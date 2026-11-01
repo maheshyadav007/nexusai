@@ -11,7 +11,8 @@ const deliver = async (page: Page, mail: Record<string, unknown>) => {
 };
 
 const noViolations = async (page: Page) => {
-  const { violations } = await new AxeBuilder({ page }).analyze();
+  // Mail is the sender's content, and its sandbox rightly stops axe from running inside it.
+  const { violations } = await new AxeBuilder({ page }).exclude("iframe").analyze();
   expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
 };
 
