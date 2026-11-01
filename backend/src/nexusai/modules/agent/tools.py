@@ -13,7 +13,7 @@ import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 import structlog
 from langchain_core.tools import InjectedToolCallId, StructuredTool
@@ -21,7 +21,7 @@ from langgraph.types import interrupt
 from pydantic import BaseModel, Field
 
 from nexusai.contracts.documents import DocumentLibrary, DocumentPreview, GetDocument, ListDocuments
-from nexusai.contracts.mail import SearchMail
+from nexusai.contracts.mail import SearchMail, SearchResults
 from nexusai.kernel.database import Migration
 from nexusai.kernel.home import scratch_folder
 from nexusai.kernel.module import CommandError, Context
@@ -29,7 +29,8 @@ from nexusai.modules.agent import channel, memory, policy, work_tools
 from nexusai.modules.agent.policy import Action
 from nexusai.modules.documents.module import get_document as _get_document
 from nexusai.modules.documents.module import list_documents as _list_documents
-from nexusai.modules.mail import accounts, store
+from nexusai.modules.mail import store
+from nexusai.modules.mail.module import run_search
 from nexusai.modules.planner import module as planner
 
 log = structlog.get_logger()
@@ -642,8 +643,7 @@ def build_tools(ctx: Context, session: str, control: RunControl) -> list[Structu
 
     def search_mail(query: str, tool_call_id: str) -> str:
         def work() -> str:
-            account = accounts.current_account(ctx.config)
-            hits = store.search(ctx.bus.db, account, SearchMail(query=query, limit=20)).hits
+            hits = cast(SearchResults, run_search(SearchMail(query=query, limit=20), ctx)).hits
             lines = [
                 f"[thread {h.thread.id}] {h.thread.subject} | {', '.join(h.thread.participants[:3])} | {h.excerpt}"
                 for h in hits

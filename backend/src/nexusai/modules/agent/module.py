@@ -92,6 +92,7 @@ from nexusai.modules.agent import (
     tools,
 )
 from nexusai.modules.mail import accounts
+from nexusai.modules.semantic import module as semantic
 
 PERSONAL_PROMPTS = (
     ("about-me", "About me"),
@@ -636,9 +637,37 @@ def list_jobs(query: ListJobs, ctx: Context) -> JobList:
                 status=row["status"],
                 progress=row["position"],
                 total=row["total"],
-                link="/mail/archive",
+                link="/settings?section=archive",
             )
         )
+    engine = semantic.engine()
+    if engine is not None:
+        semantic_status = engine.status()
+        jobs += [
+            Job(
+                id=f"model-{model.id}",
+                kind="model",
+                title="Downloading the search model",
+                status="downloading",
+                progress=model.downloaded_bytes,
+                total=model.size_bytes,
+                link="/settings?section=local-models",
+            )
+            for model in semantic_status.models
+            if model.state == "downloading"
+        ]
+        if semantic_status.indexing:
+            jobs.append(
+                Job(
+                    id="semantic-index",
+                    kind="index",
+                    title="Preparing search by meaning",
+                    status="running",
+                    progress=semantic_status.indexed,
+                    total=semantic_status.total,
+                    link="/settings?section=local-models",
+                )
+            )
     waiting = db.fetch_all("SELECT COUNT(*) AS n FROM triage_queue")[0]["n"]
     if waiting:
         status = (

@@ -74,6 +74,7 @@ from nexusai.modules.mail import accounts, pst, rules, send, store
 from nexusai.modules.mail.imap import test_imap
 from nexusai.modules.mail.parse import normalize_subject
 from nexusai.modules.mail.sync import MailSync
+from nexusai.modules.semantic import module as semantic
 
 log = structlog.get_logger()
 ATTACHED_WORDS = re.compile(r"\b(attached|attachment|enclosed|첨부)\b|첨부", re.I)
@@ -266,7 +267,16 @@ def get_thread(query: GetThread, ctx: Context) -> ThreadView:
 
 @mail_module.query("search.run")
 def run_search(query: SearchMail, ctx: Context) -> SearchResults:
-    return store.search(ctx.bus.db, accounts.current_account(ctx.config), query)
+    account = accounts.current_account(ctx.config)
+    found = store.search(ctx.bus.db, account, query)
+    engine = semantic.engine()
+    # Words work right away. If the model isn't here yet, asking is what fetches it.
+    if not query.query.strip() or engine is None or not engine.ensure():
+        return found
+    hits = engine.search(query.query, {"mail"}, MEANING_CANDIDATES)
+    return store.merge_meaning(
+        ctx.bus.db, account, query, found, [(int(hit.ref), hit.excerpt) for hit in hits]
+    )
 
 
 # Changing state: saved here at once, and sent to the server through the outbox
@@ -441,6 +451,7 @@ def save_rules(command: RuleSet, ctx: Context) -> RuleSet:
 
 # Categories
 
+MEANING_CANDIDATES = 200
 CATEGORY_RULE_PREFIX = "Category: "
 # What each Home last announced, so a count that didn't change doesn't send an event.
 _last_categories: dict[str, list[dict[str, Any]]] = {}

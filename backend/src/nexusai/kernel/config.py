@@ -56,6 +56,7 @@ class Config:
     allowed_hosts: frozenset[str]
     allowed_origins: frozenset[str]
     home_dir: Path | None
+    model_hub: str
     max_chain_depth: int
     handler_max_attempts: int
     handler_retry_delay_seconds: float
@@ -99,6 +100,7 @@ def load_config(home_dir: Path | None = None) -> Config:
         # Normally None: the user's choice is read from the pointer file at startup.
         home_dir=home_dir
         or (Path(fixed).resolve() if (fixed := os.environ.get("NEXUSAI_HOME")) else None),
+        model_hub=os.environ.get("NEXUSAI_MODEL_HUB", raw["semantic"]["hub"]),
         min_free_bytes=raw["home"]["min_free_bytes"],
         backups_kept=raw["home"]["backups_kept"],
         backup_interval_hours=raw["home"]["backup_interval_hours"],

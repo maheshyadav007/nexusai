@@ -26,6 +26,11 @@ class DocumentRow(BaseModel):
     tags: list[str]
     thread_id: int | None = None
     risky: bool = False
+    # ready, pending, no_text, encrypted, unsupported, too_large, image, empty or failed.
+    status: str = "ready"
+    status_reason: str | None = None
+    # Added again with the same content, so this is the one already here.
+    duplicate: bool = False
 
 
 class DocumentLibrary(BaseModel):
@@ -65,6 +70,12 @@ class SaveFolders(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     folders: list[str] = Field(max_length=500)
+
+
+class ReadDocumentAgain(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    key: str = Field(max_length=64)
 
 
 class DocumentDone(BaseModel):

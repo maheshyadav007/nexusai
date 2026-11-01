@@ -12,6 +12,7 @@ from nexusai.contracts import documents as documents_contracts
 from nexusai.contracts import mail as mail_contracts
 from nexusai.contracts import panels as panels_contracts
 from nexusai.contracts import planner as planner_contracts
+from nexusai.contracts import semantic as semantic_contracts
 from nexusai.contracts.errors import ApiError
 from nexusai.contracts.events import AppEvent, EventLog, EventLogQuery, FailedEvent
 from nexusai.contracts.home import (
@@ -94,6 +95,7 @@ MAIL_MODELS: list[type[BaseModel]] = [
         panels_contracts,
         agent_contracts,
         planner_contracts,
+        semantic_contracts,
     )
     for value in vars(module).values()
     if isinstance(value, type) and issubclass(value, BaseModel) and value is not BaseModel

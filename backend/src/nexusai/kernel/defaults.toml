@@ -76,3 +76,7 @@ accent = "terracotta"
 default_screen = "today"
 date_format = "system"
 time_format = "system"
+
+[semantic]
+# Where models come from, unless the person sets a mirror.
+hub = "https://huggingface.co"

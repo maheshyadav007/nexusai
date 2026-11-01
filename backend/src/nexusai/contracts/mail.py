@@ -393,6 +393,8 @@ class SearchHit(BaseModel):
     message_id: int
     excerpt: str
     matched_attachment: bool
+    # words, meaning or both, so the person can see why it's here.
+    matched_by: str = "words"
 
 
 class SearchResults(BaseModel):

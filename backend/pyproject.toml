@@ -15,6 +15,8 @@ dependencies = [
     "langgraph-checkpoint-sqlite>=2",
     "libpff-python>=20240101",
     "nh3>=0.2",
+    "numpy>=1.26",
+    "onnxruntime>=1.20",
     "openpyxl>=3.1",
     "psutil>=6",
     "pydantic>=2.14.2",
@@ -23,6 +25,7 @@ dependencies = [
     "python-pptx>=1",
     "sqlcipher3-wheels>=0.5.7",
     "structlog>=26.1.0",
+    "tokenizers>=0.20",
     "uvicorn[standard]>=0.54.0",
 ]
 
@@ -61,6 +64,7 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 "src/nexusai/modules/agent/*" = ["E501"]
 "src/nexusai/modules/planner/*" = ["E501"]
 "src/nexusai/modules/models/module.py" = ["E501"]
+"src/nexusai/modules/semantic/module.py" = ["E501"]
 "tests/*" = ["E501"]
 
 [tool.mypy]
@@ -69,7 +73,7 @@ files = ["src"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["imapclient.*", "pypff.*", "docx.*", "pptx.*", "openpyxl.*"]
+module = ["imapclient.*", "pypff.*", "docx.*", "pptx.*", "openpyxl.*", "onnxruntime.*"]
 ignore_missing_imports = true
 
 [tool.importlinter]

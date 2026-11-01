@@ -1,5 +1,6 @@
 """One library across uploaded files and mail attachments. Signature images never appear."""
 
+import hashlib
 import json
 import mimetypes
 import re
@@ -17,6 +18,7 @@ from nexusai.contracts.documents import (
     DocumentRow,
     GetDocument,
     ListDocuments,
+    ReadDocumentAgain,
     RemoveDocument,
     SaveFolders,
     UpdateDocument,
@@ -25,10 +27,12 @@ from nexusai.contracts.events import AppEvent
 from nexusai.kernel.database import Migration
 from nexusai.kernel.module import CommandError, Context, Module
 from nexusai.modules.mail import store
-from nexusai.modules.mail.extract import extract_text
+from nexusai.modules.mail.attachments import RISKY_EXTENSIONS
+from nexusai.modules.mail.extract import Extraction, extract_safely
 from nexusai.modules.mail.parse import part_bytes
 from nexusai.modules.mail.pst import PST_PART_OFFSET
 from nexusai.modules.mail.pst_worker import read_attachment
+from nexusai.modules.semantic import module as semantic
 
 log = structlog.get_logger()
 documents_module = Module(
@@ -44,10 +48,22 @@ CREATE TABLE document_meta (key TEXT PRIMARY KEY, folder TEXT, tags TEXT NOT NUL
 CREATE TABLE document_folders (name TEXT PRIMARY KEY, position INTEGER NOT NULL);
 CREATE VIRTUAL TABLE document_search USING fts5(name, text, tokenize = 'unicode61');
 """,
-        )
+        ),
+        Migration(
+            "documents_status_001",
+            """
+ALTER TABLE documents ADD COLUMN status TEXT NOT NULL DEFAULT 'ready';
+ALTER TABLE documents ADD COLUMN status_reason TEXT;
+ALTER TABLE documents ADD COLUMN sha256 TEXT;
+CREATE INDEX documents_sha256 ON documents (sha256);
+ALTER TABLE message_parts ADD COLUMN extraction TEXT;
+ALTER TABLE message_parts ADD COLUMN extraction_reason TEXT;
+""",
+        ),
     ],
 )
 EMAIL_KINDS = ("attachment", "calendar", "inline", "risky")
+READER_IDLE_SECONDS = 30.0
 
 
 def _file_folder(ctx: Context) -> Path:
@@ -65,7 +81,7 @@ def _email_parts(
     meta = _meta(ctx)
     marks = ",".join("?" * len(EMAIL_KINDS))
     rows = ctx.bus.db.fetch_all(
-        "SELECT p.message, p.part_index, p.filename, p.content_type, p.size, p.kind, m.date, m.thread_id"
+        "SELECT p.extraction, p.extraction_reason, p.message, p.part_index, p.filename, p.content_type, p.size, p.kind, m.date, m.thread_id"
         f" FROM message_parts p JOIN messages m ON m.id = p.message WHERE p.kind IN ({marks}) {where}"  # noqa: S608
         " ORDER BY m.date DESC LIMIT 5000",
         (*EMAIL_KINDS, *params),
@@ -86,6 +102,8 @@ def _email_parts(
                 tags=tags,
                 thread_id=row["thread_id"],
                 risky=row["kind"] == "risky",
+                status=row["extraction"] or "ready",
+                status_reason=row["extraction_reason"],
             )
         )
     return documents
@@ -107,6 +125,8 @@ def _uploads(ctx: Context) -> list[DocumentRow]:
                 source="upload",
                 folder=folder,
                 tags=tags,
+                status=row["status"],
+                status_reason=row["status_reason"],
             )
         )
     return documents
@@ -146,6 +166,12 @@ def list_documents(query: ListDocuments, ctx: Context) -> DocumentLibrary:
         documents = [d for d in documents if query.tag in d.tags]
     if query.query.strip():
         keys = _search_keys(ctx, query.query)
+        engine = semantic.engine()
+        # Words work right away. If the model isn't here yet, asking is what fetches it.
+        if engine is not None and engine.ensure():
+            keys |= {
+                hit.ref for hit in engine.search(query.query, {"document"}, MEANING_CANDIDATES)
+            }
         documents = [d for d in documents if d.key in keys]
     documents.sort(key=lambda d: d.date, reverse=True)
     folders = ctx.bus.db.fetch_all("SELECT name FROM document_folders ORDER BY position")
@@ -185,11 +211,13 @@ def part_text(ctx: Context, message: int, index: int) -> str:
     if rows[0]["text"] is not None:
         return str(rows[0]["text"])
     data = _part_data(ctx, message, index)
-    text = extract_text(rows[0]["filename"], data) if data else ""
+    found = extract_safely(rows[0]["filename"], data) if data else Extraction("", "empty")
+    text = found.text
     with ctx.bus.db.transaction() as tx:
         tx.execute(
-            "UPDATE message_parts SET text = ? WHERE message = ? AND part_index = ?",
-            (text, message, index),
+            "UPDATE message_parts SET text = ?, extraction = ?, extraction_reason = ?"
+            " WHERE message = ? AND part_index = ?",
+            (text, found.status, found.reason, message, index),
         )
         combined = tx.execute(
             "SELECT group_concat(text, ' ') FROM message_parts WHERE message = ? AND text != ''",
@@ -303,32 +331,148 @@ def remove_document(command: RemoveDocument, ctx: Context) -> DocumentDone:
             "documents.changed", {"key": command.key}, source="documents", trace_id=ctx.trace_id
         )
     (_file_folder(ctx) / rows[0]["stored_name"]).unlink(missing_ok=True)
+    engine = semantic.engine()
+    if engine is not None:
+        engine.forget("document", command.key)
     return DocumentDone()
 
 
-_extract_lock = threading.Lock()
+@documents_module.command("documents.readAgain")
+def read_again(command: ReadDocumentAgain, ctx: Context) -> DocumentDone:
+    """For a file that failed. A new version of the reader may do better."""
+    _find(ctx, command.key)
+    if command.key.startswith("u:"):
+        with ctx.bus.unit_of_work() as work:
+            work.tx.execute(
+                "UPDATE documents SET status = 'pending', status_reason = NULL WHERE id = ?",
+                (int(command.key[2:]),),
+            )
+            work.emit(
+                "documents.changed", {"key": command.key}, source="documents", trace_id=ctx.trace_id
+            )
+        _reader_wake.set()
+    else:
+        _, message, index = command.key.split(":")
+        with ctx.bus.db.transaction() as tx:
+            tx.execute(
+                "UPDATE message_parts SET text = NULL, extraction = NULL, extraction_reason = NULL"
+                " WHERE message = ? AND part_index = ?",
+                (int(message), int(index)),
+            )
+        part_text(ctx, int(message), int(index))
+        with ctx.bus.unit_of_work() as work:
+            work.emit(
+                "document.indexed",
+                {"message": int(message)},
+                source="documents",
+                trace_id=ctx.trace_id,
+            )
+    engine = semantic.engine()
+    if engine is not None:
+        engine.forget("document", command.key)
+    return DocumentDone()
+
+
+MEANING_CANDIDATES = 100
+_reader_wake = threading.Event()
+_reader_stop = threading.Event()
+_reader_thread: threading.Thread | None = None
+
+
+def _read_pending(ctx: Context) -> bool:
+    """Reads one waiting upload. False when there aren't any."""
+    rows = ctx.bus.db.fetch_all(
+        "SELECT id, name, stored_name FROM documents WHERE status = 'pending' ORDER BY id LIMIT 1"
+    )
+    if not rows:
+        return False
+    row = rows[0]
+    try:
+        data = (_file_folder(ctx) / row["stored_name"]).read_bytes()
+        found = extract_safely(row["name"], data)
+    except OSError:
+        found = Extraction("", "failed", "This file is missing from your Home folder.")
+    with ctx.bus.unit_of_work() as work:
+        work.tx.execute(
+            "UPDATE documents SET text = ?, status = ?, status_reason = ? WHERE id = ?",
+            (found.text, found.status, found.reason, row["id"]),
+        )
+        work.tx.execute("DELETE FROM document_search WHERE rowid = ?", (row["id"],))
+        work.tx.execute(
+            "INSERT INTO document_search (rowid, name, text) VALUES (?, ?, ?)",
+            (row["id"], row["name"], found.text),
+        )
+        key = f"u:{row['id']}"
+        work.emit("documents.changed", {"key": key}, source="documents", trace_id=ctx.trace_id)
+        work.emit("document.indexed", {"key": key}, source="documents", trace_id=ctx.trace_id)
+    log.info("document_read", status=found.status)
+    return True
+
+
+def _reader_loop(ctx: Context) -> None:
+    while not _reader_stop.is_set():
+        try:
+            if _read_pending(ctx):
+                continue
+        except Exception:
+            log.exception("document_reader_failed")
+        _reader_wake.wait(READER_IDLE_SECONDS)
+        _reader_wake.clear()
+
+
+def _start_reader(ctx: Context) -> None:
+    global _reader_thread
+    _reader_stop.clear()
+    _reader_thread = threading.Thread(
+        target=_reader_loop, args=(ctx,), daemon=True, name="document-reader"
+    )
+    _reader_thread.start()
+
+
+def _stop_reader() -> None:
+    _reader_stop.set()
+    _reader_wake.set()
+    if _reader_thread is not None:
+        _reader_thread.join(timeout=10)
+
+
+documents_module.on_start.append(_start_reader)
+documents_module.on_stop.append(_stop_reader)
 
 
 def save_upload(ctx: Context, name: str, data: bytes) -> DocumentRow:
-    """Copies the file into Home under a generated name, so a filename can't choose where it lands."""
+    """Copies the file into Home under a generated name, so a filename can't choose where it lands.
+
+    Its text is read afterwards, in the background, so a large file doesn't hold anything up."""
     clean = Path(name.replace("\\", "/")).name.strip() or "document"
+    extension = clean.rsplit(".", 1)[-1].lower() if "." in clean else ""
+    if not data:
+        raise CommandError("document.empty", f"{clean} is empty, so it wasn't added.", 422)
+    if extension in RISKY_EXTENSIONS:
+        raise CommandError(
+            "document.risky",
+            f"{clean} wasn't added, because this kind of file can run programs.",
+            422,
+        )
+    sha256 = hashlib.sha256(data).hexdigest()
+    same = ctx.bus.db.fetch_all("SELECT id FROM documents WHERE sha256 = ? LIMIT 1", (sha256,))
+    if same:
+        return _find(ctx, f"u:{same[0]['id']}").model_copy(update={"duplicate": True})
     suffix = Path(clean).suffix[:16]
     stored = f"{uuid.uuid4().hex}{suffix}"
     folder = _file_folder(ctx)
     folder.mkdir(parents=True, exist_ok=True)
     (folder / stored).write_bytes(data)
-    with _extract_lock:
-        text = extract_text(clean, data)
     content_type = mimetypes.guess_type(clean)[0] or "application/octet-stream"
     with ctx.bus.unit_of_work() as work:
         cursor = work.tx.execute(
-            "INSERT INTO documents (name, stored_name, content_type, size, added, text) VALUES (?, ?, ?, ?, ?, ?)",
-            (clean, stored, content_type, len(data), datetime.now(UTC).isoformat(), text),
+            "INSERT INTO documents (name, stored_name, content_type, size, added, text, status, sha256)"
+            " VALUES (?, ?, ?, ?, ?, '', 'pending', ?)",
+            (clean, stored, content_type, len(data), datetime.now(UTC).isoformat(), sha256),
         )
         identifier = int(cursor.lastrowid or 0)
         work.tx.execute(
-            "INSERT INTO document_search (rowid, name, text) VALUES (?, ?, ?)",
-            (identifier, clean, text),
+            "INSERT INTO document_search (rowid, name, text) VALUES (?, ?, '')", (identifier, clean)
         )
         work.emit(
             "documents.changed",
@@ -336,6 +480,7 @@ def save_upload(ctx: Context, name: str, data: bytes) -> DocumentRow:
             source="documents",
             trace_id=ctx.trace_id,
         )
+    _reader_wake.set()
     log.info("document_added", size=len(data))
     return _find(ctx, f"u:{identifier}")
 

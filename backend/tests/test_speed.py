@@ -10,8 +10,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
+import numpy as np
 import pytest
 
 from nexusai.api.app import MODULES, _open_database
@@ -21,6 +22,8 @@ from nexusai.kernel.config import Config
 from nexusai.kernel.database import Database
 from nexusai.modules.mail import store
 from nexusai.modules.mail.parse import ParsedMessage
+from nexusai.modules.semantic.catalog import DIMENSIONS
+from nexusai.modules.semantic.index import VectorIndex
 
 pytestmark = pytest.mark.speed
 
@@ -283,3 +286,18 @@ def test_new_mail_reaches_the_store(mailbox: Mailbox) -> None:
     median, slowest = timed(arrive)
     report("New mail stored", median, slowest, NEW_MAIL_TARGET_MS)
     assert slowest < NEW_MAIL_TARGET_MS
+
+
+def test_search_by_meaning_stays_quick() -> None:
+    # A mailbox this size holds more chunks than messages, since long mail is split.
+    chunks = MESSAGES * 2
+    rng = np.random.default_rng(13)
+    index = VectorIndex(cast(Database, None), "speed")
+    index.vectors = rng.integers(-127, 127, (chunks, DIMENSIONS), dtype=np.int8)
+    index.rows = [("mail", str(number // 2), number % 2) for number in range(chunks)]
+    query = rng.normal(size=DIMENSIONS).astype(np.float32)
+    query /= np.linalg.norm(query)
+
+    median, slowest = timed(lambda _: index.search(query, {"mail"}, 200))
+    report("Search by meaning", median, slowest, SEARCH_TARGET_MS)
+    assert median < SEARCH_TARGET_MS

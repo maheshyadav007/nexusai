@@ -53,6 +53,7 @@ from nexusai.modules.notifications.module import notifications_module
 from nexusai.modules.onboarding.module import onboarding_module
 from nexusai.modules.panels.module import panels_module
 from nexusai.modules.planner.module import planner_module
+from nexusai.modules.semantic.module import semantic_module
 from nexusai.modules.settings.module import settings_module
 from nexusai.modules.system.module import system_module
 
@@ -66,6 +67,7 @@ MODULES: list[Module] = [
     documents_module,
     panels_module,
     planner_module,
+    semantic_module,
     agent_module,
 ]
 log = structlog.get_logger()
@@ -398,7 +400,10 @@ def create_app(config: Config | None = None) -> FastAPI:
         data = await request.body()
         if len(data) > cfg.max_upload_bytes:
             return _error(413, "document.too_large", "That file is too large to add.")
-        return await asyncio.to_thread(documents.save_upload, ctx, name, data)
+        try:
+            return await asyncio.to_thread(documents.save_upload, ctx, name, data)
+        except CommandError as error:
+            return _error(error.status, error.code, error.message)
 
     @app.get("/api/documents/file", response_model=None)
     async def document_file(key: str) -> Response:

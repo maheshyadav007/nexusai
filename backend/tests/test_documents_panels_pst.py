@@ -152,6 +152,7 @@ def test_uploads_are_copied_indexed_and_searchable(client: TestClient, config: C
     document = upload(client, "plan.docx", docx_bytes("zebra launch plan"))
     assert document["source"] == "upload" and document["name"] == "plan.docx"
     assert len(list((config.home / "documents").iterdir())) == 1
+    wait(lambda: library(client, query="zebra")["documents"], "the text to be read")
     assert [d["key"] for d in library(client, query="zebra")["documents"]] == [document["key"]]
     assert library(client, query="giraffe")["documents"] == []
     preview = client.post("/api/queries/documents.get", json={"key": document["key"]}).json()
@@ -166,7 +167,7 @@ def test_a_filename_cant_choose_where_the_file_lands(client: TestClient, config:
     assert document["name"] == "evil.txt"
     assert not (config.home.parent / "evil.txt").exists()
     assert all(p.parent == config.home / "documents" for p in (config.home / "documents").iterdir())
-    assert upload(client, "..\\..\\win.txt", b"x")["name"] == "win.txt"
+    assert upload(client, "..\\..\\win.txt", b"y")["name"] == "win.txt"
 
 
 def test_too_large_uploads_are_refused(app_config: Config) -> None:
@@ -305,6 +306,12 @@ def test_panels_show_live_filtered_results_without_a_model(
     )
     upload(client, "a.txt", b"walrus")
     docs = {"id": "d", "title": "D", "source": "documents", "filters": {"query": "walrus"}}
+    wait(
+        lambda: client.post("/api/queries/panels.results", json={"panel": docs}).json()[
+            "documents"
+        ],
+        "the text to be read",
+    )
     assert (
         len(client.post("/api/queries/panels.results", json={"panel": docs}).json()["documents"])
         == 1

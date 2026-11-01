@@ -505,7 +505,7 @@ class ThreadSummary(BaseModel):
 
 class Job(BaseModel):
     id: str
-    kind: Literal["sync", "pst", "triage", "session", "schedule"]
+    kind: Literal["sync", "pst", "triage", "session", "schedule", "model", "index"]
     title: str
     status: str
     progress: int | None = None

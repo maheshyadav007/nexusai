@@ -31,6 +31,8 @@ from nexusai.contracts.mail import (
     RuleActions,
     RuleCondition,
     SaveCategory,
+    SearchMail,
+    SearchResults,
     SendDraft,
     SetThreadCategory,
     SetThreadFlag,
@@ -49,6 +51,7 @@ from nexusai.modules.mail import module as mail
 from nexusai.modules.mail import rules as mail_rules
 from nexusai.modules.panels import module as panels
 from nexusai.modules.planner import module as planner
+from nexusai.modules.semantic import module as semantic
 
 # What read_database can see. Masking tokens, approvals and the event log stay out of reach.
 READABLE_TABLES = frozenset(
@@ -261,6 +264,12 @@ class _Query(_Call):
             " tasks, reminders, schedules, work_board, agent_sessions, notifications."
         )
     )
+
+
+class _MeaningSearch(_Call):
+    query: str = Field(description="What you're looking for, in plain words.")
+    scope: str = Field(default="all", description="all, mail or documents.")
+    limit: int = Field(default=15, description="How many, up to 50.")
 
 
 class _NewAgent(_Call):
@@ -864,6 +873,55 @@ def specs(ctx: Context, guard: Guard, wrap_untrusted: Callable[[str], str]) -> l
             marks_untrusted=True,
         )
 
+    def semantic_search(query: str, tool_call_id: str, scope: str = "all", limit: int = 15) -> str:
+        def work() -> str:
+            engine = semantic.engine()
+            kinds = {"mail": {"mail"}, "documents": {"document"}}.get(scope, {"mail", "document"})
+            size = max(1, min(limit, 50))
+            if engine is None or not engine.ensure():
+                # Words still find things, and the person hears why this may miss some.
+                note = (
+                    "Search by meaning isn't available yet, because its model isn't on this computer."
+                    " These are keyword matches, so tell the person results may be incomplete.\n"
+                )
+                found = cast(
+                    SearchResults, mail.run_search(SearchMail(query=query, limit=size), ctx)
+                ).hits
+                return wrap_untrusted(
+                    note
+                    + (
+                        "\n".join(
+                            f"[thread {h.thread.id}] {h.thread.subject}: {h.excerpt}" for h in found
+                        )
+                        or "Nothing found."
+                    )
+                )
+            hits = engine.search(query, kinds, size)
+            lines = []
+            for hit in hits:
+                if hit.kind == "mail":
+                    rows = db.fetch_all(
+                        "SELECT thread_id, subject FROM messages WHERE id = ?", (int(hit.ref),)
+                    )
+                    name = (
+                        f"[thread {rows[0]['thread_id']}] {rows[0]['subject']}" if rows else hit.ref
+                    )
+                else:
+                    name = f"[document {hit.ref}]"
+                lines.append(f"{name} ({hit.score:.2f}): {hit.excerpt}")
+            return wrap_untrusted("\n".join(lines) or "Nothing close in meaning was found.")
+
+        return guard(
+            tool_call_id,
+            "semantic_search",
+            "read",
+            f"Search by meaning: {query}",
+            "",
+            work,
+            documents,
+            marks_untrusted=True,
+        )
+
     # Agents
 
     def create_agent(
@@ -1169,6 +1227,11 @@ def specs(ctx: Context, guard: Guard, wrap_untrusted: Callable[[str], str]) -> l
         (list_drafts, _Nothing, "See the saved drafts."),
         (save_draft, _SaveDraft, "Create or change a draft. Nothing is sent."),
         (delete_drafts, _DraftIds, "Remove one or many drafts."),
+        (
+            semantic_search,
+            _MeaningSearch,
+            "Find mail and documents by what they're about, in any language, even with no shared words.",
+        ),
         (read_database, _Query, "Answer a question from the person's data with one SELECT."),
         (
             create_agent,

@@ -145,6 +145,9 @@ TOOL_ENTRIES = (
     ToolEntry(
         "delete_documents", DATA, "Remove documents", "Delete uploaded documents.", "data", ASK
     ),
+    ToolEntry(
+        "semantic_search", DATA, "Search by meaning", "Find mail and documents by topic.", "read"
+    ),
     ToolEntry("read_database", DATA, "Look up data", "Answer questions from your data.", "read"),
     ToolEntry("list_memory", DATA, "See memory", "Read what's remembered.", "read"),
     ToolEntry("update_memory", DATA, "Change memory", "Edit something remembered.", "data"),

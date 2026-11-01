@@ -116,6 +116,8 @@ SUBJECT_WINDOW_DAYS = 30
 # How many of the newest matches get ranked, and how many of those can become results.
 SEARCH_RANKED = 5000
 SEARCH_CANDIDATES = 2000
+# The usual constant for reciprocal rank fusion: it keeps one list's top result from dominating.
+FUSION_K = 60
 EXCERPT_WORDS = 24
 REPLY_PREFIX = re.compile(
     r"^\s*(re|fw|fwd|aw|sv|antw|tr|rv|ref|답장|회신|전달)\s*(\[\d+\])?\s*[:：]", re.I
@@ -620,6 +622,73 @@ def search(db: Database, account: str, query: SearchMail) -> SearchResults:
             )
         )
     return SearchResults(hits=hits)
+
+
+def merge_meaning(
+    db: Database,
+    account: str,
+    query: SearchMail,
+    words: SearchResults,
+    meaning: list[tuple[int, str]],
+) -> SearchResults:
+    """Ranks by both lists together, so a good match in either comes up, and in both comes first."""
+    if not meaning:
+        return words
+    conditions = ["m.account = ?"]
+    params: list[object] = [account]
+    if query.sender:
+        conditions.append("(m.from_addr LIKE ? OR m.from_name LIKE ?)")
+        params += [f"%{query.sender}%", f"%{query.sender}%"]
+    if query.date_from:
+        conditions.append("m.date >= ?")
+        params.append(query.date_from)
+    if query.date_to:
+        conditions.append("m.date <= ?")
+        params.append(query.date_to)
+    if query.category:
+        conditions.append("t.category = ?")
+        params.append(query.category)
+    if query.has_attachment is not None:
+        conditions.append("m.has_attachments = ?")
+        params.append(int(query.has_attachment))
+    if query.folder:
+        conditions.append("m.folder_role = ?")
+        params.append(query.folder)
+    excerpts = dict(meaning)
+    marks = ",".join("?" * len(excerpts))
+    rows = db.fetch_all(
+        f"SELECT m.id AS message, m.thread_id AS thread FROM messages m JOIN threads t ON t.id = m.thread_id"  # noqa: S608
+        f" WHERE m.id IN ({marks}) AND {' AND '.join(conditions)}",
+        (*excerpts, *params),
+    )
+    allowed = {row["message"]: row["thread"] for row in rows}
+    scores: dict[int, float] = {}
+    hits: dict[int, SearchHit] = {}
+    for rank, hit in enumerate(words.hits):
+        scores[hit.thread.id] = 1 / (FUSION_K + rank)
+        hits[hit.thread.id] = hit
+    seen: set[int] = set()
+    rank = 0
+    for message, excerpt in meaning:
+        thread_id = allowed.get(message)
+        if thread_id is None or thread_id in seen:
+            continue
+        seen.add(thread_id)
+        scores[thread_id] = scores.get(thread_id, 0.0) + 1 / (FUSION_K + rank)
+        rank += 1
+        if thread_id in hits:
+            hits[thread_id] = hits[thread_id].model_copy(update={"matched_by": "both"})
+        else:
+            thread = db.fetch_all("SELECT * FROM threads WHERE id = ?", (thread_id,))[0]
+            hits[thread_id] = SearchHit(
+                thread=row_of(thread),
+                message_id=message,
+                excerpt=excerpt,
+                matched_attachment=False,
+                matched_by="meaning",
+            )
+    ranked = sorted(hits, key=lambda thread_id: scores[thread_id], reverse=True)
+    return SearchResults(hits=[hits[thread_id] for thread_id in ranked[: query.limit]])
 
 
 def attachment(db: Database, message: int, index: int) -> tuple[str, bytes, bool] | None:
