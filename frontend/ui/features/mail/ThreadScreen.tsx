@@ -80,32 +80,26 @@ function Body({ message }: { message: MessageView }) {
   );
 }
 
-function SummaryBlock({ id }: { id: number }) {
+function SummaryAction({ id }: { id: number }) {
   const summary = useThreadSummary(id);
   const summarize = useSummarize();
   const data = summary.data;
-  const action =
-    !data?.text || data.new_messages ? (
-      <Button loading={summarize.isPending} onClick={() => summarize.mutate(id)}>
-        {t(data?.text ? "summary.update" : "summary.summarize")}
-      </Button>
-    ) : null;
-  const failure = summarize.isError ? <p role="alert" className="text-sm text-status-danger">{summarize.error instanceof ApiRequestError ? summarize.error.detail.message : t("summary.error")}</p> : null;
-  // Until there's something to read, this is only a button beside the others.
-  if (!data?.text) {
-    return (
-      <>
-        {action}
-        {failure}
-      </>
-    );
-  }
+  if (data?.text && !data.new_messages) return null;
   return (
-    <section aria-label={t("summary.title")} className="flex w-full flex-col items-start gap-2 rounded-md bg-surface-sunken p-3">
+    <Button variant="quiet" loading={summarize.isPending} onClick={() => summarize.mutate(id)}>
+      {t(data?.text ? "summary.update" : "summary.summarize")}
+    </Button>
+  );
+}
+
+function SummaryBlock({ id }: { id: number }) {
+  const summary = useThreadSummary(id);
+  const data = summary.data;
+  if (!data?.text) return null;
+  return (
+    <section aria-label={t("summary.title")} className="flex w-full flex-col gap-1 rounded-md bg-surface-sunken p-3">
       <p data-testid="summary-text" className="whitespace-pre-wrap text-md text-ink-primary">{data.text}</p>
       {data.new_messages ? <p className="text-sm text-ink-secondary">{tn("summary.new", data.new_messages)}</p> : null}
-      {failure}
-      {action}
     </section>
   );
 }
@@ -142,7 +136,7 @@ function MessageCard({ message, open: startsOpen, onReply, threadWhy }: { messag
   const sender = message.from_name || message.from_addr;
   return (
     <article data-testid="message" className="border-b border-line-subtle last:border-b-0">
-      <button type="button" aria-expanded={open} onClick={() => setOpen((current) => !current)} className="focus-ring flex w-full items-center gap-3 rounded-md py-3 text-left">
+      <button type="button" aria-expanded={open} onClick={() => setOpen((current) => !current)} className="focus-ring flex w-full items-center gap-2 rounded-md py-3 text-left">
         <Avatar name={sender} />
         <span className="flex min-w-0 flex-1 flex-col">
           <span className={`truncate text-md ${message.read ? "text-ink-primary" : "font-medium text-ink-primary"}`}>{sender}</span>
@@ -158,7 +152,7 @@ function MessageCard({ message, open: startsOpen, onReply, threadWhy }: { messag
         <span className="shrink-0 text-sm tabular-nums text-ink-muted">{format(message.date)}</span>
       </button>
       {open ? (
-        <div className="flex flex-col gap-3 pb-4 pl-7">
+        <div className="flex flex-col gap-3 pb-4 pl-6">
           {message.added.length > 0 ? <p className="text-sm text-ink-secondary">{t("mail.people.added", { people: message.added.join(", ") })}</p> : null}
           {message.dropped.length > 0 ? <p className="text-sm text-ink-secondary">{t("mail.people.dropped", { people: message.dropped.join(", ") })}</p> : null}
           {message.why && message.why !== threadWhy ? <p className="text-sm text-ink-muted">{t("mail.why", { reason: message.why })}</p> : null}
@@ -221,25 +215,25 @@ export function ThreadScreen({ id }: { id: number }) {
   const categoryOptions = [{ value: NO_CATEGORY, label: t("mail.category.none") }, ...[...new Set([...names, ...(row.category ? [row.category] : [])])].map((name) => ({ value: name, label: name }))];
   const leave = { onSuccess: () => router.push(folder) };
   return (
-    <div className="mx-auto flex max-w-reading flex-col gap-4 p-6">
+    <div className="mx-auto flex max-w-reading animate-fade flex-col gap-4 p-6">
       <header className="flex flex-col gap-3">
         <div className="flex items-center gap-1">
-          <TextLink href={folder} className="mr-auto text-sm md:hidden">{t("mail.backToInbox")}</TextLink>
+          <TextLink href={folder} className="text-sm md:hidden">{t("mail.backToInbox")}</TextLink>
+          <AskAgent context={[`thread:${id}`]} title={row.subject || t("mail.noSubject")} />
+          <SummaryAction id={id} />
+          <span className="flex-1" />
           <IconButton icon="flag" label={t(row.flagged ? "mail.unflag" : "mail.flag")} onClick={() => setFlag.mutate({ id, flagged: !row.flagged })} />
           <IconButton icon="markUnread" label={t("mail.markUnread")} onClick={() => setRead.mutate({ id, read: false })} />
           <IconButton icon="archive" label={t("mail.archive")} onClick={() => move.mutate({ id, to: "archive" }, leave)} />
           <IconButton icon="trash" label={t("mail.delete")} onClick={() => move.mutate({ id, to: "trash" }, leave)} />
         </div>
         <h2 className="break-words text-xl font-medium text-ink-primary">{row.subject || t("mail.noSubject")}</h2>
-        <div className="grid gap-2 md:grid-cols-2">
-          <Select label={t("mail.status.label")} value={row.status} options={STATUSES} onChange={(status) => setStatus.mutate({ id, status: status as ThreadStatus })} />
-          <Select label={t("mail.category")} value={row.category ?? NO_CATEGORY} options={categoryOptions} onChange={(category) => setCategory.mutate({ id, category: category === NO_CATEGORY ? null : category })} />
+        <div className="flex flex-wrap items-center gap-2">
+          <Select quiet label={t("mail.status.label")} value={row.status} options={STATUSES} onChange={(status) => setStatus.mutate({ id, status: status as ThreadStatus })} />
+          <Select quiet label={t("mail.category")} value={row.category ?? NO_CATEGORY} options={categoryOptions} onChange={(category) => setCategory.mutate({ id, category: category === NO_CATEGORY ? null : category })} />
         </div>
         {row.why ? <WhyHere thread={id} reason={row.why} /> : null}
-        <div className="flex flex-wrap items-center gap-2">
-          <AskAgent context={[`thread:${id}`]} title={row.subject || t("mail.noSubject")} />
-          <SummaryBlock id={id} />
-        </div>
+        <SummaryBlock id={id} />
       </header>
       <div className="flex flex-col">
         {messages.map((message, index) => (

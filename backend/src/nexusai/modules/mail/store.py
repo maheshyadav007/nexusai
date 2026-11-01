@@ -346,6 +346,7 @@ def row_of(row: sqlite3.Row) -> ThreadRow:
         why=row["why"],
         status=row["status"],
         importance=row["importance"],
+        sender_name=row["sender_name"] if "sender_name" in row.keys() else None,  # noqa: SIM118
     )
 
 
@@ -362,7 +363,9 @@ def list_threads(
         where.append("(last_date, id) < (?, ?)")
         params += [date, int(identifier)]
     rows = db.fetch_all(
-        f"SELECT * FROM threads WHERE {' AND '.join(where)}"  # noqa: S608
+        "SELECT *, (SELECT COALESCE(NULLIF(m.from_name, ''), m.from_addr) FROM messages m"  # noqa: S608
+        " WHERE m.thread_id = threads.id ORDER BY m.date DESC LIMIT 1) AS sender_name"
+        f" FROM threads WHERE {' AND '.join(where)}"
         " ORDER BY last_date DESC, id DESC LIMIT ?",
         (*params, limit + 1),
     )

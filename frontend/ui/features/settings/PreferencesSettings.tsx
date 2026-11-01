@@ -28,13 +28,13 @@ export function PreferencesSettings() {
   return (
     <Card title={t("settings.section.preferences")}>
       <SettingRow label={t("preferences.screen")}>
-        <Select label={t("preferences.screen")} {...(settings.data?.default_screen ? { value: settings.data.default_screen } : {})} options={SCREENS} onChange={(default_screen) => update.mutate({ default_screen: default_screen as "today" | "inbox" })} />
+        <Select compact label={t("preferences.screen")} {...(settings.data?.default_screen ? { value: settings.data.default_screen } : {})} options={SCREENS} onChange={(default_screen) => update.mutate({ default_screen: default_screen as "today" | "inbox" })} />
       </SettingRow>
       <SettingRow label={t("preferences.date")}>
-        <Select label={t("preferences.date")} {...(settings.data?.date_format ? { value: settings.data.date_format } : {})} options={DATES} onChange={(date_format) => update.mutate({ date_format: date_format as (typeof DATES)[number]["value"] })} />
+        <Select compact label={t("preferences.date")} {...(settings.data?.date_format ? { value: settings.data.date_format } : {})} options={DATES} onChange={(date_format) => update.mutate({ date_format: date_format as (typeof DATES)[number]["value"] })} />
       </SettingRow>
       <SettingRow label={t("preferences.time")}>
-        <Select label={t("preferences.time")} {...(settings.data?.time_format ? { value: settings.data.time_format } : {})} options={TIMES} onChange={(time_format) => update.mutate({ time_format: time_format as (typeof TIMES)[number]["value"] })} />
+        <Select compact label={t("preferences.time")} {...(settings.data?.time_format ? { value: settings.data.time_format } : {})} options={TIMES} onChange={(time_format) => update.mutate({ time_format: time_format as (typeof TIMES)[number]["value"] })} />
       </SettingRow>
     </Card>
   );

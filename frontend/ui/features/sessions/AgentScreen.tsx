@@ -17,6 +17,7 @@ export function AgentScreen({ id }: { id: string }) {
   return (
     <div className="mx-auto flex h-full max-w-reading flex-col">
       <header className="flex flex-col gap-1 p-4 pb-2">
+        <div className="flex items-center justify-between gap-3">
         <nav aria-label={t("sessions.breadcrumb")} className="flex min-w-0 items-center gap-1 text-md">
           <Link href="/agent/sessions" className="focus-ring shrink-0 rounded-sm text-ink-muted transition-colors duration-fast hover:text-ink-primary">
             {t("nav.sessions")}
@@ -30,9 +31,11 @@ export function AgentScreen({ id }: { id: string }) {
             </p>
           ) : null}
         </nav>
+        <FinalPrompt session={id} />
+        </div>
         {row?.untrusted ? <p className="text-sm text-ink-muted">{t("sessions.untrusted")}</p> : null}
       </header>
-      <SessionChat key={id} id={id} footer={<div className="flex justify-end"><FinalPrompt session={id} /></div>} />
+      <SessionChat key={id} id={id} />
     </div>
   );
 }

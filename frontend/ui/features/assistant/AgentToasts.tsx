@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useEvents } from "@/ui/client/events";
-import { useApprovals } from "@/ui/client/sessions";
+import { useApprovals, useSessions } from "@/ui/client/sessions";
 import { useChannel } from "@/ui/client/work";
 import { Icon, type IconName } from "@/ui/icons";
 import { Button } from "@/ui/primitives/Button";
@@ -35,6 +35,7 @@ export function AgentToasts() {
   const pathname = usePathname();
   const channel = useChannel();
   const approvals = useApprovals();
+  const sessions = useSessions("");
   const { subscribe } = useEvents();
   // Everything already there when the app opened isn't news.
   const seen = useRef<Set<string> | null>(null);
@@ -58,7 +59,7 @@ export function AgentToasts() {
       const key = `ask-${item.id}`;
       if (seen.current.has(key) || item.session === watched || NOT_ON.includes(pathname) || pathname === `/agent/sessions/${item.session}`) continue;
       const session = item.session;
-      push({ key, icon: "chat", title: item.agent, detail: item.text, sticky: true, action: { label: t("toast.answer"), run: () => (session && session !== "mail-agent" ? assistant.openSession(session) : router.push("/today")) } });
+      push({ key, icon: "chat", title: sessions.data?.sessions.find((row) => row.id === session)?.title ?? item.agent, detail: item.text, sticky: true, action: { label: t("toast.answer"), run: () => (session && session !== "mail-agent" ? assistant.openSession(session) : router.push("/today")) } });
     }
     for (const item of pending) {
       const key = `approval-${item.id}`;
@@ -92,7 +93,7 @@ export function AgentToasts() {
 
   const dismiss = (key: string) => setNotes((current) => current.filter((item) => item.key !== key));
   return (
-    <div role="region" aria-label={t("toast.region")} className={`pointer-events-none fixed z-50 flex w-popover max-w-full flex-col gap-2 ${assistant.open ? "bottom-4 right-dock" : "bottom-7 right-4"}`}>
+    <div role="region" aria-label={t("toast.region")} className={`pointer-events-none fixed z-50 flex w-popover max-w-full flex-col gap-2 ${assistant.open ? "bottom-4 right-dock" : "bottom-7 right-4 pb-3"}`}>
       <AnimatePresence initial={false}>
         {notes.map((note) => (
           <motion.div key={note.key} layout {...FADE_RISE} data-testid="agent-toast" className="pointer-events-auto mr-4 flex items-start gap-3 rounded-lg border border-line-subtle bg-surface-raised p-3 shadow-overlay">

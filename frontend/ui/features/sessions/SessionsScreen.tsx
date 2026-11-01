@@ -8,7 +8,6 @@ import { useCreateSession, useSessions } from "@/ui/client/sessions";
 import { Button } from "@/ui/primitives/Button";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
-import { Field } from "@/ui/primitives/Field";
 import { Input } from "@/ui/primitives/Input";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { StatusDot } from "@/ui/primitives/StatusDot";
@@ -27,8 +26,8 @@ export const SESSION_STATES: Readonly<Record<string, { label: StringKey; tone: "
 function SessionGroup({ title, rows }: { title: string; rows: readonly SessionRow[] }) {
   const format = useDateTime();
   return (
-    <section aria-label={title} className="flex flex-col gap-1">
-      <h2 className="text-sm text-ink-muted">{title}</h2>
+    <section aria-label={title || t("nav.sessions")} className="flex flex-col gap-1">
+      {title ? <h2 className="text-sm text-ink-muted">{title}</h2> : null}
       <ul className="flex flex-col border-t border-line-subtle">
         {rows.map((session) => {
           const state = SESSION_STATES[session.status] ?? { label: "sessions.status.done" as const, tone: "idle" as const };
@@ -66,12 +65,12 @@ export function SessionsScreen() {
         </Button>
       </header>
       {sessions.data ? <p className="text-sm tabular-nums text-ink-muted">{t("sessions.running", { running: sessions.data.running, limit: sessions.data.limit })}</p> : null}
-      <Field label={t("sessions.search")}>{({ invalid, ...control }) => <Input invalid={invalid} value={search} onChange={(event) => setSearch(event.target.value)} {...control} />}</Field>
+      <Input aria-label={t("sessions.search")} placeholder={t("sessions.search")} value={search} onChange={(event) => setSearch(event.target.value)} />
       {sessions.isPending ? <Skeleton className="h-6 w-full" /> : null}
       {sessions.isError ? <ErrorState title={t("sessions.error")} onRetry={() => void sessions.refetch()} /> : null}
       {sessions.isSuccess && rows.length === 0 ? <EmptyState icon="sessions" title={t("sessions.empty.title")} description={t("sessions.empty.description")} /> : null}
       {waiting.length ? <SessionGroup title={t("sessions.waitingOnYou")} rows={waiting} /> : null}
-      {others.length ? <SessionGroup title={waiting.length ? t("sessions.others") : t("nav.sessions")} rows={others} /> : null}
+      {others.length ? <SessionGroup title={waiting.length ? t("sessions.others") : ""} rows={others} /> : null}
     </div>
   );
 }

@@ -9,13 +9,13 @@ export interface SelectOption {
   label: string;
 }
 
-export function Select({ id, label, value, options, placeholder, invalid = false, disabled, describedBy, onChange }: { id?: string; label?: string; value?: string; options: readonly SelectOption[]; placeholder?: string; invalid?: boolean; disabled?: boolean; describedBy?: string; onChange: (value: string) => void }) {
+export function Select({ id, label, value, options, placeholder, invalid = false, disabled, describedBy, onChange, quiet = false, compact = false }: { quiet?: boolean; compact?: boolean; id?: string; label?: string; value?: string; options: readonly SelectOption[]; placeholder?: string; invalid?: boolean; disabled?: boolean; describedBy?: string; onChange: (value: string) => void }) {
   return (
     <RadixSelect.Root {...(value === undefined ? {} : { value })} onValueChange={onChange} {...(disabled === undefined ? {} : { disabled })}>
-      <RadixSelect.Trigger id={id} aria-label={label} aria-describedby={describedBy} aria-invalid={invalid || undefined} className={`${controlClass(invalid)} flex items-center justify-between gap-2 text-left`}>
+      <RadixSelect.Trigger id={id} aria-label={label} aria-describedby={describedBy} aria-invalid={invalid || undefined} className={quiet ? "focus-ring inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-ink-secondary transition-colors duration-fast hover:bg-surface-sunken hover:text-ink-primary" : `${controlClass(invalid)} flex items-center justify-between gap-2 text-left ${compact ? "py-1" : ""}`}>
         <RadixSelect.Value {...(placeholder ? { placeholder } : {})} />
         <RadixSelect.Icon>
-          <Icon name="chevronDown" />
+          <Icon name="chevronDown" className={quiet ? "h-3 w-3 shrink-0" : "h-4 w-4 shrink-0"} />
         </RadixSelect.Icon>
       </RadixSelect.Trigger>
       <RadixSelect.Portal>

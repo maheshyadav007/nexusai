@@ -28,7 +28,8 @@ function useOtherPeople(thread: ThreadRow): string {
 }
 
 export function ThreadRowView({ thread, excerpt, href, active = false }: { thread: ThreadRow; excerpt?: string; href?: string; active?: boolean }) {
-  const people = useOtherPeople(thread);
+  const others = useOtherPeople(thread);
+  const people = thread.sender_name || others;
   const format = useShortDate();
   const unread = thread.unread_count > 0;
   const status = statusLabel(thread.status);
@@ -58,7 +59,7 @@ export function ThreadRowView({ thread, excerpt, href, active = false }: { threa
               </span>
             ) : null}
             {thread.category ? <span className="truncate">{thread.category}</span> : null}
-            {status && thread.status === "waiting_on_you" ? <span className="shrink-0 text-accent-default">{status}</span> : null}
+            {status && thread.status === "waiting_on_you" ? <span className="shrink-0">{status}</span> : null}
           </span>
         ) : null}
       </span>

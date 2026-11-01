@@ -1,7 +1,9 @@
 "use client";
 
-import { useApprovals, useSessions } from "@/ui/client/sessions";
-import { useChannel } from "@/ui/client/work";
+import { motion } from "motion/react";
+import { SMOOTH } from "@/ui/primitives/motion";
+import { useSessions } from "@/ui/client/sessions";
+import { useWaitingCount } from "@/ui/client/work";
 import { CategoryNav } from "./CategoryNav";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -17,6 +19,9 @@ import { NAV_BOTTOM, NAV_SECTIONS, NAV_TOP, type NavItem } from "./nav";
 import { SidebarEditor } from "./SidebarEditor";
 import { arrange } from "./sidebarLayout";
 
+// One highlight that glides to the row you chose.
+const ACTIVE_ROW = "nav-active";
+
 function NavRow({ item, active, collapsed, count }: { item: NavItem; active: boolean; collapsed: boolean; count: number | undefined }) {
   const label = t(item.label);
   const row = (
@@ -24,11 +29,14 @@ function NavRow({ item, active, collapsed, count }: { item: NavItem; active: boo
       href={item.href}
       aria-current={active ? "page" : undefined}
       {...(collapsed ? { "aria-label": label } : {})}
-      className={`focus-ring flex items-center gap-2 rounded-md px-2 py-1 text-md transition-colors duration-fast ${collapsed ? "justify-center" : ""} ${active ? "bg-surface-sunken font-medium text-ink-primary" : "text-ink-secondary hover:bg-surface-sunken hover:text-ink-primary"}`}
+      className={`focus-ring relative flex items-center gap-2 rounded-md px-2 py-1 text-md transition-colors duration-fast ${collapsed ? "justify-center" : ""} ${active ? "text-ink-primary" : "text-ink-secondary hover:bg-surface-raised hover:text-ink-primary"}`}
     >
-      <Icon name={item.icon} />
-      {collapsed ? null : <span className="min-w-0 flex-1 truncate">{label}</span>}
-      {collapsed || !count ? null : <span className="text-sm tabular-nums text-accent-default">{count}</span>}
+      {active ? <motion.span layoutId={ACTIVE_ROW} transition={SMOOTH} className="absolute inset-0 rounded-md bg-surface-sunken" /> : null}
+      <span className="relative flex min-w-0 flex-1 items-center gap-2">
+        <Icon name={item.icon} />
+        {collapsed ? null : <span className="min-w-0 flex-1 truncate">{label}</span>}
+        {collapsed || !count ? null : <span className="text-sm tabular-nums text-accent-default">{count}</span>}
+      </span>
     </Link>
   );
   return collapsed ? (
@@ -42,11 +50,8 @@ function NavRow({ item, active, collapsed, count }: { item: NavItem; active: boo
 
 function useWaitingCounts(): Readonly<Record<string, number>> {
   const sessions = useSessions("");
-  const channel = useChannel();
-  const approvals = useApprovals();
+  const decisions = useWaitingCount();
   const waiting = (sessions.data?.sessions ?? []).filter((row) => row.status === "waiting").length;
-  const asks = (channel.data?.messages ?? []).filter((message) => message.kind === "ask").length;
-  const decisions = asks + (approvals.data?.approvals.length ?? 0);
   return { ...(waiting ? { sessions: waiting } : {}), ...(decisions ? { today: decisions } : {}) };
 }
 

@@ -103,6 +103,8 @@ class ListThreads(BaseModel):
 
 
 class ThreadRow(BaseModel):
+    # The latest sender's name, when a list has looked it up.
+    sender_name: str | None = None
     id: int
     subject: str
     participants: list[str]

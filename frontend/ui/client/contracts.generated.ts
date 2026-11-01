@@ -38,6 +38,7 @@ export type Category = string | null;
  */
 export type Before = string | null;
 export type Limit = number;
+export type SenderName = string | null;
 export type Id = number;
 export type Subject = string;
 export type Participants = string[];
@@ -1578,6 +1579,7 @@ export interface ListThreads {
  * via the `definition` "ThreadRow".
  */
 export interface ThreadRow {
+  sender_name?: SenderName;
   id: Id;
   subject: Subject;
   participants: Participants;

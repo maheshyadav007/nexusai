@@ -50,7 +50,7 @@ export function PermissionsSettings() {
                 .filter((tool) => tool.group === group)
                 .map((tool) => (
                   <SettingRow key={tool.name} label={tool.label} description={tool.description}>
-                    <Select label={tool.label} value={tool.level} options={tool.can_allow ? LEVEL_OPTIONS : ALWAYS_ASKS} onChange={(level) => update({ tools: { ...value.tools, [tool.name]: level as Level } })} />
+                    <Select compact label={tool.label} value={tool.level} options={tool.can_allow ? LEVEL_OPTIONS : ALWAYS_ASKS} onChange={(level) => update({ tools: { ...value.tools, [tool.name]: level as Level } })} />
                   </SettingRow>
                 ))}
             </div>
@@ -104,16 +104,16 @@ export function SendCheckSettingsCard() {
   return (
     <Card title={t("checks.title")} description={t("checks.description")}>
       <SettingRow label={t("checks.external")}>
-        <Select label={t("checks.external")} value={value.external_recipient ?? "warn"} options={CHECK_OPTIONS} onChange={(level) => update({ external_recipient: level as CheckLevel })} />
+        <Select compact label={t("checks.external")} value={value.external_recipient ?? "warn"} options={CHECK_OPTIONS} onChange={(level) => update({ external_recipient: level as CheckLevel })} />
       </SettingRow>
       <SettingRow label={t("checks.attachment")}>
-        <Select label={t("checks.attachment")} value={value.missing_attachment ?? "warn"} options={CHECK_OPTIONS} onChange={(level) => update({ missing_attachment: level as CheckLevel })} />
+        <Select compact label={t("checks.attachment")} value={value.missing_attachment ?? "warn"} options={CHECK_OPTIONS} onChange={(level) => update({ missing_attachment: level as CheckLevel })} />
       </SettingRow>
       <SettingRow label={t("checks.newer")}>
-        <Select label={t("checks.newer")} value={value.newer_reply ?? "warn"} options={CHECK_OPTIONS} onChange={(level) => update({ newer_reply: level as CheckLevel })} />
+        <Select compact label={t("checks.newer")} value={value.newer_reply ?? "warn"} options={CHECK_OPTIONS} onChange={(level) => update({ newer_reply: level as CheckLevel })} />
       </SettingRow>
       <SettingRow label={t("checks.undo")}>
-        <Input aria-label={t("checks.undo")} type="number" min={0} max={60} value={value.undo_seconds ?? 5} onChange={(event) => update({ undo_seconds: Number(event.target.value) })} />
+        <Input className="py-1" aria-label={t("checks.undo")} type="number" min={0} max={60} value={value.undo_seconds ?? 5} onChange={(event) => update({ undo_seconds: Number(event.target.value) })} />
       </SettingRow>
     </Card>
   );
@@ -144,7 +144,7 @@ export function GuardSettings() {
             <div className="flex items-center gap-3">
               <span className="min-w-0 flex-1 text-md text-ink-primary">{rule.name}</span>
               <div className="w-rail-wide shrink-0">
-                <Select label={t("guard.action")} value={rule.action ?? "mask"} options={ACTION_OPTIONS} onChange={(action) => change(index, { action: action as GuardRule["action"] })} />
+                <Select compact label={t("guard.action")} value={rule.action ?? "mask"} options={ACTION_OPTIONS} onChange={(action) => change(index, { action: action as GuardRule["action"] })} />
               </div>
               <Switch label={rule.name} hideLabel checked={rule.enabled ?? true} onChange={(enabled) => change(index, { enabled })} />
             </div>
@@ -221,13 +221,13 @@ export function NotificationSettings() {
         <div className="flex justify-end"><Switch label={t("quiet.enabled")} hideLabel checked={value.enabled ?? false} onChange={(enabled) => update({ enabled })} /></div>
       </SettingRow>
       <SettingRow label={t("quiet.start")}>
-        <Input aria-label={t("quiet.start")} type="time" value={value.start ?? "22:00"} onChange={(event) => update({ start: event.target.value })} />
+        <Input className="py-1" aria-label={t("quiet.start")} type="time" value={value.start ?? "22:00"} onChange={(event) => update({ start: event.target.value })} />
       </SettingRow>
       <SettingRow label={t("quiet.end")}>
-        <Input aria-label={t("quiet.end")} type="time" value={value.end ?? "07:00"} onChange={(event) => update({ end: event.target.value })} />
+        <Input className="py-1" aria-label={t("quiet.end")} type="time" value={value.end ?? "07:00"} onChange={(event) => update({ end: event.target.value })} />
       </SettingRow>
       <SettingRow label={t("quiet.limit")}>
-        <Input aria-label={t("quiet.limit")} type="number" min={0} value={value.channel_daily_limit ?? 20} onChange={(event) => update({ channel_daily_limit: Number(event.target.value) })} />
+        <Input className="py-1" aria-label={t("quiet.limit")} type="number" min={0} value={value.channel_daily_limit ?? 20} onChange={(event) => update({ channel_daily_limit: Number(event.target.value) })} />
       </SettingRow>
       <SettingRow label={t("notifications.browser")} description={t("notifications.browser.description")}>
         <div className="flex justify-end"><Button onClick={allow}>{t("notifications.allow")}</Button></div>

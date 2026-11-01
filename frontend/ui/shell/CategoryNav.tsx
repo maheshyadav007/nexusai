@@ -1,5 +1,6 @@
 "use client";
 
+import { motion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -11,6 +12,7 @@ import { Dialog } from "@/ui/primitives/Dialog";
 import { Field } from "@/ui/primitives/Field";
 import { IconButton } from "@/ui/primitives/IconButton";
 import { Input } from "@/ui/primitives/Input";
+import { SMOOTH } from "@/ui/primitives/motion";
 import { t } from "@/ui/strings";
 
 function NewCategory() {
@@ -70,12 +72,13 @@ export function CategoryNav({ collapsed }: { collapsed: boolean }) {
           const active = pathname === href || pathname.startsWith(`${href}/`);
           return (
             <li key={item.name}>
-              <Link href={href} aria-current={active ? "page" : undefined} className={`focus-ring flex items-center gap-2 rounded-md px-2 py-1 text-md transition-colors duration-fast ${active ? "bg-surface-sunken text-ink-primary" : "text-ink-secondary hover:bg-surface-sunken hover:text-ink-primary"}`}>
-                <span aria-hidden className="flex h-4 w-4 shrink-0 items-center justify-center">
+              <Link href={href} aria-current={active ? "page" : undefined} className={`focus-ring relative flex items-center gap-2 rounded-md px-2 py-1 text-md transition-colors duration-fast ${active ? "text-ink-primary" : "text-ink-secondary hover:bg-surface-raised hover:text-ink-primary"}`}>
+                {active ? <motion.span layoutId="nav-active" transition={SMOOTH} className="absolute inset-0 rounded-md bg-surface-sunken" /> : null}
+                <span aria-hidden className="relative flex h-4 w-4 shrink-0 items-center justify-center">
                   <span className={`h-2 w-2 rounded-full ${item.in_priority ? "bg-accent-default" : "bg-line-strong"}`} />
                 </span>
-                <span className="min-w-0 flex-1 truncate">{item.name}</span>
-                {item.unread ? <span className="text-sm tabular-nums text-ink-muted">{item.unread}</span> : null}
+                <span className="relative min-w-0 flex-1 truncate">{item.name}</span>
+                {item.unread ? <span className="relative text-sm tabular-nums text-ink-muted">{item.unread}</span> : null}
               </Link>
             </li>
           );

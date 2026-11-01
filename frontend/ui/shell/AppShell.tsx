@@ -16,7 +16,7 @@ export function AppShell({ activities, counts, children }: { activities?: readon
       <NavSidebar {...(counts ? { counts } : {})} />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar {...(activities ? { activities } : {})} />
-        <main id="main" tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto outline-none">
+        <main id="main" tabIndex={-1} className="dock-aware min-h-0 flex-1 overflow-y-auto outline-none">
           <ErrorBoundary>{children}</ErrorBoundary>
         </main>
       </div>

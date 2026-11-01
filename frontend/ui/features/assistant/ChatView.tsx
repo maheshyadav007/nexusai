@@ -304,7 +304,7 @@ export function ChatView({ id, initial, active, readOnly = false, footer }: { id
             following.current = box.scrollHeight - box.scrollTop - box.clientHeight < FOLLOW_WITHIN_PX;
             setAway(!following.current);
           }}
-          className="flex h-full flex-col gap-5 overflow-y-auto p-4"
+          className="flex h-full flex-col gap-3 overflow-y-auto p-4"
         >
           {messages.map((message, index) =>
             message.role === "user" ? (

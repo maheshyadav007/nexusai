@@ -67,7 +67,7 @@ export function QuestionCard({ question, options, multiple, onAnswer, onSkip, pe
           value={other}
           disabled={pending}
           onChange={(event) => setOther(event.target.value)}
-          className="focus-ring w-full rounded-md bg-transparent p-2 text-md text-ink-primary placeholder:text-ink-muted"
+          className="focus-ring mt-1 w-full rounded-md border border-line-subtle bg-surface-page p-2 text-md text-ink-primary transition-colors duration-fast placeholder:text-ink-muted focus:border-line-strong"
         />
         {error ? <p role="alert" className="text-sm text-status-danger">{error}</p> : null}
         <div className="mt-2 flex items-center justify-end gap-2">

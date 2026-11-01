@@ -61,3 +61,7 @@ Applied to `nexus-light`. `nexus-dark` follows the same rules, with its peach ti
 
 1. **Surfaces:** warm paper, not v9's peach.
 2. **Interface font:** Instrument Sans for now. Fonts must stay easy to swap, so each theme chooses its own; see "Fonts" in section 2 of `docs/COMPONENT_PLAN.md`.
+3. **The chat runs the app (2026-11-01).** One conversation view is used by a dock that minimizes to a pill, the session page and setup. Agents talk to the person on Today, and to each other in the Agent channel. Anything waiting on the person shows the same count in the sidebar, the pill and Today.
+4. **Chat rendering:** the person's messages sit in a tonal bubble with copy, edit and time on hover. Replies are plain text on the page with copy and time. Work folds behind one thinking line, and next steps are rows. Decisions get cards. Their shapes come from Beautiful UI and AICSS's free components, on our tokens.
+5. **Motion:** Motion for panels, cards and the sidebar highlight, with the theme's durations and easing, and it honors reduced motion. A loop is allowed only for work really running.
+

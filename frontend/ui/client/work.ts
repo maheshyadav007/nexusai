@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { command, query } from "./api";
 import type { QuietHours, Schedule, SaveMemory, SavePrompt, SaveReminder, SaveTask, SendCheckSettings, SetSessionContext, GuardRules, SaveModelProvider, ListProviderModels } from "./contracts.generated";
 import { useHomeReady } from "./home";
+import { useCategories } from "./mail";
+import { useApprovals } from "./sessions";
 
 function useReady<T>(key: readonly unknown[], fn: () => Promise<T>) {
   const ready = useHomeReady();
@@ -76,3 +78,21 @@ export const useTestGuard = () => useMutation({ mutationFn: (input: { rules: Gua
 export const useModelProvider = () => useReady(["model-provider"], () => query("models.provider", {}));
 export const useSaveModelProvider = () => useCommand(["model-provider", "models"], (input: SaveModelProvider) => command("models.provider.save", input));
 export const useListProviderModels = () => useMutation({ mutationFn: (input: ListProviderModels) => command("models.provider.listModels", input) });
+
+/** Everything agents are waiting on the person for. The sidebar, the chat pill and Today all use it. */
+export function useWaitingCount(): number {
+  const channel = useChannel();
+  const approvals = useApprovals();
+  const tasks = useTasks(false);
+  const reminders = useReminders();
+  const memory = useMemory("");
+  const categories = useCategories();
+  return (
+    (channel.data?.messages ?? []).filter((message) => message.kind === "ask").length +
+    (approvals.data?.approvals.length ?? 0) +
+    (tasks.data?.tasks ?? []).filter((task) => task.proposed).length +
+    (reminders.data?.reminders ?? []).filter((reminder) => reminder.proposed).length +
+    (memory.data?.proposals.length ?? 0) +
+    (categories.data?.categories ?? []).filter((item) => item.proposed).length
+  );
+}

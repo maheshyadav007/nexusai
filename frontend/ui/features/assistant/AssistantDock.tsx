@@ -3,9 +3,9 @@
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
-import { useApprovals, useSessions } from "@/ui/client/sessions";
-import { useChannel } from "@/ui/client/work";
+import { useEffect, useState } from "react";
+import { useSessions } from "@/ui/client/sessions";
+import { useWaitingCount } from "@/ui/client/work";
 import { Icon } from "@/ui/icons";
 import { IconButton } from "@/ui/primitives/IconButton";
 import { PANEL, QUICK } from "@/ui/primitives/motion";
@@ -75,14 +75,17 @@ function Panel() {
 export function AssistantDock() {
   const assistant = useAssistant();
   const pathname = usePathname();
-  const channel = useChannel();
-  const approvals = useApprovals();
   const sessions = useSessions("");
-  const asks = (channel.data?.messages ?? []).filter((message) => message.kind === "ask").length;
-  const waiting = asks + (approvals.data?.approvals.length ?? 0);
+  const waiting = useWaitingCount();
   const running = sessions.data?.running ?? 0;
   // The session page already is this conversation, and two live views of one chat would fight.
-  if (pathname.startsWith("/agent/sessions/")) return null;
+  const hidden = pathname.startsWith("/agent/sessions/");
+  const showing = assistant.open && !hidden;
+  useEffect(() => {
+    if (showing) document.documentElement.dataset.dock = "open";
+    else delete document.documentElement.dataset.dock;
+  }, [showing]);
+  if (hidden) return null;
   return (
     <AnimatePresence initial={false} mode="wait">
       {assistant.open ? (

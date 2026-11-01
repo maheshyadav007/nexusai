@@ -213,6 +213,11 @@ class _ImapHandler(socketserver.StreamRequestHandler):
                 entry = (self, self.selected)
                 self.state.idlers.append(entry)
                 self.push("+ idling\r\n")
+                # Like real servers, it reports what changed since this client last looked.
+                count = len(self.state.boxes[self.selected or "INBOX"].mails)
+                if count != getattr(self, "last_idle_count", count):
+                    self.push(f"* {count} EXISTS\r\n")
+                self.last_idle_count = count
                 self.state.lock.release()
                 try:
                     self.rfile.readline()

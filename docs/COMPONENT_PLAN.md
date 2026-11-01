@@ -340,7 +340,7 @@ Status: built. The 100,000-message targets pass at the storage layer (`make spee
 
 ### Stage 3: Agent
 
-Status: built and tested with a fake model. Sessions, masking and approvals have also run on a real ChatGPT account. The Mail agent, summaries and the setup interview haven't, and neither has a LiteLLM server.
+Status: rebuilt around one chat after the first real use (see decisions 3 to 5 in `frontend/ui/DESIGN_DIRECTION.md`). Built and tested with a fake model. Sessions, masking and approvals have also run on a real ChatGPT account. The Mail agent, summaries and the setup interview haven't, and neither has a LiteLLM server.
 
 | # | Build | Done when |
 |---|---|---|

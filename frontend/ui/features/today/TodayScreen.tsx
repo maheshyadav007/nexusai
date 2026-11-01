@@ -7,7 +7,7 @@ import type { ChannelMessage, MailCategory, TodayThread } from "@/ui/client/cont
 import { useDateOnly, useDateTime, useShortDate } from "@/ui/client/format";
 import { useCategories, useDecideCategory, useMailStatus } from "@/ui/client/mail";
 import { useApprovals, useSessions } from "@/ui/client/sessions";
-import { useChannel, useDecideMemory, useDismissChannel, useMemory, useReminders, useRemoveReminder, useRemoveTask, useRespondChannel, useSaveReminder, useSaveTask, useTasks, useToday } from "@/ui/client/work";
+import { useChannel, useDecideMemory, useDismissChannel, useMemory, useReminders, useRemoveReminder, useRemoveTask, useRespondChannel, useSaveReminder, useSaveTask, useTasks, useToday, useWaitingCount } from "@/ui/client/work";
 import { useAssistant } from "@/ui/features/assistant/AssistantProvider";
 import { ApprovalCard, QuestionCard } from "@/ui/features/assistant/Cards";
 import { Composer } from "@/ui/features/assistant/Composer";
@@ -52,15 +52,18 @@ function AskRow({ message }: { message: ChannelMessage }) {
   const respond = useRespondChannel();
   const dismiss = useDismissChannel();
   const assistant = useAssistant();
+  const sessions = useSessions("");
+  const title = sessions.data?.sessions.find((row) => row.id === message.session)?.title;
   return (
     <div className="flex flex-col gap-1">
       <p className="flex items-center gap-2 text-sm text-ink-muted">
-        {message.agent}
         {message.session && message.session !== "mail-agent" ? (
-          <button type="button" onClick={() => assistant.openSession(message.session as string)} className="focus-ring rounded-sm underline underline-offset-2 transition-colors duration-fast hover:text-ink-primary">
-            {t("channel.openSession")}
+          <button type="button" onClick={() => assistant.openSession(message.session as string)} className="focus-ring min-w-0 truncate rounded-sm underline underline-offset-2 transition-colors duration-fast hover:text-ink-primary">
+            {title ?? message.agent}
           </button>
-        ) : null}
+        ) : (
+          message.agent
+        )}
         {message.thread ? <TextLink className="text-sm" href={`/mail/all/${message.thread}`}>{t("channel.openSource")}</TextLink> : null}
       </p>
       <QuestionCard question={message.text} options={message.options} multiple={message.multiple ?? false} pending={respond.isPending} onAnswer={(answer) => respond.mutate({ id: message.id, answer })} onSkip={() => dismiss.mutate(message.id)} />
@@ -113,7 +116,7 @@ function WaitingOnYou() {
   const proposedReminders = (reminders.data?.reminders ?? []).filter((reminder) => reminder.proposed);
   const proposedMemories = memory.data?.proposals ?? [];
   const proposedCategories: readonly MailCategory[] = (categories.data?.categories ?? []).filter((item) => item.proposed);
-  const count = asks.length + pending.length + proposedTasks.length + proposedReminders.length + proposedMemories.length + proposedCategories.length;
+  const count = useWaitingCount();
   if (channel.isError) return <ErrorState title={t("channel.error")} onRetry={() => void channel.refetch()} />;
   return (
     <section aria-label={t("today.waitingOnYou")} className="flex flex-col gap-3">

@@ -59,7 +59,7 @@ export function TasksScreen() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {task.proposed ? <Button variant="primary" onClick={() => save.mutate({ ...editable(task), proposed: false })}>{t("tasks.accept")}</Button> : null}
-              <AskAgent context={[`task:${task.id}`]} title={task.title} label={t("tasks.doIt")} text={t("tasks.doIt.prompt")} />
+              <AskAgent context={[`task:${task.id}`]} title={task.title} label={t("tasks.doIt")} text={t("tasks.doIt.prompt")} quiet={false} />
               {task.thread ? <TextLink className="text-sm" href={`/mail/all/${task.thread}`}>{t("channel.openSource")}</TextLink> : null}
             </div>
           </li>
