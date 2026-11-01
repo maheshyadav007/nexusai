@@ -155,6 +155,32 @@ test("ChatGPT connects, lists models, remembers the choice and answers a test", 
   await expect(page.getByRole("button", { name: "Connect ChatGPT" })).toBeVisible();
 });
 
+test("a change during a window's first load isn't lost", async ({ page, request }) => {
+  // The first answer was read before the change, but arrives after the event saying it changed.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  let first = true;
+  await page.route("**/api/queries/settings.get", async (route) => {
+    if (!first) return route.continue();
+    first = false;
+    const stale = await route.fetch();
+    await held;
+    return route.fulfill({ response: stale });
+  });
+  const events = page.waitForResponse("**/api/events?*");
+  await page.goto("/settings");
+  await events;
+  await page.waitForTimeout(300);
+
+  await request.post("/api/commands/settings.update", { data: { density: "spacious" } });
+  await page.waitForTimeout(300);
+  release();
+  await expect(page.locator("html")).toHaveAttribute("data-density", "spacious");
+
+  await request.post("/api/commands/settings.update", { data: { density: "comfortable" } });
+  await expect(page.locator("html")).toHaveAttribute("data-density", "comfortable");
+});
+
 test("density and text size apply instantly", async ({ page }) => {
   await page.goto("/settings");
   await page.getByRole("radio", { name: "Large" }).click();

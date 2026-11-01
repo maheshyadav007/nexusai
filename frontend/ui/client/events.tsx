@@ -1,6 +1,6 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { EVENTS_URL, latestSeq } from "./api";
 import type { AppEvent } from "./contracts.generated";
@@ -15,6 +15,15 @@ const INVALIDATES: Record<string, readonly string[]> = {
 };
 
 type Listener = (event: AppEvent) => void;
+
+/**
+ * Reads a query again. It's cancelled first because TanStack won't restart a first load when it's
+ * invalidated, and that load may have read the old value just before the change.
+ */
+async function refresh(client: QueryClient, filters?: { queryKey: readonly string[] }) {
+  await client.cancelQueries(filters);
+  await client.invalidateQueries(filters);
+}
 
 interface EventsValue {
   connected: boolean;
@@ -43,11 +52,15 @@ export function EventsProvider({ children }: { children: ReactNode }) {
     void latestSeq().then((seq) => {
       if (cancelled) return;
       source = new EventSource(`${EVENTS_URL}?since=${seq}`);
-      source.onopen = () => setConnected(true);
+      source.onopen = () => {
+        setConnected(true);
+        // Anything could have changed before this connection opened.
+        void refresh(client);
+      };
       source.onerror = () => setConnected(false);
       source.onmessage = (message) => {
         const event = JSON.parse(message.data as string) as AppEvent;
-        for (const key of INVALIDATES[event.type] ?? []) void client.invalidateQueries({ queryKey: [key] });
+        for (const key of INVALIDATES[event.type] ?? []) void refresh(client, { queryKey: [key] });
         for (const listener of listeners.current) listener(event);
       };
     });
