@@ -25,6 +25,8 @@ Components use **semantic tokens** that say what a value is for, such as `surfac
 ```text
 frontend/ui/theme/
   schema.ts                 every token, with validation
+  font-catalog.ts           the fonts a theme can choose from
+  fonts.ts                  loads each catalog font
   themes/
     nexus-light.json        from v9
     nexus-dark.json         to be designed
@@ -38,14 +40,14 @@ tailwind.config.ts          maps Tailwind names to CSS variables only, no values
   "id": "nexus-light",
   "mode": "light",
   "color": {
-    "surface": { "page": "#F8EAE2", "raised": "...", "sunken": "...", "inverse": "#1B1815" },
+    "surface": { "page": "#F7F4EE", "raised": "...", "sunken": "...", "inverse": "#1B1815" },
     "text": { "primary": "#191714", "secondary": "#4A423A", "muted": "#6E645A" },
     "accent": { "default": "#A8441F", "hover": "#8E3717", "onAccent": "#FCF3EE" },
     "status": { "success": "#3B5C33", "warning": "#7A5410", "danger": "#A83226" },
     "agent": { "running": "...", "waiting": "...", "done": "...", "failed": "..." },
     "border": { "subtle": "...", "strong": "..." }
   },
-  "type": { "family": { "sans": "...", "serif": "...", "mono": "..." }, "size": { "xs": "11px", "sm": "12px", "md": "13px", "lg": "15px", "xl": "19px", "display": "..." } },
+  "type": { "family": { "sans": "instrument-sans", "serif": "instrument-serif", "mono": "jetbrains-mono" }, "size": { "xs": "11px", "sm": "12px", "md": "13px", "lg": "15px", "xl": "19px", "display": "..." } },
   "space": { "1": "4px", "2": "8px", "3": "12px", "4": "16px", "5": "24px", "6": "32px" },
   "radius": { "sm": "6px", "md": "9px", "lg": "14px", "full": "999px" },
   "shadow": { "raised": "...", "overlay": "..." },
@@ -58,7 +60,8 @@ tailwind.config.ts          maps Tailwind names to CSS variables only, no values
 - **Accent, density and text size (`SET-1`):** these override individual variables.
 - **Native window parts:** Mica, vibrancy and title bar colors will come from the same theme file when Electron is added.
 - **Emails keep their own look:** HTML mail renders in a sandbox (`PRC-7`). Theme tokens cover the surrounding frame only.
-- **Validated:** the build fails if a theme is missing a token, or if text and background pairs fall below contrast targets.
+- **Fonts:** each theme names its fonts from the catalog, so changing a theme's font is a one-word edit in its JSON file, and themes can use different fonts. A new font is added to `font-catalog.ts` and `fonts.ts`; the type check fails until both are done.
+- **Validated:** the build fails if a theme is missing a token, names a font outside the catalog, or if text and background pairs fall below contrast targets.
 
 ### Corrections to v9 for readability
 
@@ -297,7 +300,7 @@ Each step ends with something you can see working. **Unslop and the quality bar 
 
 ### Stage 0: Foundation
 
-Status: built except 0.5. Agent host and Heavy jobs processes, the backend supervisor, live events and the per-install token arrive with the first features that need them.
+Status: built. Agent host and Heavy jobs processes, the backend supervisor, live events and the per-install token arrive with the first features that need them.
 
 | # | Build | Done when |
 |---|---|---|
@@ -305,7 +308,7 @@ Status: built except 0.5. Agent host and Heavy jobs processes, the backend super
 | 0.2 | Local server with security checks, config, logging | A request from another origin is refused |
 | 0.3 | Contracts, event bus, database, migrations | An event survives a crash and is delivered after restart |
 | 0.4 | Theme system with `nexus-light` and a `nexus-dark` draft, `ui/strings`, typed client, gallery | Changing one theme file value restyles the app, with no component edits |
-| 0.5 | Install unslop; run it on v9; write `DESIGN_DIRECTION.md` | You approve the direction |
+| 0.5 | Install unslop; run it on v9; write `DESIGN_DIRECTION.md` | Done: direction approved, warm paper surfaces, fonts chosen per theme |
 | 0.6 | Proof: Settings → change theme, seen in the event inspector | Works through every layer, and survives a reload |
 
 ### Stage 1: Shell

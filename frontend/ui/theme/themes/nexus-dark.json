@@ -7,10 +7,10 @@
       "page": "#121010",
       "raised": "#1B1815",
       "sunken": "#0F0E0D",
-      "inverse": "#F8EAE2"
+      "inverse": "#F7F4EE"
     },
     "ink": {
-      "primary": "#F6E7DE",
+      "primary": "#EFE9DE",
       "secondary": "#D3C4B8",
       "muted": "#A79B8D",
       "faint": "#6E645A",
@@ -49,9 +49,9 @@
       "display": "32px"
     },
     "family": {
-      "sans": "var(--font-sans)",
-      "serif": "var(--font-serif)",
-      "mono": "var(--font-mono)"
+      "sans": "instrument-sans",
+      "serif": "instrument-serif",
+      "mono": "jetbrains-mono"
     }
   },
   "space": {

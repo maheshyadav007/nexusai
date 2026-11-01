@@ -1,0 +1,3 @@
+Source: https://github.com/heydamir/unslop
+Commit: 1d13095 (reviewed 2026-11-01)
+Credit: Damir Sokolovsky (@heydamir), CC BY 4.0

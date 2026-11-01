@@ -14,7 +14,7 @@ export function themeToCss(theme: Theme, isDefault: boolean): string {
   for (const [name, value] of Object.entries(theme.type.size)) {
     lines.push(`--type-size-${name}: max(${theme.type.minSize}, calc(${value} * var(--text-scale)));`);
   }
-  for (const [name, value] of Object.entries(theme.type.family)) lines.push(`--type-family-${name}: ${value};`);
+  for (const [name, value] of Object.entries(theme.type.family)) lines.push(`--type-family-${name}: var(--font-${value});`);
   for (const [name, value] of Object.entries(theme.space)) lines.push(`--space-${name}: calc(${value} * var(--density-scale));`);
   for (const [name, value] of Object.entries(theme.radius)) lines.push(`--radius-${name}: ${value};`);
   for (const [name, value] of Object.entries(theme.shadow)) lines.push(`--shadow-${name}: ${value};`);

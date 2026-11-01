@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FONT_CATALOG } from "./font-catalog";
 
 const hex = z.string().regex(/^#[0-9A-Fa-f]{6}$/);
 const size = z.string().regex(/^\d+(\.\d+)?(px|rem)$/);
@@ -20,7 +21,7 @@ export const themeSchema = z
     type: z.strictObject({
       minSize: size,
       size: z.strictObject({ xs: size, sm: size, md: size, lg: size, xl: size, display: size }),
-      family: z.strictObject({ sans: z.string(), serif: z.string(), mono: z.string() }),
+      family: z.strictObject({ sans: z.enum(FONT_CATALOG.sans), serif: z.enum(FONT_CATALOG.serif), mono: z.enum(FONT_CATALOG.mono) }),
     }),
     space: z.record(z.string(), size),
     radius: z.strictObject({ sm: size, md: size, lg: size, full: size }),

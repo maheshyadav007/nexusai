@@ -35,8 +35,26 @@ describe("themes", () => {
 
   it("changing one value in a theme file changes the CSS", () => {
     const changed = { ...light, color: { ...light.color, surface: { ...light.color.surface, page: "#102030" } } };
-    expect(themeToCss(light, true)).toContain("--color-surface-page: 248 234 226;");
+    expect(themeToCss(light, true)).toContain("--color-surface-page: 247 244 238;");
     expect(themeToCss(changed, true)).toContain("--color-surface-page: 16 32 48;");
+  });
+});
+
+describe("fonts", () => {
+  it("a theme chooses its font by name, and the CSS follows", () => {
+    const swapped = { ...light, type: { ...light.type, family: { ...light.type.family, sans: "space-grotesk" as const } } };
+    expect(themeToCss(light, true)).toContain("--type-family-sans: var(--font-instrument-sans);");
+    expect(themeToCss(swapped, true)).toContain("--type-family-sans: var(--font-space-grotesk);");
+  });
+
+  it("rejects a font that isn't in the catalog", () => {
+    const unknown = { ...light, type: { ...light.type, family: { ...light.type.family, sans: "comic-sans" } } };
+    expect(themeSchema.safeParse(unknown).success).toBe(false);
+  });
+
+  it("rejects a font used in the wrong role", () => {
+    const wrong = { ...light, type: { ...light.type, family: { ...light.type.family, mono: "instrument-sans" } } };
+    expect(themeSchema.safeParse(wrong).success).toBe(false);
   });
 });
 

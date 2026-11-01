@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { FONT_CATALOG } from "../ui/theme/font-catalog";
 
 const background = (page: import("@playwright/test").Page) =>
   page.evaluate(() => getComputedStyle(document.body).backgroundColor);
@@ -29,6 +30,21 @@ test("changing the theme goes through every layer, and reaches other windows", a
 
   await page.getByRole("radio", { name: "Nexus Light" }).click();
   await expect.poll(() => background(page)).toBe(lightBackground);
+});
+
+test("every catalog font loads, and a theme's choice reaches the text", async ({ page }) => {
+  await page.goto("/settings");
+  const bodyFont = () => page.evaluate(() => getComputedStyle(document.body).fontFamily);
+  await expect.poll(bodyFont).toMatch(/Instrument.Sans/i);
+
+  for (const id of Object.values(FONT_CATALOG).flat()) {
+    const family = await page.evaluate((name) => getComputedStyle(document.documentElement).getPropertyValue(`--font-${name}`), id);
+    expect(family, `--font-${id} is missing; load it in ui/theme/fonts.ts`).not.toBe("");
+  }
+
+  // The same swap a theme file makes, applied live, reaches the rendered text.
+  await page.evaluate(() => document.documentElement.style.setProperty("--type-family-sans", "var(--font-space-grotesk)"));
+  await expect.poll(bodyFont).toMatch(/Space.Grotesk/i);
 });
 
 test("density and text size apply instantly", async ({ page }) => {

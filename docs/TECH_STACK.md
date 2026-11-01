@@ -34,7 +34,7 @@ Status legend: **In use** (in the repo today) · **Decided** (agreed, not built 
 | TanStack Query + Virtual | Decided | Backend data in the UI, refreshed by events; virtualized long lists. |
 | Drag-and-drop library (such as `dnd-kit`) | Considered | For panels and sidebar; must support keyboard dragging. |
 | Framer Motion, lucide-react, Radix Slot, react-markdown | In use | Animation, icons, primitives, markdown rendering. |
-| Bundled fonts (Space Grotesk, Instrument Serif, JetBrains Mono) | In use | Loaded with `next/font/google`, which downloads them at build time and serves them locally, so there are no runtime calls to Google Fonts (corporate proxies often block them). Fallbacks: Segoe UI Variable (Windows), SF Pro (macOS). |
+| Bundled fonts (Instrument Sans, Instrument Serif, JetBrains Mono; Space Grotesk available) | In use. Each theme chooses from the font catalog | Loaded with `next/font/google`, which downloads them at build time and serves them locally, so there are no runtime calls to Google Fonts (corporate proxies often block them). Fallbacks: Segoe UI Variable (Windows), SF Pro (macOS). |
 | Own component set, built on tokens | Decided | Radix primitives for behaviour; Beautiful UI, free AICSS and Amicro adapted where licenses allow; everything restyled to our theme. See [`COMPONENT_PLAN.md`](COMPONENT_PLAN.md). |
 | Radix UI primitives | Decided | Accessible, unstyled Dialog, Menu, Popover, Tabs, Tooltip, Select and Switch. |
 | Theme files + CSS variables | Decided | All visual values live in `ui/theme/themes/*.json`. Build checks reject hardcoded colors and sizes. |
@@ -143,6 +143,7 @@ The MVP build stages and feature targets are in [`FEATURES.md`](FEATURES.md).
 
 | Date | Change |
 |---|---|
+| 2026-11-01 | Design direction approved: warm paper surfaces and Instrument Sans. Fonts are chosen per theme from a catalog. |
 | 2026-11-01 | Initial stack: Electron shell over the existing Next.js app; Playwright + Windows CI/VM for testing; v9 chosen as design reference. |
 | 2026-11-01 | Added design resources: Beautiful UI, unslop, AICSS (free tier only), Amicro. |
 | 2026-11-01 | Repo cleanup: old prototype, docs, designs and hallmark skill moved to `archive/2026-11-01/`. Fresh Next.js shell with v9 colors and fonts. |
