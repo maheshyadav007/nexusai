@@ -70,6 +70,7 @@ class Config:
     mail: MailConfig
     agent: AgentConfig
     secrets_test_file: Path | None = None
+    require_install_token: bool = True
 
     @property
     def database_path(self) -> Path:

@@ -1,5 +1,6 @@
 {
   "backendUrl": "http://127.0.0.1:8765",
+  "installToken": { "file": "install-token", "header": "x-nexusai-token" },
   "devOrigins": ["127.0.0.1"],
   "defaultTheme": "nexus-light",
   "systemThemes": { "light": "nexus-light", "dark": "nexus-dark" },

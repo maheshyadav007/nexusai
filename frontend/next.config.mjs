@@ -7,6 +7,9 @@ export default {
   allowedDevOrigins: appConfig.devOrigins,
   // The default corner covers the sidebar.
   devIndicators: { position: "bottom-right" },
+  // Requests pass through proxy.ts, which would cut off an upload past its 10 MB default.
+  // The backend's max_upload_bytes is the real limit.
+  experimental: { proxyClientMaxBodySize: "210mb" },
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${process.env.NEXUSAI_BACKEND_URL ?? appConfig.backendUrl}/api/:path*` }];
   },

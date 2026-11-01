@@ -14,7 +14,7 @@ from fastapi import FastAPI, Header, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import ValidationError
 
-from nexusai.api.security import LocalOnlyMiddleware
+from nexusai.api.security import LocalOnlyMiddleware, install_token
 from nexusai.api.sse import sse_stream
 from nexusai.contracts.agent import SessionChat
 from nexusai.contracts.documents import DocumentRow
@@ -143,6 +143,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         LocalOnlyMiddleware,
         allowed_hosts=cfg.allowed_hosts,
         allowed_origins=cfg.allowed_origins,
+        token=install_token(data_dir) if cfg.require_install_token else None,
     )
 
     async def run(endpoint: Endpoint | None, name: str, request: Request) -> JSONResponse:

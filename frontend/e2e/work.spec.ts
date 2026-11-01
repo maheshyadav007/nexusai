@@ -233,3 +233,23 @@ test("typing on Today starts a session and sends it", async ({ page }) => {
   await expect(page.getByText("Hello from Today").first()).toBeVisible();
   await expect(page.getByTestId("agent-message")).toHaveCount(1);
 });
+
+test("only the app's own pages get through to the backend", async ({ page, request }) => {
+  await page.goto("/today");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
+  const direct = await request.post("http://127.0.0.1:8765/api/queries/settings.get", { data: {} });
+  expect(direct.status()).toBe(401);
+  const otherSite = await request.post("/api/queries/settings.get", { data: {}, headers: { "sec-fetch-site": "cross-site" } });
+  expect(otherSite.status()).toBe(403);
+  const otherOrigin = await request.post("/api/commands/settings.update", { data: { theme: "nexus-dark" }, headers: { origin: "https://evil.example" } });
+  expect(otherOrigin.status()).toBe(403);
+});
+
+test("a large upload arrives whole through the token proxy", async ({ page }) => {
+  await page.goto("/documents/all");
+  const size = 12 * 1024 * 1024;
+  const response = await page.request.post("/api/documents/upload?name=large-upload.txt", { data: Buffer.alloc(size, "a"), headers: { "content-type": "application/octet-stream" } });
+  expect(response.ok(), await response.text()).toBe(true);
+  expect(((await response.json()) as { size: number }).size).toBe(size);
+});

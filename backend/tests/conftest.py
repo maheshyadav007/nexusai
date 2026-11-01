@@ -19,4 +19,5 @@ def config(tmp_path: Path) -> Config:
         load_config(tmp_path),
         handler_retry_delay_seconds=0,
         secrets_test_file=tmp_path / "secrets.json",
+        require_install_token=False,
     )

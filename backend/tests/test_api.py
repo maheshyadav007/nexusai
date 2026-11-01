@@ -1,9 +1,14 @@
+import stat
+import sys
 from collections.abc import Iterator
+from dataclasses import replace
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from nexusai.api.app import create_app
+from nexusai.api.security import TOKEN_FILE, TOKEN_HEADER
 from nexusai.kernel.config import Config
 
 GOOD = {"host": "127.0.0.1:8765"}
@@ -68,3 +73,36 @@ def test_dns_rebinding_host_is_refused(client: TestClient) -> None:
 def test_app_origin_is_allowed(client: TestClient) -> None:
     response = client.get("/api/health", headers={"origin": "http://localhost:3000"})
     assert response.status_code == 200
+
+
+def test_requests_need_this_install_s_token(config: Config, tmp_path: Path) -> None:
+    secured = replace(config, require_install_token=True)
+    with TestClient(create_app(secured), base_url="http://127.0.0.1:8765") as client:
+        token_file = tmp_path / "app-data" / TOKEN_FILE
+        token = token_file.read_text()
+        assert len(token) >= 40
+        if sys.platform != "win32":
+            assert stat.S_IMODE(token_file.stat().st_mode) == 0o600
+
+        # Whatever starts the app needs to know it's up, and learns nothing else.
+        assert client.get("/api/health").status_code == 200
+        for path in [
+            "/api/queries/settings.get",
+            "/api/home/status",
+            "/api/commands/settings.update",
+        ]:
+            assert client.post(path, json={}).status_code == 401
+        wrong = client.post("/api/queries/settings.get", headers={TOKEN_HEADER: "wrong"})
+        assert (wrong.status_code, wrong.json()["code"]) == (401, "request.unauthorized")
+        # A header that isn't plain text is refused, not a crash.
+        odd = client.post(
+            "/api/queries/settings.get", headers={TOKEN_HEADER: "caf\u00e9".encode("latin-1")}
+        )
+        assert odd.status_code == 401
+        right = client.post("/api/home/status", headers={TOKEN_HEADER: token})
+        assert right.status_code == 200
+
+    # It stays the same across restarts, so the app doesn't have to be told again.
+    with TestClient(create_app(secured), base_url="http://127.0.0.1:8765") as client:
+        assert client.post("/api/home/status", headers={TOKEN_HEADER: token}).status_code == 200
+        assert token_file.read_text() == token
