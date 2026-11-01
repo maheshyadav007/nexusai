@@ -161,6 +161,12 @@ def needs_triage(event: AppEvent, ctx: Context) -> None:
     mail_agent.on_needs_triage(event, ctx, _mail_agent)
 
 
+@agent_module.on("models.changed", "agent.triage_model_back")
+def model_changed(event: AppEvent, ctx: Context) -> None:
+    if _mail_agent:
+        _mail_agent.wake.set()
+
+
 @agent_module.on("reminders.changed", "agent.scheduler_reminders")
 def reminders_changed(event: AppEvent, ctx: Context) -> None:
     if _scheduler:

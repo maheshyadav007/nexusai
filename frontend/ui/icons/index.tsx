@@ -1,8 +1,25 @@
-import { Activity, AlarmClock, Archive, ArrowDown, ArrowUp, Bell, Flag, Paperclip, Bot, BrainCircuit, CalendarDays, Check, ChevronDown, ChevronRight, CircleAlert, Clock, FileText, FolderOpen, GripVertical, Inbox, LayoutPanelTop, ListChecks, Loader, Mails, MessagesSquare, PanelLeftClose, PanelLeftOpen, PenLine, ScrollText, Search, Send, Settings, ShieldCheck, SlidersHorizontal, Sun, Tags, Terminal, Upload, WifiOff, X } from "lucide-react";
+import { Activity, AlarmClock, Archive, ArrowDown, ArrowUp, Bell, Bot, Brain, BrainCircuit, CalendarDays, Check, ChevronDown, ChevronRight, CircleAlert, Clock, Copy, CornerDownRight, File, FileText, Flag, Folder, FolderOpen, GripVertical, Inbox, LayoutPanelTop, ListChecks, Loader, MailOpen, Mails, Maximize2, MessageCircle, MessagesSquare, Minus, PanelLeftClose, PanelLeftOpen, Paperclip, PenLine, Pencil, Plus, Reply, ReplyAll, ScrollText, Search, Send, Settings, ShieldCheck, SlidersHorizontal, Square, SquarePen, Star, Sun, Tags, Terminal, Trash2, Upload, WifiOff, X } from "lucide-react";
 
 // Features name an icon by what it's for, so one change here updates every use.
 export const ICONS = {
   activity: Activity,
+  thinking: Brain,
+  copy: Copy,
+  edit: Pencil,
+  stop: Square,
+  minimize: Minus,
+  openFull: Maximize2,
+  newChat: SquarePen,
+  chat: MessageCircle,
+  followUp: CornerDownRight,
+  file: File,
+  priority: Star,
+  reply: Reply,
+  replyAll: ReplyAll,
+  trash: Trash2,
+  add: Plus,
+  markUnread: MailOpen,
+  folder: Folder,
   agent: Bot,
   all: FolderOpen,
   approvals: ShieldCheck,

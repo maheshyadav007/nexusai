@@ -27,6 +27,7 @@ const INVALIDATES: Record<string, readonly string[]> = {
   "channel.posted": ["channel", "today"],
   "board.changed": ["board"],
   "tasks.changed": ["tasks"],
+  "categories.changed": ["categories", "threads"],
   "reminders.changed": ["reminders"],
   "schedule.changed": ["schedules"],
   "schedule.ran": ["schedules", "jobs"],

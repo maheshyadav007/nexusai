@@ -4,6 +4,8 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
 const FAKE = "http://127.0.0.1:8766/__sent";
 
 const noViolations = async (page: Page) => {
+  // Cards fade in, and contrast can't be judged halfway through.
+  await page.waitForTimeout(300);
   const { violations } = await new AxeBuilder({ page }).analyze();
   expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
 };
@@ -87,7 +89,8 @@ test("a command waits for approval in the session, then runs and finishes", asyn
 
   await approval.getByRole("button", { name: "Allow once" }).click();
   await expect(page.getByTestId("agent-message").last()).toContainText("Tool said: from-the-agent");
-  await expect(page.getByTestId("tool-call")).toContainText("Done");
+  await page.getByTestId("thinking").getByRole("button").first().click();
+  await expect(page.getByTestId("tool-call")).toContainText("Ran command");
   await expect(page.getByTestId("session-status")).toContainText("Done");
 });
 
@@ -106,6 +109,7 @@ test("approvals can be answered from the top bar, and a denied command never run
   await page.goto("/agent/sessions");
   await page.getByTestId("session-row").first().click();
   await expect(page.getByTestId("agent-message").last()).toContainText("Tool said: The person declined this.");
+  await page.getByTestId("thinking").getByRole("button").first().click();
   await expect(page.getByTestId("tool-call")).toContainText("Declined");
 });
 

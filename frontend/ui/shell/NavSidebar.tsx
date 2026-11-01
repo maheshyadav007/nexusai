@@ -1,8 +1,11 @@
 "use client";
 
+import { useApprovals, useSessions } from "@/ui/client/sessions";
+import { useChannel } from "@/ui/client/work";
+import { CategoryNav } from "./CategoryNav";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import appConfig from "@/app.config.json";
 import { Icon } from "@/ui/icons";
 import { useSidebar } from "@/ui/client/settings";
@@ -25,7 +28,7 @@ function NavRow({ item, active, collapsed, count }: { item: NavItem; active: boo
     >
       <Icon name={item.icon} />
       {collapsed ? null : <span className="min-w-0 flex-1 truncate">{label}</span>}
-      {collapsed || !count ? null : <span className="text-sm tabular-nums text-ink-muted">{count}</span>}
+      {collapsed || !count ? null : <span className="text-sm tabular-nums text-accent-default">{count}</span>}
     </Link>
   );
   return collapsed ? (
@@ -37,8 +40,19 @@ function NavRow({ item, active, collapsed, count }: { item: NavItem; active: boo
   );
 }
 
-export function NavSidebar({ counts = {} }: { counts?: Readonly<Record<string, number>> }) {
+function useWaitingCounts(): Readonly<Record<string, number>> {
+  const sessions = useSessions("");
+  const channel = useChannel();
+  const approvals = useApprovals();
+  const waiting = (sessions.data?.sessions ?? []).filter((row) => row.status === "waiting").length;
+  const asks = (channel.data?.messages ?? []).filter((message) => message.kind === "ask").length;
+  const decisions = asks + (approvals.data?.approvals.length ?? 0);
+  return { ...(waiting ? { sessions: waiting } : {}), ...(decisions ? { today: decisions } : {}) };
+}
+
+export function NavSidebar({ counts }: { counts?: Readonly<Record<string, number>> }) {
   const pathname = usePathname();
+  const waiting = useWaitingCounts();
   const layout = useSidebar();
   const sections = arrange(NAV_SECTIONS, layout.data).filter((section) => !section.hidden);
   const [collapsed, setCollapsed] = useState(false);
@@ -65,7 +79,7 @@ export function NavSidebar({ counts = {} }: { counts?: Readonly<Record<string, n
     const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
     return (
       <li key={item.id}>
-        <NavRow item={item} active={active} collapsed={collapsed} count={counts[item.id]} />
+        <NavRow item={item} active={active} collapsed={collapsed} count={(counts ?? waiting)[item.id]} />
       </li>
     );
   };
@@ -83,10 +97,13 @@ export function NavSidebar({ counts = {} }: { counts?: Readonly<Record<string, n
         <div className="flex flex-col gap-5 px-2 pb-4">
           <ul className="flex flex-col gap-px">{NAV_TOP.map(row)}</ul>
           {sections.map((section) => (
-            <section key={section.id} aria-label={t(section.label)}>
-              {collapsed ? null : <h2 className="mb-1 px-2 text-sm text-ink-muted">{t(section.label)}</h2>}
-              <ul className="flex flex-col gap-px">{section.items.filter((item) => !item.hidden).map(row)}</ul>
-            </section>
+            <Fragment key={section.id}>
+              <section aria-label={t(section.label)}>
+                {collapsed ? null : <h2 className="mb-1 px-2 text-sm text-ink-muted">{t(section.label)}</h2>}
+                <ul className="flex flex-col gap-px">{section.items.filter((item) => !item.hidden).map(row)}</ul>
+              </section>
+              {section.id === "mail" ? <CategoryNav collapsed={collapsed} /> : null}
+            </Fragment>
           ))}
         </div>
       </ScrollArea>

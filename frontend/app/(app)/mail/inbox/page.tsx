@@ -1,5 +1,5 @@
-import { InboxScreen } from "@/ui/features/mail/InboxScreen";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <InboxScreen />;
+  redirect("/mail/priority");
 }

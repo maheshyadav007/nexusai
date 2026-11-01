@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import type { ThreadRow } from "@/ui/client/contracts.generated";
-import { useDateTime } from "@/ui/client/format";
+import { useShortDate } from "@/ui/client/format";
 import { useMailAccounts } from "@/ui/client/mail";
 import { Icon } from "@/ui/icons";
-import { Badge } from "@/ui/primitives/Badge";
 import { t, type StringKey } from "@/ui/strings";
 
 const STATUS_LABELS: Readonly<Record<string, StringKey>> = {
@@ -28,38 +27,40 @@ function useOtherPeople(thread: ThreadRow): string {
   return shown.join(", ");
 }
 
-export function ThreadRowView({ thread, excerpt }: { thread: ThreadRow; excerpt?: string }) {
+export function ThreadRowView({ thread, excerpt, href, active = false }: { thread: ThreadRow; excerpt?: string; href?: string; active?: boolean }) {
   const people = useOtherPeople(thread);
-  const format = useDateTime();
+  const format = useShortDate();
   const unread = thread.unread_count > 0;
   const status = statusLabel(thread.status);
   return (
-    <Link href={`/mail/thread/${thread.id}`} className="focus-ring flex items-start gap-3 rounded-md px-3 py-2 transition-colors duration-fast hover:bg-surface-sunken">
-      <span aria-hidden className={`mt-2 h-2 w-2 shrink-0 rounded-full ${unread ? "bg-accent-default" : ""}`} />
-      <span className="min-w-0 flex-1">
+    <Link href={href ?? `/mail/all/${thread.id}`} aria-current={active ? "page" : undefined} className={`focus-ring flex items-start gap-2 border-b border-line-subtle px-3 py-3 transition-colors duration-fast ${active ? "bg-surface-sunken" : "hover:bg-surface-raised"}`}>
+      <span aria-hidden className={`mt-1 h-2 w-2 shrink-0 rounded-full ${unread ? "bg-accent-default" : ""}`} />
+      <span className="flex min-w-0 flex-1 flex-col gap-px">
         <span className="flex items-baseline justify-between gap-3">
           <span className={`min-w-0 truncate text-md ${unread ? "font-medium text-ink-primary" : "text-ink-secondary"}`}>
             {people}
-            {thread.message_count > 1 ? <span className="ml-2 text-sm tabular-nums text-ink-muted">{thread.message_count}</span> : null}
+            {thread.message_count > 1 ? <span className="ml-1 text-sm tabular-nums text-ink-muted">{thread.message_count}</span> : null}
           </span>
           <span className="shrink-0 text-sm tabular-nums text-ink-muted">{format(thread.last_date)}</span>
         </span>
         <span className={`block truncate text-md ${unread ? "text-ink-primary" : "text-ink-secondary"}`}>{thread.subject || t("mail.noSubject")}</span>
-        <span className="flex items-center gap-2">
-          <span className="min-w-0 flex-1 truncate text-sm text-ink-muted">{excerpt ?? thread.snippet}</span>
-          {thread.has_attachments ? (
-            <span role="img" aria-label={t("mail.hasAttachments")} className="text-ink-muted">
-              <Icon name="attachment" className="h-3 w-3" />
-            </span>
-          ) : null}
-          {thread.flagged ? (
-            <span role="img" aria-label={t("mail.flagged")} className="text-accent-default">
-              <Icon name="flag" className="h-3 w-3" />
-            </span>
-          ) : null}
-          {status ? <Badge>{status}</Badge> : null}
-          {thread.category ? <Badge>{thread.category}</Badge> : null}
-        </span>
+        <span className="block truncate text-sm text-ink-muted">{excerpt ?? thread.snippet}</span>
+        {status || thread.category || thread.has_attachments || thread.flagged ? (
+          <span className="mt-1 flex items-center gap-2 text-sm text-ink-muted">
+            {thread.flagged ? (
+              <span role="img" aria-label={t("mail.flagged")} className="text-accent-default">
+                <Icon name="flag" className="h-3 w-3" />
+              </span>
+            ) : null}
+            {thread.has_attachments ? (
+              <span role="img" aria-label={t("mail.hasAttachments")}>
+                <Icon name="attachment" className="h-3 w-3" />
+              </span>
+            ) : null}
+            {thread.category ? <span className="truncate">{thread.category}</span> : null}
+            {status && thread.status === "waiting_on_you" ? <span className="shrink-0 text-accent-default">{status}</span> : null}
+          </span>
+        ) : null}
       </span>
     </Link>
   );

@@ -57,7 +57,7 @@ export function EntryRedirect() {
   const router = useRouter();
   const { route, pending, failed, retry } = useEntryRoute();
   const settings = useSettings();
-  const start = settings.data?.default_screen === "inbox" ? "/mail/inbox" : "/today";
+  const start = settings.data?.default_screen === "inbox" ? "/mail/priority" : "/today";
   const waiting = pending || (!route && settings.isPending);
   useEffect(() => {
     if (!waiting && !failed) router.replace(route ?? start);

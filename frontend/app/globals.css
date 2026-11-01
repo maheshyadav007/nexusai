@@ -36,3 +36,11 @@ svg.lucide {
     animation-duration: 0ms !important;
   }
 }
+
+@layer components {
+  /* A message box that grows with what's typed, up to a point. */
+  .grow-field {
+    field-sizing: content;
+    max-height: var(--layout-popover);
+  }
+}

@@ -89,7 +89,11 @@
     "drawer": "420px",
     "dialog": "480px",
     "page": "1200px",
-    "railWide": "180px"
+    "railWide": "180px",
+    "dock": "440px",
+    "dockHeight": "720px",
+    "reading": "760px",
+    "mailList": "380px"
   },
   "scale": {
     "density": {

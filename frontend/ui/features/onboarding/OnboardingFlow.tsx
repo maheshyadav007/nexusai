@@ -8,7 +8,7 @@ import { useFinishOnboarding, useOnboarding, useSetStep } from "@/ui/client/onbo
 import { useCreateSession } from "@/ui/client/sessions";
 import { useStarterPrompts } from "@/ui/client/work";
 import { PromptsEditor } from "@/ui/features/agent/MemoryScreen";
-import { Conversation } from "@/ui/features/sessions/AgentScreen";
+import { ChatView } from "@/ui/features/assistant/ChatView";
 import { PermissionsSettings } from "@/ui/features/settings/AgentSettings";
 import { HomeChooser } from "@/ui/features/home/HomeChooser";
 import { PstImportCard } from "@/ui/features/mail/PstImportCard";
@@ -90,7 +90,7 @@ function InterviewStep() {
   }
   return (
     <div className="flex h-drawer flex-col">
-      <Conversation id={session} initial={[]} active={false} />
+      <ChatView id={session} initial={[]} active={false} />
     </div>
   );
 }

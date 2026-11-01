@@ -10,7 +10,7 @@ import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { t } from "@/ui/strings";
 import { Composer } from "./Composer";
-import { NewMessage } from "./InboxScreen";
+import { NewMessage } from "./MailWorkspace";
 import { NoAccount, SyncNotice } from "./MailList";
 import { useMailAccounts } from "@/ui/client/mail";
 

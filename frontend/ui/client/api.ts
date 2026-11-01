@@ -1,4 +1,13 @@
 import type {
+  AnswerSession,
+  CategoryList,
+  CategoryName,
+  CategorySaved,
+  DecideCategory,
+  GetToolCatalog,
+  ListCategories,
+  SaveCategory,
+  ToolCatalog,
   ActivityList,
   AgentChannelList,
   BoardList,
@@ -204,6 +213,10 @@ interface Commands {
   "session.archive": [SessionAction, AgentDone];
   "approvals.decide": [DecideApproval, AgentDone];
   "permissions.save": [Permissions, Permissions];
+  "session.answer": [AnswerSession, AgentDone];
+  "categories.save": [SaveCategory, CategorySaved];
+  "categories.remove": [CategoryName, CategoryList];
+  "categories.decide": [DecideCategory, CategoryList];
   "channel.respond": [RespondChannel, AgentDone];
   "channel.dismiss": [DismissChannel, AgentDone];
   "agentChannel.setMuted": [SetTopicMuted, AgentDone];
@@ -263,6 +276,8 @@ interface Queries {
   "approvals.list": [ListApprovals, ApprovalList];
   "modelCall.get": [GetModelCall, ModelCallView];
   "permissions.get": [GetPermissions, Permissions];
+  "tools.catalog": [GetToolCatalog, ToolCatalog];
+  "categories.list": [ListCategories, CategoryList];
   "today.view": [GetToday, TodayView];
   "channel.list": [ListChannel, ChannelList];
   "board.list": [ListBoard, BoardList];

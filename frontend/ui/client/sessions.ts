@@ -39,6 +39,7 @@ export function takeFirstMessage(id: string): string | undefined {
 }
 
 export const useCreateSession = () => useSessionCommand((input: CreateSession) => command("session.create", input));
+export const useAnswerSession = () => useSessionCommand((input: { id: string; answer: string }) => command("session.answer", input));
 export const useStopSession = () => useSessionCommand((id: string) => command("session.stop", { id }));
 export const useRenameSession = () => useSessionCommand((input: { id: string; title: string }) => command("session.rename", input));
 export const useArchiveSession = () => useSessionCommand((id: string) => command("session.archive", { id }));
@@ -69,6 +70,9 @@ export function useSavePermissions() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (permissions: Permissions) => command("permissions.save", permissions),
-    onSuccess: (permissions) => client.setQueryData(["permissions"], permissions),
+    onSuccess: (permissions) => {
+      client.setQueryData(["permissions"], permissions);
+      void client.invalidateQueries({ queryKey: ["permissions", "catalog"] });
+    },
   });
 }

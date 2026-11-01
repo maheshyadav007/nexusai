@@ -1,5 +1,6 @@
 "use client";
 
+import { MotionConfig } from "motion/react";
 import { useEffect, useState, type ReactNode } from "react";
 import appConfig from "@/app.config.json";
 import { useSettings } from "@/ui/client/settings";
@@ -33,7 +34,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   }, [data, systemDark]);
 
-  return children;
+  // Honors the system's reduced motion setting everywhere Motion is used.
+  return <MotionConfig reducedMotion="user">{children}</MotionConfig>;
 }
 
 /** Runs before first paint, so a saved theme never flashes the default. */

@@ -63,6 +63,7 @@ export const useTriageExisting = () => useCommand(["triage-estimate", "jobs"], (
 export const useSessionContext = (id: string) => useReady(["session-context", id], () => query("session.context", { id }));
 export const useSetContext = () => useCommand(["session-context"], (input: { id: string; context: string[] }) => command("session.setContext", input as SetSessionContext));
 
+export const useToolCatalog = () => useReady(["permissions", "catalog"], () => query("tools.catalog", {}));
 export const useUsage = () => useReady(["usage"], () => query("usage.get", {}));
 export const useSetCap = () => useCommand(["usage"], (daily_cap: number) => command("usage.setCap", { daily_cap }));
 export const useQuietHours = () => useReady(["quiet"], () => query("quietHours.get", {}));

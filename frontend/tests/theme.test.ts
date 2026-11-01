@@ -59,11 +59,11 @@ describe("accents", () => {
 
 describe("sidebar layout", () => {
   it("applies the saved order, marks hidden entries and keeps new ones", () => {
-    const arranged = arrange(NAV_SECTIONS, { sections: ["agent", "gone", "mail"], items: { mail: ["sent", "inbox"] }, hidden: ["drafts", "planner"] });
+    const arranged = arrange(NAV_SECTIONS, { sections: ["agent", "gone", "mail"], items: { mail: ["sent", "priority"] }, hidden: ["drafts", "planner"] });
     expect(arranged.slice(0, 2).map((section) => section.id)).toEqual(["agent", "mail"]);
     expect(arranged.map((section) => section.id)).toEqual(expect.arrayContaining(["documents", "planner"]));
     const mail = arranged.find((section) => section.id === "mail")!;
-    expect(mail.items.slice(0, 2).map((item) => item.id)).toEqual(["sent", "inbox"]);
+    expect(mail.items.slice(0, 2).map((item) => item.id)).toEqual(["sent", "priority"]);
     expect(mail.items.find((item) => item.id === "drafts")!.hidden).toBe(true);
     expect(arranged.find((section) => section.id === "planner")!.hidden).toBe(true);
   });
@@ -103,9 +103,9 @@ describe("navigation", () => {
   });
 
   it("finds an item from its path, and not from a similar one", () => {
-    expect(findNavItem("/mail/inbox")?.id).toBe("inbox");
-    expect(findNavItem("/mail/inbox/123")?.id).toBe("inbox");
-    expect(findNavItem("/mail/inboxes")).toBeUndefined();
+    expect(findNavItem("/mail/priority")?.id).toBe("priority");
+    expect(findNavItem("/mail/priority/123")?.id).toBe("priority");
+    expect(findNavItem("/mail/priorities")).toBeUndefined();
   });
 });
 

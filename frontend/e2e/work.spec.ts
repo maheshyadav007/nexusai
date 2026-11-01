@@ -6,6 +6,8 @@ const USER = "tester@example.com";
 const unique = (word: string) => `${word} ${Date.now()}${Math.floor(Math.random() * 1000)}`;
 
 const noViolations = async (page: Page) => {
+  // Cards fade in, and contrast can't be judged halfway through.
+  await page.waitForTimeout(300);
   const { violations } = await new AxeBuilder({ page }).exclude("iframe").analyze();
   expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
 };
@@ -39,6 +41,16 @@ test.beforeAll(async ({ request }) => {
     },
   });
   expect(saved.ok(), await saved.text()).toBe(true);
+  // Mail that arrives during the first sync counts as old, so it wouldn't be judged. The status
+  // can still describe the account before this one, so only seeing mail arrive proves it's synced.
+  const probe = unique("Probe");
+  await expect
+    .poll(async () => ((await (await request.post("/api/queries/mail.status", { data: {} })).json()) as { state: string }).state, { timeout: 20_000 })
+    .toBe("live");
+  await request.post(CONTROL, { data: { subject: probe, body: "Just checking." } });
+  await expect
+    .poll(async () => ((await (await request.post("/api/queries/threads.list", { data: { folder: "all" } })).json()) as { threads: { subject: string }[] }).threads.some((thread) => thread.subject === probe), { timeout: 20_000 })
+    .toBe(true);
 });
 
 test.afterAll(async ({ request }) => {
@@ -55,13 +67,13 @@ test("new mail is judged, and reaches Today, the thread and the channel", async 
 
   const row = page.getByTestId("today-thread").filter({ hasText: subject });
   await expect(row).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId("channel-message").first()).toContainText("Is this urgent for you?", { timeout: 20_000 });
+  await expect(page.getByTestId("question-card").first()).toContainText("Is this urgent for you?", { timeout: 20_000 });
   await noViolations(page);
 
-  const question = page.getByTestId("channel-message").filter({ hasText: "Is this urgent for you?" }).first();
+  const question = page.getByTestId("question-card").filter({ hasText: "Is this urgent for you?" }).first();
   await question.getByRole("textbox").fill("Yes it is");
-  await question.getByRole("button", { name: "Answer" }).click();
-  await expect(page.getByTestId("channel-message").filter({ hasText: "Is this urgent for you?" })).toHaveCount(0);
+  await question.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByTestId("question-card").filter({ hasText: "Is this urgent for you?" })).toHaveCount(0);
 
   await row.click();
   await expect(page.getByRole("heading", { name: subject })).toBeVisible();
@@ -76,7 +88,7 @@ test("new mail is judged, and reaches Today, the thread and the channel", async 
   await expect(page.getByTestId("summary-text")).toContainText("They want the numbers by Friday.");
 
   await page.getByRole("button", { name: "Ask agent" }).click();
-  await expect(page).toHaveURL(/\/agent\/sessions\/[0-9a-f]{32}/);
+  await expect(page.getByTestId("assistant-dock")).toBeVisible();
   await expect(page.getByTestId("context-chip")).toContainText(subject);
   await page.getByRole("button", { name: /^Remove / }).click();
   await expect(page.getByTestId("context-chip")).toHaveCount(0);
@@ -104,8 +116,8 @@ test("a proposed task is accepted, finished, and removed", async ({ page }) => {
   await expect(mine).toHaveCount(0);
 
   await proposed.getByRole("button", { name: "Do it for me" }).click();
-  await expect(page).toHaveURL(/\/agent\/sessions\/[0-9a-f]{32}/);
-  await expect(page.getByTestId("context-chip")).toContainText("Reply to this mail");
+  await expect(page.getByTestId("assistant-dock")).toBeVisible();
+  await expect(page.getByTestId("user-message")).toContainText("Please do this task for me.");
 });
 
 test("a reminder is added and snoozed", async ({ page }) => {
@@ -182,10 +194,16 @@ test("agent screens open cleanly and memory proposals are decided", async ({ pag
 
 test("the new settings sections save, and the guard masks a sample", async ({ page }) => {
   await page.goto("/settings?section=permissions");
-  await page.getByRole("radiogroup", { name: "Run commands" }).getByRole("radio", { name: "Off" }).click();
+  await page.getByRole("combobox", { name: "Run commands" }).click();
+  await page.getByRole("option", { name: "Off" }).click();
   await page.reload();
-  await expect(page.getByRole("radiogroup", { name: "Run commands" }).getByRole("radio", { name: "Off" })).toBeChecked();
-  await page.getByRole("radiogroup", { name: "Run commands" }).getByRole("radio", { name: "Ask" }).click();
+  await expect(page.getByRole("combobox", { name: "Run commands" })).toHaveText(/Off/);
+  await page.getByRole("combobox", { name: "Run commands" }).click();
+  await page.getByRole("option", { name: "Ask first" }).click();
+  // Sending always asks, so allowing it isn't offered.
+  await page.getByRole("combobox", { name: "Send mail" }).click();
+  await expect(page.getByRole("option", { name: "Allow" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
   await noViolations(page);
 
   await page.goto("/settings?section=guard");
@@ -218,7 +236,7 @@ test("a send warns about a missing attachment, and can be undone", async ({ page
   await page.reload();
   await expect(page.getByRole("spinbutton", { name: "Seconds to undo a send" })).toHaveValue("3");
 
-  await page.goto("/mail/inbox");
+  await page.goto("/mail/all");
   await page.getByRole("button", { name: "New message" }).click();
   await page.getByRole("textbox", { name: "To", exact: true }).fill("someone@example.com");
   await page.getByRole("textbox", { name: "Subject" }).fill(unique("Report"));
@@ -238,10 +256,11 @@ test("typing on Today starts a session and sends it", async ({ page }) => {
   await page.goto("/today");
   await page.getByRole("textbox", { name: "Ask the agent to do something" }).fill("Hello from Today");
   await page.getByRole("button", { name: "Send" }).click();
-  await expect(page).toHaveURL(/\/agent\/sessions\/[0-9a-f]{32}$/);
-  await expect(page.getByTestId("agent-message")).toContainText("Hello from gpt-best");
+  const dock = page.getByTestId("assistant-dock");
+  await expect(dock.getByTestId("agent-message")).toContainText("Hello from gpt-best");
   await page.reload();
-  await expect(page.getByText("Hello from Today").first()).toBeVisible();
+  await expect(page.getByTestId("assistant-dock").getByTestId("agent-message")).toContainText("Hello from gpt-best");
+  await expect(page.getByTestId("user-message")).toContainText("Hello from Today");
   await expect(page.getByTestId("agent-message")).toHaveCount(1);
 });
 

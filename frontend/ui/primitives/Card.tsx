@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 export function Card({ title, description, aside, children }: { title: string; description?: string; aside?: ReactNode; children: ReactNode }) {
   return (
-    <section className="rounded-lg border border-line-subtle bg-surface-raised p-5 shadow-raised">
+    <section className="rounded-lg border border-line-subtle bg-surface-raised p-5">
       <header className="mb-4 flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-medium text-ink-primary">{title}</h2>

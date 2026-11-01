@@ -11,6 +11,8 @@ const deliver = async (page: Page, mail: Record<string, unknown>) => {
 };
 
 const noViolations = async (page: Page) => {
+  // Cards fade in, and contrast can't be judged halfway through.
+  await page.waitForTimeout(300);
   // Mail is the sender's content, and its sandbox rightly stops axe from running inside it.
   const { violations } = await new AxeBuilder({ page }).exclude("iframe").analyze();
   expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
@@ -24,7 +26,7 @@ test.beforeAll(async ({ request }) => {
 test.describe.configure({ mode: "serial" });
 
 test("a mail account can be tested, and a wrong password says so", async ({ page }) => {
-  await page.goto("/mail/inbox");
+  await page.goto("/mail/all");
   await expect(page.getByText("No mail account connected")).toBeVisible();
   await page.getByRole("link", { name: "Connect mail in Settings" }).click();
   await expect(page).toHaveURL(/section=accounts/);
@@ -53,7 +55,7 @@ test("a mail account can be tested, and a wrong password says so", async ({ page
 });
 
 test("new mail appears by itself, opens safely, and reads as read", async ({ page }) => {
-  await page.goto("/mail/inbox");
+  await page.goto("/mail/all");
   const subject = unique("Contract review");
   await deliver(page, {
     subject,
@@ -78,12 +80,12 @@ test("new mail appears by itself, opens safely, and reads as read", async ({ pag
   await expect(page.getByText("Remote images are blocked")).toBeVisible();
   await noViolations(page);
 
-  await page.goto("/mail/inbox");
+  await page.goto("/mail/all");
   await expect(page.getByTestId("thread-row").filter({ hasText: subject }).locator("span.bg-accent-default")).toHaveCount(0);
 });
 
 test("replying goes out with the right people and joins the conversation", async ({ page }) => {
-  await page.goto("/mail/inbox");
+  await page.goto("/mail/all");
   const subject = unique("Budget question");
   await deliver(page, { subject, to: `${USER}, sam@example.com`, cc: "lee@example.com", body: "Can you confirm the numbers?" });
   await page.getByTestId("thread-row").filter({ hasText: subject }).getByRole("link").click();
@@ -108,7 +110,7 @@ test("replying goes out with the right people and joins the conversation", async
 });
 
 test("a bad address blocks sending, and a saved draft can be reopened", async ({ page }) => {
-  await page.goto("/mail/inbox");
+  await page.goto("/mail/all");
   await page.getByRole("button", { name: "New message" }).click();
   await page.getByRole("textbox", { name: "To", exact: true }).fill("not-an-address");
   await expect(page.getByText("isn't a valid address")).toBeVisible();
@@ -129,7 +131,7 @@ test("a bad address blocks sending, and a saved draft can be reopened", async ({
 });
 
 test("search finds mail from the top bar and filters narrow it", async ({ page }) => {
-  await page.goto("/mail/inbox");
+  await page.goto("/mail/all");
   const word = `zebra${Date.now()}`;
   await deliver(page, { subject: `About ${word}`, body: `The ${word} report.` });
   await expect(page.getByTestId("thread-row").filter({ hasText: word })).toBeVisible({ timeout: 15_000 });
@@ -153,7 +155,7 @@ test("a rule files new mail, and the reason is shown", async ({ page }) => {
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Rules saved").first()).toBeVisible();
 
-  await page.goto("/mail/inbox");
+  await page.goto("/mail/all");
   const subject = unique("Invoice");
   await deliver(page, { subject });
   const row = page.getByTestId("thread-row").filter({ hasText: subject });
@@ -163,7 +165,7 @@ test("a rule files new mail, and the reason is shown", async ({ page }) => {
 });
 
 test("status and flag are kept, and archive removes it from the inbox", async ({ page }) => {
-  await page.goto("/mail/inbox");
+  await page.goto("/mail/all");
   const subject = unique("Archive this");
   await deliver(page, { subject });
   await page.getByTestId("thread-row").filter({ hasText: subject }).getByRole("link").click();
@@ -176,12 +178,12 @@ test("status and flag are kept, and archive removes it from the inbox", async ({
   await expect(page.getByRole("combobox", { name: "Status" })).toHaveText("Waiting on others");
 
   await page.getByRole("button", { name: "Archive" }).click();
-  await expect(page).toHaveURL(/\/mail\/inbox$/);
+  await expect(page).toHaveURL(/\/mail\/all$/);
   await expect(page.getByTestId("thread-row").filter({ hasText: subject })).toHaveCount(0);
 });
 
 test("the inbox stays fast and scrollable with many threads", async ({ page, request }) => {
-  await page.goto("/mail/inbox");
+  await page.goto("/mail/all");
   await page.setViewportSize({ width: 1366, height: 768 });
   const rendered = await page.getByTestId("thread-row").count();
   expect(rendered).toBeLessThan(60);
@@ -225,7 +227,7 @@ test("a document uploads, opens with its text, and can be filed, tagged and remo
 });
 
 test("PST imports show progress and can be paused and resumed", async ({ page }) => {
-  await page.goto("/mail/archive");
+  await page.goto("/settings?section=archive");
   await page.getByRole("textbox", { name: "PST file" }).fill("/no/such/file.pst");
   await page.getByRole("button", { name: "Import" }).click();
   await expect(page.getByText("That file doesn't exist")).toBeVisible();

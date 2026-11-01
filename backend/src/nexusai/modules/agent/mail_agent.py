@@ -159,7 +159,9 @@ class MailAgent:
                     # Mail keeps working. Queued triage carries on when the model is back.
                     self.waiting_for_model = str(error)
                     log.info("triage_waiting", kind=type(error).__name__)
-                    self.stopping.wait(self.config.triage_retry_seconds)
+                    # Connecting a model wakes this, so nobody waits out the timer.
+                    self.wake.wait(self.config.triage_retry_seconds)
+                    self.wake.clear()
                     continue
                 except Exception:
                     log.exception("triage_failed")

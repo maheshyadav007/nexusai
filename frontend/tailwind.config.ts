@@ -33,16 +33,20 @@ const config: Config = {
     transitionTimingFunction: { DEFAULT: "var(--motion-easing)" },
     maxWidth: { none: "none", full: "100%", ...layout },
     extend: {
+      inset: layout,
       width: layout,
       height: layout,
       maxHeight: layout,
       keyframes: {
         fade: { from: { opacity: "0" } },
         rise: { from: { opacity: "0", transform: "translateY(var(--space-2))" } },
+        working: { "0%, 100%": { opacity: "1" }, "50%": { opacity: "0.45" } },
       },
       animation: {
         fade: "fade var(--motion-normal) var(--motion-easing)",
         rise: "rise var(--motion-normal) var(--motion-easing)",
+        // Only for something that's really running right now.
+        working: "working 1600ms var(--motion-easing) infinite",
       },
     },
   },

@@ -2,12 +2,13 @@
 
 import { useSettings, useUpdateSettings } from "@/ui/client/settings";
 import { Card } from "@/ui/primitives/Card";
-import { Segmented } from "@/ui/primitives/Segmented";
+import { Select } from "@/ui/primitives/Select";
+import { SettingRow } from "@/ui/primitives/SettingRow";
 import { t } from "@/ui/strings";
 
 const SCREENS = [
   { value: "today", label: t("nav.today") },
-  { value: "inbox", label: t("nav.inbox") },
+  { value: "inbox", label: t("nav.priority") },
 ] as const;
 const DATES = [
   { value: "system", label: t("preferences.system") },
@@ -26,11 +27,15 @@ export function PreferencesSettings() {
   const update = useUpdateSettings();
   return (
     <Card title={t("settings.section.preferences")}>
-      <div className="flex flex-col gap-4">
-        <Segmented label={t("preferences.screen")} value={settings.data?.default_screen} options={SCREENS} onChange={(default_screen) => update.mutate({ default_screen })} />
-        <Segmented label={t("preferences.date")} value={settings.data?.date_format} options={DATES} onChange={(date_format) => update.mutate({ date_format })} />
-        <Segmented label={t("preferences.time")} value={settings.data?.time_format} options={TIMES} onChange={(time_format) => update.mutate({ time_format })} />
-      </div>
+      <SettingRow label={t("preferences.screen")}>
+        <Select label={t("preferences.screen")} {...(settings.data?.default_screen ? { value: settings.data.default_screen } : {})} options={SCREENS} onChange={(default_screen) => update.mutate({ default_screen: default_screen as "today" | "inbox" })} />
+      </SettingRow>
+      <SettingRow label={t("preferences.date")}>
+        <Select label={t("preferences.date")} {...(settings.data?.date_format ? { value: settings.data.date_format } : {})} options={DATES} onChange={(date_format) => update.mutate({ date_format: date_format as (typeof DATES)[number]["value"] })} />
+      </SettingRow>
+      <SettingRow label={t("preferences.time")}>
+        <Select label={t("preferences.time")} {...(settings.data?.time_format ? { value: settings.data.time_format } : {})} options={TIMES} onChange={(time_format) => update.mutate({ time_format: time_format as (typeof TIMES)[number]["value"] })} />
+      </SettingRow>
     </Card>
   );
 }

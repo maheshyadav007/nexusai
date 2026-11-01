@@ -50,15 +50,15 @@ for (const path of SCREENS) {
 test("the sidebar navigates, marks where you are, and remembers being collapsed", async ({ page }) => {
   await page.goto("/");
   await expect(page).toHaveURL(/\/today$/);
-  await page.getByRole("link", { name: "Inbox" }).click();
-  await expect(page).toHaveURL(/\/mail\/inbox$/);
-  await expect(page.getByRole("link", { name: "Inbox" })).toHaveAttribute("aria-current", "page");
-  await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+  await page.getByRole("link", { name: "All mail" }).click();
+  await expect(page).toHaveURL(/\/mail\/all$/);
+  await expect(page.getByRole("link", { name: "All mail" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("heading", { name: "All mail" })).toBeVisible();
 
   await page.getByRole("button", { name: "Collapse sidebar" }).click();
   await page.reload();
   await expect(page.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Inbox" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "All mail" })).toBeVisible();
 });
 
 test("an unknown path says so, and offers a way back", async ({ page }) => {
@@ -209,13 +209,16 @@ test("profile saves from Settings, and preferences choose the first screen", asy
   await expect(page.getByRole("textbox", { name: "Role" })).toHaveValue("Programme lead");
 
   await page.goto("/settings?section=preferences");
-  await page.getByRole("radio", { name: "Inbox" }).click();
-  await expect(page.getByRole("radio", { name: "Inbox" })).toBeChecked();
+  const screen = page.getByRole("combobox", { name: "Open to" });
+  await screen.click();
+  await page.getByRole("option", { name: "Priority inbox" }).click();
+  await expect(screen).toHaveText(/Priority inbox/);
   await page.goto("/");
-  await expect(page).toHaveURL(/\/mail\/inbox$/);
+  await expect(page).toHaveURL(/\/mail\/priority$/);
   await page.goto("/settings?section=preferences");
-  await page.getByRole("radio", { name: "Today" }).click();
-  await expect(page.getByRole("radio", { name: "Today" })).toBeChecked();
+  await page.getByRole("combobox", { name: "Open to" }).click();
+  await page.getByRole("option", { name: "Today" }).click();
+  await expect(page.getByRole("combobox", { name: "Open to" })).toHaveText(/Today/);
 });
 
 test("the sidebar can be reordered, hidden and reset, by keyboard and buttons", async ({ page }) => {

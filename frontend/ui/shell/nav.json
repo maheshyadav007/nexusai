@@ -5,11 +5,12 @@
       "id": "mail",
       "labelKey": "nav.mail",
       "items": [
-        { "id": "inbox", "labelKey": "nav.inbox", "icon": "inbox", "href": "/mail/inbox" },
-        { "id": "categories", "labelKey": "nav.categories", "icon": "categories", "href": "/mail/categories" },
+        { "id": "priority", "labelKey": "nav.priority", "icon": "priority", "href": "/mail/priority" },
+        { "id": "all-mail", "labelKey": "nav.allMail", "icon": "inbox", "href": "/mail/all" },
         { "id": "sent", "labelKey": "nav.sent", "icon": "sent", "href": "/mail/sent" },
         { "id": "drafts", "labelKey": "nav.drafts", "icon": "drafts", "href": "/mail/drafts" },
-        { "id": "archive", "labelKey": "nav.archive", "icon": "archive", "href": "/mail/archive" }
+        { "id": "archive", "labelKey": "nav.archive", "icon": "archive", "href": "/mail/archive" },
+        { "id": "trash", "labelKey": "nav.trash", "icon": "trash", "href": "/mail/trash" }
       ]
     },
     {

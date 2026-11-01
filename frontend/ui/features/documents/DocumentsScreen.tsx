@@ -86,7 +86,7 @@ function Preview({ documentKey, folders, onClose }: { documentKey: string | null
       {row ? (
         <div className="flex flex-col gap-4">
           {row.risky ? <p className="text-md text-status-danger">{t("documents.risky")}</p> : <a className="focus-ring self-start rounded-sm text-md text-accent-default underline underline-offset-2" href={documentUrl(row.key)}>{t("documents.download")}</a>}
-          {row.thread_id ? <TextLink className="self-start text-md" href={`/mail/thread/${row.thread_id}`}>{t("documents.openMessage")}</TextLink> : null}
+          {row.thread_id ? <TextLink className="self-start text-md" href={`/mail/all/${row.thread_id}`}>{t("documents.openMessage")}</TextLink> : null}
           {row.risky ? null : <div><AskAgent context={[`document:${row.key}`]} title={row.name} /></div>}
           <Field label={t("documents.folder")}>{({ invalid, id }) => <Select id={id} invalid={invalid} value={folder} options={[{ value: NO_FOLDER, label: t("documents.noFolder") }, ...folders.map((value) => ({ value, label: value }))]} onChange={(next) => save({ folder: next === NO_FOLDER ? null : next })} />}</Field>
           <form

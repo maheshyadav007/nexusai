@@ -1,19 +1,20 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ApiRequestError } from "@/ui/client/api";
 import type { Draft, MessageView } from "@/ui/client/contracts.generated";
 import { useDateTime } from "@/ui/client/format";
-import { useMoveThread, useReplyDraft, useSetFlag, useSetRead, useSetStatus, useThread, type ThreadStatus } from "@/ui/client/mail";
+import { useCategories, useMoveThread, useReplyDraft, useSetCategory, useSetFlag, useSetRead, useSetStatus, useThread, type ThreadStatus } from "@/ui/client/mail";
 import { useSummarize, useThreadRuns, useThreadSummary } from "@/ui/client/work";
 import { AskAgent } from "@/ui/features/agent/AskAgent";
 import { Icon } from "@/ui/icons";
-import { Badge } from "@/ui/primitives/Badge";
+import { Avatar } from "@/ui/primitives/Avatar";
 import { Button } from "@/ui/primitives/Button";
 import { Dialog } from "@/ui/primitives/Dialog";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
+import { IconButton } from "@/ui/primitives/IconButton";
 import { Select } from "@/ui/primitives/Select";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { TextLink } from "@/ui/primitives/TextLink";
@@ -140,29 +141,37 @@ function MessageCard({ message, open: startsOpen, onReply, threadWhy }: { messag
   const format = useDateTime();
   const sender = message.from_name || message.from_addr;
   return (
-    <article data-testid="message" className="rounded-lg border border-line-subtle bg-surface-raised">
-      <button type="button" aria-expanded={open} onClick={() => setOpen((current) => !current)} className="focus-ring flex w-full items-baseline justify-between gap-3 rounded-lg p-4 text-left transition-colors duration-fast hover:bg-surface-sunken">
-        <span className="min-w-0">
-          <span className={`text-md ${message.read ? "text-ink-primary" : "font-medium text-ink-primary"}`}>{sender}</span>
-          {open ? null : <span className="ml-3 truncate text-sm text-ink-muted">{message.own_text.slice(0, 120)}</span>}
+    <article data-testid="message" className="border-b border-line-subtle last:border-b-0">
+      <button type="button" aria-expanded={open} onClick={() => setOpen((current) => !current)} className="focus-ring flex w-full items-center gap-3 rounded-md py-3 text-left">
+        <Avatar name={sender} />
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className={`truncate text-md ${message.read ? "text-ink-primary" : "font-medium text-ink-primary"}`}>{sender}</span>
+          {open ? (
+            <span className="truncate text-sm text-ink-muted">
+              {t("mail.toLine", { people: [...message.to, ...message.cc].join(", ") })}
+              {message.signed ? ` · ${t("mail.signed")}` : ""}
+            </span>
+          ) : (
+            <span className="truncate text-sm text-ink-muted">{message.own_text.slice(0, 120)}</span>
+          )}
         </span>
         <span className="shrink-0 text-sm tabular-nums text-ink-muted">{format(message.date)}</span>
       </button>
       {open ? (
-        <div className="flex flex-col gap-3 px-4 pb-4">
-          <p className="break-words text-sm text-ink-muted">
-            {t("mail.toLine", { people: [...message.to, ...message.cc].join(", ") })}
-            {message.signed ? ` · ${t("mail.signed")}` : ""}
-          </p>
+        <div className="flex flex-col gap-3 pb-4 pl-7">
           {message.added.length > 0 ? <p className="text-sm text-ink-secondary">{t("mail.people.added", { people: message.added.join(", ") })}</p> : null}
           {message.dropped.length > 0 ? <p className="text-sm text-ink-secondary">{t("mail.people.dropped", { people: message.dropped.join(", ") })}</p> : null}
           {message.why && message.why !== threadWhy ? <p className="text-sm text-ink-muted">{t("mail.why", { reason: message.why })}</p> : null}
           <Body message={message} />
           <Attachments message={message} />
-          <div className="flex gap-2">
-            <Button onClick={() => onReply(message, true)}>{t("mail.replyAll")}</Button>
-            <Button variant="quiet" onClick={() => onReply(message, false)}>
+          <div className="flex gap-1">
+            <Button onClick={() => onReply(message, false)}>
+              <Icon name="reply" />
               {t("mail.reply")}
+            </Button>
+            <Button variant="quiet" onClick={() => onReply(message, true)}>
+              <Icon name="replyAll" />
+              {t("mail.replyAll")}
             </Button>
           </div>
         </div>
@@ -171,13 +180,19 @@ function MessageCard({ message, open: startsOpen, onReply, threadWhy }: { messag
   );
 }
 
+const NO_CATEGORY = "none";
+
 export function ThreadScreen({ id }: { id: number }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const folder = pathname.slice(0, pathname.lastIndexOf("/"));
   const thread = useThread(id);
   const setRead = useSetRead();
   const setFlag = useSetFlag();
   const move = useMoveThread();
   const setStatus = useSetStatus();
+  const setCategory = useSetCategory();
+  const categories = useCategories();
   const replyDraft = useReplyDraft();
   const [composing, setComposing] = useState<{ draft: Draft; dropped: string[] } | null>(null);
 
@@ -188,32 +203,37 @@ export function ThreadScreen({ id }: { id: number }) {
     // Once on opening: marking unread on purpose mustn't be undone straight away.
   }, [id, thread.isSuccess]);
 
-  if (thread.isPending) return <div aria-busy className="mx-auto flex max-w-content flex-col gap-3 p-6"><Skeleton className="h-6 w-1/2" /><Skeleton /></div>;
+  if (thread.isPending) return <div aria-busy className="mx-auto flex max-w-reading flex-col gap-3 p-6"><Skeleton className="h-6 w-1/2" /><Skeleton /></div>;
   if (thread.isError) {
     if (thread.error instanceof ApiRequestError && thread.error.detail.code === "thread.not_found") {
       return (
-        <div className="mx-auto max-w-content p-6">
-          <h1 className="mb-4 font-serif text-display text-ink-primary">{t("mail.gone.title")}</h1>
-          <EmptyState icon="inbox" title={t("mail.gone.description")} action={<TextLink href="/mail/inbox">{t("mail.backToInbox")}</TextLink>} />
+        <div className="mx-auto max-w-reading p-6">
+          <h2 className="mb-4 text-xl font-medium text-ink-primary">{t("mail.gone.title")}</h2>
+          <EmptyState icon="inbox" title={t("mail.gone.description")} action={<TextLink href={folder}>{t("mail.backToInbox")}</TextLink>} />
         </div>
       );
     }
-    return <div className="mx-auto max-w-content p-6"><ErrorState title={t("mail.thread.error")} onRetry={() => void thread.refetch()} /></div>;
+    return <div className="mx-auto max-w-reading p-6"><ErrorState title={t("mail.thread.error")} onRetry={() => void thread.refetch()} /></div>;
   }
   const { thread: row, messages } = thread.data;
-  const reply = (message: MessageView, replyAll: boolean) => replyDraft.mutate({ message_id: message.id, reply_all: replyAll }, { onSuccess: (result) => setComposing({ draft: result.draft, dropped: result.dropped ?? [] }) });
+  const reply = (message: MessageView, replyAll: boolean) => replyDraft.mutate({ message_id: message.id, reply_all: replyAll }, { onSuccess: (result) => setComposing({ draft: result.draft, dropped: result.dropped }) });
+  const names = (categories.data?.categories ?? []).filter((item) => !item.proposed).map((item) => item.name);
+  const categoryOptions = [{ value: NO_CATEGORY, label: t("mail.category.none") }, ...[...new Set([...names, ...(row.category ? [row.category] : [])])].map((name) => ({ value: name, label: name }))];
+  const leave = { onSuccess: () => router.push(folder) };
   return (
-    <div className="mx-auto flex max-w-content flex-col gap-4 p-6">
+    <div className="mx-auto flex max-w-reading flex-col gap-4 p-6">
       <header className="flex flex-col gap-3">
-        <TextLink href="/mail/inbox" className="self-start text-sm">{t("mail.backToInbox")}</TextLink>
-        <h1 className="font-serif text-display text-ink-primary">{row.subject || t("mail.noSubject")}</h1>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button onClick={() => setRead.mutate({ id, read: false })}>{t("mail.markUnread")}</Button>
-          <Button onClick={() => setFlag.mutate({ id, flagged: !row.flagged })}>{t(row.flagged ? "mail.unflag" : "mail.flag")}</Button>
-          <Button onClick={() => move.mutate({ id, to: "archive" }, { onSuccess: () => router.push("/mail/inbox") })}>{t("mail.archive")}</Button>
-          <Button variant="danger" onClick={() => move.mutate({ id, to: "trash" }, { onSuccess: () => router.push("/mail/inbox") })}>{t("mail.delete")}</Button>
-          <div className="w-1/3 min-w-0"><Select label={t("mail.status.label")} value={row.status} options={STATUSES} onChange={(status) => setStatus.mutate({ id, status: status as ThreadStatus })} /></div>
-          {row.category ? <Badge>{row.category}</Badge> : null}
+        <div className="flex items-center gap-1">
+          <TextLink href={folder} className="mr-auto text-sm md:hidden">{t("mail.backToInbox")}</TextLink>
+          <IconButton icon="flag" label={t(row.flagged ? "mail.unflag" : "mail.flag")} onClick={() => setFlag.mutate({ id, flagged: !row.flagged })} />
+          <IconButton icon="markUnread" label={t("mail.markUnread")} onClick={() => setRead.mutate({ id, read: false })} />
+          <IconButton icon="archive" label={t("mail.archive")} onClick={() => move.mutate({ id, to: "archive" }, leave)} />
+          <IconButton icon="trash" label={t("mail.delete")} onClick={() => move.mutate({ id, to: "trash" }, leave)} />
+        </div>
+        <h2 className="break-words text-xl font-medium text-ink-primary">{row.subject || t("mail.noSubject")}</h2>
+        <div className="grid gap-2 md:grid-cols-2">
+          <Select label={t("mail.status.label")} value={row.status} options={STATUSES} onChange={(status) => setStatus.mutate({ id, status: status as ThreadStatus })} />
+          <Select label={t("mail.category")} value={row.category ?? NO_CATEGORY} options={categoryOptions} onChange={(category) => setCategory.mutate({ id, category: category === NO_CATEGORY ? null : category })} />
         </div>
         {row.why ? <WhyHere thread={id} reason={row.why} /> : null}
         <div className="flex flex-wrap items-center gap-2">
@@ -221,9 +241,11 @@ export function ThreadScreen({ id }: { id: number }) {
           <SummaryBlock id={id} />
         </div>
       </header>
-      {messages.map((message, index) => (
-        <MessageCard threadWhy={row.why} key={message.id} message={message} open={index === messages.length - 1} onReply={reply} />
-      ))}
+      <div className="flex flex-col">
+        {messages.map((message, index) => (
+          <MessageCard threadWhy={row.why} key={message.id} message={message} open={index === messages.length - 1} onReply={reply} />
+        ))}
+      </div>
       {composing ? (
         <section className="rounded-lg border border-line-subtle bg-surface-raised p-4">
           <Composer initial={composing.draft} dropped={composing.dropped} onDone={() => setComposing(null)} />

@@ -58,7 +58,7 @@ export function RemindersScreen() {
               <span className="text-sm tabular-nums text-ink-muted">{format(reminder.when)}</span>
             </span>
             <span className="flex items-center gap-2">
-              {reminder.thread ? <TextLink className="text-sm" href={`/mail/thread/${reminder.thread}`}>{t("channel.openSource")}</TextLink> : null}
+              {reminder.thread ? <TextLink className="text-sm" href={`/mail/all/${reminder.thread}`}>{t("channel.openSource")}</TextLink> : null}
               {reminder.proposed ? (
                 <>
                   <Badge tone="accent">{t("tasks.proposed")}</Badge>

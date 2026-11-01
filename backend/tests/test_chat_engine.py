@@ -3,12 +3,17 @@
 
 import json
 import threading
+from dataclasses import replace
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
 from fake_mail import FakeMail, make_mail
-from nexusai.modules.agent.providers import TextChunk, ToolCall
+from nexusai.api.app import create_app
+from nexusai.kernel.config import Config
+from nexusai.modules.agent import gateway
+from nexusai.modules.agent.providers import ModelNotConfigured, TextChunk, ToolCall
 from nexusai.modules.agent.ui_stream import UiTranslator, followups_part
 from test_agent_work import (  # noqa: F401
     Script,
@@ -433,3 +438,34 @@ def test_accepting_a_suggested_category_makes_it_real(
     client.post("/api/commands/categories.decide", json={"name": "Receipts", "accept": True})
     assert thread_named(client, "Receipt 1")["id"] == thread["id"]
     assert subjects(client, folder="all", category="Receipts") == ["Receipt 1"]
+
+
+def test_connecting_a_model_starts_waiting_triage_straight_away(
+    app_config: Config, script: Script, fake: FakeMail, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def no_model(_: Any) -> Any:
+        raise ModelNotConfigured("Connect a model")
+
+    real = gateway.resolve_provider
+    monkeypatch.setattr(gateway, "resolve_provider", no_model)
+    # A timer far longer than the wait below, so only the event can start it.
+    slow = replace(app_config, agent=replace(app_config.agent, triage_retry_seconds=600))
+    with TestClient(create_app(slow), base_url="http://127.0.0.1:8765") as live:
+        connect(live, fake)
+        script.replies = [triage_reply(importance="high")]
+        fake.state.deliver(make_mail(subject="Waited for a model"))
+        wait(
+            lambda: any(
+                job["status"] == "waiting for the model"
+                for job in live.post("/api/queries/jobs.list").json()["jobs"]
+            ),
+            "the agent to notice there's no model",
+        )
+        monkeypatch.setattr(gateway, "resolve_provider", real)
+        with live.app.state.bus.unit_of_work() as work:  # type: ignore[attr-defined]
+            work.emit("models.changed", {"connected": True}, source="models", trace_id="t")
+        wait(
+            lambda: thread_named(live, "Waited for a model")["importance"] == "high",
+            "triage after connecting",
+            seconds=8,
+        )
