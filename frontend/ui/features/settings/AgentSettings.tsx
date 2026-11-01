@@ -15,7 +15,7 @@ import { Segmented } from "@/ui/primitives/Segmented";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { Switch } from "@/ui/primitives/Switch";
 import { useToast } from "@/ui/primitives/Toast";
-import { t } from "@/ui/strings";
+import { t, tn } from "@/ui/strings";
 
 const LEVELS = [
   { value: "off", label: t("permissions.off") },
@@ -140,24 +140,24 @@ export function UsageSettings() {
   return (
     <Card title={t("usage.title")} description={t("usage.description")}>
       <div className="flex flex-col gap-3">
-        <p data-testid="usage-total" className="text-md tabular-nums text-ink-primary">{t("usage.total", { total: data.total_today })}</p>
+        <p data-testid="usage-total" className="text-md tabular-nums text-ink-primary">{t("usage.total", { total: data.total_today.toLocaleString() })}</p>
         {data.near_cap ? <p className="text-md text-status-warning">{t("usage.near")}</p> : null}
         <ul className="flex flex-col gap-1">
           {data.today.map((row) => (
             <li key={row.agent} className="flex justify-between gap-3 text-md tabular-nums text-ink-secondary">
               <span>{row.agent}</span>
-              <span>{t("usage.row", { calls: row.calls, tokens: row.input_tokens + row.output_tokens })}</span>
+              <span>{tn("usage.row", row.calls, { tokens: (row.input_tokens + row.output_tokens).toLocaleString() })}</span>
             </li>
           ))}
         </ul>
         <form
-          className="flex items-end gap-2"
+          className="flex flex-col items-start gap-2"
           onSubmit={(event) => {
             event.preventDefault();
             setCap.mutate(Number(cap ?? data.daily_cap));
           }}
         >
-          <div className="min-w-0 flex-1"><Field label={t("usage.cap")} hint={t("usage.cap.hint")}>{({ invalid, ...control }) => <Input type="number" min={0} invalid={invalid} value={cap ?? data.daily_cap} onChange={(event) => setCapText(event.target.value)} {...control} />}</Field></div>
+          <div className="w-full"><Field label={t("usage.cap")} hint={t("usage.cap.hint")}>{({ invalid, ...control }) => <Input type="number" min={0} invalid={invalid} value={cap ?? data.daily_cap} onChange={(event) => setCapText(event.target.value)} {...control} />}</Field></div>
           <Button type="submit" loading={setCap.isPending}>{t("settings.save")}</Button>
         </form>
       </div>

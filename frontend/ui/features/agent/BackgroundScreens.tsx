@@ -12,7 +12,7 @@ import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Progress } from "@/ui/primitives/Progress";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { StatusDot } from "@/ui/primitives/StatusDot";
-import { t } from "@/ui/strings";
+import { t, tn } from "@/ui/strings";
 
 export function BackgroundScreen() {
   const jobs = useJobs();
@@ -27,7 +27,7 @@ export function BackgroundScreen() {
       {mail.data && mail.data.state !== "off" ? (
         <p role="status" className="flex items-center gap-2 text-md text-ink-secondary">
           <StatusDot tone={mail.data.state === "live" ? "done" : mail.data.state === "failed" || mail.data.state === "offline" ? "failed" : "running"} />
-          {t("background.mail", { count: mail.data.messages ?? 0 })}
+          {tn(mail.data.state === "live" ? "background.mail.live" : "background.mail.syncing", mail.data.messages ?? 0)}
         </p>
       ) : null}
       {jobs.isPending ? <Skeleton className="h-6 w-full" /> : null}
@@ -47,7 +47,7 @@ export function BackgroundScreen() {
         ))}
       </ul>
       {untriaged > 0 ? (
-        <Card title={t("background.older")} description={t("background.older.description", { count: untriaged, tokens: estimate.data?.approx_tokens ?? 0 })}>
+        <Card title={t("background.older")} description={tn("background.older.description", untriaged, { tokens: (estimate.data?.approx_tokens ?? 0).toLocaleString() })}>
           <Button loading={triage.isPending} onClick={() => triage.mutate(true)}>{t("background.older.action")}</Button>
         </Card>
       ) : null}

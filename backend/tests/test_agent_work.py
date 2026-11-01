@@ -945,7 +945,7 @@ def test_daily_prep_shows_on_today(client: TestClient, script: Script, fake: Fak
     )
     assert [t["subject"] for t in today["needs_you"]] == ["Needs me"]
     assert [t["subject"] for t in today["waiting"]] == ["Waiting one"]
-    assert today["brief"].startswith("1 need you")
+    assert today["brief"].startswith("1 needs you")
     assert today["prep_text"] is None
 
     script.default = [TextChunk("Your morning: one thing needs you.")]

@@ -4,6 +4,16 @@ import { useSettings } from "./settings";
 
 const DATE_ORDER: Readonly<Record<string, string>> = { "day-month": "en-GB", "month-day": "en-US", iso: "sv-SE" };
 
+/** A day with no time attached, like a task's due date. It's read as local, not UTC. */
+export function useDateOnly(): (value: string) => string {
+  const { data } = useSettings();
+  const formatter = new Intl.DateTimeFormat(DATE_ORDER[data?.date_format ?? "system"], { dateStyle: "medium" });
+  return (value) => {
+    const date = new Date(`${value}T00:00`);
+    return Number.isNaN(date.getTime()) ? value : formatter.format(date);
+  };
+}
+
 /** Dates and times in the person's chosen format. */
 export function useDateTime(): (value: string) => string {
   const { data } = useSettings();

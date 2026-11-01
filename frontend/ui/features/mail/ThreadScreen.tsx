@@ -17,7 +17,7 @@ import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Select } from "@/ui/primitives/Select";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { TextLink } from "@/ui/primitives/TextLink";
-import { t } from "@/ui/strings";
+import { t, tn } from "@/ui/strings";
 import { Composer } from "./Composer";
 import { SafeMailFrame } from "./SafeMailFrame";
 
@@ -83,16 +83,28 @@ function SummaryBlock({ id }: { id: number }) {
   const summary = useThreadSummary(id);
   const summarize = useSummarize();
   const data = summary.data;
+  const action =
+    !data?.text || data.new_messages ? (
+      <Button loading={summarize.isPending} onClick={() => summarize.mutate(id)}>
+        {t(data?.text ? "summary.update" : "summary.summarize")}
+      </Button>
+    ) : null;
+  const failure = summarize.isError ? <p role="alert" className="text-sm text-status-danger">{summarize.error instanceof ApiRequestError ? summarize.error.detail.message : t("summary.error")}</p> : null;
+  // Until there's something to read, this is only a button beside the others.
+  if (!data?.text) {
+    return (
+      <>
+        {action}
+        {failure}
+      </>
+    );
+  }
   return (
-    <section aria-label={t("summary.title")} className="flex flex-col items-start gap-2 rounded-md bg-surface-sunken p-3">
-      {data?.text ? <p data-testid="summary-text" className="whitespace-pre-wrap text-md text-ink-primary">{data.text}</p> : null}
-      {data?.text && data.new_messages ? <p className="text-sm text-ink-secondary">{t("summary.new", { count: data.new_messages })}</p> : null}
-      {summarize.isError ? <p className="text-sm text-status-danger">{summarize.error instanceof ApiRequestError ? summarize.error.detail.message : t("summary.error")}</p> : null}
-      {!data?.text || data.new_messages ? (
-        <Button loading={summarize.isPending} onClick={() => summarize.mutate(id)}>
-          {t(data?.text ? "summary.update" : "summary.summarize")}
-        </Button>
-      ) : null}
+    <section aria-label={t("summary.title")} className="flex w-full flex-col items-start gap-2 rounded-md bg-surface-sunken p-3">
+      <p data-testid="summary-text" className="whitespace-pre-wrap text-md text-ink-primary">{data.text}</p>
+      {data.new_messages ? <p className="text-sm text-ink-secondary">{tn("summary.new", data.new_messages)}</p> : null}
+      {failure}
+      {action}
     </section>
   );
 }
@@ -123,7 +135,7 @@ function WhyHere({ thread, reason }: { thread: number; reason: string }) {
   );
 }
 
-function MessageCard({ message, open: startsOpen, onReply }: { message: MessageView; open: boolean; onReply: (message: MessageView, replyAll: boolean) => void }) {
+function MessageCard({ message, open: startsOpen, onReply, threadWhy }: { message: MessageView; open: boolean; onReply: (message: MessageView, replyAll: boolean) => void; threadWhy: string | null | undefined }) {
   const [open, setOpen] = useState(startsOpen);
   const format = useDateTime();
   const sender = message.from_name || message.from_addr;
@@ -144,7 +156,7 @@ function MessageCard({ message, open: startsOpen, onReply }: { message: MessageV
           </p>
           {message.added.length > 0 ? <p className="text-sm text-ink-secondary">{t("mail.people.added", { people: message.added.join(", ") })}</p> : null}
           {message.dropped.length > 0 ? <p className="text-sm text-ink-secondary">{t("mail.people.dropped", { people: message.dropped.join(", ") })}</p> : null}
-          {message.why ? <p className="text-sm text-ink-muted">{t("mail.why", { reason: message.why })}</p> : null}
+          {message.why && message.why !== threadWhy ? <p className="text-sm text-ink-muted">{t("mail.why", { reason: message.why })}</p> : null}
           <Body message={message} />
           <Attachments message={message} />
           <div className="flex gap-2">
@@ -204,11 +216,13 @@ export function ThreadScreen({ id }: { id: number }) {
           {row.category ? <Badge>{row.category}</Badge> : null}
         </div>
         {row.why ? <WhyHere thread={id} reason={row.why} /> : null}
-        <div><AskAgent context={[`thread:${id}`]} title={row.subject || t("mail.noSubject")} /></div>
-        <SummaryBlock id={id} />
+        <div className="flex flex-wrap items-center gap-2">
+          <AskAgent context={[`thread:${id}`]} title={row.subject || t("mail.noSubject")} />
+          <SummaryBlock id={id} />
+        </div>
       </header>
       {messages.map((message, index) => (
-        <MessageCard key={message.id} message={message} open={index === messages.length - 1} onReply={reply} />
+        <MessageCard threadWhy={row.why} key={message.id} message={message} open={index === messages.length - 1} onReply={reply} />
       ))}
       {composing ? (
         <section className="rounded-lg border border-line-subtle bg-surface-raised p-4">

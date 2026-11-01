@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Task } from "@/ui/client/contracts.generated";
+import { useDateOnly } from "@/ui/client/format";
 import { useRemoveTask, useSaveTask, useTasks } from "@/ui/client/work";
 import { AskAgent } from "@/ui/features/agent/AskAgent";
 import { Badge } from "@/ui/primitives/Badge";
@@ -23,6 +24,7 @@ export function TasksScreen() {
   const tasks = useTasks(showDone);
   const save = useSaveTask();
   const remove = useRemoveTask();
+  const formatDay = useDateOnly();
   const [title, setTitle] = useState("");
   const [due, setDue] = useState("");
   const rows = tasks.data?.tasks ?? [];
@@ -50,7 +52,7 @@ export function TasksScreen() {
             <div className="flex items-center justify-between gap-3">
               <Checkbox label={task.title} checked={task.status === "done"} onChange={(done) => save.mutate({ ...editable(task), status: done ? "done" : "todo" })} />
               <span className="flex shrink-0 items-center gap-2">
-                {task.due ? <span className="text-sm tabular-nums text-ink-muted">{task.due}</span> : null}
+                {task.due ? <span className="text-sm tabular-nums text-ink-muted">{formatDay(task.due)}</span> : null}
                 {task.proposed ? <Badge tone="accent">{t("tasks.proposed")}</Badge> : null}
                 <IconButton icon="close" label={t("tasks.remove", { title: task.title })} onClick={() => remove.mutate(task.id)} />
               </span>

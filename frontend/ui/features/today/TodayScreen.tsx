@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { ChannelMessage, TodayThread } from "@/ui/client/contracts.generated";
 import { useDateTime } from "@/ui/client/format";
+import { useMailStatus } from "@/ui/client/mail";
 import { leaveFirstMessage, useApprovals, useCreateSession } from "@/ui/client/sessions";
 import { useChannel, useDismissChannel, useRespondChannel, useToday } from "@/ui/client/work";
 import { Badge } from "@/ui/primitives/Badge";
@@ -16,7 +17,7 @@ import { Input, Textarea } from "@/ui/primitives/Input";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { TextLink } from "@/ui/primitives/TextLink";
 import { ApprovalDetails } from "@/ui/shell/ApprovalQueue";
-import { t, type StringKey } from "@/ui/strings";
+import { t, tn, type StringKey } from "@/ui/strings";
 
 const KIND_LABELS: Readonly<Record<string, StringKey>> = { ask: "channel.ask", suggest: "channel.suggest", tell: "channel.tell" };
 
@@ -145,6 +146,8 @@ function PromptBar() {
 
 export function TodayScreen() {
   const today = useToday();
+  const mail = useMailStatus();
+  const noMail = mail.data?.state === "off" && !today.data?.needs_you.length && !today.data?.waiting.length;
   return (
     <div className="mx-auto flex max-w-content flex-col gap-5 p-6">
       <header>
@@ -163,10 +166,15 @@ export function TodayScreen() {
       <UserChannel />
       {today.data ? (
         <>
-          <ThreadList title={t("today.needsYou")} threads={today.data.needs_you} empty={t("today.needsYou.empty")} />
-          <ThreadList title={t("today.waiting")} threads={today.data.waiting} empty={t("today.waiting.empty")} />
-          {today.data.automated_count ? <TextLink className="self-start text-md" href="/mail/categories">{t("today.automated", { count: today.data.automated_count })}</TextLink> : null}
-          {today.data.needs_you.length + today.data.waiting.length === 0 && !today.data.prep_text ? <EmptyState icon="today" title={t("today.empty.title")} description={t("today.empty.description")} /> : null}
+          {noMail ? (
+            <EmptyState icon="today" title={t("today.empty.title")} description={t("today.empty.description")} action={<TextLink href="/settings?section=accounts">{t("mail.noAccount.action")}</TextLink>} />
+          ) : (
+            <>
+              <ThreadList title={t("today.needsYou")} threads={today.data.needs_you} empty={t("today.needsYou.empty")} />
+              <ThreadList title={t("today.waiting")} threads={today.data.waiting} empty={t("today.waiting.empty")} />
+            </>
+          )}
+          {today.data.automated_count ? <TextLink className="self-start text-md" href="/mail/categories">{tn("today.automated", today.data.automated_count)}</TextLink> : null}
         </>
       ) : null}
     </div>

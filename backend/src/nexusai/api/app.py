@@ -85,6 +85,7 @@ class Runtime:
     config: Config
     db: Database
     bus: EventBus
+    daily_backups: backups.DailyBackups
 
 
 def _bound(handler: Listener, bus: EventBus, config: Config) -> Callable[[AppEvent], None]:
@@ -104,13 +105,12 @@ def _open_database(config: Config, home: Path, key: str) -> tuple[Database, bool
             db.check()
         migrations = [migration for module in MODULES for migration in module.migrations]
         upgrading = db.pending(migrations)
-        due = backups.is_due(home, config.backup_interval_hours)
     except DatabaseDamaged:
         db.close()
         raise
-    if upgrading or due:
+    if upgrading:
         db.close()
-        backups.create(home, "upgrade" if upgrading else "daily", config.backups_kept)
+        backups.create(home, "upgrade", config.backups_kept)
         db = Database(path, key)
     sentinel.touch()
     return db, encrypted
@@ -134,7 +134,9 @@ def _open_runtime(config: Config, home: Path) -> Runtime:
     for module in MODULES:
         for start in module.on_start:
             start(context)
-    return Runtime(opened, db, bus)
+    daily = backups.DailyBackups(home, key, opened.backups_kept, opened.backup_interval_hours)
+    daily.start()
+    return Runtime(opened, db, bus, daily)
 
 
 def _ask_to_save_recovery_key(bus: EventBus) -> None:
@@ -199,6 +201,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             for stop in module.on_stop:
                 stop()
         if runtime is not None:
+            runtime.daily_backups.stop()
             runtime.bus.stop()
             runtime.db.close()
             (runtime.config.home / "system" / RUNNING_FILE).unlink(missing_ok=True)

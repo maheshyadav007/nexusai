@@ -95,7 +95,7 @@ function ScheduleItem({ row }: { row: ScheduleRow }) {
       </div>
       <p className="text-sm tabular-nums text-ink-muted">
         {row.next_run ? t("schedules.next", { when: format(row.next_run) }) : t("schedules.noNext")}
-        {row.token_limit ? ` · ${t("schedules.limit.value", { limit: row.token_limit })}` : ""}
+        {row.token_limit ? ` · ${t("schedules.limit.value", { limit: row.token_limit.toLocaleString() })}` : ""}
       </p>
       <div className="flex flex-wrap items-center gap-3">
         <Button loading={run.isPending} onClick={() => row.id != null && run.mutate(row.id)}>{t("schedules.runNow")}</Button>

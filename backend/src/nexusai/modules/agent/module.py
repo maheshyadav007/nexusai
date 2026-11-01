@@ -685,7 +685,8 @@ def today_view(query: GetToday, ctx: Context) -> TodayView:
                 "".join(p.get("text", "") for p in last[-1]["parts"] if p.get("type") == "text")
                 or None
             )
-    brief = f"{len(needs)} need you, {len(waiting)} waiting on others, {automated} automated."
+    verb = "needs" if len(needs) == 1 else "need"
+    brief = f"{len(needs)} {verb} you, {len(waiting)} waiting on others, {automated} automated."
     return TodayView(
         brief=brief,
         needs_you=[_today_thread(row) for row in needs],

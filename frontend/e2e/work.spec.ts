@@ -147,7 +147,7 @@ test("a schedule is created and runs on demand", async ({ page }) => {
   await dialog.getByLabel("Time").fill("05:30");
   await dialog.getByRole("spinbutton", { name: "Token limit for each run" }).fill("20000");
   await dialog.getByRole("button", { name: "Save" }).click();
-  await expect(prep).toContainText("Limit: 20000 tokens");
+  await expect(prep).toContainText("Limit: 20,000 tokens");
   await expect(prep).toContainText("5:30");
 
   await page.getByRole("switch", { name: "Time check for reminders and deadlines" }).click();
@@ -266,6 +266,8 @@ test("a large upload arrives whole through the token proxy", async ({ page }) =>
 });
 
 test("a new recovery key can be made in Settings, and is only shown until saved", async ({ page }) => {
+  // Setup shows the first one, and this file's setup skips that step.
+  await page.request.post("/api/home/recovery-key/confirm", { data: {} });
   await page.goto("/settings?section=home");
   await page.getByRole("button", { name: "Create a new recovery key" }).click();
   await noViolations(page);

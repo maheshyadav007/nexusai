@@ -3,6 +3,7 @@
 import json
 import re
 import sqlite3
+import unicodedata
 import zlib
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -76,10 +77,18 @@ CREATE TABLE mail_outbox (
 CREATE TABLE mail_drafts (id INTEGER PRIMARY KEY AUTOINCREMENT, body TEXT NOT NULL, updated TEXT NOT NULL);
 CREATE VIRTUAL TABLE mail_search USING fts5(subject, sender, body, attachments, tokenize = 'unicode61');
 """,
-    )
+    ),
+    Migration(
+        "mail_messages_date_001",
+        "CREATE INDEX messages_date ON messages (account, date DESC);",
+    ),
 ]
 THREAD_COLUMNS = {"inbox": "in_inbox", "sent": "in_sent", "drafts": "in_drafts", "trash": "in_trash", "archive": "in_archive", "other": "in_other"}  # fmt: skip
 SUBJECT_WINDOW_DAYS = 30
+# How many of the newest matches get ranked, and how many of those can become results.
+SEARCH_RANKED = 5000
+SEARCH_CANDIDATES = 2000
+EXCERPT_WORDS = 24
 REPLY_PREFIX = re.compile(
     r"^\s*(re|fw|fwd|aw|sv|antw|tr|rv|ref|답장|회신|전달)\s*(\[\d+\])?\s*[:：]", re.I
 )
@@ -430,22 +439,102 @@ def thread_view(db: Database, thread: int) -> ThreadView | None:
     return ThreadView(thread=row_of(rows[0]), messages=views)
 
 
-def _fts_query(text: str) -> str:
+def _search_words(text: str) -> list[str]:
+    return [_folded(word) for word in re.findall(r"\w+", text, flags=re.UNICODE)]
+
+
+def _fts_query(words: list[str], sender: str | None) -> str:
     """Each word as a quoted prefix, so punctuation in a search can't break it."""
-    words = re.findall(r"[\w@.+-]+", text, flags=re.UNICODE)
-    return " ".join(f'"{word}"*' for word in words)
+    terms = [f'"{word}"*' for word in words]
+    terms += [f'sender : "{word}"*' for word in _search_words(sender or "")]
+    return " ".join(terms)
+
+
+def _ranked_matches(
+    db: Database, match: str, conditions: list[str], params: list[object], *, by_relevance: bool
+) -> list[sqlite3.Row]:
+    """Ranks only the newest matches. Ranking every match of a common word takes many seconds.
+
+    A word in most of the mailbox has more matches than anyone reads, and its newest ones are
+    the likeliest to matter. Narrowing the search reaches further back.
+    """
+    # Forcing this join order lets the index walk newest-first and stop early.
+    source = (
+        "mail_search CROSS JOIN messages m ON m.id = mail_search.rowid"
+        " CROSS JOIN threads t ON t.id = m.thread_id"
+    )
+    where = ["mail_search MATCH ?", *conditions]
+    values = [match, *params]
+    if not by_relevance:
+        # Only a person to look for, so there are no words to rank: newest first.
+        return db.fetch_all(
+            f"SELECT m.id AS message, m.thread_id AS thread FROM {source}"  # noqa: S608
+            f" WHERE {' AND '.join(where)} ORDER BY mail_search.rowid DESC LIMIT ?",
+            (*values, SEARCH_CANDIDATES),
+        )
+    floor = db.fetch_all(
+        f"SELECT mail_search.rowid AS id FROM {source} WHERE {' AND '.join(where)}"  # noqa: S608
+        " ORDER BY mail_search.rowid DESC LIMIT 1 OFFSET ?",
+        (*values, SEARCH_RANKED - 1),
+    )
+    if floor:
+        where.append("mail_search.rowid >= ?")
+        values.append(floor[0]["id"])
+    return db.fetch_all(
+        f"SELECT m.id AS message, m.thread_id AS thread FROM {source}"  # noqa: S608
+        f" WHERE {' AND '.join(where)} ORDER BY bm25(mail_search) LIMIT ?",
+        (*values, SEARCH_CANDIDATES),
+    )
+
+
+def _folded(text: str) -> str:
+    """The same folding the search index uses, so a match here is a match there."""
+    decomposed = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in decomposed if not unicodedata.combining(c)).casefold()
+
+
+def _first_match(text: str, words: list[str]) -> re.Match[str] | None:
+    return next(
+        (m for m in re.finditer(r"\w+", text) if _folded(m.group()).startswith(tuple(words))),
+        None,
+    )
+
+
+def _excerpt(text: str, words: list[str]) -> str:
+    """Some words around the first match."""
+    found = _first_match(text, words)
+    centre = found.start() if found else 0
+    tokens = list(re.finditer(r"\S+", text))
+    position = next((i for i, token in enumerate(tokens) if token.end() > centre), 0)
+    first = max(0, position - EXCERPT_WORDS // 2)
+    shown = tokens[first : first + EXCERPT_WORDS]
+    body = " ".join(token.group() for token in shown)
+    return f"{'…' if first else ''}{body}{'…' if first + EXCERPT_WORDS < len(tokens) else ''}"
+
+
+def _excerpts(db: Database, words: list[str], messages: list[int]) -> dict[int, tuple[str, bool]]:
+    """Written here because FTS5's snippet() re-runs a prefix search for each row, taking seconds."""
+    if not messages:
+        return {}
+    marks = ",".join("?" * len(messages))
+    rows = db.fetch_all(
+        f"SELECT rowid AS id, body, attachments FROM mail_search WHERE rowid IN ({marks})",  # noqa: S608
+        messages,
+    )
+    return {
+        row["id"]: (
+            _excerpt(row["body"] or row["attachments"] or "", words),
+            _first_match(row["attachments"] or "", words) is not None,
+        )
+        for row in rows
+    }
 
 
 def search(db: Database, account: str, query: SearchMail) -> SearchResults:
     conditions = ["m.account = ?"]
     params: list[object] = [account]
-    match = _fts_query(query.query)
-    if match:
-        conditions.append("mail_search MATCH ?")
-        params.append(match)
-    if query.sender:
-        conditions.append("(m.from_addr LIKE ? OR m.from_name LIKE ?)")
-        params += [f"%{query.sender}%", f"%{query.sender}%"]
+    words = _search_words(query.query)
+    match = _fts_query(words, query.sender)
     if query.date_from:
         conditions.append("m.date >= ?")
         params.append(query.date_from)
@@ -461,33 +550,45 @@ def search(db: Database, account: str, query: SearchMail) -> SearchResults:
     if query.folder:
         conditions.append("m.folder_role = ?")
         params.append(query.folder)
-    excerpt = "snippet(mail_search, -1, '', '', '…', 24)" if match else "m.snippet"
-    order = "bm25(mail_search)" if match else "m.date DESC"
-    join = "mail_search JOIN messages m ON m.id = mail_search.rowid" if match else "messages m"
-    hit_attachments = "highlight(mail_search, 3, '\x01', '\x01')" if match else "''"
-    rows = db.fetch_all(
-        f"SELECT m.id AS message, m.thread_id AS thread, {excerpt} AS excerpt,"  # noqa: S608
-        f" {hit_attachments} AS attachment_hit FROM {join} JOIN threads t ON t.id = m.thread_id"
-        f" WHERE {' AND '.join(conditions)} ORDER BY {order} LIMIT 2000",
-        params,
+    if match:
+        rows = _ranked_matches(db, match, conditions, params, by_relevance=bool(words))
+    else:
+        rows = db.fetch_all(
+            "SELECT m.id AS message, m.thread_id AS thread FROM messages m"  # noqa: S608
+            f" JOIN threads t ON t.id = m.thread_id WHERE {' AND '.join(conditions)}"
+            " ORDER BY m.date DESC LIMIT ?",
+            (*params, SEARCH_CANDIDATES),
+        )
+    # A conversation shows once, at its best match.
+    chosen: dict[int, int] = {}
+    for row in rows:
+        chosen.setdefault(row["thread"], row["message"])
+        if len(chosen) >= query.limit:
+            break
+    excerpts = _excerpts(db, words, list(chosen.values())) if words else {}
+    snippets = (
+        {}
+        if words or not chosen
+        else {
+            row["id"]: row["snippet"]
+            for row in db.fetch_all(
+                f"SELECT id, snippet FROM messages WHERE id IN ({','.join('?' * len(chosen))})",  # noqa: S608
+                list(chosen.values()),
+            )
+        }
     )
     hits: list[SearchHit] = []
-    seen: set[int] = set()
-    for row in rows:
-        if row["thread"] in seen:
-            continue
-        seen.add(row["thread"])
-        thread = db.fetch_all("SELECT * FROM threads WHERE id = ?", (row["thread"],))[0]
+    for thread_id, message in chosen.items():
+        thread = db.fetch_all("SELECT * FROM threads WHERE id = ?", (thread_id,))[0]
+        found = excerpts.get(message)
         hits.append(
             SearchHit(
                 thread=row_of(thread),
-                message_id=row["message"],
-                excerpt=row["excerpt"],
-                matched_attachment="\x01" in (row["attachment_hit"] or ""),
+                message_id=message,
+                excerpt=found[0] if found else snippets.get(message, ""),
+                matched_attachment=bool(found and found[1]),
             )
         )
-        if len(hits) >= query.limit:
-            break
     return SearchResults(hits=hits)
 
 

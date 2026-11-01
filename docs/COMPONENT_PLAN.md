@@ -300,7 +300,7 @@ Each step ends with something you can see working. **Unslop and the quality bar 
 
 ### Stage 0: Foundation
 
-Status: built. Agent host and Heavy jobs processes, the backend supervisor, live events and the per-install token arrive with the first features that need them.
+Status: built, including the per-install token and live events. The Agent host and Heavy jobs processes and the backend supervisor arrive with Stage 5.
 
 | # | Build | Done when |
 |---|---|---|
@@ -325,7 +325,7 @@ Status: built, and ChatGPT sign-in, model choice and a test message work in Sett
 
 ### Stage 2: Mail
 
-Status: built, except that the 100,000-message speed target and a multi-GB PST haven't been measured yet, and the corporate server is untested. OCR and image description wait for the local models (`MDL-3`, Next).
+Status: built. The 100,000-message targets pass at the storage layer (`make speed`); they don't yet time the full path through the screen. A multi-GB PST hasn't been measured, and the corporate server is untested. OCR and image description wait for the local models (`MDL-3`, Next).
 
 | # | Build | Done when |
 |---|---|---|
@@ -340,6 +340,8 @@ Status: built, except that the 100,000-message speed target and a multi-GB PST h
 
 ### Stage 3: Agent
 
+Status: built and tested with a fake model. Sessions, masking and approvals have also run on a real ChatGPT account. The Mail agent, summaries and the setup interview haven't, and neither has a LiteLLM server.
+
 | # | Build | Done when |
 |---|---|---|
 | 3.1 | Providers, model gateway, data guard | Tests show no raw sensitive value reaches a provider, and tool arguments restore correctly |
@@ -352,6 +354,8 @@ Status: built, except that the 100,000-message speed target and a multi-GB PST h
 | 3.8 | "Ask agent" everywhere, drafts, activity with undo | Context is attached and removable |
 
 ### Stage 4: Daily work
+
+Status: 4.1 to 4.3 built and tested. 4.4 is built, and its done-when, a full day on your own mail, is still to do. 4.5 hasn't had its formal unslop pass: the new screens have only had a screenshot review.
 
 | # | Build | Done when |
 |---|---|---|

@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import replace
@@ -188,7 +189,6 @@ def test_backups_are_taken_before_an_upgrade_and_old_ones_go(config: Config) -> 
     with running(config):
         pass
     home = config.home
-    assert all(b.reason == "daily" for b in backups.listing(home))
     key = vault.open_key(home, secret_store(config.secrets_test_file))
     with_key = Database(home / "system" / "nexusai.db", key)
     with with_key.transaction() as tx:
@@ -203,6 +203,43 @@ def test_backups_are_taken_before_an_upgrade_and_old_ones_go(config: Config) -> 
     for _ in range(5):
         backups.create(home, "daily", config.backups_kept)
     assert len(backups.listing(home)) == config.backups_kept
+
+
+def test_the_daily_backup_runs_while_the_app_works_and_can_be_restored(config: Config) -> None:
+    with running(config) as client:
+        save_theme(client)
+        home = config.home
+        store = secret_store(config.secrets_test_file)
+        key = vault.open_key(home, store)
+        made = backups.create_online(home, key, 3, threading.Event())
+        assert made
+        # The app kept working with the copy being taken, and the copy is encrypted too.
+        save_theme(client)
+    folder = home / "system" / "backups" / made.name
+    assert not (folder / "nexusai.db").read_bytes().startswith(b"SQLite format 3")
+    assert not list(folder.glob("*-wal"))
+    copy = Database(folder / "nexusai.db", key)
+    assert copy.fetch_all("SELECT COUNT(*) FROM migrations")[0][0] > 0
+    copy.close()
+
+    (home / "system" / "nexusai.db").write_bytes(b"\0" * 8192)
+    (home / "system" / "nexusai.db-wal").unlink(missing_ok=True)
+    (home / "system" / "nexusai.db-shm").unlink(missing_ok=True)
+    with running(config) as client:
+        assert status(client)["state"] == "damaged"
+        assert client.post("/api/home/restore", json={"name": made.name}).json()["state"] == "ready"
+        assert theme(client) == "nexus-dark"
+
+
+def test_an_interrupted_daily_backup_leaves_nothing_behind(config: Config) -> None:
+    with running(config):
+        pass
+    key = vault.open_key(config.home, secret_store(config.secrets_test_file))
+    stopped = threading.Event()
+    stopped.set()
+    assert backups.create_online(config.home, key, 3, stopped) is None
+    root = config.home / "system" / "backups"
+    assert not list(root.glob("*.partial"))
 
 
 def test_a_backup_is_skipped_when_the_drive_is_nearly_full(

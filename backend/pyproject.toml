@@ -41,6 +41,8 @@ testpaths = ["tests"]
 pythonpath = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+addopts = "-m 'not speed'"
+markers = ["speed: the 100,000-message speed targets; slow to set up, run with make speed"]
 
 [tool.ruff]
 line-length = 100
