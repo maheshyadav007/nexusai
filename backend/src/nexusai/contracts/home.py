@@ -40,9 +40,11 @@ class BrowseFolders(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     path: str | None = Field(default=None, max_length=4096)
+    extension: str | None = Field(default=None, pattern=r"^[a-z0-9]+$", max_length=16)
 
 
 class FolderListing(BaseModel):
     path: str
     parent: str | None
     folders: list[str]
+    files: list[str] = Field(default_factory=list)

@@ -300,7 +300,7 @@ def remove_message(tx: sqlite3.Connection, message: int) -> None:
     refresh_thread(tx, row[0])
 
 
-def _row(row: sqlite3.Row) -> ThreadRow:
+def row_of(row: sqlite3.Row) -> ThreadRow:
     return ThreadRow(
         id=row["id"],
         subject=row["subject"],
@@ -344,7 +344,7 @@ def list_threads(
         (account,),
     )
     return ThreadList(
-        threads=[_row(row) for row in page],
+        threads=[row_of(row) for row in page],
         next_before=f"{page[-1]['last_date']}|{page[-1]['id']}" if len(rows) > limit else None,
         categories=[row["category"] for row in categories],
     )
@@ -427,7 +427,7 @@ def thread_view(db: Database, thread: int) -> ThreadView | None:
             )
         )  # fmt: skip
         previous = people
-    return ThreadView(thread=_row(rows[0]), messages=views)
+    return ThreadView(thread=row_of(rows[0]), messages=views)
 
 
 def _fts_query(text: str) -> str:
@@ -480,7 +480,7 @@ def search(db: Database, account: str, query: SearchMail) -> SearchResults:
         thread = db.fetch_all("SELECT * FROM threads WHERE id = ?", (row["thread"],))[0]
         hits.append(
             SearchHit(
-                thread=_row(thread),
+                thread=row_of(thread),
                 message_id=row["message"],
                 excerpt=row["excerpt"],
                 matched_attachment="\x01" in (row["attachment_hit"] or ""),

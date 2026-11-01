@@ -17,7 +17,7 @@ export function SearchBox() {
         if (text.trim()) router.push(`/search?q=${encodeURIComponent(text.trim())}`);
       }}
     >
-      <Input aria-label={t("search.label")} placeholder={t("search.placeholder")} value={text} onChange={(event) => setText(event.target.value)} />
+      <Input type="search" aria-label={t("search.label")} placeholder={t("search.placeholder")} value={text} onChange={(event) => setText(event.target.value)} />
     </form>
   );
 }

@@ -170,19 +170,22 @@ def create_home(path: Path) -> None:
         raise HomeError("Couldn't create the folder there. Choose another one.") from error
 
 
-def browse(raw: str | None) -> FolderListing:
+def browse(raw: str | None, extension: str | None = None) -> FolderListing:
     path = normalize(raw) if raw else Path.home()
     if not path.is_dir():
         path = _nearest_existing(path)
     try:
-        folders = sorted(
-            (e.name for e in os.scandir(path) if e.is_dir() and not e.name.startswith(".")),
+        entries = [e for e in os.scandir(path) if not e.name.startswith(".")]
+        folders = sorted((e.name for e in entries if e.is_dir()), key=str.lower)
+        wanted = f".{extension}" if extension else None
+        files = sorted(
+            (e.name for e in entries if wanted and e.is_file() and e.name.lower().endswith(wanted)),
             key=str.lower,
         )
     except OSError as error:
         raise HomeError("Couldn't open that folder.") from error
     parent = None if path.parent == path else str(path.parent)
-    return FolderListing(path=str(path), parent=parent, folders=folders)
+    return FolderListing(path=str(path), parent=parent, folders=folders, files=files)
 
 
 def agent_path(home: Path, requested: str, *, write: bool) -> Path:

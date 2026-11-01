@@ -16,6 +16,7 @@ from pydantic import ValidationError
 
 from nexusai.api.security import LocalOnlyMiddleware
 from nexusai.api.sse import sse_stream
+from nexusai.contracts.documents import DocumentRow
 from nexusai.contracts.errors import ApiError
 from nexusai.contracts.events import AppEvent, EventLog, EventLogQuery
 from nexusai.contracts.home import (
@@ -32,11 +33,14 @@ from nexusai.kernel.database import Database
 from nexusai.kernel.event_bus import EventBus
 from nexusai.kernel.logging import configure_logging, sink
 from nexusai.kernel.module import CommandError, Context, Endpoint, Listener, Module
+from nexusai.modules.documents import module as documents
+from nexusai.modules.documents.module import documents_module
 from nexusai.modules.mail import store as mail_store
 from nexusai.modules.mail.module import mail_module
 from nexusai.modules.models.module import models_module, reset_login
 from nexusai.modules.notifications.module import notifications_module
 from nexusai.modules.onboarding.module import onboarding_module
+from nexusai.modules.panels.module import panels_module
 from nexusai.modules.settings.module import settings_module
 from nexusai.modules.system.module import system_module
 
@@ -47,6 +51,8 @@ MODULES: list[Module] = [
     notifications_module,
     system_module,
     mail_module,
+    documents_module,
+    panels_module,
 ]
 log = structlog.get_logger()
 
@@ -188,7 +194,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     @app.post("/api/home/browse", response_model=None)
     async def browse_home(command: BrowseFolders) -> FolderListing | JSONResponse:
         try:
-            return await asyncio.to_thread(homes.browse, command.path)
+            return await asyncio.to_thread(homes.browse, command.path, command.extension)
         except homes.HomeError as error:
             return _error(422, "home.unreadable", str(error))
 
@@ -228,6 +234,41 @@ def create_app(config: Config | None = None) -> FastAPI:
             "X-Content-Type-Options": "nosniff",
         }
         return Response(body, media_type="application/octet-stream", headers=headers)
+
+    def bare_context() -> Context | None:
+        if runtime is None:
+            return None
+        return Context(bus=runtime.bus, config=runtime.config, trace_id=uuid.uuid4().hex)
+
+    @app.post("/api/documents/upload", response_model=None)
+    async def upload_document(request: Request, name: str) -> DocumentRow | JSONResponse:
+        ctx = bare_context()
+        if ctx is None:
+            return _error(409, "home.not_ready", "Choose a NexusAI Home first.")
+        declared = int(request.headers.get("content-length") or 0)
+        if declared > cfg.max_upload_bytes:
+            return _error(413, "document.too_large", "That file is too large to add.")
+        data = await request.body()
+        if len(data) > cfg.max_upload_bytes:
+            return _error(413, "document.too_large", "That file is too large to add.")
+        return await asyncio.to_thread(documents.save_upload, ctx, name, data)
+
+    @app.get("/api/documents/file", response_model=None)
+    async def document_file(key: str) -> Response:
+        ctx = bare_context()
+        if ctx is None:
+            return _error(409, "home.not_ready", "Choose a NexusAI Home first.")
+        try:
+            found = await asyncio.to_thread(documents.document_file, ctx, key)
+        except ValueError:
+            found = None
+        if found is None:
+            return _error(404, "document.not_found", "That document no longer exists.")
+        headers = {
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(found[0])}",
+            "X-Content-Type-Options": "nosniff",
+        }
+        return Response(found[1], media_type="application/octet-stream", headers=headers)
 
     @app.post("/api/commands/{name}")
     async def command(name: str, request: Request) -> JSONResponse:

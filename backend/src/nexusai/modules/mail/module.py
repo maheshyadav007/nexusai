@@ -2,15 +2,18 @@ import json
 import threading
 from datetime import UTC, datetime
 from email.utils import parseaddr
+from pathlib import Path
 
 import structlog
 
 from nexusai.contracts.mail import (
+    AddPstImport,
     ConnectionResult,
     Draft,
     DraftList,
     GetMailAccounts,
     GetMailStatus,
+    GetPstImports,
     GetRules,
     GetThread,
     ListDrafts,
@@ -23,6 +26,9 @@ from nexusai.contracts.mail import (
     MailStatus,
     MailTestResult,
     MoveThread,
+    PstImport,
+    PstImportAction,
+    PstImports,
     Recipient,
     RemoveDraft,
     RemoveMailAccount,
@@ -43,13 +49,13 @@ from nexusai.contracts.mail import (
     ThreadView,
 )
 from nexusai.kernel.module import CommandError, Context, Module
-from nexusai.modules.mail import accounts, rules, send, store
+from nexusai.modules.mail import accounts, pst, rules, send, store
 from nexusai.modules.mail.imap import test_imap
 from nexusai.modules.mail.parse import normalize_subject
 from nexusai.modules.mail.sync import MailSync
 
 log = structlog.get_logger()
-mail_module = Module(name="mail", migrations=store.MIGRATIONS)
+mail_module = Module(name="mail", migrations=[*store.MIGRATIONS, pst.MIGRATION])
 
 _sync: MailSync | None = None
 _sync_lock = threading.Lock()
@@ -75,6 +81,8 @@ def _start_sync(ctx: Context) -> None:
 def _startup(ctx: Context) -> None:
     accounts.adopt_earlier_accounts(ctx.config)
     _start_sync(ctx)
+    # An import that was running when the app closed carries on from its saved position.
+    pst.runner.kick(ctx)
 
 
 def _shutdown() -> None:
@@ -87,6 +95,7 @@ def _shutdown() -> None:
 
 mail_module.on_start.append(_startup)
 mail_module.on_stop.append(_shutdown)
+mail_module.on_stop.append(pst.runner.stop)
 
 
 def _account(ctx: Context) -> str:
@@ -194,7 +203,8 @@ def remove_account(command: RemoveMailAccount, ctx: Context) -> MailAccounts:
 def get_status(query: GetMailStatus, ctx: Context) -> MailStatus:
     active, _ = accounts.read_accounts(ctx.config)
     count = ctx.bus.db.fetch_all(
-        "SELECT COUNT(*) AS n FROM messages WHERE account = ?", (active or "",)
+        "SELECT COUNT(*) AS n FROM messages WHERE account = ?",
+        (accounts.current_account(ctx.config),),
     )[0]["n"]
     if _sync is None:
         return MailStatus(account=active, state="off", messages=count)
@@ -212,11 +222,9 @@ def get_status(query: GetMailStatus, ctx: Context) -> MailStatus:
 
 @mail_module.query("threads.list")
 def list_threads(query: ListThreads, ctx: Context) -> ThreadList:
-    active, _ = accounts.read_accounts(ctx.config)
-    if active is None:
-        return ThreadList(threads=[], next_before=None, categories=[])
+    account = accounts.current_account(ctx.config)
     return store.list_threads(
-        ctx.bus.db, active, query.folder, query.category, query.before, query.limit
+        ctx.bus.db, account, query.folder, query.category, query.before, query.limit
     )
 
 
@@ -225,13 +233,18 @@ def get_thread(query: GetThread, ctx: Context) -> ThreadView:
     view = store.thread_view(ctx.bus.db, query.id)
     if view is None:
         raise CommandError("thread.not_found", "That conversation no longer exists.", 404)
+    # Older mail's attachments get read the first time someone opens them.
+    if any(a.kind == "attachment" for m in view.messages for a in m.attachments):
+        with ctx.bus.unit_of_work() as work:
+            work.emit(
+                "thread.opened", {"thread_id": query.id}, source="mail", trace_id=ctx.trace_id
+            )
     return view
 
 
 @mail_module.query("search.run")
 def run_search(query: SearchMail, ctx: Context) -> SearchResults:
-    active, _ = accounts.read_accounts(ctx.config)
-    return store.search(ctx.bus.db, active, query) if active else SearchResults(hits=[])
+    return store.search(ctx.bus.db, accounts.current_account(ctx.config), query)
 
 
 # Changing state: saved here at once, and sent to the server through the outbox
@@ -523,3 +536,72 @@ def send_mail(command: SendDraft, ctx: Context) -> MailDone:
         work.emit("drafts.changed", {"id": draft.id}, source="mail", trace_id=ctx.trace_id)
     _wake()
     return MailDone()
+
+
+# PST archives
+
+
+def _pst_rows(ctx: Context) -> PstImports:
+    rows = ctx.bus.db.fetch_all("SELECT * FROM pst_imports ORDER BY id DESC")
+    return PstImports(imports=[PstImport(**dict(row)) for row in rows])
+
+
+@mail_module.query("pst.imports")
+def pst_imports(query: GetPstImports, ctx: Context) -> PstImports:
+    return _pst_rows(ctx)
+
+
+@mail_module.command("pst.add")
+def pst_add(command: AddPstImport, ctx: Context) -> PstImports:
+    path = Path(command.path).expanduser().resolve()
+    if not path.is_file():
+        raise CommandError("pst.not_found", "That file doesn't exist. Check the path.", 422)
+    if path.suffix.lower() not in {".pst", ".ost"}:
+        raise CommandError("pst.not_a_pst", "Choose a .pst file.", 422)
+    with ctx.bus.unit_of_work() as work:
+        existing = work.tx.execute(
+            "SELECT 1 FROM pst_imports WHERE path = ? AND status != 'failed'", (str(path),)
+        ).fetchone()
+        if existing:
+            raise CommandError("pst.already_added", "That archive has already been added.", 409)
+        work.tx.execute(
+            "INSERT INTO pst_imports (path, name, status) VALUES (?, ?, 'queued')",
+            (str(path), path.name),
+        )
+        work.emit("pst.progress", {"status": "queued"}, source="mail", trace_id=ctx.trace_id)
+    pst.runner.kick(ctx)
+    return _pst_rows(ctx)
+
+
+@mail_module.command("pst.pause")
+def pst_pause(command: PstImportAction, ctx: Context) -> PstImports:
+    if not pst.runner.pause(command.id):
+        with ctx.bus.unit_of_work() as work:
+            work.tx.execute(
+                "UPDATE pst_imports SET status = 'paused' WHERE id = ? AND status = 'queued'",
+                (command.id,),
+            )
+            work.emit(
+                "pst.progress",
+                {"id": command.id, "status": "paused"},
+                source="mail",
+                trace_id=ctx.trace_id,
+            )
+    return _pst_rows(ctx)
+
+
+@mail_module.command("pst.resume")
+def pst_resume(command: PstImportAction, ctx: Context) -> PstImports:
+    with ctx.bus.unit_of_work() as work:
+        work.tx.execute(
+            "UPDATE pst_imports SET status = 'queued', error = NULL WHERE id = ? AND status IN ('paused', 'failed')",
+            (command.id,),
+        )
+        work.emit(
+            "pst.progress",
+            {"id": command.id, "status": "queued"},
+            source="mail",
+            trace_id=ctx.trace_id,
+        )
+    pst.runner.kick(ctx)
+    return _pst_rows(ctx)

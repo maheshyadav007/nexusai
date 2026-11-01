@@ -13,6 +13,7 @@ from nexusai.kernel.secrets import FileStore
 
 KEYCHAIN_SERVICE = "NexusAI Mail"
 FILE_NAME = "mail-accounts.json"
+LOCAL_ACCOUNT = "local"
 
 
 def _path(config: Config) -> Path:
@@ -36,6 +37,12 @@ def read_accounts(config: Config) -> tuple[str | None, dict[str, MailProfile]]:
     profiles = {name: MailProfile.model_validate(p) for name, p in raw.get("profiles", {}).items()}
     active = raw.get("activeProfile")
     return (active if active in profiles else None), profiles
+
+
+def current_account(config: Config) -> str:
+    """Where mail is filed. A PST can come in before any account is connected."""
+    active, _ = read_accounts(config)
+    return active or LOCAL_ACCOUNT
 
 
 def write_accounts(config: Config, active: str | None, profiles: dict[str, MailProfile]) -> None:

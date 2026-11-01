@@ -345,3 +345,39 @@ class ThreadUpdated(BaseModel):
     thread_id: int
     field: str
     value: Any = None
+
+
+PstStatus = Literal["queued", "running", "paused", "done", "failed"]
+
+
+class GetPstImports(BaseModel):
+    pass
+
+
+class PstImport(BaseModel):
+    id: int
+    name: str
+    path: str
+    status: PstStatus
+    total: int
+    position: int
+    imported: int
+    duplicates: int
+    failed: int
+    error: str | None
+
+
+class PstImports(BaseModel):
+    imports: list[PstImport]
+
+
+class AddPstImport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1, max_length=4096)
+
+
+class PstImportAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int

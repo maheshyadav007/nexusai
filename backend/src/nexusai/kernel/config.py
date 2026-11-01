@@ -47,6 +47,7 @@ class Config:
     log_page_size: int
     default_settings: dict[str, Any]
     min_free_bytes: int
+    max_upload_bytes: int
     log_retention_days: int
     network_check_timeout_seconds: float
     chatgpt: ChatGptConfig
@@ -77,6 +78,7 @@ def load_config(home_dir: Path | None = None) -> Config:
         home_dir=home_dir
         or (Path(fixed).resolve() if (fixed := os.environ.get("NEXUSAI_HOME")) else None),
         min_free_bytes=raw["home"]["min_free_bytes"],
+        max_upload_bytes=raw["home"]["max_upload_bytes"],
         log_retention_days=raw["logs"]["retention_days"],
         network_check_timeout_seconds=raw["network"]["check_timeout_seconds"],
         max_chain_depth=events["max_chain_depth"],

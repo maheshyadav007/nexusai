@@ -8,9 +8,14 @@ dependencies = [
     "httpx>=0.28.1",
     "imapclient>=3",
     "keyring>=25",
+    "libpff-python>=20240101",
     "nh3>=0.2",
+    "openpyxl>=3.1",
     "psutil>=6",
     "pydantic>=2.14.2",
+    "pypdf>=5",
+    "python-docx>=1.1",
+    "python-pptx>=1",
     "structlog>=26.1.0",
     "uvicorn[standard]>=0.54.0",
 ]
@@ -41,6 +46,10 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.ruff.lint.per-file-ignores]
 # Long lines here are SQL and test data, which read better whole.
 "src/nexusai/modules/mail/store.py" = ["E501"]
+"src/nexusai/modules/mail/pst.py" = ["E501"]
+"src/nexusai/modules/mail/module.py" = ["E501"]
+"src/nexusai/modules/documents/module.py" = ["E501"]
+"src/nexusai/modules/panels/module.py" = ["E501"]
 "tests/*" = ["E501"]
 
 [tool.mypy]
@@ -49,7 +58,7 @@ files = ["src"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["imapclient.*"]
+module = ["imapclient.*", "pypff.*", "docx.*", "pptx.*", "openpyxl.*"]
 ignore_missing_imports = true
 
 [tool.importlinter]
