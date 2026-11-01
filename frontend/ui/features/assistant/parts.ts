@@ -44,6 +44,26 @@ export function toBlocks(message: UIMessage, pending: ReadonlySet<string>): Bloc
   return blocks;
 }
 
+export type Shown = Block | { kind: "results"; parts: ToolPart[]; key: string };
+
+const WITH_OWN_CARD = new Set(["ask_user", "send_mail"]);
+
+/** Side by side, results of the same kind become one card. What's still being decided stays out. */
+export function mergeResults(blocks: readonly Block[], pending: ReadonlyMap<string, unknown>): Shown[] {
+  const shown: Shown[] = [];
+  for (const block of blocks) {
+    const isResult = block.kind === "card" && !WITH_OWN_CARD.has(toolName(block.part)) && !pending.has(block.part.toolCallId) && CARD_TOOLS.has(toolName(block.part));
+    if (!isResult) {
+      shown.push(block);
+      continue;
+    }
+    const last = shown[shown.length - 1];
+    if (last?.kind === "results" && toolName(last.parts[0] as ToolPart) === toolName(block.part)) last.parts.push(block.part);
+    else shown.push({ kind: "results", parts: [block.part], key: block.key });
+  }
+  return shown;
+}
+
 export const followUpsOf = (message: UIMessage): string[] => {
   const part = message.parts.find((item) => item.type === "data-followups") as { data?: { questions?: string[] } } | undefined;
   return part?.data?.questions ?? [];

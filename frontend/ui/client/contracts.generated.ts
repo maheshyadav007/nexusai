@@ -687,9 +687,20 @@ export type Detail1 = string;
 export type Undoable = boolean;
 export type Status6 = "pending" | "approved" | "denied";
 export type Time1 = string;
+export type ToolLabel = string;
+export type CanRemember = boolean;
 export type Approvals = ToolApproval[];
 export type Id20 = number;
 export type Choice = "once" | "session" | "deny";
+/**
+ * @maxItems 500
+ */
+export type Allow = number[];
+/**
+ * @maxItems 500
+ */
+export type Deny = number[];
+export type Remember = boolean;
 export type Ok4 = boolean;
 export type Read2 = "off" | "ask" | "allow";
 export type Write = "off" | "ask" | "allow";
@@ -1309,6 +1320,7 @@ export interface Contracts {
   ListApprovals?: ListApprovals;
   ApprovalList?: ApprovalList;
   DecideApproval?: DecideApproval;
+  DecideApprovals?: DecideApprovals;
   AgentDone?: AgentDone;
   GetPermissions?: GetPermissions;
   Permissions?: Permissions;
@@ -2434,6 +2446,8 @@ export interface ToolApproval {
   undoable: Undoable;
   status: Status6;
   time: Time1;
+  tool_label?: ToolLabel;
+  can_remember?: CanRemember;
   [k: string]: unknown;
 }
 /**
@@ -2458,6 +2472,17 @@ export interface ApprovalList {
 export interface DecideApproval {
   id: Id20;
   choice: Choice;
+}
+/**
+ * Several at once, so a run making many calls doesn't take as many clicks.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "DecideApprovals".
+ */
+export interface DecideApprovals {
+  allow?: Allow;
+  deny?: Deny;
+  remember?: Remember;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema

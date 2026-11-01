@@ -4,12 +4,12 @@ import { AnimatePresence, motion } from "motion/react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useEvents } from "@/ui/client/events";
-import { useApprovals, useSessions } from "@/ui/client/sessions";
+import { groupApprovals, useApprovals, useSessions } from "@/ui/client/sessions";
 import { useChannel } from "@/ui/client/work";
 import { Icon, type IconName } from "@/ui/icons";
 import { Button } from "@/ui/primitives/Button";
 import { FADE_RISE } from "@/ui/primitives/motion";
-import { t } from "@/ui/strings";
+import { t, tn } from "@/ui/strings";
 import { useAssistant } from "./AssistantProvider";
 
 interface Note {
@@ -49,7 +49,9 @@ export function AgentToasts() {
     if (!channel.data || !approvals.data) return;
     const asks = channel.data.messages.filter((message) => message.kind === "ask");
     const pending = approvals.data.approvals;
-    const live = new Set([...asks.map((item) => `ask-${item.id}`), ...pending.map((item) => `approval-${item.id}`)]);
+    const groups = groupApprovals(pending);
+    const groupKey = (item: { session: string; tool: string }) => `approval-${item.session}-${item.tool}`;
+    const live = new Set([...asks.map((item) => `ask-${item.id}`), ...pending.map(groupKey)]);
     if (seen.current === null) {
       seen.current = live;
       return;
@@ -61,11 +63,13 @@ export function AgentToasts() {
       const session = item.session;
       push({ key, icon: "chat", title: sessions.data?.sessions.find((row) => row.id === session)?.title ?? item.agent, detail: item.text, sticky: true, action: { label: t("toast.answer"), run: () => (session && session !== "mail-agent" ? assistant.openSession(session) : router.push("/today")) } });
     }
-    for (const item of pending) {
-      const key = `approval-${item.id}`;
+    for (const group of groups) {
+      const item = group[0];
+      if (!item) continue;
+      const key = groupKey(item);
       if (seen.current.has(key) || item.session === watched || NOT_ON.includes(pathname) || pathname === `/agent/sessions/${item.session}`) continue;
       const session = item.session;
-      push({ key, icon: "approvals", title: t("toast.approval"), detail: item.summary, sticky: true, action: { label: t("toast.review"), run: () => assistant.openSession(session) } });
+      push({ key, icon: "approvals", title: t("toast.approval"), detail: group.length > 1 ? tn("approvals.group", group.length, { label: item.tool_label ?? item.tool }) : item.summary, sticky: true, action: { label: t("toast.review"), run: () => assistant.openSession(session) } });
     }
     seen.current = new Set([...seen.current, ...live]);
     // Anything answered elsewhere goes away by itself.

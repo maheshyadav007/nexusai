@@ -336,6 +336,162 @@ def test_creating_an_agent_asks_first_then_schedules_it(client: TestClient, scri
     ]
 
 
+# Many approvals at once
+
+
+def pending(client: TestClient, count: int) -> list[dict[str, Any]]:
+    def enough() -> list[dict[str, Any]] | None:
+        found: list[dict[str, Any]] = client.post("/api/queries/approvals.list").json()["approvals"]
+        return found if len(found) == count else None
+
+    result: list[dict[str, Any]] = wait(enough, f"{count} approvals")
+    return result
+
+
+def mail_session(client: TestClient, script: Script, fake: FakeMail) -> tuple[str, int]:
+    """A session that has read mail, which is when changes ask first."""
+    connect(client, fake)
+    script.replies = [triage_reply()]
+    fake.state.deliver(make_mail(subject="Quarterly numbers"))
+    thread = triaged(client, "Quarterly numbers")["id"]
+    session = new_session(client)
+    script.replies = [[ToolCall("r1", "read_thread", {"thread_id": thread})], [TextChunk("Read.")]]
+    chat(client, session, "Read it")
+    return session, thread
+
+
+def file_calls(thread: int, count: int, start: int = 0) -> list[ToolCall]:
+    return [
+        ToolCall(
+            f"f{start + n}", "set_thread_category", {"thread_id": thread, "category": "Finance"}
+        )
+        for n in range(count)
+    ]
+
+
+def test_allowing_for_the_session_settles_everything_of_that_kind_waiting(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    session, thread = mail_session(client, script, fake)
+    script.replies = [file_calls(thread, 4), [TextChunk("Filed.")]]
+    done = chat_in_background(client, session, "File them")
+    waiting = pending(client, 4)
+    assert all(item["can_remember"] for item in waiting)
+    assert "“Quarterly numbers”" in waiting[0]["summary"]
+    client.post(
+        "/api/commands/approvals.decide", json={"id": waiting[0]["id"], "choice": "session"}
+    )
+    wait(lambda: done, "finish")
+    assert client.post("/api/queries/approvals.list").json()["approvals"] == []
+    assert status(client, session) == "done"
+
+
+def test_a_session_allowance_holds_for_later_calls_even_after_reading_mail(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    session, thread = mail_session(client, script, fake)
+    script.replies = [file_calls(thread, 1), [TextChunk("One.")]]
+    done = chat_in_background(client, session, "File it")
+    client.post(
+        "/api/commands/approvals.decide",
+        json={"id": pending(client, 1)[0]["id"], "choice": "session"},
+    )
+    wait(lambda: done, "first")
+    script.replies = [file_calls(thread, 1, 10), [TextChunk("Two.")]]
+    chat(client, session, "File it again")
+    assert client.post("/api/queries/approvals.list").json()["approvals"] == []
+    assert last_tool_result(script) == "Filed under Finance."
+
+
+def test_allowing_one_tool_does_not_allow_another(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    session, thread = mail_session(client, script, fake)
+    script.replies = [file_calls(thread, 1), [TextChunk("One.")]]
+    done = chat_in_background(client, session, "File it")
+    client.post(
+        "/api/commands/approvals.decide",
+        json={"id": pending(client, 1)[0]["id"], "choice": "session"},
+    )
+    wait(lambda: done, "first")
+    script.replies = [[ToolCall("t1", "create_task", {"title": "Other"})], [TextChunk("Ok.")]]
+    done = chat_in_background(client, session, "Add a task")
+    assert pending(client, 1)[0]["tool"] == "create_task"
+    client.post(
+        "/api/commands/approvals.decide",
+        json={"id": pending(client, 1)[0]["id"], "choice": "deny"},
+    )
+    wait(lambda: done, "second")
+
+
+def test_mail_cannot_earn_a_session_allowance_for_risky_tools(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    session, _ = mail_session(client, script, fake)
+    calls = {
+        "run_command": {"command": "echo hi"},
+        "create_agent": {"name": "Sneaky", "instructions": "Do things"},
+    }
+    for name, arguments in calls.items():
+        script.replies = [[ToolCall(f"x-{name}", name, arguments)], [TextChunk("Ok.")]]
+        done = chat_in_background(client, session, f"Use {name}")
+        item = pending(client, 1)[0]
+        assert item["can_remember"] is False
+        # Even if asked for directly, nothing is remembered.
+        client.post("/api/commands/approvals.decide", json={"id": item["id"], "choice": "session"})
+        wait(lambda finished=done: finished, name)
+        script.replies = [[ToolCall(f"y-{name}", name, arguments)], [TextChunk("Ok.")]]
+        done = chat_in_background(client, session, f"Use {name} again")
+        again = pending(client, 1)[0]
+        assert again["tool"] == name
+        client.post("/api/commands/approvals.decide", json={"id": again["id"], "choice": "deny"})
+        wait(lambda finished=done: finished, f"{name} again")
+
+
+def test_many_can_be_decided_together_with_some_declined(
+    client: TestClient, script: Script
+) -> None:
+    current = client.post("/api/queries/permissions.get").json()
+    client.post("/api/commands/permissions.save", json={**current, "tools": {"create_task": "ask"}})
+    session = new_session(client)
+    calls = [ToolCall(f"t{n}", "create_task", {"title": f"Task {n}"}) for n in range(3)]
+    script.replies = [calls, [TextChunk("Done.")]]
+    done = chat_in_background(client, session, "Add three")
+    by_title = {item["summary"][-6:]: item["id"] for item in pending(client, 3)}
+    client.post(
+        "/api/commands/approvals.decideMany",
+        json={"allow": [by_title["Task 0"], by_title["Task 2"]], "deny": [by_title["Task 1"]]},
+    )
+    wait(lambda: done, "finish")
+    titles = {t["title"] for t in client.post("/api/queries/tasks.list", json={}).json()["tasks"]}
+    assert titles == {"Task 0", "Task 2"}
+    # One run carried on once, not once per decision.
+    assert status(client, session) == "done"
+
+
+def test_declining_one_while_remembering_the_rest_is_respected(
+    client: TestClient, script: Script
+) -> None:
+    current = client.post("/api/queries/permissions.get").json()
+    client.post("/api/commands/permissions.save", json={**current, "tools": {"create_task": "ask"}})
+    session = new_session(client)
+    calls = [ToolCall(f"t{n}", "create_task", {"title": f"Task {n}"}) for n in range(3)]
+    script.replies = [calls, [TextChunk("Done.")]]
+    done = chat_in_background(client, session, "Add three")
+    by_title = {item["summary"][-6:]: item["id"] for item in pending(client, 3)}
+    client.post(
+        "/api/commands/approvals.decideMany",
+        json={
+            "allow": [by_title["Task 0"], by_title["Task 2"]],
+            "deny": [by_title["Task 1"]],
+            "remember": True,
+        },
+    )
+    wait(lambda: done, "finish")
+    titles = {t["title"] for t in client.post("/api/queries/tasks.list", json={}).json()["tasks"]}
+    assert titles == {"Task 0", "Task 2"}
+
+
 # Folders and categories
 
 

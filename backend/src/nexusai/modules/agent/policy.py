@@ -139,6 +139,18 @@ def tool_level(permissions: Permissions, entry: ToolEntry) -> Literal["off", "as
     return group
 
 
+def can_remember(tool: str, untrusted: bool) -> bool:
+    """Whether "for this session" can hold. Mail in a session could be what's asking, so a session
+    that read mail can only be granted changes to the person's own data, which are easily undone.
+    Commands, files and anything that runs later still ask every time."""
+    entry = TOOLS_BY_NAME.get(tool)
+    if entry is None or entry.action == "send":
+        return False
+    if not untrusted:
+        return True
+    return entry.action == "data" and entry.default is None
+
+
 def for_tool(permissions: Permissions, tool: str) -> Permissions:
     """The permissions a decision should see, with this tool's setting in place of its group's."""
     entry = TOOLS_BY_NAME.get(tool)
@@ -162,6 +174,8 @@ def decide(
     if action == "data":
         if permissions.data == "off":
             return Decision("deny", "This is turned off in Settings.")
+        if session_allowed:
+            return Decision("allow", "You allowed this for this session.")
         if untrusted:
             return Decision(
                 "ask", "This session has read mail or documents, so changes ask you first."

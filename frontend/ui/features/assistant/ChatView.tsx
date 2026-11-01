@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiRequestError } from "@/ui/client/api";
 import { useTimeOnly } from "@/ui/client/format";
-import { takeFirstMessage, useAnswerSession, useApprovals, useModelCall, useStopSession } from "@/ui/client/sessions";
+import { groupApprovals, takeFirstMessage, useAnswerSession, useApprovals, useModelCall, useStopSession } from "@/ui/client/sessions";
 import { useChannel, useDismissChannel, useSessionContext, useSetContext } from "@/ui/client/work";
 import { Icon } from "@/ui/icons";
 import { Button } from "@/ui/primitives/Button";
@@ -16,10 +16,10 @@ import { FADE_RISE, QUICK } from "@/ui/primitives/motion";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { Tooltip } from "@/ui/primitives/Tooltip";
 import { t } from "@/ui/strings";
-import { AnsweredQuestion, ApprovalCard, MailCard, QuestionCard, ResultCard } from "./Cards";
+import { AnsweredQuestion, ApprovalGroupCard, MailCard, QuestionCard, ResultCard } from "./Cards";
 import { Composer } from "./Composer";
 import { Markdown } from "./Markdown";
-import { failureOf, followUpsOf, isFinished, textOf, timeOf, toBlocks, toolName, type ToolPart } from "./parts";
+import { failureOf, followUpsOf, isFinished, mergeResults, textOf, timeOf, toBlocks, toolName, type ToolPart } from "./parts";
 import { ThinkingTrace } from "./ThinkingTrace";
 
 const COPIED_MS = 1500;
@@ -141,22 +141,25 @@ function AssistantMessage({ message, session, running, isLast, onFollowUp, showF
   const approvals = useApprovals();
   const pending = useMemo(() => new Map((approvals.data?.approvals ?? []).filter((item) => item.session === session).map((item) => [item.tool_call_id, item])), [approvals.data, session]);
   const blocks = toBlocks(message, new Set(pending.keys()));
+  const merged = mergeResults(blocks, pending);
+  const groups = groupApprovals([...pending.values()]);
   const text = textOf(message);
   const failure = failureOf(message);
   const followUps = followUpsOf(message);
   const settled = !running || !isLast;
   return (
     <article data-testid="agent-message" className="group flex flex-col gap-3">
-      {blocks.map((block) => {
+      {merged.map((block) => {
         if (block.kind === "text") return <Markdown key={block.key} text={block.text} />;
         if (block.kind === "trace") return <ThinkingTrace key={block.key} steps={block.steps} running={running && isLast && block.key === blocks[blocks.length - 1]?.key} />;
+        if (block.kind === "results") return <ResultCard key={block.key} parts={block.parts} />;
         const { part } = block;
         const name = toolName(part);
-        const approval = pending.get(part.toolCallId);
         if (name === "ask_user") return <QuestionPart key={block.key} part={part} session={session} />;
-        if (name === "send_mail") return <MailCard key={block.key} part={part} approval={approval} />;
-        if (approval && !["create_task", "create_reminder", "create_category", "create_agent", "propose_task", "propose_reminder", "draft_reply"].includes(name)) return <ApprovalCard key={block.key} approval={approval} />;
-        return <ResultCard key={block.key} part={part} approval={approval} />;
+        if (name === "send_mail") return <MailCard key={block.key} part={part} approval={pending.get(part.toolCallId)} />;
+        // The first of a group speaks for the rest.
+        const group = groups.find((items) => items.some((item) => item.tool_call_id === part.toolCallId));
+        return group?.[0]?.tool_call_id === part.toolCallId ? <ApprovalGroupCard key={block.key} approvals={group} /> : null;
       })}
       {failure ? <ErrorState title={t("sessions.failed")} description={failure} /> : null}
       {settled && text ? (

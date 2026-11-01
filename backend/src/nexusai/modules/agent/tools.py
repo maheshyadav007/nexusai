@@ -176,6 +176,11 @@ def _guarded(
 ) -> str:
     db = ctx.bus.db
     kind = f"{tool}:{path.parent if path else ''}"
+    # A tool restarts from the top after a decision. A no stands, whatever was allowed since.
+    decided = _approval_row(ctx, session, call_id)
+    if decided is not None and decided["status"] == "denied":
+        _log_call(ctx, session, call_id, tool, detail or summary, DENIED, "denied", "person", 0)
+        return DENIED
     permissions = policy.load_permissions(db)
     if permissions.tools.get(tool) == "off":
         reason = "This tool is turned off in Settings."
@@ -187,7 +192,10 @@ def _guarded(
         home=ctx.config.home,
         permissions=policy.for_tool(permissions, tool),
         untrusted=_is_untrusted(ctx, session),
-        session_allowed=policy.allowed_for_session(db, session, kind),
+        session_allowed=(
+            policy.allowed_for_session(db, session, kind)
+            and policy.can_remember(tool, _is_untrusted(ctx, session))
+        ),
     )
     approved_by = "settings"
     if decision.verdict == "deny":

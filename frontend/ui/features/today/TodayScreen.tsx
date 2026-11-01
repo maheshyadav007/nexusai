@@ -6,10 +6,10 @@ import { useState } from "react";
 import type { ChannelMessage, MailCategory, TodayThread } from "@/ui/client/contracts.generated";
 import { useDateOnly, useDateTime, useShortDate } from "@/ui/client/format";
 import { useCategories, useDecideCategory, useMailStatus } from "@/ui/client/mail";
-import { useApprovals, useSessions } from "@/ui/client/sessions";
+import { groupApprovals, useApprovals, useSessions } from "@/ui/client/sessions";
 import { useChannel, useDecideMemory, useDismissChannel, useMemory, useReminders, useRemoveReminder, useRemoveTask, useRespondChannel, useSaveReminder, useSaveTask, useTasks, useToday, useWaitingCount } from "@/ui/client/work";
 import { useAssistant } from "@/ui/features/assistant/AssistantProvider";
-import { ApprovalCard, QuestionCard } from "@/ui/features/assistant/Cards";
+import { ApprovalGroupCard, QuestionCard } from "@/ui/features/assistant/Cards";
 import { Composer } from "@/ui/features/assistant/Composer";
 import { Icon, type IconName } from "@/ui/icons";
 import { Button } from "@/ui/primitives/Button";
@@ -127,10 +127,10 @@ function WaitingOnYou() {
       {channel.isPending ? <Skeleton className="h-6 w-full" /> : null}
       {channel.isSuccess && count === 0 ? <p className="text-md text-ink-muted">{t("today.nothingWaiting")}</p> : null}
       <AnimatePresence initial={false}>
-        {pending.map((approval) => (
-          <motion.div key={`approval-${approval.id}`} layout {...FADE_RISE} className="flex flex-col gap-1">
-            <p className="text-sm text-ink-muted">{approval.session_title}</p>
-            <ApprovalCard approval={approval} />
+        {groupApprovals(pending).map((group) => (
+          <motion.div key={`approval-${group[0]?.session}-${group[0]?.tool}`} layout {...FADE_RISE} className="flex flex-col gap-1">
+            <p className="text-sm text-ink-muted">{group[0]?.session_title}</p>
+            <ApprovalGroupCard approvals={group} />
           </motion.div>
         ))}
         {asks.map((message) => (

@@ -6,11 +6,12 @@ import { useState, type ReactNode } from "react";
 import { ApiRequestError } from "@/ui/client/api";
 import type { ToolApproval } from "@/ui/client/contracts.generated";
 import { useDateTime } from "@/ui/client/format";
-import { useDecideApproval } from "@/ui/client/sessions";
+import { useDecideApproval, useDecideApprovals } from "@/ui/client/sessions";
 import { Icon, type IconName } from "@/ui/icons";
 import { Button } from "@/ui/primitives/Button";
+import { Checkbox } from "@/ui/primitives/Checkbox";
 import { FADE_RISE } from "@/ui/primitives/motion";
-import { t } from "@/ui/strings";
+import { t, tn } from "@/ui/strings";
 import { isFinished, toolName, type ToolPart } from "./parts";
 
 function Shell({ children, testid }: { children: ReactNode; testid?: string }) {
@@ -108,11 +109,11 @@ function Decisions({ approval, allow, deny }: { approval: ToolApproval; allow: s
         <Button variant="quiet" disabled={decide.isPending} onClick={() => decide.mutate({ id: approval.id, choice: "deny" })}>
           {deny}
         </Button>
-        {approval.tool === "send_mail" ? null : (
+        {approval.can_remember ? (
           <Button disabled={decide.isPending} onClick={() => decide.mutate({ id: approval.id, choice: "session" })}>
             {t("approvals.session")}
           </Button>
-        )}
+        ) : null}
         <Button variant="primary" loading={decide.isPending} onClick={() => decide.mutate({ id: approval.id, choice: "once" })}>
           {allow}
         </Button>
@@ -131,6 +132,58 @@ export function ApprovalCard({ approval }: { approval: ToolApproval }) {
       </div>
       {approval.detail ? <pre className="max-h-popover overflow-auto whitespace-pre-wrap break-words rounded-md bg-surface-sunken p-2 font-mono text-sm text-ink-secondary">{approval.detail}</pre> : null}
       <Decisions approval={approval} allow={t("approvals.once")} deny={t("approvals.deny")} />
+    </Shell>
+  );
+}
+
+/** Many requests to use one tool, as one decision. Untick any that shouldn't happen. */
+export function ApprovalGroupCard({ approvals }: { approvals: readonly ToolApproval[] }) {
+  const decide = useDecideApprovals();
+  const [left, setLeft] = useState<ReadonlySet<number>>(new Set());
+  const first = approvals[0];
+  if (!first) return null;
+  if (approvals.length === 1) return <ApprovalCard approval={first} />;
+  const allowed = approvals.filter((item) => !left.has(item.id)).map((item) => item.id);
+  const declined = approvals.filter((item) => left.has(item.id)).map((item) => item.id);
+  const refused = decide.error instanceof ApiRequestError ? decide.error.detail.message : null;
+  return (
+    <Shell testid="approval-group">
+      <div className="flex flex-col gap-1">
+        <p className="text-md font-medium text-ink-primary">{tn("approvals.group", approvals.length, { label: first.tool_label ?? first.tool })}</p>
+        <p className="text-sm text-ink-muted">{first.reason}</p>
+      </div>
+      <ul aria-label={first.tool_label ?? first.tool} className="flex max-h-popover flex-col gap-1 overflow-y-auto rounded-md bg-surface-sunken p-2">
+        {approvals.map((item) => (
+          <li key={item.id}>
+            <Checkbox
+              label={item.summary}
+              checked={!left.has(item.id)}
+              onChange={(on) =>
+                setLeft((current) => {
+                  const next = new Set(current);
+                  if (on) next.delete(item.id);
+                  else next.add(item.id);
+                  return next;
+                })
+              }
+            />
+          </li>
+        ))}
+      </ul>
+      {refused ? <p role="alert" className="text-sm text-status-danger">{refused}</p> : null}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <Button variant="quiet" disabled={decide.isPending} onClick={() => decide.mutate({ deny: approvals.map((item) => item.id) })}>
+          {t("approvals.denyAll")}
+        </Button>
+        {first.can_remember ? (
+          <Button disabled={decide.isPending || !allowed.length} onClick={() => decide.mutate({ allow: allowed, deny: declined, remember: true })}>
+            {t("approvals.session")}
+          </Button>
+        ) : null}
+        <Button variant="primary" loading={decide.isPending} disabled={!allowed.length} onClick={() => decide.mutate({ allow: allowed, deny: declined })}>
+          {t("approvals.allowCount", { count: allowed.length })}
+        </Button>
+      </div>
     </Shell>
   );
 }
@@ -181,35 +234,41 @@ const RESULT: Readonly<Record<string, { icon: IconName; href: string; open: Para
   draft_reply: { icon: "drafts", href: "/mail/drafts", open: "chat.result.openDrafts" },
 };
 
-/** Something the agent made for the person, and where to find it. */
-export function ResultCard({ part, approval }: { part: ToolPart; approval?: ToolApproval | undefined }) {
+/** What the agent made for the person, and where to find it. The same kind shares one card. */
+export function ResultCard({ parts }: { parts: readonly ToolPart[] }) {
   const format = useDateTime();
-  const name = toolName(part);
-  const shown = RESULT[name];
-  const input = part.input ?? {};
-  const title = String(input.title ?? input.name ?? input.subject ?? t(`tool.${name}` as Parameters<typeof t>[0]));
-  const when = typeof input.when === "string" ? format(input.when) : typeof input.due === "string" ? input.due : null;
-  const proposed = name.startsWith("propose_");
-  const refused = part.state === "output-denied" || (typeof part.output === "string" && part.output.startsWith("Not allowed"));
-  if (approval) return <ApprovalCard approval={approval} />;
+  const seen = new Set<string>();
+  const rows = parts.flatMap((part) => {
+    const name = toolName(part);
+    const input = part.input ?? {};
+    const title = String(input.title ?? input.name ?? input.subject ?? t(`tool.${name}` as Parameters<typeof t>[0]));
+    if (seen.has(title)) return [];
+    seen.add(title);
+    return [{ part, name, title, when: typeof input.when === "string" ? format(input.when) : typeof input.due === "string" ? input.due : null }];
+  });
+  const shown = RESULT[toolName(parts[0] as ToolPart)];
+  const everyDone = parts.every(isFinished);
   return (
     <Shell testid="result-card">
-      <div className="flex items-center gap-3">
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-surface-sunken text-ink-secondary">
-          <Icon name={shown?.icon ?? "check"} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-md font-medium text-ink-primary">{title}</p>
-          <p className="text-sm tabular-nums text-ink-muted">
-            {refused ? t("chat.result.notDone") : !isFinished(part) ? t("chat.result.working") : proposed ? t("chat.result.proposed") : when ?? t("chat.result.done")}
-          </p>
-        </div>
-        {shown && !refused && isFinished(part) ? (
-          <Link href={shown.href} className="focus-ring shrink-0 rounded-sm text-sm text-ink-secondary underline underline-offset-2 transition-colors duration-fast hover:text-ink-primary">
-            {t(shown.open)}
-          </Link>
-        ) : null}
-      </div>
+      {rows.map(({ part, name, title, when }) => {
+        const refused = part.state === "output-denied" || (typeof part.output === "string" && part.output.startsWith("Not allowed"));
+        return (
+          <div key={part.toolCallId} className="flex items-center gap-3">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-surface-sunken text-ink-secondary">
+              <Icon name={RESULT[name]?.icon ?? "check"} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-md font-medium text-ink-primary">{title}</p>
+              <p className="text-sm tabular-nums text-ink-muted">{refused ? t("chat.result.notDone") : !isFinished(part) ? t("chat.result.working") : name.startsWith("propose_") ? t("chat.result.proposed") : when ?? t("chat.result.done")}</p>
+            </div>
+          </div>
+        );
+      })}
+      {shown && everyDone ? (
+        <Link href={shown.href} className="focus-ring self-start rounded-sm text-sm text-ink-secondary underline underline-offset-2 transition-colors duration-fast hover:text-ink-primary">
+          {t(shown.open)}
+        </Link>
+      ) : null}
     </Shell>
   );
 }

@@ -176,6 +176,9 @@ class ToolApproval(BaseModel):
     undoable: bool
     status: ApprovalStatus
     time: str
+    tool_label: str = ""
+    # Whether saying yes for the rest of the session would actually hold.
+    can_remember: bool = False
 
 
 class ListApprovals(BaseModel):
@@ -191,6 +194,16 @@ class DecideApproval(BaseModel):
 
     id: int
     choice: ApprovalChoice
+
+
+class DecideApprovals(BaseModel):
+    """Several at once, so a run making many calls doesn't take as many clicks."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    allow: list[int] = Field(default_factory=list, max_length=500)
+    deny: list[int] = Field(default_factory=list, max_length=500)
+    remember: bool = False
 
 
 class AgentDone(BaseModel):

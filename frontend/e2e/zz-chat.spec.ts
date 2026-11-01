@@ -160,6 +160,31 @@ test("sending mail shows the mail itself, and nothing goes without a yes", async
   expect(sent.filter((item) => item.raw.includes("Here they are."))).toEqual([]);
 });
 
+test("many requests at once are one decision, and one can be left out", async ({ page, request }) => {
+  const current = await (await request.post("/api/queries/permissions.get", { data: {} })).json();
+  await request.post("/api/commands/permissions.save", { data: { ...current, tools: { ...current.tools, create_task: "ask" } } });
+  await openFresh(page);
+  await say(page, "add three tasks");
+  const group = page.getByTestId("approval-group");
+  await expect(group).toContainText("3 requests");
+  await expect(page.getByTestId("approval")).toHaveCount(0);
+  await noViolations(page);
+  await group.getByRole("checkbox", { name: "Second task" }).click();
+  await group.getByRole("button", { name: "Allow 2" }).click();
+  await expect(page.getByTestId("session-status")).toContainText("Done");
+  await page.goto("/planner/tasks");
+  await expect(page.getByTestId("task").filter({ hasText: "First task" })).toBeVisible();
+  await expect(page.getByTestId("task").filter({ hasText: "Third task" })).toBeVisible();
+  await expect(page.getByTestId("task").filter({ hasText: "Second task" })).toHaveCount(0);
+
+  await openFresh(page);
+  await say(page, "add three tasks");
+  await page.getByTestId("approval-group").getByRole("button", { name: "Allow for this session" }).click();
+  await expect(page.getByTestId("session-status")).toContainText("Done");
+  await expect(page.getByTestId("approval-group")).toHaveCount(0);
+  await request.post("/api/commands/permissions.save", { data: current });
+});
+
 test("the chat follows you around, minimizes to a pill, and remembers", async ({ page }) => {
   await page.goto("/today");
   await page.getByTestId("assistant-pill").click();

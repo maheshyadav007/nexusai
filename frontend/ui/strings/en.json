@@ -860,5 +860,9 @@
   "categories.source.rule": "From a rule",
   "categories.count.one": "{count} conversation",
   "categories.count.other": "{count} conversations",
-  "categories.from": "from {sender}"
+  "categories.from": "from {sender}",
+  "approvals.group.one": "{label}: {count} request",
+  "approvals.group.other": "{label}: {count} requests",
+  "approvals.denyAll": "Deny all",
+  "approvals.allowCount": "Allow {count}"
 }

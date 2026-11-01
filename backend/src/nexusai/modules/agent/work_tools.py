@@ -178,6 +178,12 @@ def specs(ctx: Context, guard: Guard, wrap_untrusted: Callable[[str], str]) -> l
     db = ctx.bus.db
     documents = ctx.config.home / "documents"
 
+    def named(thread_id: int) -> str:
+        """What the person would recognize a conversation by, since its number means nothing."""
+        rows = db.fetch_all("SELECT subject FROM threads WHERE id = ?", (thread_id,))
+        subject = str(rows[0]["subject"]) if rows else ""
+        return f"“{subject}”" if subject else f"conversation {thread_id}"
+
     def create_task(
         title: str,
         tool_call_id: str,
@@ -307,7 +313,7 @@ def specs(ctx: Context, guard: Guard, wrap_untrusted: Callable[[str], str]) -> l
             mail.set_category(SetThreadCategory(id=thread_id, category=category), ctx)
             return f"Filed under {category}."
 
-        summary = f"File conversation {thread_id} under {category}"
+        summary = f"File {named(thread_id)} under {category}"
         return guard(tool_call_id, "set_thread_category", "data", summary, "", work)
 
     def archive_thread(thread_id: int, tool_call_id: str) -> str:
@@ -315,7 +321,7 @@ def specs(ctx: Context, guard: Guard, wrap_untrusted: Callable[[str], str]) -> l
             mail.move_thread(MoveThread(id=thread_id, to="archive"), ctx)
             return "Archived."
 
-        summary = f"Archive conversation {thread_id}"
+        summary = f"Archive {named(thread_id)}"
         return guard(tool_call_id, "archive_thread", "data", summary, "", work)
 
     def send_mail(

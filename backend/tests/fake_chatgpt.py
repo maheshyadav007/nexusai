@@ -142,6 +142,17 @@ def create_fake() -> FastAPI:
                         ),
                     },
                 )
+            elif "add three tasks" in said:
+                for title in ("First task", "Second task", "Third task"):
+                    yield event(
+                        "response.output_item.done",
+                        item={
+                            "type": "function_call",
+                            "call_id": f"task-{uuid.uuid4().hex}",
+                            "name": "create_task",
+                            "arguments": json.dumps({"title": title}),
+                        },
+                    )
             elif "ask me something" in said:
                 yield event(
                     "response.output_item.done",

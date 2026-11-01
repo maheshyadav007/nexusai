@@ -1,4 +1,5 @@
 import type {
+  DecideApprovals,
   AnswerSession,
   CategoryList,
   CategoryName,
@@ -212,6 +213,7 @@ interface Commands {
   "session.rename": [RenameSession, AgentDone];
   "session.archive": [SessionAction, AgentDone];
   "approvals.decide": [DecideApproval, AgentDone];
+  "approvals.decideMany": [DecideApprovals, AgentDone];
   "permissions.save": [Permissions, Permissions];
   "session.answer": [AnswerSession, AgentDone];
   "categories.save": [SaveCategory, CategorySaved];

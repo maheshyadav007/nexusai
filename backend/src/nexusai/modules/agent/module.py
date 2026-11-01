@@ -15,6 +15,7 @@ from nexusai.contracts.agent import (
     ContextItem,
     CreateSession,
     DecideApproval,
+    DecideApprovals,
     DecideMemoryProposal,
     DismissChannel,
     GetGuardRules,
@@ -237,6 +238,12 @@ def list_approvals(query: ListApprovals, ctx: Context) -> ApprovalList:
 @agent_module.command("approvals.decide")
 def decide_approval(command: DecideApproval, ctx: Context) -> AgentDone:
     current().decide(command.id, command.choice)
+    return AgentDone()
+
+
+@agent_module.command("approvals.decideMany")
+def decide_approvals(command: DecideApprovals, ctx: Context) -> AgentDone:
+    current().decide_many(command.allow, command.deny, command.remember)
     return AgentDone()
 
 

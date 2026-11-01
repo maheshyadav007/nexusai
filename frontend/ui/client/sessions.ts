@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { command, query } from "./api";
-import type { CreateSession, DecideApproval, Permissions } from "./contracts.generated";
+import type { CreateSession, DecideApproval, DecideApprovals, Permissions, ToolApproval } from "./contracts.generated";
 import { useHomeReady } from "./home";
 
 export function useSessions(search: string) {
@@ -55,6 +55,24 @@ export function useDecideApproval() {
     mutationFn: (input: DecideApproval) => command("approvals.decide", input),
     onSuccess: () => client.invalidateQueries({ queryKey: ["approvals"] }),
   });
+}
+
+export function useDecideApprovals() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: DecideApprovals) => command("approvals.decideMany", input),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["approvals"] }),
+  });
+}
+
+/** One session's requests to use one tool. A run can make many at once, and they're one decision. */
+export function groupApprovals(approvals: readonly ToolApproval[]): ToolApproval[][] {
+  const groups = new Map<string, ToolApproval[]>();
+  for (const approval of approvals) {
+    const key = `${approval.session}:${approval.tool}`;
+    groups.set(key, [...(groups.get(key) ?? []), approval]);
+  }
+  return [...groups.values()];
 }
 
 export function useModelCall(session: string, enabled: boolean) {

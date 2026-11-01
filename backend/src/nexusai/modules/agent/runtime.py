@@ -462,26 +462,20 @@ class SessionRuntime:
         if turn is not None:
             self._resume_if_ready(session, turn)
 
-    def decide(self, approval: int, choice: str) -> None:
-        rows = self.db.fetch_all("SELECT * FROM tool_approvals WHERE id = ?", (approval,))
-        if not rows:
-            raise CommandError("approval.not_found", "That approval no longer exists.", 404)
-        row = rows[0]
-        if row["status"] != "pending":
-            raise CommandError("approval.decided", "That has already been decided.", 409)
-        approved = choice != "deny"
+    def _settle(self, row: Any, approved: bool) -> None:
+        """Records one decision. The run carries on once everything it's waiting on is decided."""
         status = "approved" if approved else "denied"
         session = row["session"]
         with self.ctx.bus.unit_of_work() as work:
-            work.tx.execute("UPDATE tool_approvals SET status = ? WHERE id = ?", (status, approval))
+            work.tx.execute(
+                "UPDATE tool_approvals SET status = ? WHERE id = ?", (status, row["id"])
+            )
             work.emit(
                 "approval.changed",
-                {"id": approval, "status": status},
+                {"id": row["id"], "status": status},
                 source="agent",
                 trace_id=self.ctx.trace_id,
             )
-        if choice == "session":
-            policy.allow_for_session(self.db, session, row["kind"])
         turn = self.active_turn(session)
         if turn is None:
             return
@@ -490,7 +484,7 @@ class SessionRuntime:
             [
                 {
                     "type": "tool-approval-response",
-                    "approvalId": str(approval),
+                    "approvalId": str(row["id"]),
                     "approved": approved,
                     "toolCallId": row["tool_call_id"],
                 }
@@ -498,7 +492,55 @@ class SessionRuntime:
         )
         if not approved:
             self._append(turn, [{"type": "tool-output-denied", "toolCallId": row["tool_call_id"]}])
-        self._resume_if_ready(session, turn)
+
+    def _carry_on(self, session: str) -> None:
+        turn = self.active_turn(session)
+        if turn is not None:
+            self._resume_if_ready(session, turn)
+
+    def _remember(self, row: Any) -> list[Any]:
+        """Allows this kind for the session, and everything of that kind already waiting."""
+        if not policy.can_remember(row["tool"], self.row(row["session"]).untrusted):
+            return []
+        policy.allow_for_session(self.db, row["session"], row["kind"])
+        return self.db.fetch_all(
+            "SELECT * FROM tool_approvals WHERE session = ? AND kind = ? AND status = 'pending'"
+            " AND id != ?",
+            (row["session"], row["kind"], row["id"]),
+        )
+
+    def decide(self, approval: int, choice: str) -> None:
+        rows = self.db.fetch_all("SELECT * FROM tool_approvals WHERE id = ?", (approval,))
+        if not rows:
+            raise CommandError("approval.not_found", "That approval no longer exists.", 404)
+        row = rows[0]
+        if row["status"] != "pending":
+            raise CommandError("approval.decided", "That has already been decided.", 409)
+        also = self._remember(row) if choice == "session" else []
+        self._settle(row, choice != "deny")
+        for other in also:
+            self._settle(other, True)
+        self._carry_on(row["session"])
+
+    def decide_many(self, allow: list[int], deny: list[int], remember: bool) -> None:
+        sessions = set()
+        for identifiers, approved in ((deny, False), (allow, True)):
+            for identifier in identifiers:
+                rows = self.db.fetch_all(
+                    "SELECT * FROM tool_approvals WHERE id = ? AND status = 'pending'",
+                    (identifier,),
+                )
+                # Another window may have decided it first, and that answer stands.
+                if not rows:
+                    continue
+                sessions.add(rows[0]["session"])
+                if approved and remember:
+                    for other in self._remember(rows[0]):
+                        if other["id"] not in deny:
+                            self._settle(other, True)
+                self._settle(rows[0], approved)
+        for session in sessions:
+            self._carry_on(session)
 
     def _resume_if_ready(self, session: str, turn: int) -> None:
         # Others from the same step may still wait. The run continues once they're all decided.
@@ -682,7 +724,7 @@ def context_label(ctx: Context, ref: str) -> str:
 
 def approvals_view(db: Any) -> ApprovalList:
     rows = db.fetch_all(
-        "SELECT a.*, s.title AS session_title FROM tool_approvals a JOIN agent_sessions s ON s.id = a.session"
+        "SELECT a.*, s.title AS session_title, s.untrusted AS untrusted FROM tool_approvals a JOIN agent_sessions s ON s.id = a.session"
         " WHERE a.status = 'pending' ORDER BY a.id"
     )
     return ApprovalList(
@@ -699,6 +741,12 @@ def approvals_view(db: Any) -> ApprovalList:
                 undoable=bool(row["undoable"]),
                 status=row["status"],
                 time=row["time"],
+                tool_label=(
+                    policy.TOOLS_BY_NAME[row["tool"]].label
+                    if row["tool"] in policy.TOOLS_BY_NAME
+                    else row["tool"].replace("_", " ")
+                ),
+                can_remember=policy.can_remember(row["tool"], bool(row["untrusted"])),
             )
             for row in rows
         ]
