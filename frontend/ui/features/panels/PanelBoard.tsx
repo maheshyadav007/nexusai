@@ -13,7 +13,6 @@ import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Field } from "@/ui/primitives/Field";
 import { IconButton } from "@/ui/primitives/IconButton";
 import { Input } from "@/ui/primitives/Input";
-import { Segmented } from "@/ui/primitives/Segmented";
 import { Select } from "@/ui/primitives/Select";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { Sortable } from "@/ui/primitives/Sortable";
@@ -130,12 +129,14 @@ export function PanelBoard() {
           label: panel.title,
           className: SPANS[panel.size ?? "medium"] ?? "col-span-2",
           content: (
-            <section data-testid="panel" aria-label={panel.title} className="flex flex-col gap-3 rounded-lg border border-line-subtle bg-surface-raised p-4 shadow-raised">
+            <section data-testid="panel" aria-label={panel.title} className="flex flex-col gap-3 rounded-lg border border-line-subtle bg-surface-raised p-4">
               <header className="flex items-center justify-between gap-2">
                 <h2 className="min-w-0 truncate text-md font-medium text-ink-primary">{panel.title}</h2>
-                <IconButton icon="close" label={t("panels.remove", { name: panel.title })} onClick={() => store(panels.filter((item) => item.id !== panel.id))} />
+                <div className="flex items-center gap-1">
+                  <Select quiet label={t("panels.size")} value={panel.size ?? "medium"} options={SIZES} onChange={(size) => store(panels.map((item) => (item.id === panel.id ? { ...item, size: size as NonNullable<typeof item.size> } : item)))} />
+                  <IconButton icon="close" label={t("panels.remove", { name: panel.title })} onClick={() => store(panels.filter((item) => item.id !== panel.id))} />
+                </div>
               </header>
-              <Segmented label={t("panels.size")} value={panel.size ?? "medium"} options={SIZES} onChange={(size) => store(panels.map((item) => (item.id === panel.id ? { ...item, size } : item)))} />
               <PanelResults panel={panel} />
             </section>
           ),

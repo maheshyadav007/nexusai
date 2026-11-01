@@ -57,10 +57,13 @@ export function useTimeOnly(): (value: string) => string {
 /** A day with no time attached, like a task's due date. It's read as local, not UTC. */
 export function useDateOnly(): (value: string) => string {
   const { data } = useSettings();
-  const formatter = new Intl.DateTimeFormat(DATE_ORDER[data?.date_format ?? "system"], { dateStyle: "medium" });
+  const locale = DATE_ORDER[data?.date_format ?? "system"];
+  const near = new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" });
+  const far = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
   return (value) => {
     const date = new Date(`${value}T00:00`);
-    return Number.isNaN(date.getTime()) ? value : formatter.format(date);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.getFullYear() === new Date().getFullYear() ? near.format(date) : far.format(date);
   };
 }
 

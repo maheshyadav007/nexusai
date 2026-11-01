@@ -939,5 +939,12 @@
   "categories.inPriority": "In Priority inbox",
   "categories.subject": "File mail with this in the subject",
   "categories.remove": "Remove category",
-  "schedules.ranLast": "last ran {when}"
+  "schedules.ranLast": "last ran {when}",
+  "rules.open": "Open {name}",
+  "rules.on": "On",
+  "rules.off": "Off",
+  "rules.matches": "{field} has “{value}”",
+  "rules.filesInto": "files into {category}",
+  "prompts.open": "Open {title}",
+  "prompts.empty": "Nothing written yet"
 }

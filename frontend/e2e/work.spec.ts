@@ -199,7 +199,8 @@ test("agent screens open cleanly and memory proposals are decided", async ({ pag
   await expect(page.getByTestId("memory-file").filter({ has: page.locator(`textarea:text-is("${note}")`) })).toBeVisible();
 
   await page.getByRole("tab", { name: "Prompts" }).click();
-  await expect(page.getByRole("textbox").first()).toBeVisible();
+  await page.getByRole("button", { name: "Open About me" }).click();
+  await expect(page.getByRole("textbox", { name: "About me" })).toBeVisible();
   await noViolations(page);
 });
 

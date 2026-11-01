@@ -315,11 +315,15 @@ test("the chat can be attached to the right, slides in, and keeps the conversati
   await page.getByTestId("assistant-pill").click();
   const dock = page.getByTestId("assistant-dock");
   await expect(dock).toHaveAttribute("data-pinned", "false");
+  await dock.getByRole("button", { name: "Set a reminder for me" }).click();
+  await expect(dock.getByTestId("agent-message")).toBeVisible();
   const session = dock.getByRole("combobox", { name: "Switch conversation" });
   const title = await session.textContent();
   await dock.getByRole("button", { name: "Attach to the right" }).click();
   await expect(dock).toHaveAttribute("data-pinned", "true");
   await expect(session).toHaveText(title ?? "");
+  // The same conversation, still on screen rather than loaded again.
+  await expect(dock.getByTestId("agent-message")).toBeVisible();
   // The page moves over rather than sitting underneath.
   await expect.poll(async () => {
     const main = await page.locator("main").boundingBox();

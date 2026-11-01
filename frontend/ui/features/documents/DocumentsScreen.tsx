@@ -147,7 +147,7 @@ function Folders({ folders, current, onChoose }: { folders: readonly string[]; c
           setName("");
         }}
       >
-        <Field label={t("documents.newFolder")}>{({ invalid, ...control }) => <Input invalid={invalid} value={name} onChange={(event) => setName(event.target.value)} {...control} />}</Field>
+        <Input aria-label={t("documents.newFolder")} placeholder={t("documents.newFolder")} value={name} onChange={(event) => setName(event.target.value)} />
       </form>
     </nav>
   );
@@ -169,7 +169,7 @@ export function DocumentsScreen({ view }: { view: DocumentView }) {
       <div className="flex items-start gap-6">
         <Folders folders={folders} current={folder} onChoose={setFolder} />
         <div className="flex min-w-0 flex-1 flex-col gap-3">
-          <Field label={t("documents.search")}>{({ invalid, ...control }) => <Input invalid={invalid} value={query} onChange={(event) => setQuery(event.target.value)} {...control} />}</Field>
+          <Input aria-label={t("documents.search")} placeholder={t("documents.search")} value={query} onChange={(event) => setQuery(event.target.value)} />
           {library.isPending ? <Skeleton className="h-6 w-full" /> : null}
           {library.isError ? <ErrorState title={t("documents.error")} onRetry={() => void library.refetch()} /> : null}
           {library.isSuccess && documents.length === 0 ? <EmptyState icon="documents" title={t(query ? "documents.none" : "documents.empty")} /> : null}

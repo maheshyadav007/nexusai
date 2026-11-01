@@ -5,6 +5,7 @@ import type { MemoryFile, PromptFile } from "@/ui/client/contracts.generated";
 import { useDecideMemory, useMemory, usePrompts, useRemoveMemory, useSaveMemory, useSavePrompt } from "@/ui/client/work";
 import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
+import { ExpandRow } from "@/ui/primitives/ExpandRow";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Field } from "@/ui/primitives/Field";
@@ -15,13 +16,14 @@ import { Tabs } from "@/ui/primitives/Tabs";
 import { useToast } from "@/ui/primitives/Toast";
 import { t } from "@/ui/strings";
 
-function PromptEditor({ prompt }: { prompt: PromptFile }) {
+function PromptEditor({ prompt, startsOpen }: { prompt: PromptFile; startsOpen: boolean }) {
   const toast = useToast();
   const save = useSavePrompt();
   const [content, setContent] = useState(prompt.content);
   useEffect(() => setContent(prompt.content), [prompt.content]);
+  const summary = prompt.content.trim().split("\n")[0];
   return (
-    <Card title={prompt.title} {...(prompt.kind === "agent" ? { description: t("prompts.agent.description") } : {})}>
+    <ExpandRow label={t("prompts.open", { title: prompt.title })} defaultOpen={startsOpen} title={prompt.title} meta={summary || t(prompt.kind === "agent" ? "prompts.agent.description" : "prompts.empty")}>
       <form
         className="flex flex-col gap-3"
         onSubmit={(event) => {
@@ -38,7 +40,7 @@ function PromptEditor({ prompt }: { prompt: PromptFile }) {
         <Textarea aria-label={prompt.title} rows={5} value={content} onChange={(event) => setContent(event.target.value)} />
         <div><Button type="submit" loading={save.isPending} disabled={content === prompt.content}>{t("settings.save")}</Button></div>
       </form>
-    </Card>
+    </ExpandRow>
   );
 }
 
@@ -48,8 +50,8 @@ export function PromptsEditor({ only }: { only?: readonly string[] }) {
   if (prompts.isError) return <ErrorState title={t("prompts.error")} onRetry={() => void prompts.refetch()} />;
   const shown = prompts.data.prompts.filter((prompt) => !only || only.includes(prompt.name));
   return (
-    <div className="flex flex-col gap-4">
-      {shown.map((prompt) => <PromptEditor key={`${prompt.kind}-${prompt.name}`} prompt={prompt} />)}
+    <div className="flex flex-col gap-2">
+      {shown.map((prompt) => <PromptEditor key={`${prompt.kind}-${prompt.name}`} prompt={prompt} startsOpen={Boolean(only)} />)}
     </div>
   );
 }

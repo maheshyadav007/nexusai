@@ -269,12 +269,13 @@ test("panels show live results, and can be added, resized, reordered and reset",
   await deliver(page, { subject: "Panel mail", sender: person });
   await expect(panel).toContainText("Panel mail", { timeout: 15_000 });
 
-  await panel.getByRole("radio", { name: "Large" }).click();
-  await expect(panel.getByRole("radio", { name: "Large" })).toBeChecked();
+  await panel.getByRole("combobox", { name: "Size" }).click();
+  await page.getByRole("option", { name: "Large" }).click();
+  await expect(panel.getByRole("combobox", { name: "Size" })).toHaveText(/Large/);
   await page.getByRole("button", { name: "Move From this person up" }).click();
   await page.reload();
   await expect(page.getByTestId("panel").nth(3)).toHaveAttribute("aria-label", "From this person");
-  await expect(page.getByRole("region", { name: "From this person" }).getByRole("radio", { name: "Large" })).toBeChecked();
+  await expect(page.getByRole("region", { name: "From this person" }).getByRole("combobox", { name: "Size" })).toHaveText(/Large/);
 
   await page.getByRole("button", { name: "Reset panels" }).click();
   await expect(page.getByTestId("panel")).toHaveCount(4);

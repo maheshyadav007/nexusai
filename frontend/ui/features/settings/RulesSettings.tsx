@@ -9,6 +9,7 @@ import { Card } from "@/ui/primitives/Card";
 import { Checkbox } from "@/ui/primitives/Checkbox";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
+import { ExpandRow } from "@/ui/primitives/ExpandRow";
 import { Field } from "@/ui/primitives/Field";
 import { IconButton } from "@/ui/primitives/IconButton";
 import { Input } from "@/ui/primitives/Input";
@@ -29,16 +30,32 @@ const FIELDS = [
 const emptyCondition = (): RuleCondition => ({ field: "subject", value: "" });
 const emptyRule = (): MailRule => ({ name: t("rules.newName"), enabled: true, conditions: [emptyCondition()] as MailRule["conditions"], actions: { category: null, mark_read: false, skip_agent: false, notify: false, tag: null } });
 
-function RuleEditor({ rule, onChange, onRemove }: { rule: MailRule; onChange: (rule: MailRule) => void; onRemove: () => void }) {
+function RuleEditor({ rule, onChange, onRemove, startsOpen }: { rule: MailRule; onChange: (rule: MailRule) => void; onRemove: () => void; startsOpen: boolean }) {
   const actions = rule.actions;
+  const matching = rule.conditions
+    .filter((condition) => condition.value)
+    .map((condition) => t("rules.matches", { field: FIELDS.find((item) => item.value === condition.field)?.label ?? condition.field, value: condition.value ?? "" }))
+    .join(", ");
   const setCondition = (position: number, changes: Partial<RuleCondition>) => onChange({ ...rule, conditions: rule.conditions.map((item, i) => (i === position ? { ...item, ...changes } : item)) as MailRule["conditions"] });
   return (
-    <fieldset data-testid="rule" aria-label={rule.name} className="flex flex-col gap-3 rounded-md border border-line-subtle p-4">
+    <ExpandRow
+      testid="rule"
+      label={t("rules.open", { name: rule.name })}
+      defaultOpen={startsOpen}
+      title={rule.name}
+      meta={
+        <>
+          {t(rule.enabled === false ? "rules.off" : "rules.on")}
+          {matching ? ` · ${matching}` : ""}
+          {actions.category ? ` · ${t("rules.filesInto", { category: actions.category })}` : ""}
+        </>
+      }
+      aside={<Switch label={t("rules.enabled")} hideLabel checked={rule.enabled ?? true} onChange={(enabled) => onChange({ ...rule, enabled })} />}
+    >
       <div className="flex items-end gap-3">
         <div className="min-w-0 flex-1"><Field label={t("rules.name")}>{({ invalid, ...control }) => <Input invalid={invalid} value={rule.name} onChange={(event) => onChange({ ...rule, name: event.target.value })} {...control} />}</Field></div>
         <IconButton icon="close" label={t("rules.remove", { name: rule.name })} onClick={onRemove} />
       </div>
-      <Switch label={t("rules.enabled")} checked={rule.enabled ?? true} onChange={(enabled) => onChange({ ...rule, enabled })} />
       <p className="text-md font-medium text-ink-primary">{t("rules.when")}</p>
       {rule.conditions.map((condition, position) => (
         <div key={position} className="grid gap-2 md:grid-cols-2">
@@ -55,7 +72,7 @@ function RuleEditor({ rule, onChange, onRemove }: { rule: MailRule; onChange: (r
         <Checkbox label={t("rules.skipAgent")} checked={actions.skip_agent ?? false} onChange={(skip_agent) => onChange({ ...rule, actions: { ...actions, skip_agent } })} />
         <Checkbox label={t("rules.notify")} checked={actions.notify ?? false} onChange={(notify) => onChange({ ...rule, actions: { ...actions, notify } })} />
       </div>
-    </fieldset>
+    </ExpandRow>
   );
 }
 
@@ -74,7 +91,7 @@ export function RulesSettings() {
         {rules === null && saved.isPending ? <Skeleton className="h-6 w-full" /> : null}
         {rules?.length === 0 ? <EmptyState icon="categories" title={t("rules.empty")} /> : null}
         {rules?.map((rule, index) => (
-          <RuleEditor key={index} rule={rule} onChange={(next) => setRules(rules.map((item, i) => (i === index ? next : item)))} onRemove={() => setRules(rules.filter((_, i) => i !== index))} />
+          <RuleEditor key={index} rule={rule} startsOpen={index >= (saved.data?.rules.length ?? 0)} onChange={(next) => setRules(rules.map((item, i) => (i === index ? next : item)))} onRemove={() => setRules(rules.filter((_, i) => i !== index))} />
         ))}
         {save.isError ? <ErrorState title={t("rules.saveError")} description={save.error instanceof ApiRequestError ? save.error.detail.message : ""} /> : null}
         <div className="flex gap-2">

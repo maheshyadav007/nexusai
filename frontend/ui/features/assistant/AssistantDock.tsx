@@ -84,7 +84,7 @@ function Panel() {
       data-pinned={attached}
       className={`fixed z-40 flex w-dock max-w-full flex-col overflow-hidden border border-line-subtle bg-surface-page ${attached ? "border-y-0 border-r-0" : "shadow-overlay"}`}
     >
-      <header className="flex min-h-topbar items-center gap-1 border-b border-line-subtle px-2">
+      <header className="flex h-topbar shrink-0 items-center gap-1 border-b border-line-subtle px-2">
         <div className="min-w-0 flex-1">
           {assistant.session && options.length ? <Select quiet label={t("chat.switch")} value={assistant.session} options={options} onChange={assistant.openSession} /> : <p className="px-2 text-md font-medium text-ink-primary">{t("chat.title")}</p>}
         </div>

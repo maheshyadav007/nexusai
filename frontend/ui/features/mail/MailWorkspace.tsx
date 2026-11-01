@@ -104,7 +104,7 @@ export function MailWorkspace({ folder, category = null, children }: { folder: s
   return (
     <div className="flex h-full">
       <section aria-label={title} className={`min-h-0 w-full shrink-0 flex-col border-r border-line-subtle md:flex md:w-mail-list ${reading ? "hidden" : "flex"}`}>
-        <header className="flex min-h-topbar items-center justify-between gap-3 border-b border-line-subtle px-4 py-2">
+        <header className="flex h-topbar shrink-0 items-center justify-between gap-3 border-b border-line-subtle px-4">
           <div className="min-w-0">
             <h1 className="truncate text-lg font-medium text-ink-primary">{title}</h1>
             <SyncNotice />

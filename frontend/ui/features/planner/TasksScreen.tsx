@@ -157,6 +157,7 @@ export function TasksScreen() {
         </Button>
       </form>
       <Segmented
+        hideLabel
         label={t("tasks.show")}
         value={view}
         onChange={setView}
