@@ -49,6 +49,8 @@ class Module:
     commands: dict[str, Endpoint] = field(default_factory=dict)
     queries: dict[str, Endpoint] = field(default_factory=dict)
     listeners: list[tuple[str, str, Listener]] = field(default_factory=list)
+    on_start: list[Callable[[Context], None]] = field(default_factory=list)
+    on_stop: list[Callable[[], None]] = field(default_factory=list)
 
     def on(self, pattern: str, name: str) -> Callable[[Listener], Listener]:
         """Runs after matching events. The name keeps its place in the event log across restarts."""

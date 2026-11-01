@@ -29,6 +29,18 @@ refresh_skew_seconds = 120
 model_list_client_versions = ["99.0.0", "0.0.0"]
 test_instructions = "You are NexusAI's connection test. Reply briefly."
 
+[mail]
+connect_timeout_seconds = 30
+initial_batch = 200
+backfill_batch = 100
+flag_window = 500
+# Servers drop IDLE connections after about 30 minutes, so renew before that.
+idle_seconds = 1500
+reconnect_min_seconds = 2
+reconnect_max_seconds = 300
+signature_max_bytes = 30000
+signature_repeat_count = 3
+
 [logs]
 retention_days = 30
 

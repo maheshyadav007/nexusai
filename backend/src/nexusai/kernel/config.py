@@ -21,6 +21,19 @@ class ChatGptConfig:
 
 
 @dataclass(frozen=True)
+class MailConfig:
+    connect_timeout_seconds: float
+    initial_batch: int
+    backfill_batch: int
+    flag_window: int
+    idle_seconds: float
+    reconnect_min_seconds: float
+    reconnect_max_seconds: float
+    signature_max_bytes: int
+    signature_repeat_count: int
+
+
+@dataclass(frozen=True)
 class Config:
     host: str
     port: int
@@ -37,6 +50,7 @@ class Config:
     log_retention_days: int
     network_check_timeout_seconds: float
     chatgpt: ChatGptConfig
+    mail: MailConfig
     secrets_test_file: Path | None = None
 
     @property
@@ -71,6 +85,7 @@ def load_config(home_dir: Path | None = None) -> Config:
         sse_keepalive_seconds=events["sse_keepalive_seconds"],
         log_page_size=events["log_page_size"],
         default_settings=raw["settings"],
+        mail=MailConfig(**raw["mail"]),
         chatgpt=ChatGptConfig(
             issuer=os.environ.get("NEXUSAI_CHATGPT_ISSUER", chatgpt["issuer"]),
             base_url=os.environ.get("NEXUSAI_CHATGPT_BASE_URL", chatgpt["base_url"]),

@@ -7,6 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from nexusai.contracts import mail as mail_contracts
 from nexusai.contracts.errors import ApiError
 from nexusai.contracts.events import AppEvent, EventLog, EventLogQuery, FailedEvent
 from nexusai.contracts.home import (
@@ -72,7 +73,13 @@ from nexusai.contracts.system import (
     TraceView,
 )
 
+MAIL_MODELS: list[type[BaseModel]] = [
+    value
+    for value in vars(mail_contracts).values()
+    if isinstance(value, type) and issubclass(value, BaseModel) and value is not BaseModel
+]
 MODELS: list[type[BaseModel]] = [
+    *MAIL_MODELS,
     ApiError,
     AppEvent,
     EventLog,

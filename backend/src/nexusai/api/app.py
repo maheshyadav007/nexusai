@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import structlog
 from fastapi import FastAPI, Header, Request
@@ -31,6 +32,8 @@ from nexusai.kernel.database import Database
 from nexusai.kernel.event_bus import EventBus
 from nexusai.kernel.logging import configure_logging, sink
 from nexusai.kernel.module import CommandError, Context, Endpoint, Listener, Module
+from nexusai.modules.mail import store as mail_store
+from nexusai.modules.mail.module import mail_module
 from nexusai.modules.models.module import models_module, reset_login
 from nexusai.modules.notifications.module import notifications_module
 from nexusai.modules.onboarding.module import onboarding_module
@@ -43,6 +46,7 @@ MODULES: list[Module] = [
     onboarding_module,
     notifications_module,
     system_module,
+    mail_module,
 ]
 log = structlog.get_logger()
 
@@ -76,6 +80,10 @@ def _open_runtime(config: Config, home: Path) -> Runtime:
         for name, pattern, handler in module.listeners:
             bus.subscribe(name, pattern, _bound(handler, bus, opened))
     bus.start()
+    context = Context(bus=bus, config=opened, trace_id=uuid.uuid4().hex)
+    for module in MODULES:
+        for start in module.on_start:
+            start(context)
     return Runtime(opened, db, bus)
 
 
@@ -110,6 +118,9 @@ def create_app(config: Config | None = None) -> FastAPI:
             open_home(home)
         yield
         reset_login()
+        for module in MODULES:
+            for stop in module.on_stop:
+                stop()
         if runtime is not None:
             runtime.bus.stop()
             runtime.db.close()
@@ -199,6 +210,24 @@ def create_app(config: Config | None = None) -> FastAPI:
         homes.write_pointer(data_dir, path)
         log.info("home_opened", existing=check.is_existing_home)
         return home_status()
+
+    @app.get("/api/mail/attachment/{message}/{index}", response_model=None)
+    async def mail_attachment(message: int, index: int) -> Response:
+        if runtime is None:
+            return _error(409, "home.not_ready", "Choose a NexusAI Home first.")
+        found = await asyncio.to_thread(mail_store.attachment, runtime.db, message, index)
+        if found is None:
+            return _error(404, "attachment.not_found", "That attachment no longer exists.")
+        filename, body, risky = found
+        if risky:
+            return _error(403, "attachment.risky", "NexusAI won't open this kind of file.")
+        # Always a download with a fixed type, so a file can't run as a page on this address.
+        safe_name = quote(filename)
+        headers = {
+            "Content-Disposition": f"attachment; filename*=UTF-8''{safe_name}",
+            "X-Content-Type-Options": "nosniff",
+        }
+        return Response(body, media_type="application/octet-stream", headers=headers)
 
     @app.post("/api/commands/{name}")
     async def command(name: str, request: Request) -> JSONResponse:
