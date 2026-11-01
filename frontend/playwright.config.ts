@@ -10,6 +10,6 @@ export default defineConfig({
   use: { baseURL: "http://127.0.0.1:3000" },
   webServer: [
     { command: "uv run --quiet nexusai-backend", cwd: "../backend", url: "http://127.0.0.1:8765/api/health", env: { NEXUSAI_HOME: home, VIRTUAL_ENV: "" }, reuseExistingServer: false },
-    { command: "npm run dev -- --hostname 127.0.0.1 --port 3000", url: "http://127.0.0.1:3000/gallery", reuseExistingServer: false, timeout: 120_000 },
+    { command: "npm run dev", url: "http://127.0.0.1:3000/gallery", reuseExistingServer: false, timeout: 120_000 },
   ],
 });

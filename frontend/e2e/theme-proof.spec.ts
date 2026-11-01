@@ -4,6 +4,19 @@ import { FONT_CATALOG } from "../ui/theme/font-catalog";
 const background = (page: import("@playwright/test").Page) =>
   page.evaluate(() => getComputedStyle(document.body).backgroundColor);
 
+for (const path of ["/settings", "/gallery"]) {
+  test(`${path} loads with no browser errors`, async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    await page.goto(path);
+    await page.waitForLoadState("networkidle");
+    expect(errors).toEqual([]);
+  });
+}
+
 test("changing the theme goes through every layer, and reaches other windows", async ({ context }) => {
   const page = await context.newPage();
   const other = await context.newPage();

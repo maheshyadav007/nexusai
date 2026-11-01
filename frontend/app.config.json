@@ -1,5 +1,6 @@
 {
   "backendUrl": "http://127.0.0.1:8765",
+  "devOrigins": ["127.0.0.1"],
   "defaultTheme": "nexus-light",
   "storageKeys": { "appearance": "nexusai.appearance" }
 }
