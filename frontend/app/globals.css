@@ -8,6 +8,28 @@ body {
   @apply bg-surface-page font-sans text-ink-primary antialiased;
 }
 
+@layer components {
+  .nx-progress {
+    @apply block h-1 w-full appearance-none overflow-hidden rounded-full bg-surface-sunken;
+  }
+  .nx-progress::-webkit-progress-bar {
+    @apply bg-surface-sunken;
+  }
+  .nx-progress::-webkit-progress-value {
+    @apply bg-accent-default;
+  }
+  .nx-progress::-moz-progress-bar {
+    @apply bg-accent-default;
+  }
+  .focus-ring {
+    @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-default;
+  }
+}
+
+svg.lucide {
+  stroke-width: var(--icon-stroke);
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition-duration: 0ms !important;

@@ -20,6 +20,7 @@ export function themeToCss(theme: Theme, isDefault: boolean): string {
   for (const [name, value] of Object.entries(theme.shadow)) lines.push(`--shadow-${name}: ${value};`);
   for (const [name, value] of Object.entries(theme.motion)) lines.push(`--motion-${name}: ${value};`);
   for (const [name, value] of Object.entries(theme.layout)) lines.push(`--layout-${name}: ${value};`);
+  lines.push(`--icon-stroke: ${theme.icon.stroke};`);
   // :where() has no specificity, so the default never overrides a selected theme.
   const selector = `${isDefault ? ":where(:root), " : ""}[data-theme="${theme.id}"]`;
   const body = lines.map((line) => `  ${line}`).join("\n");

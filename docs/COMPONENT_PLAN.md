@@ -313,6 +313,8 @@ Status: built. Agent host and Heavy jobs processes, the backend supervisor, live
 
 ### Stage 1: Shell
 
+Status: 1.1 built. Primitives still to add when first needed: `Radio`, `Slider`, `Accordion`, `Stack`, `Grid`, `FolderPicker` and `FileDrop` (1.2 and 1.3), and `ResizeHandle`, `SplitPane`, `VirtualList` and `Sortable` (1.5 and Stage 2). `Drawer` is a shape of `Dialog`, and `Link` is `TextLink`. No Beautiful UI or AICSS component has been imported yet; those start with the agent screens.
+
 | # | Build | Done when |
 |---|---|---|
 | 1.1 | Primitives and `AppShell`, in the gallery | Every state passes the quality bar |

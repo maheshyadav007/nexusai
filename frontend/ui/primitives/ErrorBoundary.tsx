@@ -2,6 +2,7 @@
 
 import { Component, type ReactNode } from "react";
 import { t } from "@/ui/strings";
+import { ErrorState } from "./ErrorState";
 
 export class ErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   override state = { failed: false };
@@ -12,13 +13,6 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { failed: 
 
   override render() {
     if (!this.state.failed) return this.props.children;
-    return (
-      <div role="alert" className="rounded-md border border-status-danger p-4 text-sm text-status-danger">
-        <p>{t("error.title")}</p>
-        <button type="button" className="mt-2 underline" onClick={() => this.setState({ failed: false })}>
-          {t("error.retry")}
-        </button>
-      </div>
-    );
+    return <ErrorState title={t("error.title")} onRetry={() => this.setState({ failed: false })} />;
   }
 }

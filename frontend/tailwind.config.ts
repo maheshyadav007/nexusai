@@ -15,6 +15,9 @@ const colors = Object.fromEntries(
   ]),
 );
 
+// The easing curve is one value, not a duration.
+const { easing: _easing, ...durations } = light.motion;
+
 const config: Config = {
   content: ["./app/**/*.{ts,tsx}", "./ui/**/*.{ts,tsx}"],
   theme: {
@@ -24,8 +27,21 @@ const config: Config = {
     spacing: { 0: "0", px: "1px", ...vars("space", light.space) },
     borderRadius: { none: "0", ...vars("radius", light.radius) },
     boxShadow: { none: "none", ...vars("shadow", light.shadow) },
-    transitionDuration: vars("motion", light.motion),
+    transitionDuration: vars("motion", durations),
+    transitionTimingFunction: { DEFAULT: "var(--motion-easing)" },
     maxWidth: { none: "none", full: "100%", ...vars("layout", light.layout) },
+    extend: {
+      width: vars("layout", light.layout),
+      height: vars("layout", light.layout),
+      keyframes: {
+        fade: { from: { opacity: "0" } },
+        rise: { from: { opacity: "0", transform: "translateY(var(--space-2))" } },
+      },
+      animation: {
+        fade: "fade var(--motion-normal) var(--motion-easing)",
+        rise: "rise var(--motion-normal) var(--motion-easing)",
+      },
+    },
   },
   plugins: [],
 };

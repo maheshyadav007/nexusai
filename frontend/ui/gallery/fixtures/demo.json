@@ -1,0 +1,24 @@
+{
+  "counts": { "inbox": 12, "drafts": 3, "sessions": 1 },
+  "activities": [
+    { "id": "a1", "title": "Triaging new mail from Priya Nair", "detail": "Reading the thread, step 2 of 4", "completed": 1 },
+    { "id": "a2", "title": "Preparing tomorrow's review", "detail": "Waiting for your approval", "completed": 3 }
+  ],
+  "person": "Priya Nair",
+  "email": "priya.nair@example.com",
+  "toast": { "title": "Reply saved as a draft", "description": "Nothing was sent. Review it in Drafts." },
+  "steps": ["Home folder", "Theme", "Profile", "Mail"],
+  "options": [
+    { "value": "today", "label": "Today" },
+    { "value": "inbox", "label": "Inbox" }
+  ],
+  "menu": [
+    { "id": "draft", "label": "Draft a reply", "icon": "drafts" },
+    { "id": "snooze", "label": "Remind me later", "icon": "reminders" },
+    { "id": "discard", "label": "Discard", "icon": "close", "danger": true }
+  ],
+  "tabs": [
+    { "value": "thread", "label": "Thread", "content": "Three messages about the supplier contract." },
+    { "value": "files", "label": "Files", "content": "Two attachments from this thread." }
+  ]
+}

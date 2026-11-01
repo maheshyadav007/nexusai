@@ -11,7 +11,7 @@ export const themeSchema = z
     name: z.string().min(1),
     mode: z.enum(["light", "dark"]),
     color: z.strictObject({
-      surface: z.strictObject({ page: hex, raised: hex, sunken: hex, inverse: hex }),
+      surface: z.strictObject({ page: hex, raised: hex, sunken: hex, inverse: hex, scrim: hex }),
       ink: z.strictObject({ primary: hex, secondary: hex, muted: hex, faint: hex, inverse: hex }),
       accent: z.strictObject({ default: hex, hover: hex, bright: hex, on: hex }),
       status: z.strictObject({ success: hex, warning: hex, danger: hex }),
@@ -26,8 +26,9 @@ export const themeSchema = z
     space: z.record(z.string(), size),
     radius: z.strictObject({ sm: size, md: size, lg: size, full: size }),
     shadow: z.strictObject({ raised: z.string(), overlay: z.string() }),
-    motion: z.strictObject({ fast: z.string(), normal: z.string() }),
-    layout: z.strictObject({ content: size }),
+    motion: z.strictObject({ fast: z.string(), normal: z.string(), easing: z.string() }),
+    layout: z.strictObject({ content: size, sidebar: size, rail: size, topbar: size, popover: size, drawer: size, dialog: size }),
+    icon: z.strictObject({ stroke: z.string() }),
     scale: z.strictObject({
       density: z.strictObject({ compact: scale, comfortable: scale, spacious: scale }),
       text: z.strictObject({ small: scale, medium: scale, large: scale }),

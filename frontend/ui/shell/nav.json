@@ -1,0 +1,53 @@
+{
+  "top": [{ "id": "today", "labelKey": "nav.today", "icon": "today", "href": "/today" }],
+  "sections": [
+    {
+      "id": "mail",
+      "labelKey": "nav.mail",
+      "arrivesKey": "placeholder.mail",
+      "items": [
+        { "id": "inbox", "labelKey": "nav.inbox", "icon": "inbox", "href": "/mail/inbox" },
+        { "id": "categories", "labelKey": "nav.categories", "icon": "categories", "href": "/mail/categories" },
+        { "id": "sent", "labelKey": "nav.sent", "icon": "sent", "href": "/mail/sent" },
+        { "id": "drafts", "labelKey": "nav.drafts", "icon": "drafts", "href": "/mail/drafts" },
+        { "id": "archive", "labelKey": "nav.archive", "icon": "archive", "href": "/mail/archive" }
+      ]
+    },
+    {
+      "id": "documents",
+      "labelKey": "nav.documents",
+      "arrivesKey": "placeholder.mail",
+      "items": [
+        { "id": "documents-all", "labelKey": "nav.documents.all", "icon": "all", "href": "/documents/all" },
+        { "id": "documents-uploaded", "labelKey": "nav.documents.uploaded", "icon": "uploaded", "href": "/documents/uploaded" },
+        { "id": "documents-email", "labelKey": "nav.documents.fromEmail", "icon": "fromEmail", "href": "/documents/from-email" }
+      ]
+    },
+    {
+      "id": "agent",
+      "labelKey": "nav.agent",
+      "arrivesKey": "placeholder.agent",
+      "items": [
+        { "id": "sessions", "labelKey": "nav.sessions", "icon": "sessions", "href": "/agent/sessions" },
+        { "id": "channel", "labelKey": "nav.channel", "icon": "channel", "href": "/agent/channel" },
+        { "id": "memory", "labelKey": "nav.memory", "icon": "memory", "href": "/agent/memory" },
+        { "id": "background", "labelKey": "nav.background", "icon": "background", "href": "/agent/background" },
+        { "id": "schedules", "labelKey": "nav.schedules", "icon": "schedules", "href": "/agent/schedules", "arrivesKey": "placeholder.daily" }
+      ]
+    },
+    {
+      "id": "planner",
+      "labelKey": "nav.planner",
+      "arrivesKey": "placeholder.daily",
+      "items": [
+        { "id": "tasks", "labelKey": "nav.tasks", "icon": "tasks", "href": "/planner/tasks" },
+        { "id": "reminders", "labelKey": "nav.reminders", "icon": "reminders", "href": "/planner/reminders" }
+      ]
+    }
+  ],
+  "bottom": [
+    { "id": "panels", "labelKey": "nav.panels", "icon": "panels", "href": "/panels", "arrivesKey": "placeholder.mail" },
+    { "id": "logs", "labelKey": "nav.logs", "icon": "logs", "href": "/logs", "arrivesKey": "placeholder.shell" },
+    { "id": "settings", "labelKey": "nav.settings", "icon": "settings", "href": "/settings" }
+  ]
+}

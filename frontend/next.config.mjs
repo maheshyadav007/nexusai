@@ -5,6 +5,8 @@ export default {
   compress: false,
   // Next trusts only localhost in development, and blocks its live connection elsewhere.
   allowedDevOrigins: appConfig.devOrigins,
+  // The default corner covers the sidebar.
+  devIndicators: { position: "bottom-right" },
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${process.env.NEXUSAI_BACKEND_URL ?? appConfig.backendUrl}/api/:path*` }];
   },

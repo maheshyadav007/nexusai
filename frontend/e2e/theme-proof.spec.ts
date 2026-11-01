@@ -1,10 +1,13 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { FONT_CATALOG } from "../ui/theme/font-catalog";
 
 const background = (page: import("@playwright/test").Page) =>
   page.evaluate(() => getComputedStyle(document.body).backgroundColor);
 
-for (const path of ["/settings", "/gallery"]) {
+const SCREENS = ["/today", "/settings", "/mail/inbox", "/gallery", "/gallery/shell"];
+
+for (const path of SCREENS) {
   test(`${path} loads with no browser errors`, async ({ page }) => {
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
@@ -16,6 +19,63 @@ for (const path of ["/settings", "/gallery"]) {
     expect(errors).toEqual([]);
   });
 }
+
+for (const path of SCREENS) {
+  for (const theme of ["nexus-light", "nexus-dark"]) {
+    test(`${path} has no accessibility violations in ${theme}`, async ({ page }) => {
+      await page.goto(path);
+      await page.waitForLoadState("networkidle");
+      await page.evaluate((id) => document.documentElement.setAttribute("data-theme", id), theme);
+      const { violations } = await new AxeBuilder({ page }).analyze();
+      expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
+    });
+  }
+  for (const width of [1366, 1536]) {
+    test(`${path} fits a ${width}px screen`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 768 });
+      await page.goto(path);
+      await page.waitForLoadState("networkidle");
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow).toBe(0);
+    });
+  }
+}
+
+test("the sidebar navigates, marks where you are, and remembers being collapsed", async ({ page }) => {
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/today$/);
+  await page.getByRole("link", { name: "Inbox" }).click();
+  await expect(page).toHaveURL(/\/mail\/inbox$/);
+  await expect(page.getByRole("link", { name: "Inbox" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Collapse sidebar" }).click();
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Expand sidebar" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Inbox" })).toBeVisible();
+});
+
+test("an unknown path is a real 404", async ({ page }) => {
+  const response = await page.goto("/no-such-screen");
+  expect(response?.status()).toBe(404);
+});
+
+test("overlays open, trap focus and close with Escape", async ({ page }) => {
+  await page.goto("/gallery");
+  await page.getByRole("button", { name: "Dialog" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press("Tab");
+  expect(await dialog.evaluate((node) => node.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("button", { name: "Dialog" })).toBeFocused();
+
+  await page.getByRole("button", { name: "Menu" }).click();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("Draft a reply").first()).toBeVisible();
+});
 
 test("changing the theme goes through every layer, and reaches other windows", async ({ context }) => {
   const page = await context.newPage();

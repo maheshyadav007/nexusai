@@ -21,7 +21,7 @@ export function Segmented<T extends string>({ label, value, options, onChange }:
           <RadioGroup.Item
             key={option.value}
             value={option.value}
-            className="rounded-sm px-3 py-1 text-sm text-ink-secondary transition-colors duration-fast hover:text-ink-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-default data-[state=checked]:bg-surface-raised data-[state=checked]:text-ink-primary data-[state=checked]:shadow-raised"
+            className="focus-ring rounded-sm px-3 py-1 text-sm text-ink-secondary transition-colors duration-fast hover:text-ink-primary data-[state=checked]:bg-surface-raised data-[state=checked]:text-ink-primary data-[state=checked]:shadow-raised"
           >
             {option.label}
           </RadioGroup.Item>
