@@ -1,6 +1,6 @@
 import os
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
 from typing import Any
@@ -63,6 +63,8 @@ class Config:
     log_page_size: int
     default_settings: dict[str, Any]
     min_free_bytes: int
+    backups_kept: int
+    backup_interval_hours: int
     max_upload_bytes: int
     log_retention_days: int
     network_check_timeout_seconds: float
@@ -70,6 +72,8 @@ class Config:
     mail: MailConfig
     agent: AgentConfig
     secrets_test_file: Path | None = None
+    # Not printed if a config is ever logged.
+    database_key: str | None = field(default=None, repr=False)
     require_install_token: bool = True
 
     @property
@@ -96,6 +100,8 @@ def load_config(home_dir: Path | None = None) -> Config:
         home_dir=home_dir
         or (Path(fixed).resolve() if (fixed := os.environ.get("NEXUSAI_HOME")) else None),
         min_free_bytes=raw["home"]["min_free_bytes"],
+        backups_kept=raw["home"]["backups_kept"],
+        backup_interval_hours=raw["home"]["backup_interval_hours"],
         max_upload_bytes=raw["home"]["max_upload_bytes"],
         log_retention_days=raw["logs"]["retention_days"],
         network_check_timeout_seconds=raw["network"]["check_timeout_seconds"],

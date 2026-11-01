@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import quote
 
 import structlog
@@ -21,19 +21,27 @@ from nexusai.contracts.documents import DocumentRow
 from nexusai.contracts.errors import ApiError
 from nexusai.contracts.events import AppEvent, EventLog, EventLogQuery
 from nexusai.contracts.home import (
+    BackupList,
+    BackupRow,
     BrowseFolders,
     CheckHome,
     ChooseHome,
     FolderListing,
     HomeCheck,
     HomeStatus,
+    RecoveryKeyView,
+    RestoreBackup,
+    UnlockHome,
 )
+from nexusai.contracts.notifications import NotificationRequested
+from nexusai.kernel import backups, vault
 from nexusai.kernel import home as homes
 from nexusai.kernel.config import Config, load_config
-from nexusai.kernel.database import Database
+from nexusai.kernel.database import Database, DatabaseDamaged
 from nexusai.kernel.event_bus import EventBus
 from nexusai.kernel.logging import configure_logging, sink
 from nexusai.kernel.module import CommandError, Context, Endpoint, Listener, Module
+from nexusai.kernel.secrets import secret_store
 from nexusai.modules.agent import module as agent
 from nexusai.modules.agent.module import agent_module
 from nexusai.modules.documents import module as documents
@@ -61,6 +69,8 @@ MODULES: list[Module] = [
     agent_module,
 ]
 log = structlog.get_logger()
+# Present while the app runs, so one left behind means the last exit wasn't clean.
+RUNNING_FILE = "running"
 
 
 def _error(status: int, code: str, message: str, trace_id: str | None = None) -> JSONResponse:
@@ -81,10 +91,36 @@ def _bound(handler: Listener, bus: EventBus, config: Config) -> Callable[[AppEve
     return lambda event: handler(event, Context(bus=bus, config=config, trace_id=event.trace_id))
 
 
+def _open_database(config: Config, home: Path, key: str) -> tuple[Database, bool]:
+    """Encrypts, checks and backs up. Backups are taken here because nothing else is using it."""
+    path = config.database_path
+    encrypted = vault.encrypt_existing(path, key)
+    vault.encrypt_existing(home / "system" / "checkpoints.db", key)
+    sentinel = home / "system" / RUNNING_FILE
+    db = Database(path, key)
+    try:
+        if sentinel.exists():
+            log.warning("unclean_exit_found")
+            db.check()
+        migrations = [migration for module in MODULES for migration in module.migrations]
+        upgrading = db.pending(migrations)
+        due = backups.is_due(home, config.backup_interval_hours)
+    except DatabaseDamaged:
+        db.close()
+        raise
+    if upgrading or due:
+        db.close()
+        backups.create(home, "upgrade" if upgrading else "daily", config.backups_kept)
+        db = Database(path, key)
+    sentinel.touch()
+    return db, encrypted
+
+
 def _open_runtime(config: Config, home: Path) -> Runtime:
     homes.create_home(home)
-    opened = replace(config, home_dir=home)
-    db = Database(opened.database_path)
+    key = vault.open_key(home, secret_store(config.secrets_test_file))
+    opened = replace(config, home_dir=home, database_key=key)
+    db, newly_encrypted = _open_database(opened, home, key)
     bus = EventBus(db, opened)
     sink.attach(opened.home / "system" / "logs", opened.log_retention_days)
     for module in MODULES:
@@ -93,10 +129,28 @@ def _open_runtime(config: Config, home: Path) -> Runtime:
             bus.subscribe(name, pattern, _bound(handler, bus, opened))
     bus.start()
     context = Context(bus=bus, config=opened, trace_id=uuid.uuid4().hex)
+    if newly_encrypted:
+        _ask_to_save_recovery_key(bus)
     for module in MODULES:
         for start in module.on_start:
             start(context)
     return Runtime(opened, db, bus)
+
+
+def _ask_to_save_recovery_key(bus: EventBus) -> None:
+    """A Home from before encryption skipped the setup step that shows this."""
+    with bus.unit_of_work() as work:
+        work.emit(
+            "notification.requested",
+            NotificationRequested(
+                title="Save your recovery key",
+                detail="Your data is now encrypted. A new computer will need this key to open it.",
+                link="/settings?section=home",
+                kind="recovery-key",
+            ).model_dump(),
+            source="app",
+            trace_id=uuid.uuid4().hex,
+        )
 
 
 def create_app(config: Config | None = None) -> FastAPI:
@@ -107,13 +161,24 @@ def create_app(config: Config | None = None) -> FastAPI:
     queries = {name: ep for m in MODULES for name, ep in m.queries.items()}
     runtime: Runtime | None = None
     runtime_lock = threading.Lock()
+    # A Home that was found but can't open yet: its path, and what's in the way.
+    blocked: tuple[Path, Literal["locked", "damaged"]] | None = None
+    store = secret_store(cfg.secrets_test_file)
 
     def open_home(path: Path) -> None:
-        nonlocal runtime
+        nonlocal runtime, blocked
         with runtime_lock:
             if runtime is None:
-                runtime = _open_runtime(cfg, path)
-                app.state.bus = runtime.bus
+                try:
+                    runtime = _open_runtime(cfg, path)
+                except vault.VaultLocked:
+                    blocked = (path, "locked")
+                except DatabaseDamaged as error:
+                    log.error("database_damaged", error=str(error))
+                    blocked = (path, "damaged")
+                else:
+                    blocked = None
+                    app.state.bus = runtime.bus
 
     def startup_home() -> Path | None:
         """The Home to open at startup. A missing one is never silently recreated."""
@@ -136,6 +201,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         if runtime is not None:
             runtime.bus.stop()
             runtime.db.close()
+            (runtime.config.home / "system" / RUNNING_FILE).unlink(missing_ok=True)
             sink.detach()
 
     app = FastAPI(title="NexusAI", lifespan=lifespan)
@@ -175,6 +241,15 @@ def create_app(config: Config | None = None) -> FastAPI:
         default = str(homes.default_home())
         if runtime is not None:
             return HomeStatus(state="ready", path=str(runtime.config.home), default_path=default)
+        if blocked is not None:
+            message = (
+                "This Home is encrypted. Enter its recovery key to open it on this computer."
+                if blocked[1] == "locked"
+                else "NexusAI can't read its database, which may be damaged."
+            )
+            return HomeStatus(
+                state=blocked[1], path=str(blocked[0]), default_path=default, message=message
+            )
         pointer = homes.read_pointer(data_dir)
         if pointer is None:
             return HomeStatus(state="unset", default_path=default)
@@ -223,6 +298,68 @@ def create_app(config: Config | None = None) -> FastAPI:
         homes.write_pointer(data_dir, path)
         log.info("home_opened", existing=check.is_existing_home)
         return home_status()
+
+    @app.post("/api/home/unlock", response_model=None)
+    async def unlock_home(command: UnlockHome) -> HomeStatus | JSONResponse:
+        if blocked is None or blocked[1] != "locked":
+            return _error(409, "home.not_locked", "This Home isn't locked.")
+        path = blocked[0]
+        try:
+            await asyncio.to_thread(vault.unlock, path, store, command.recovery_key)
+        except vault.WrongRecoveryKey:
+            log.info("recovery_key_refused")
+            return _error(422, "home.wrong_key", "That recovery key doesn't match this Home.")
+        await asyncio.to_thread(open_home, path)
+        return home_status()
+
+    @app.post("/api/home/backups")
+    async def list_backups() -> BackupList:
+        current = blocked[0] if blocked else runtime.config.home if runtime else None
+        if current is None:
+            return BackupList(backups=[])
+        found = await asyncio.to_thread(backups.listing, current)
+        return BackupList(
+            backups=[
+                BackupRow(name=b.name, reason=b.reason, time=b.time.isoformat(), size=b.size)
+                for b in found
+            ]
+        )
+
+    @app.post("/api/home/restore", response_model=None)
+    async def restore_home(command: RestoreBackup) -> HomeStatus | JSONResponse:
+        # Only a Home that won't open: an open one is using these files.
+        if blocked is None or blocked[1] != "damaged":
+            return _error(409, "home.not_damaged", "This Home doesn't need restoring.")
+        path = blocked[0]
+        try:
+            await asyncio.to_thread(backups.restore, path, command.name)
+        except FileNotFoundError:
+            return _error(404, "backup.not_found", "That backup no longer exists.")
+        (path / "system" / RUNNING_FILE).unlink(missing_ok=True)
+        await asyncio.to_thread(open_home, path)
+        log.info("home_restored", backup=command.name)
+        return home_status()
+
+    @app.post("/api/home/recovery-key", response_model=None)
+    async def recovery_key() -> RecoveryKeyView | JSONResponse:
+        if runtime is None:
+            return _error(409, "home.not_ready", "Choose a NexusAI Home first.")
+        pending = await asyncio.to_thread(vault.pending_recovery_key, runtime.config.home, store)
+        return RecoveryKeyView(pending=pending)
+
+    @app.post("/api/home/recovery-key/confirm", response_model=None)
+    async def confirm_recovery_key() -> RecoveryKeyView | JSONResponse:
+        if runtime is None:
+            return _error(409, "home.not_ready", "Choose a NexusAI Home first.")
+        await asyncio.to_thread(vault.confirm_saved, runtime.config.home, store)
+        return RecoveryKeyView()
+
+    @app.post("/api/home/recovery-key/new", response_model=None)
+    async def replace_recovery_key() -> RecoveryKeyView | JSONResponse:
+        if runtime is None:
+            return _error(409, "home.not_ready", "Choose a NexusAI Home first.")
+        fresh = await asyncio.to_thread(vault.new_recovery_key, runtime.config.home, store)
+        return RecoveryKeyView(pending=fresh)
 
     @app.get("/api/mail/attachment/{message}/{index}", response_model=None)
     async def mail_attachment(message: int, index: int) -> Response:

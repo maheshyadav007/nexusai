@@ -9,6 +9,9 @@ allowed_origins = ["http://127.0.0.1:3000", "http://localhost:3000"]
 min_free_bytes = 5368709120
 max_upload_bytes = 209715200
 
+backups_kept = 3
+backup_interval_hours = 24
+
 [events]
 max_chain_depth = 20
 handler_max_attempts = 3

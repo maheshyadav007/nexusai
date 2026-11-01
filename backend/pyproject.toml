@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "NexusAI local backend"
 requires-python = ">=3.12"
 dependencies = [
+    "cryptography>=45",
     "fastapi>=0.162.0",
     "httpx>=0.28.1",
     "imapclient>=3",
@@ -20,6 +21,7 @@ dependencies = [
     "pypdf>=5",
     "python-docx>=1.1",
     "python-pptx>=1",
+    "sqlcipher3-wheels>=0.5.7",
     "structlog>=26.1.0",
     "uvicorn[standard]>=0.54.0",
 ]

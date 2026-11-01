@@ -17,7 +17,7 @@ function useEntryRoute(): { route: string | null; pending: boolean; failed: bool
   if (home.isError) return { route: null, pending: false, failed: true, retry };
   if (home.isPending) return { route: null, pending: true, failed: false, retry };
   if (home.data.state === "unset") return { route: "/welcome", pending: false, failed: false, retry };
-  if (home.data.state === "missing") return { route: "/recover", pending: false, failed: false, retry };
+  if (home.data.state === "missing" || home.data.state === "locked" || home.data.state === "damaged") return { route: "/recover", pending: false, failed: false, retry };
   if (onboarding.isError) return { route: null, pending: false, failed: true, retry: () => void onboarding.refetch() };
   if (onboarding.isPending) return { route: null, pending: true, failed: false, retry };
   return { route: onboarding.data.completed ? null : "/setup", pending: false, failed: false, retry };

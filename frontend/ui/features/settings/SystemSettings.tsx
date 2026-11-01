@@ -1,5 +1,6 @@
 "use client";
 
+import { RecoverySettings } from "@/ui/features/home/RecoveryKey";
 import { useHomeStatus } from "@/ui/client/home";
 import { useDiagnostics, useNetworkCheck } from "@/ui/client/system";
 import { Button } from "@/ui/primitives/Button";
@@ -31,6 +32,10 @@ export function HomeSettings() {
         <Row label={t("home.location")} value={home.data?.path ?? ""} />
         {diagnostics.data ? <Row label={t("settings.home.free")} value={gigabytes(diagnostics.data.free_bytes)} /> : null}
       </dl>
+      <section aria-label={t("recovery.title")} className="mt-5 flex flex-col gap-3 border-t border-line-subtle pt-4">
+        <h3 className="text-md font-medium text-ink-primary">{t("recovery.title")}</h3>
+        <RecoverySettings />
+      </section>
     </Card>
   );
 }

@@ -1093,7 +1093,15 @@ export type Problems1 = string[];
 export type Warnings = string[];
 export type FreeBytes = number | null;
 export type IsExistingHome = boolean;
-export type State3 = "ready" | "unset" | "missing";
+export type Name14 = string;
+export type Reason3 = string;
+export type Time11 = string;
+export type Size3 = number;
+export type Backups = BackupRow[];
+export type Pending = string | null;
+export type Name15 = string;
+export type RecoveryKey = string;
+export type State3 = "ready" | "unset" | "missing" | "locked" | "damaged";
 export type Path10 = string | null;
 export type DefaultPath = string;
 export type Message5 = string | null;
@@ -1102,7 +1110,7 @@ export type Completed = boolean;
 export type Completed1 = boolean;
 export type CurrentStep = string | null;
 export type Step2 = string;
-export type Name14 = string;
+export type Name16 = string;
 export type Role = string;
 export type Signature = string;
 export type Tone = "formal" | "friendly" | "brief";
@@ -1112,7 +1120,7 @@ export type Fields = string[];
 export type Kind10 = string | null;
 export type Id49 = number | null;
 export type Id50 = number;
-export type Time11 = string;
+export type Time12 = string;
 export type Kind11 = string;
 export type Title13 = string;
 export type Detail2 = string;
@@ -1149,7 +1157,7 @@ export type TraceId2 = string;
 export type Lines = {
   [k: string]: unknown;
 }[];
-export type Name15 = string;
+export type Name17 = string;
 export type Host1 = string;
 export type Ok7 = boolean;
 export type Detail4 = string;
@@ -1360,6 +1368,11 @@ export interface Contracts {
   ChooseHome?: ChooseHome;
   FolderListing?: FolderListing;
   HomeCheck?: HomeCheck;
+  BackupList?: BackupList;
+  BackupRow?: BackupRow;
+  RecoveryKeyView?: RecoveryKeyView;
+  RestoreBackup?: RestoreBackup;
+  UnlockHome?: UnlockHome;
   HomeStatus?: HomeStatus;
   FinishOnboarding?: FinishOnboarding;
   GetOnboarding?: GetOnboarding;
@@ -3311,6 +3324,49 @@ export interface HomeCheck {
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "BackupList".
+ */
+export interface BackupList {
+  backups: Backups;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "BackupRow".
+ */
+export interface BackupRow {
+  name: Name14;
+  reason: Reason3;
+  time: Time11;
+  size: Size3;
+  [k: string]: unknown;
+}
+/**
+ * Only a key the person hasn't confirmed saving. Afterwards it can't be shown again.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "RecoveryKeyView".
+ */
+export interface RecoveryKeyView {
+  pending?: Pending;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "RestoreBackup".
+ */
+export interface RestoreBackup {
+  name: Name15;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "UnlockHome".
+ */
+export interface UnlockHome {
+  recovery_key: RecoveryKey;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "HomeStatus".
  */
 export interface HomeStatus {
@@ -3371,7 +3427,7 @@ export interface GetProfile {
  * via the `definition` "Profile".
  */
 export interface Profile {
-  name?: Name14;
+  name?: Name16;
   role?: Role;
   signature?: Signature;
   tone?: Tone;
@@ -3411,7 +3467,7 @@ export interface MarkNotificationsRead {
  */
 export interface Notification {
   id: Id50;
-  time: Time11;
+  time: Time12;
   kind: Kind11;
   title: Title13;
   detail: Detail2;
@@ -3537,7 +3593,7 @@ export interface LogLines {
  * via the `definition` "NetworkCheck".
  */
 export interface NetworkCheck {
-  name: Name15;
+  name: Name17;
   host: Host1;
   ok: Ok7;
   detail: Detail4;

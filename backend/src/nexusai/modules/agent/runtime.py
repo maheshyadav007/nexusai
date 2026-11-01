@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-import sqlite3
 import threading
 import uuid
 from collections.abc import AsyncIterator
@@ -20,7 +19,7 @@ from langgraph.types import Command
 
 from nexusai.contracts.agent import ApprovalList, SessionRow, SessionView, ToolApproval
 from nexusai.contracts.documents import GetDocument
-from nexusai.kernel.database import Migration
+from nexusai.kernel.database import Migration, StandardErrorsConnection, connect_raw
 from nexusai.kernel.home import scratch_folder
 from nexusai.kernel.module import CommandError, Context
 from nexusai.modules.agent import (
@@ -103,7 +102,9 @@ class SessionRuntime:
         self.live: dict[str, _Live] = {}
         self.lock = threading.Lock()
         path = ctx.config.home / "system" / "checkpoints.db"
-        self.connection = sqlite3.connect(path, check_same_thread=False)
+        self.connection = connect_raw(
+            path, ctx.config.database_key, factory=StandardErrorsConnection
+        )
         self.saver = SqliteSaver(self.connection)
         self.closing = False
 

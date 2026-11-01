@@ -15,12 +15,17 @@ from nexusai.contracts import planner as planner_contracts
 from nexusai.contracts.errors import ApiError
 from nexusai.contracts.events import AppEvent, EventLog, EventLogQuery, FailedEvent
 from nexusai.contracts.home import (
+    BackupList,
+    BackupRow,
     BrowseFolders,
     CheckHome,
     ChooseHome,
     FolderListing,
     HomeCheck,
     HomeStatus,
+    RecoveryKeyView,
+    RestoreBackup,
+    UnlockHome,
 )
 from nexusai.contracts.models import (
     AvailableModel,
@@ -126,6 +131,11 @@ MODELS: list[type[BaseModel]] = [
     ChooseHome,
     FolderListing,
     HomeCheck,
+    BackupList,
+    BackupRow,
+    RecoveryKeyView,
+    RestoreBackup,
+    UnlockHome,
     HomeStatus,
     FinishOnboarding,
     GetOnboarding,

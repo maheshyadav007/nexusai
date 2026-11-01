@@ -27,6 +27,14 @@ test("a new person goes from landing through setup into the app, and setup resum
   await expect(page.getByText(/free on this drive/)).toBeVisible();
   await page.getByRole("button", { name: "Use this folder" }).click();
 
+  await expect(page.getByRole("heading", { name: "Save your recovery key" })).toBeVisible();
+  await expect(page.getByTestId("recovery-key")).toHaveText(/^([0-9A-Z]{4}-){7}[0-9A-Z]{4}$/);
+  await noViolations(page);
+  // There's no way past it without saying it's saved, and then it can't be shown again.
+  await expect(page.getByRole("button", { name: "Continue" })).toBeDisabled();
+  await page.getByRole("checkbox", { name: "I've saved my recovery key somewhere safe" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
+
   await expect(page.getByRole("heading", { name: "Choose how it looks" })).toBeVisible();
   await noViolations(page);
   await page.getByRole("button", { name: "Continue" }).click();
@@ -80,6 +88,32 @@ test("a new person goes from landing through setup into the app, and setup resum
   await expect(page).toHaveURL(/\/today$/);
   await page.goto("/setup");
   await expect(page).toHaveURL(/\/today$/);
+});
+
+test("a locked Home asks for its recovery key and says when it's wrong", async ({ page }) => {
+  await page.route("**/api/home/status", (route) => route.fulfill({ json: { state: "locked", default_path: "/tmp", path: "/moved/NexusAI", message: "This Home is encrypted. Enter its recovery key to open it on this computer." } }));
+  await page.route("**/api/home/unlock", (route) => route.fulfill({ status: 422, json: { code: "home.wrong_key", message: "That recovery key doesn't match this Home." } }));
+  await page.goto("/today");
+  await expect(page).toHaveURL(/\/recover$/);
+  await expect(page.getByText("This Home is encrypted")).toBeVisible();
+  await noViolations(page);
+  await page.getByRole("textbox", { name: "Recovery key" }).fill("AAAA-BBBB");
+  await page.getByRole("button", { name: "Open my data" }).click();
+  await expect(page.getByText("That recovery key doesn't match this Home.")).toBeVisible();
+  await noViolations(page);
+});
+
+test("a damaged Home offers its backups, and says when there are none", async ({ page }) => {
+  await page.route("**/api/home/status", (route) => route.fulfill({ json: { state: "damaged", default_path: "/tmp", path: "/here/NexusAI", message: "NexusAI can't read its database, which may be damaged." } }));
+  let rows = [{ name: "20261101-060000-000000-daily", reason: "daily", time: "2026-11-01T06:00:00+00:00", size: 1000 }];
+  await page.route("**/api/home/backups", (route) => route.fulfill({ json: { backups: rows } }));
+  await page.goto("/today");
+  await expect(page).toHaveURL(/\/recover$/);
+  await expect(page.getByTestId("backup").getByRole("button", { name: "Restore" })).toBeVisible();
+  await noViolations(page);
+  rows = [];
+  await page.reload();
+  await expect(page.getByText("There are no backups to restore from.")).toBeVisible();
 });
 
 test("the folder chooser shows problems and browses folders", async ({ page }) => {

@@ -48,7 +48,7 @@ Status legend: **In use** (in the repo today) · **Decided** (agreed, not built 
 | Server-Sent Events | Decided | Pushes events to the UI, with catch-up by sequence number after a reconnect. |
 | Pydantic | Decided | Validates commands, queries, events and external data at every boundary; TypeScript types generated from it. |
 | SQLite event log | Decided | Own event bus. Durable events saved in the same transaction as the data change; live events not saved. |
-| SQLite, SQLCipher for encryption | Decided | Standard `sqlite3` during early stages, encrypted build added with `APP-9`. Stored under `system/` in the NexusAI Home. |
+| SQLite, SQLCipher for encryption | Decided | Through `sqlcipher3-wheels`, which has builds for Windows, macOS and Linux and includes FTS5. Both databases are encrypted with a random key held in the system's secure store; `system/vault.json` holds it sealed with the person's recovery key. Files in the Home's folders (uploads, memory, prompts, logs) aren't encrypted. Stored under `system/` in the NexusAI Home. |
 | `structlog` | Decided | Structured logs with trace IDs. |
 | pytest, ruff, `import-linter` | Decided | Tests, lint, and a build check for module boundaries. |
 

@@ -264,3 +264,19 @@ test("a large upload arrives whole through the token proxy", async ({ page }) =>
   expect(response.ok(), await response.text()).toBe(true);
   expect(((await response.json()) as { size: number }).size).toBe(size);
 });
+
+test("a new recovery key can be made in Settings, and is only shown until saved", async ({ page }) => {
+  await page.goto("/settings?section=home");
+  await page.getByRole("button", { name: "Create a new recovery key" }).click();
+  await noViolations(page);
+  await page.getByRole("button", { name: "Replace my key" }).click();
+  await expect(page.getByTestId("recovery-key")).toHaveText(/^([0-9A-Z]{4}-){7}[0-9A-Z]{4}$/);
+  await noViolations(page);
+  await expect(page.getByRole("button", { name: "Done" })).toBeDisabled();
+  await page.getByRole("checkbox", { name: "I've saved my recovery key somewhere safe" }).click();
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByTestId("recovery-key")).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Create a new recovery key" })).toBeVisible();
+  await expect(page.getByTestId("recovery-key")).toHaveCount(0);
+});

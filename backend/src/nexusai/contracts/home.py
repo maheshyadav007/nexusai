@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-HomeState = Literal["ready", "unset", "missing"]
+HomeState = Literal["ready", "unset", "missing", "locked", "damaged"]
 
 
 class HomeStatus(BaseModel):
@@ -48,3 +48,32 @@ class FolderListing(BaseModel):
     parent: str | None
     folders: list[str]
     files: list[str] = Field(default_factory=list)
+
+
+class UnlockHome(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    recovery_key: str = Field(min_length=1, max_length=200)
+
+
+class RecoveryKeyView(BaseModel):
+    """Only a key the person hasn't confirmed saving. Afterwards it can't be shown again."""
+
+    pending: str | None = None
+
+
+class BackupRow(BaseModel):
+    name: str
+    reason: str
+    time: str
+    size: int
+
+
+class BackupList(BaseModel):
+    backups: list[BackupRow]
+
+
+class RestoreBackup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=100)

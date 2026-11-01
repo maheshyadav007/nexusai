@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { useHomeStatus } from "@/ui/client/home";
+import { useHomeStatus, useRecoveryKey } from "@/ui/client/home";
+import { PendingRecoveryKey } from "@/ui/features/home/RecoveryKey";
 import { useFinishOnboarding, useOnboarding, useSetStep } from "@/ui/client/onboarding";
 import { useCreateSession } from "@/ui/client/sessions";
 import { useStarterPrompts } from "@/ui/client/work";
@@ -31,6 +32,7 @@ interface Step {
 
 const STEPS: readonly Step[] = [
   { id: "home", label: "setup.home.label", title: "setup.home.title", description: "setup.home.description" },
+  { id: "recovery", label: "recovery.title", title: "setup.recovery.title", description: "setup.recovery.description" },
   { id: "theme", label: "setup.theme.label", title: "setup.theme.title", description: "setup.theme.description" },
   { id: "profile", label: "setup.profile.label", title: "setup.profile.title", description: "setup.profile.description" },
   { id: "mail", label: "setup.mail.label", title: "setup.mail.title", description: "setup.mail.description", optional: true },
@@ -40,6 +42,37 @@ const STEPS: readonly Step[] = [
   { id: "pst", label: "setup.pst.label", title: "setup.pst.title", description: "setup.pst.description", optional: true },
   { id: "permissions", label: "permissions.title", title: "setup.permissions.title", description: "setup.permissions.description" },
 ];
+
+const NEEDS_RECOVERY = new Set(["missing", "locked", "damaged"]);
+
+/** Comes right after Home, so nobody's mail is stored before they hold the way back to it. */
+function RecoveryStep({ step, index, back, onDone }: { step: Step; index: number; back: ReactNode; onDone: () => void }) {
+  const key = useRecoveryKey();
+  const pending = key.data?.pending;
+  return (
+    <Frame
+      step={step}
+      index={index}
+      actions={
+        pending ? (
+          back
+        ) : (
+          <>
+            {back}
+            <Button variant="primary" disabled={!key.isSuccess} onClick={onDone}>
+              {t("setup.next")}
+            </Button>
+          </>
+        )
+      }
+    >
+      {key.isPending ? <Skeleton className="h-6 w-full" /> : null}
+      {key.isError ? <ErrorState title={t("recovery.error")} onRetry={() => void key.refetch()} /> : null}
+      {pending ? <PendingRecoveryKey value={pending} action={t("setup.next")} onSaved={onDone} /> : null}
+      {key.isSuccess && !pending ? <p className="text-md text-ink-secondary">{t("recovery.alreadySaved")}</p> : null}
+    </Frame>
+  );
+}
 
 /** Optional: the agent asks about the person, then writes prompts they can edit. */
 function InterviewStep() {
@@ -97,7 +130,7 @@ export function OnboardingFlow() {
 
   const done = onboarding.data?.completed;
   useEffect(() => {
-    if (home.data?.state === "missing") router.replace("/recover");
+    if (home.data && NEEDS_RECOVERY.has(home.data.state)) router.replace("/recover");
     else if (done) router.replace("/today");
   }, [home.data, done, router]);
 
@@ -108,13 +141,13 @@ export function OnboardingFlow() {
       </div>
     );
   }
-  if (!home.data || home.data.state === "missing") return <Skeleton className="h-6 w-full" />;
+  if (!home.data || NEEDS_RECOVERY.has(home.data.state)) return <Skeleton className="h-6 w-full" />;
 
   const first = STEPS[0] as Step;
   if (home.data.state === "unset") {
     return (
       <Frame step={first} index={0}>
-        <HomeChooser initialPath={home.data.default_path} action={t("setup.home.action")} onChosen={() => setStep.mutate("theme")} />
+        <HomeChooser initialPath={home.data.default_path} action={t("setup.home.action")} onChosen={() => setStep.mutate((STEPS[1] as Step).id)} />
       </Frame>
     );
   }
@@ -137,6 +170,9 @@ export function OnboardingFlow() {
       </Button>
     ) : null;
 
+  if (step.id === "recovery") {
+    return <RecoveryStep step={step} index={index} back={back} onDone={goNext} />;
+  }
   if (step.id === "profile") {
     return (
       <Frame step={step} index={index} actions={back}>

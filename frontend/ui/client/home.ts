@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { post } from "./api";
-import type { ChooseHome, FolderListing, HomeCheck, HomeStatus } from "./contracts.generated";
+import type { BackupList, ChooseHome, FolderListing, HomeCheck, HomeStatus, RecoveryKeyView } from "./contracts.generated";
 
 export function useHomeStatus() {
   return useQuery({ queryKey: ["home"], queryFn: () => post<HomeStatus>("/api/home/status", {}) });
@@ -41,3 +41,40 @@ export function useChooseHome() {
     },
   });
 }
+
+function useOpenedHome<I>(path: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: I) => post<HomeStatus>(path, input),
+    onSuccess: (status) => {
+      client.setQueryData(["home"], status);
+      void client.invalidateQueries({ predicate: (query) => query.queryKey[0] !== "home" });
+    },
+  });
+}
+
+export const useUnlockHome = () => useOpenedHome<{ recovery_key: string }>("/api/home/unlock");
+export const useRestoreBackup = () => useOpenedHome<{ name: string }>("/api/home/restore");
+
+export function useBackups(enabled: boolean) {
+  return useQuery({ queryKey: ["home-backups"], queryFn: () => post<BackupList>("/api/home/backups", {}), enabled, staleTime: 0 });
+}
+
+const RECOVERY_KEY = ["recovery-key"];
+
+// Never kept around, because it's the one thing that opens this data elsewhere.
+export function useRecoveryKey() {
+  const ready = useHomeReady();
+  return useQuery({ queryKey: RECOVERY_KEY, queryFn: () => post<RecoveryKeyView>("/api/home/recovery-key", {}), enabled: ready, staleTime: 0, gcTime: 0 });
+}
+
+function useRecoveryChange(path: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => post<RecoveryKeyView>(path, {}),
+    onSuccess: (view) => client.setQueryData(RECOVERY_KEY, view),
+  });
+}
+
+export const useConfirmRecoveryKey = () => useRecoveryChange("/api/home/recovery-key/confirm");
+export const useNewRecoveryKey = () => useRecoveryChange("/api/home/recovery-key/new");
