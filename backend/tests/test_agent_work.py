@@ -342,6 +342,38 @@ def test_a_question_gives_a_best_guess_then_updates_when_answered(
     assert client.post("/api/queries/channel.list").json()["messages"] == []
 
 
+def test_an_answered_question_is_not_asked_again_and_nothing_doubles(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    connect(client, fake)
+    same = {
+        "question": "Is this urgent?",
+        "tasks": [{"title": "Reply", "due": None}],
+        "reminders": [{"title": "Check back", "when": "2031-05-01T09:00"}],
+        "memory": "They run payroll.",
+        "draft": "Thanks.",
+    }
+    script.replies = [triage_reply(**same), triage_reply(**same)]
+    fake.state.deliver(make_mail(subject="Twice judged"))
+    thread = triaged(client, "Twice judged")
+    ask = wait(lambda: client.post("/api/queries/channel.list").json()["messages"], "ask")[0]
+    client.post("/api/commands/channel.respond", json={"id": ask["id"], "answer": "Yes"})
+    wait(
+        lambda: len(script.requests) == 2 and "Yes" in script.requests[-1].messages[0].text,
+        "second",
+    )
+    wait(lambda: "best guess" not in thread_named(client, "Twice judged")["why"], "settled")
+    assert client.post("/api/queries/channel.list").json()["messages"] == []
+    tasks = client.post("/api/queries/tasks.list", json={}).json()["tasks"]
+    assert [t["title"] for t in tasks if t["thread"] == thread["id"]] == ["Reply"]
+    reminders = client.post("/api/queries/reminders.list", json={}).json()["reminders"]
+    assert [r["title"] for r in reminders if r["thread"] == thread["id"]] == ["Check back"]
+    proposals = client.post("/api/queries/memory.list", json={"query": ""}).json()["proposals"]
+    assert [p["text"] for p in proposals] == ["They run payroll."]
+    drafts = client.post("/api/queries/drafts.list", json={}).json()["drafts"]
+    assert [d["body"] for d in drafts if d["thread_id"] == thread["id"]] == ["Thanks."]
+
+
 def test_mail_agent_is_one_entry_with_a_record_per_run(
     client: TestClient, script: Script, fake: FakeMail
 ) -> None:

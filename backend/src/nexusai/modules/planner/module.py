@@ -17,7 +17,7 @@ from nexusai.contracts.planner import (
     TaskAction,
     TaskList,
 )
-from nexusai.kernel.database import Migration
+from nexusai.kernel.database import Database, Migration
 from nexusai.kernel.module import CommandError, Context, Module
 
 planner_module = Module(
@@ -62,6 +62,19 @@ def _reminder(row: object) -> Reminder:
         source=data["source"],
         proposed=bool(data["proposed"]),
         fired=bool(data["fired"]),
+    )
+
+
+def has_task(db: Database, title: str, thread: int | None) -> bool:
+    """Whether this conversation already led to this task, including one that's finished."""
+    return bool(
+        db.fetch_all("SELECT id FROM tasks WHERE title = ? AND thread IS ?", (title, thread))
+    )
+
+
+def has_reminder(db: Database, title: str, thread: int | None) -> bool:
+    return bool(
+        db.fetch_all("SELECT id FROM reminders WHERE title = ? AND thread IS ?", (title, thread))
     )
 
 

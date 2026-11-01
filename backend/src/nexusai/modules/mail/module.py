@@ -548,7 +548,7 @@ def _problems(
 
     def add(check: str, level: str, message: str) -> None:
         if level != "off":
-            found.append(SendProblem(check=check, level=level, message=message))  # type: ignore[arg-type]
+            found.append(SendProblem(check=check, level=level, message=message))
 
     active, profiles = accounts.read_accounts(ctx.config)
     domain = profiles[active].auth.user.rsplit("@", 1)[-1].lower() if active else ""

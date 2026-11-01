@@ -95,6 +95,11 @@ def relevant(home: Path, agent: str, task_text: str, limit: int) -> str:
 
 def propose(db: Database, agent: str, text: str, source: str | None) -> None:
     """Runs that read untrusted content can only suggest a memory, so mail can't plant one."""
+    # The same mail can be judged again, and shouldn't ask twice.
+    if db.fetch_all(
+        "SELECT id FROM memory_proposals WHERE text = ? AND source IS ?", (text, source)
+    ):
+        return
     with db.transaction() as tx:
         tx.execute(
             "INSERT INTO memory_proposals (agent, text, source, time) VALUES (?, ?, ?, ?)",

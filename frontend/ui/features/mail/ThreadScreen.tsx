@@ -6,9 +6,12 @@ import { ApiRequestError } from "@/ui/client/api";
 import type { Draft, MessageView } from "@/ui/client/contracts.generated";
 import { useDateTime } from "@/ui/client/format";
 import { useMoveThread, useReplyDraft, useSetFlag, useSetRead, useSetStatus, useThread, type ThreadStatus } from "@/ui/client/mail";
+import { useSummarize, useThreadRuns, useThreadSummary } from "@/ui/client/work";
+import { AskAgent } from "@/ui/features/agent/AskAgent";
 import { Icon } from "@/ui/icons";
 import { Badge } from "@/ui/primitives/Badge";
 import { Button } from "@/ui/primitives/Button";
+import { Dialog } from "@/ui/primitives/Dialog";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Select } from "@/ui/primitives/Select";
@@ -72,6 +75,50 @@ function Body({ message }: { message: MessageView }) {
           {t(showAll ? "mail.quotes.hide" : "mail.quotes.show")}
         </Button>
       ) : null}
+    </div>
+  );
+}
+
+function SummaryBlock({ id }: { id: number }) {
+  const summary = useThreadSummary(id);
+  const summarize = useSummarize();
+  const data = summary.data;
+  return (
+    <section aria-label={t("summary.title")} className="flex flex-col items-start gap-2 rounded-md bg-surface-sunken p-3">
+      {data?.text ? <p data-testid="summary-text" className="whitespace-pre-wrap text-md text-ink-primary">{data.text}</p> : null}
+      {data?.text && data.new_messages ? <p className="text-sm text-ink-secondary">{t("summary.new", { count: data.new_messages })}</p> : null}
+      {summarize.isError ? <p className="text-sm text-status-danger">{summarize.error instanceof ApiRequestError ? summarize.error.detail.message : t("summary.error")}</p> : null}
+      {!data?.text || data.new_messages ? (
+        <Button loading={summarize.isPending} onClick={() => summarize.mutate(id)}>
+          {t(data?.text ? "summary.update" : "summary.summarize")}
+        </Button>
+      ) : null}
+    </section>
+  );
+}
+
+function WhyHere({ thread, reason }: { thread: number; reason: string }) {
+  const [open, setOpen] = useState(false);
+  const runs = useThreadRuns(thread, open);
+  const format = useDateTime();
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm text-ink-muted">
+      <span>{t("mail.why", { reason })}</span>
+      <Dialog title={t("runs.title")} shape="drawer" open={open} onOpenChange={setOpen} trigger={<Button variant="quiet" className="py-px">{t("runs.open")}</Button>}>
+        <ul className="flex flex-col gap-3 overflow-y-auto">
+          {(runs.data?.runs ?? []).map((run) => (
+            <li key={run.id} data-testid="triage-run" className="flex flex-col gap-1 rounded-md border border-line-subtle p-3 text-md text-ink-secondary">
+              <span className="text-sm tabular-nums text-ink-muted">{format(run.time)}</span>
+              {run.summary ? <p className="text-ink-primary">{run.summary}</p> : null}
+              {run.reason ? <p>{run.reason}</p> : null}
+              {run.error ? <p className="text-status-danger">{run.error}</p> : null}
+              {(run.facts ?? []).map((fact) => <p key={fact} className="text-sm">{fact}</p>)}
+              {run.suggested_action ? <p className="text-sm">{t("runs.action", { action: run.suggested_action })}</p> : null}
+            </li>
+          ))}
+          {runs.isSuccess && !runs.data.runs.length ? <li className="text-md text-ink-muted">{t("runs.none")}</li> : null}
+        </ul>
+      </Dialog>
     </div>
   );
 }
@@ -156,7 +203,9 @@ export function ThreadScreen({ id }: { id: number }) {
           <div className="w-1/3 min-w-0"><Select label={t("mail.status.label")} value={row.status} options={STATUSES} onChange={(status) => setStatus.mutate({ id, status: status as ThreadStatus })} /></div>
           {row.category ? <Badge>{row.category}</Badge> : null}
         </div>
-        {row.why ? <p className="text-sm text-ink-muted">{t("mail.why", { reason: row.why })}</p> : null}
+        {row.why ? <WhyHere thread={id} reason={row.why} /> : null}
+        <div><AskAgent context={[`thread:${id}`]} title={row.subject || t("mail.noSubject")} /></div>
+        <SummaryBlock id={id} />
       </header>
       {messages.map((message, index) => (
         <MessageCard key={message.id} message={message} open={index === messages.length - 1} onReply={reply} />

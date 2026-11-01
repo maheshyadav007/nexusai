@@ -267,7 +267,11 @@ class MailAgent:
         reason = str(parsed.get("reason") or "")[:500]
         summary = str(parsed.get("summary") or "")[:1000]
         action = str(parsed["suggested_action"])[:500] if parsed.get("suggested_action") else None
-        question = str(parsed["question"])[:500] if parsed.get("question") else None
+        # Once the person has answered, the agent decides. Asking again could go on forever.
+        answered = any(row["answer"] for row in rows)
+        question = (
+            str(parsed["question"])[:500] if parsed.get("question") and not answered else None
+        )
         provisional = bool(question)
         why = f"{reason} (a best guess until you answer)" if provisional else reason
         latest = max(row["message"] for row in rows)
@@ -352,7 +356,11 @@ class MailAgent:
                     "Mail agent",
                 )
         for item in parsed.get("tasks") or []:
-            if isinstance(item, dict) and item.get("title"):
+            if (
+                isinstance(item, dict)
+                and item.get("title")
+                and not planner.has_task(ctx.bus.db, str(item["title"])[:500], thread)
+            ):
                 planner.add_task(
                     ctx,
                     str(item["title"])[:500],
@@ -362,7 +370,12 @@ class MailAgent:
                     True,
                 )
         for item in parsed.get("reminders") or []:
-            if isinstance(item, dict) and item.get("title") and _valid_moment(item.get("when")):
+            if (
+                isinstance(item, dict)
+                and item.get("title")
+                and _valid_moment(item.get("when"))
+                and not planner.has_reminder(ctx.bus.db, str(item["title"])[:500], thread)
+            ):
                 planner.add_reminder(
                     ctx,
                     str(item["title"])[:500],
@@ -387,6 +400,11 @@ class MailAgent:
             (thread,),
         )
         if not rows:
+            return
+        # Whatever is there may have the person's edits in it, so it's left alone.
+        if ctx.bus.db.fetch_all(
+            "SELECT id FROM mail_drafts WHERE json_extract(body, '$.thread_id') = ?", (thread,)
+        ):
             return
         draft = {
             "thread_id": thread,

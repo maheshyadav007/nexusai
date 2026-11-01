@@ -56,7 +56,19 @@ test("a new person goes from landing through setup into the app, and setup resum
   await page.getByRole("button", { name: "Continue" }).click();
 
   await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: "Let the agent get to know you" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start the interview" })).toBeVisible();
+  await noViolations(page);
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: "What matters in your mail?" })).toBeVisible();
+  // The starter set is there to edit, and is saved as the person's own.
+  await expect(page.getByRole("textbox").first()).not.toHaveValue("");
+  await noViolations(page);
+  await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("heading", { name: "Bring in old mail" })).toBeVisible();
+  await noViolations(page);
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: "What may the agent do?" })).toBeVisible();
   await noViolations(page);
   await page.getByRole("button", { name: "Enter NexusAI" }).click();
   await expect(page).toHaveURL(/\/today$/);

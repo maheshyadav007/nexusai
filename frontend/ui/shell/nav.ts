@@ -7,8 +7,6 @@ export interface NavItem {
   label: StringKey;
   icon: IconName;
   href: string;
-  /** Says when a screen that isn't built yet will arrive. */
-  arrives?: StringKey;
 }
 
 export interface NavSection {
@@ -22,19 +20,15 @@ interface RawItem {
   labelKey: string;
   icon: string;
   href: string;
-  arrivesKey?: string;
 }
 
-const item = (raw: RawItem, sectionArrives?: string): NavItem => {
-  const arrives = raw.arrivesKey ?? sectionArrives;
-  return { id: raw.id, label: raw.labelKey as StringKey, icon: raw.icon as IconName, href: raw.href, ...(arrives ? { arrives: arrives as StringKey } : {}) };
-};
+const item = (raw: RawItem): NavItem => ({ id: raw.id, label: raw.labelKey as StringKey, icon: raw.icon as IconName, href: raw.href });
 
 export const NAV_TOP: NavItem[] = nav.top.map((raw) => item(raw));
 export const NAV_SECTIONS: NavSection[] = nav.sections.map((section) => ({
   id: section.id,
   label: section.labelKey as StringKey,
-  items: section.items.map((raw) => item(raw, section.arrivesKey)),
+  items: section.items.map((raw) => item(raw)),
 }));
 export const NAV_BOTTOM: NavItem[] = nav.bottom.map((raw) => item(raw));
 

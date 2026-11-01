@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ApiRequestError } from "@/ui/client/api";
 import type { Draft, Recipient } from "@/ui/client/contracts.generated";
+import { query } from "@/ui/client/api";
 import { useRemoveDraft, useSaveDraft, useSendMail } from "@/ui/client/mail";
+import type { SendProblem } from "@/ui/client/contracts.generated";
 import { Button } from "@/ui/primitives/Button";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Field } from "@/ui/primitives/Field";
@@ -33,11 +35,57 @@ export function Composer({ initial, dropped = [], onDone }: { initial: Draft; dr
   const send = useSendMail();
   const remove = useRemoveDraft();
   const [id, setId] = useState(initial.id ?? null);
+  const [problems, setProblems] = useState<SendProblem[]>([]);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const opened = useRef(new Date().toISOString());
 
   const parsed = { to: parse(to), cc: parse(cc), bcc: parse(bcc) };
   const bad = [...parsed.to.bad, ...parsed.cc.bad, ...parsed.bcc.bad];
   const noRecipients = parsed.to.people.length + parsed.cc.people.length + parsed.bcc.people.length === 0;
   const draft = (): Draft => ({ ...initial, id, to: parsed.to.people, cc: parsed.cc.people, bcc: parsed.bcc.people, subject, body });
+
+  const deliver = () =>
+    send.mutate(draft(), {
+      onSuccess: () => {
+        toast({ title: t("mail.sent") });
+        onDone();
+      },
+    });
+
+  /** A short window to change your mind, because a sent mail can't be recalled. */
+  const startUndoWindow = (seconds: number) => {
+    if (seconds <= 0) {
+      deliver();
+      return;
+    }
+    let left = seconds;
+    setCountdown(left);
+    timer.current = setInterval(() => {
+      left -= 1;
+      setCountdown(left);
+      if (left <= 0) {
+        if (timer.current) clearInterval(timer.current);
+        setCountdown(null);
+        deliver();
+      }
+    }, 1000);
+  };
+  const cancelSend = () => {
+    if (timer.current) clearInterval(timer.current);
+    setCountdown(null);
+  };
+  const checkThenSend = async (confirmed: boolean) => {
+    const result = await query("mail.checkSend", { draft: draft(), written_after: opened.current });
+    const found = result.problems ?? [];
+    if (found.length && !confirmed) {
+      setProblems(found);
+      return;
+    }
+    setProblems([]);
+    startUndoWindow(result.undo_seconds ?? 0);
+  };
+  const blocked = problems.some((problem) => problem.level === "block");
 
   return (
     <form
@@ -45,12 +93,7 @@ export function Composer({ initial, dropped = [], onDone }: { initial: Draft; dr
       className="flex flex-col gap-3"
       onSubmit={(event) => {
         event.preventDefault();
-        send.mutate(draft(), {
-          onSuccess: () => {
-            toast({ title: t("mail.sent") });
-            onDone();
-          },
-        });
+        void checkThenSend(false);
       }}
     >
       {dropped.length > 0 ? <p className="text-md text-status-warning">{t("mail.dropped", { people: dropped.join(", ") })}</p> : null}
@@ -63,10 +106,22 @@ export function Composer({ initial, dropped = [], onDone }: { initial: Draft; dr
       </div>
       <Field label={t("mail.subject")}>{({ invalid, ...control }) => <Input invalid={invalid} value={subject} onChange={(event) => setSubject(event.target.value)} {...control} />}</Field>
       <Field label={t("mail.body")}>{({ invalid, ...control }) => <Textarea invalid={invalid} rows={8} value={body} onChange={(event) => setBody(event.target.value)} {...control} />}</Field>
+      {problems.length ? (
+        <div role="alert" data-testid="send-checks" className="flex flex-col items-start gap-2 rounded-md border border-status-warning p-3">
+          {problems.map((problem) => <p key={problem.check} className="text-md text-ink-primary">{problem.message}</p>)}
+          {blocked ? null : <Button onClick={() => void checkThenSend(true)}>{t("mail.sendAnyway")}</Button>}
+        </div>
+      ) : null}
+      {countdown !== null ? (
+        <div role="status" className="flex items-center gap-3 rounded-md bg-surface-sunken p-3 text-md text-ink-primary">
+          {t("mail.sending", { seconds: countdown })}
+          <Button onClick={cancelSend}>{t("mail.undoSend")}</Button>
+        </div>
+      ) : null}
       {send.isError ? <ErrorState title={t("mail.sendFailed")} description={messageOf(send.error)} /> : null}
       {save.isError ? <ErrorState title={t("mail.saveFailed")} description={messageOf(save.error)} /> : null}
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" variant="primary" loading={send.isPending} disabled={noRecipients || bad.length > 0}>
+        <Button type="submit" variant="primary" loading={send.isPending} disabled={noRecipients || bad.length > 0 || countdown !== null}>
           {t("mail.send")}
         </Button>
         <Button

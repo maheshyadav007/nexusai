@@ -97,7 +97,8 @@ test("replying goes out with the right people and joins the conversation", async
   await expect(page.getByRole("textbox", { name: "Cc", exact: true })).toHaveValue("sam@example.com, lee@example.com");
   await page.getByRole("textbox", { name: "Message" }).fill("Numbers confirmed.");
   await page.getByRole("button", { name: "Send", exact: true }).click();
-  await expect(page.getByText("Message sent").first()).toBeVisible();
+  // There's a short window to undo before it goes.
+  await expect(page.getByText("Message sent").first()).toBeVisible({ timeout: 15_000 });
 
   const sent = (await (await page.request.get(CONTROL)).json()) as { to: string[]; raw: string }[];
   const mine = sent.find((item) => item.raw.includes("Numbers confirmed."));

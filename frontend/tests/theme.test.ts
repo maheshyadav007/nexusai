@@ -94,10 +94,9 @@ describe("fonts", () => {
 describe("navigation", () => {
   const items = [...NAV_TOP, ...NAV_SECTIONS.flatMap((section) => section.items), ...NAV_BOTTOM];
 
-  it("every label, placeholder and icon exists", () => {
+  it("every label and icon exists", () => {
     for (const item of items) {
       expect(en).toHaveProperty([item.label]);
-      if (item.arrives) expect(en).toHaveProperty([item.arrives]);
       expect(ICONS).toHaveProperty(item.icon);
     }
     for (const section of NAV_SECTIONS) expect(en).toHaveProperty([section.label]);

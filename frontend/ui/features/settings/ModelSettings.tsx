@@ -3,14 +3,17 @@
 import { useState } from "react";
 import { ApiRequestError } from "@/ui/client/api";
 import { useAvailableModels, useCancelLogin, useDisconnect, useModelStatus, useSelectModel, useStartLogin, useTestModel } from "@/ui/client/models";
+import { useListProviderModels, useModelProvider, useSaveModelProvider } from "@/ui/client/work";
 import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Field } from "@/ui/primitives/Field";
-import { Textarea } from "@/ui/primitives/Input";
+import { Input, Textarea } from "@/ui/primitives/Input";
+import { Segmented } from "@/ui/primitives/Segmented";
 import { Select } from "@/ui/primitives/Select";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { StatusDot } from "@/ui/primitives/StatusDot";
+import { Switch } from "@/ui/primitives/Switch";
 import { TextLink } from "@/ui/primitives/TextLink";
 import { useToast } from "@/ui/primitives/Toast";
 import { t } from "@/ui/strings";
@@ -99,13 +102,52 @@ function Connected({ email, plan, selected }: { email: string | null | undefined
   );
 }
 
+function InternalServer() {
+  const provider = useModelProvider();
+  const save = useSaveModelProvider();
+  const list = useListProviderModels();
+  const [baseUrl, setBaseUrl] = useState<string | null>(null);
+  const [apiKey, setApiKey] = useState("");
+  const [tools, setTools] = useState<boolean | null>(null);
+  const data = provider.data;
+  if (!data) return <Skeleton className="h-6 w-full" />;
+  const url = baseUrl ?? data.base_url ?? "";
+  const supports = tools ?? data.supports_tools ?? false;
+  const options = (list.data?.models ?? []).map((model) => ({ value: model.id, label: model.name }));
+  const store = (model: string | null) => save.mutate({ provider: "litellm", base_url: url, model, supports_tools: supports, ...(apiKey ? { api_key: apiKey } : {}) });
+  return (
+    <div className="flex flex-col gap-3">
+      <Field label={t("settings.models.internal.url")} hint={t("settings.models.internal.urlHint")}>{({ invalid, ...control }) => <Input invalid={invalid} spellCheck={false} value={url} onChange={(event) => setBaseUrl(event.target.value)} {...control} />}</Field>
+      <Field label={t("settings.models.internal.key")} {...(data.has_key ? { hint: t("settings.models.internal.keySaved") } : {})}>{({ invalid, ...control }) => <Input type="password" autoComplete="off" invalid={invalid} value={apiKey} onChange={(event) => setApiKey(event.target.value)} {...control} />}</Field>
+      <Switch label={t("settings.models.internal.tools")} checked={supports} onChange={setTools} />
+      {list.isError ? <ErrorState title={t("settings.models.list.error")} description={messageOf(list.error)} /> : null}
+      {save.isError ? <ErrorState title={t("settings.models.error")} description={messageOf(save.error)} /> : null}
+      <div><Button loading={list.isPending} disabled={!url} onClick={() => list.mutate({ base_url: url, ...(apiKey ? { api_key: apiKey } : {}) })}>{t("settings.models.internal.load")}</Button></div>
+      {options.length ? <Field label={t("settings.models.choose")}>{({ invalid, id }) => <Select id={id} invalid={invalid} {...(data.model ? { value: data.model } : {})} placeholder={t("settings.models.choose.placeholder")} options={options} onChange={(model) => store(model)} />}</Field> : null}
+      {data.provider === "litellm" && data.model ? <p className="text-md text-ink-secondary">{t("settings.models.internal.using", { model: data.model })}</p> : null}
+    </div>
+  );
+}
+
 export function ModelSettings() {
   const status = useModelStatus();
   const start = useStartLogin();
   const login = status.data?.login;
+  const provider = useModelProvider();
+  const saveProvider = useSaveModelProvider();
+  const active = provider.data?.provider ?? "chatgpt";
   return (
     <Card title={t("settings.models.title")} description={t("settings.models.description")}>
-      <div aria-busy={status.isPending}>
+      <div className="mb-4">
+        <Segmented
+          label={t("settings.models.provider")}
+          value={active}
+          options={[{ value: "chatgpt", label: t("settings.models.provider.chatgpt") }, { value: "litellm", label: t("settings.models.provider.internal") }]}
+          onChange={(next) => saveProvider.mutate({ provider: next as "chatgpt" | "litellm", base_url: provider.data?.base_url ?? null, model: provider.data?.model ?? null, supports_tools: provider.data?.supports_tools ?? false })}
+        />
+      </div>
+      {active === "litellm" ? <InternalServer /> : null}
+      <div aria-busy={status.isPending} className={active === "litellm" ? "hidden" : ""}>
         {status.isPending ? <Skeleton className="h-6 w-full" /> : null}
         {status.isError ? <ErrorState title={t("settings.models.status.error")} description={messageOf(status.error)} onRetry={() => void status.refetch()} /> : null}
         {status.data?.connected ? <Connected email={status.data.account_email} plan={status.data.plan} selected={status.data.selected_model} /> : null}

@@ -8,6 +8,7 @@ import { Card } from "@/ui/primitives/Card";
 import { t, type StringKey } from "@/ui/strings";
 import { PstImportCard } from "@/ui/features/mail/PstImportCard";
 import { AccountSettings } from "./AccountSettings";
+import { GuardSettings, NotificationSettings, PermissionsSettings, SendCheckSettingsCard, UsageSettings } from "./AgentSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { ModelSettings } from "./ModelSettings";
 import { PreferencesSettings } from "./PreferencesSettings";
@@ -15,7 +16,6 @@ import { ProfileForm } from "./ProfileForm";
 import { RulesSettings } from "./RulesSettings";
 import { AboutSettings, HomeSettings, NetworkSettings } from "./SystemSettings";
 
-// Accounts, permissions, connectors, rules and more join as their stages arrive.
 const SECTIONS: readonly { id: string; label: StringKey; content: () => ReactNode }[] = [
   { id: "appearance", label: "settings.appearance.title", content: () => <AppearanceSettings /> },
   {
@@ -32,6 +32,11 @@ const SECTIONS: readonly { id: string; label: StringKey; content: () => ReactNod
   { id: "archive", label: "nav.archive", content: () => <PstImportCard /> },
   { id: "rules", label: "settings.section.rules", content: () => <RulesSettings /> },
   { id: "models", label: "settings.models.title", content: () => <ModelSettings /> },
+  { id: "permissions", label: "permissions.title", content: () => <PermissionsSettings /> },
+  { id: "send-checks", label: "checks.title", content: () => <SendCheckSettingsCard /> },
+  { id: "guard", label: "guard.title", content: () => <GuardSettings /> },
+  { id: "usage", label: "usage.title", content: () => <UsageSettings /> },
+  { id: "notifications", label: "notifications.title", content: () => <NotificationSettings /> },
   { id: "home", label: "settings.section.home", content: () => <HomeSettings /> },
   { id: "network", label: "settings.section.network", content: () => <NetworkSettings /> },
   { id: "about", label: "settings.section.about", content: () => <AboutSettings /> },

@@ -26,6 +26,18 @@ function useSessionCommand<T, R>(run: (input: T) => Promise<R>) {
   });
 }
 
+// Kept in memory, because a link would put what the person typed in their browser history.
+const firstMessages = new Map<string, string>();
+
+/** The session screen sends this when it opens. */
+export const leaveFirstMessage = (id: string, text: string) => void firstMessages.set(id, text);
+
+export function takeFirstMessage(id: string): string | undefined {
+  const text = firstMessages.get(id);
+  firstMessages.delete(id);
+  return text;
+}
+
 export const useCreateSession = () => useSessionCommand((input: CreateSession) => command("session.create", input));
 export const useStopSession = () => useSessionCommand((id: string) => command("session.stop", { id }));
 export const useRenameSession = () => useSessionCommand((input: { id: string; title: string }) => command("session.rename", input));

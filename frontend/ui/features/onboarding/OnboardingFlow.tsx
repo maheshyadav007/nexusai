@@ -1,9 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useHomeStatus } from "@/ui/client/home";
 import { useFinishOnboarding, useOnboarding, useSetStep } from "@/ui/client/onboarding";
+import { useCreateSession } from "@/ui/client/sessions";
+import { useStarterPrompts } from "@/ui/client/work";
+import { PromptsEditor } from "@/ui/features/agent/MemoryScreen";
+import { Conversation } from "@/ui/features/sessions/AgentScreen";
+import { PermissionsSettings } from "@/ui/features/settings/AgentSettings";
 import { HomeChooser } from "@/ui/features/home/HomeChooser";
 import { PstImportCard } from "@/ui/features/mail/PstImportCard";
 import { AccountSettings } from "@/ui/features/settings/AccountSettings";
@@ -24,15 +29,45 @@ interface Step {
   optional?: boolean;
 }
 
-// The setup interview, priorities and permissions join as their stages arrive.
 const STEPS: readonly Step[] = [
   { id: "home", label: "setup.home.label", title: "setup.home.title", description: "setup.home.description" },
   { id: "theme", label: "setup.theme.label", title: "setup.theme.title", description: "setup.theme.description" },
   { id: "profile", label: "setup.profile.label", title: "setup.profile.title", description: "setup.profile.description" },
   { id: "mail", label: "setup.mail.label", title: "setup.mail.title", description: "setup.mail.description", optional: true },
   { id: "model", label: "setup.model.label", title: "setup.model.title", description: "setup.model.description", optional: true },
+  { id: "interview", label: "setup.interview.label", title: "setup.interview.title", description: "setup.interview.description", optional: true },
+  { id: "priorities", label: "setup.priorities.label", title: "setup.priorities.title", description: "setup.priorities.description", optional: true },
   { id: "pst", label: "setup.pst.label", title: "setup.pst.title", description: "setup.pst.description", optional: true },
+  { id: "permissions", label: "permissions.title", title: "setup.permissions.title", description: "setup.permissions.description" },
 ];
+
+/** Optional: the agent asks about the person, then writes prompts they can edit. */
+function InterviewStep() {
+  const create = useCreateSession();
+  const [session, setSession] = useState<string | null>(null);
+  if (!session) {
+    return (
+      <div>
+        <Button loading={create.isPending} onClick={() => create.mutate({ title: t("setup.interview.label"), agent: "interview" }, { onSuccess: (row) => setSession(row.id) })}>
+          {t("setup.interview.start")}
+        </Button>
+        {create.isError ? <ErrorState title={t("sessions.error")} description={create.error.message} /> : null}
+      </div>
+    );
+  }
+  return (
+    <div className="flex h-drawer flex-col">
+      <Conversation id={session} initial={[]} active={false} />
+    </div>
+  );
+}
+
+function PrioritiesStep() {
+  const starters = useStarterPrompts();
+  const { mutate } = starters;
+  useEffect(() => mutate(undefined), [mutate]);
+  return <PromptsEditor only={["importance", "categories"]} />;
+}
 
 function Frame({ step, index, actions, children }: { step: Step; index: number; actions?: ReactNode; children: ReactNode }) {
   return (
@@ -125,7 +160,10 @@ export function OnboardingFlow() {
       {step.id === "theme" ? <AppearanceSettings /> : null}
       {step.id === "mail" ? <AccountSettings /> : null}
       {step.id === "model" ? <ModelSettings /> : null}
+      {step.id === "interview" ? <InterviewStep /> : null}
+      {step.id === "priorities" ? <PrioritiesStep /> : null}
       {step.id === "pst" ? <PstImportCard /> : null}
+      {step.id === "permissions" ? <PermissionsSettings /> : null}
     </Frame>
   );
 }

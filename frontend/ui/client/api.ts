@@ -1,4 +1,69 @@
 import type {
+  ActivityList,
+  AgentChannelList,
+  BoardList,
+  ChannelList,
+  CheckDraft,
+  DecideMemoryProposal,
+  DismissChannel,
+  GetGuardRules,
+  GetModelProvider,
+  GetQuietHours,
+  GetSendChecks,
+  GetThreadRuns,
+  GetToday,
+  GetUsage,
+  GuardRules,
+  GuardTestResult,
+  JobList,
+  ListActivity,
+  ListAgentChannel,
+  ListBoard,
+  ListChannel,
+  ListJobs,
+  ListMemory,
+  ListPrompts,
+  ListProviderModels,
+  ListReminders,
+  ListSchedules,
+  ListTasks,
+  MemoryList,
+  ModelProviderView,
+  PlannerDone,
+  PromptList,
+  QuietHours,
+  ReminderAction,
+  ReminderList,
+  RemoveMemory,
+  RemoveSchedule,
+  RespondChannel,
+  RunSchedule,
+  SaveMemory,
+  SaveModelProvider,
+  SavePrompt,
+  SaveReminder,
+  SaveTask,
+  Schedule,
+  ScheduleList,
+  SendCheckResult,
+  SendCheckSettings,
+  SessionContext,
+  SetDailyCap,
+  SetDefaults,
+  SetSessionContext,
+  SetTopicMuted,
+  SnoozeReminder,
+  SummarizeThread,
+  TaskAction,
+  TaskList,
+  TestGuardRules,
+  ThreadRuns,
+  ThreadSummary,
+  TodayView,
+  TriageEstimate,
+  TriageExisting,
+  UndoActivity,
+  UsageView,
   AgentDone,
   ApprovalList,
   CreateSession,
@@ -139,6 +204,34 @@ interface Commands {
   "session.archive": [SessionAction, AgentDone];
   "approvals.decide": [DecideApproval, AgentDone];
   "permissions.save": [Permissions, Permissions];
+  "channel.respond": [RespondChannel, AgentDone];
+  "channel.dismiss": [DismissChannel, AgentDone];
+  "agentChannel.setMuted": [SetTopicMuted, AgentDone];
+  "tasks.save": [SaveTask, PlannerDone];
+  "tasks.remove": [TaskAction, PlannerDone];
+  "reminders.save": [SaveReminder, PlannerDone];
+  "reminders.snooze": [SnoozeReminder, PlannerDone];
+  "reminders.remove": [ReminderAction, PlannerDone];
+  "schedules.save": [Schedule, ScheduleList];
+  "schedules.remove": [RemoveSchedule, ScheduleList];
+  "schedules.runNow": [RunSchedule, AgentDone];
+  "schedules.setDefaults": [SetDefaults, ScheduleList];
+  "activity.undo": [UndoActivity, AgentDone];
+  "prompts.save": [SavePrompt, AgentDone];
+  "prompts.useStarters": [ListPrompts, AgentDone];
+  "memory.save": [SaveMemory, AgentDone];
+  "memory.remove": [RemoveMemory, AgentDone];
+  "memory.decide": [DecideMemoryProposal, AgentDone];
+  "thread.summarize": [SummarizeThread, ThreadSummary];
+  "triage.existing": [TriageExisting, TriageEstimate];
+  "session.setContext": [SetSessionContext, AgentDone];
+  "usage.setCap": [SetDailyCap, UsageView];
+  "quietHours.save": [QuietHours, QuietHours];
+  "sendChecks.save": [SendCheckSettings, SendCheckSettings];
+  "guard.save": [GuardRules, GuardRules];
+  "guard.test": [TestGuardRules, GuardTestResult];
+  "models.provider.save": [SaveModelProvider, ModelProviderView];
+  "models.provider.listModels": [ListProviderModels, AvailableModels];
 }
 
 interface Queries {
@@ -170,6 +263,27 @@ interface Queries {
   "approvals.list": [ListApprovals, ApprovalList];
   "modelCall.get": [GetModelCall, ModelCallView];
   "permissions.get": [GetPermissions, Permissions];
+  "today.view": [GetToday, TodayView];
+  "channel.list": [ListChannel, ChannelList];
+  "board.list": [ListBoard, BoardList];
+  "agentChannel.list": [ListAgentChannel, AgentChannelList];
+  "tasks.list": [ListTasks, TaskList];
+  "reminders.list": [ListReminders, ReminderList];
+  "schedules.list": [ListSchedules, ScheduleList];
+  "jobs.list": [ListJobs, JobList];
+  "activity.list": [ListActivity, ActivityList];
+  "prompts.list": [ListPrompts, PromptList];
+  "memory.list": [ListMemory, MemoryList];
+  "thread.summary": [SummarizeThread, ThreadSummary];
+  "triage.runs": [GetThreadRuns, ThreadRuns];
+  "triage.estimate": [ListJobs, TriageEstimate];
+  "session.context": [SessionAction, SessionContext];
+  "usage.get": [GetUsage, UsageView];
+  "quietHours.get": [GetQuietHours, QuietHours];
+  "sendChecks.get": [GetSendChecks, SendCheckSettings];
+  "guard.rules": [GetGuardRules, GuardRules];
+  "models.provider": [GetModelProvider, ModelProviderView];
+  "mail.checkSend": [CheckDraft, SendCheckResult];
 }
 
 export class ApiRequestError extends Error {

@@ -99,7 +99,8 @@ test("approvals can be answered from the top bar, and a denied command never run
   await page.goto("/today");
   await page.getByRole("button", { name: "Approvals, 1 waiting" }).click();
   await noViolations(page);
-  await page.getByRole("button", { name: "Deny" }).click();
+  // Today shows the same approval, so this answers the one in the top bar's list.
+  await page.getByRole("dialog", { name: "Approvals" }).getByRole("button", { name: "Deny" }).click();
   await expect(page.getByRole("button", { name: "Approvals", exact: true })).toBeVisible();
 
   await page.goto("/agent/sessions");
@@ -135,7 +136,7 @@ test("stop ends the work, and the session can carry on", async ({ page }) => {
   await newSession(page);
   await say(page, "slow one to stop");
   await expect(page.getByTestId("agent-message")).toContainText("word1", { timeout: 10_000 });
-  await page.getByRole("button", { name: "Stop" }).click();
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
   await expect(page.getByTestId("session-status")).toContainText("Stopped", { timeout: 10_000 });
   const text = await page.getByTestId("agent-message").innerText();
   expect(text).not.toContain("word29");

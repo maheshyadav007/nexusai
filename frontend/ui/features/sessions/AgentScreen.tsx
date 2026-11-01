@@ -3,10 +3,13 @@
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useApprovals, useModelCall, useSession, useStopSession } from "@/ui/client/sessions";
+import { takeFirstMessage, useApprovals, useModelCall, useSession, useStopSession } from "@/ui/client/sessions";
+import { useSessionContext, useSetContext } from "@/ui/client/work";
 import { ApprovalDetails } from "@/ui/shell/ApprovalQueue";
+import { Badge } from "@/ui/primitives/Badge";
 import { Button } from "@/ui/primitives/Button";
 import { Dialog } from "@/ui/primitives/Dialog";
+import { IconButton } from "@/ui/primitives/IconButton";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Textarea } from "@/ui/primitives/Input";
 import { Skeleton } from "@/ui/primitives/Skeleton";
@@ -124,7 +127,24 @@ function FinalPrompt({ session }: { session: string }) {
   );
 }
 
-function Conversation({ id, initial, active }: { id: string; initial: UIMessage[]; active: boolean }) {
+function ContextChips({ id }: { id: string }) {
+  const context = useSessionContext(id);
+  const setContext = useSetContext();
+  const items = context.data?.items ?? [];
+  if (!items.length) return null;
+  return (
+    <ul aria-label={t("sessions.context")} className="flex flex-wrap items-center gap-2">
+      {items.map((item) => (
+        <li key={item.ref} data-testid="context-chip" className="flex items-center gap-1">
+          <Badge>{item.label}</Badge>
+          <IconButton icon="close" tooltip={false} label={t("sessions.context.remove", { label: item.label })} onClick={() => setContext.mutate({ id, context: items.filter((other) => other.ref !== item.ref).map((other) => other.ref) })} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function Conversation({ id, initial, active }: { id: string; initial: UIMessage[]; active: boolean }) {
   const transport = useMemo(
     () =>
       new DefaultChatTransport<UIMessage>({
@@ -142,6 +162,15 @@ function Conversation({ id, initial, active }: { id: string; initial: UIMessage[
   const stop = useStopSession();
   const [text, setText] = useState("");
   const end = useRef<HTMLDivElement>(null);
+  const { sendMessage } = chat;
+  useEffect(() => {
+    // useChat stops the chat when an effect is cleaned up, which React's checks do once on mount.
+    const timer = setTimeout(() => {
+      const first = takeFirstMessage(id);
+      if (first) void sendMessage({ text: first });
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [id, sendMessage]);
   const busy = chat.status === "submitted" || chat.status === "streaming";
   useEffect(() => {
     end.current?.scrollIntoView?.({ block: "end" });
@@ -159,6 +188,7 @@ function Conversation({ id, initial, active }: { id: string; initial: UIMessage[
         ))}
         <div ref={end} />
       </div>
+      <ContextChips id={id} />
       {chat.error ? <ErrorState title={t("sessions.failed")} description={chat.error.message} /> : null}
       <form
         className="flex flex-col gap-2"

@@ -114,6 +114,7 @@ class CreateSession(BaseModel):
 
     title: str | None = Field(default=None, max_length=200)
     context: list[str] = Field(default_factory=list, max_length=20)
+    agent: Literal["session", "interview"] = "session"
 
 
 class SessionRow(BaseModel):

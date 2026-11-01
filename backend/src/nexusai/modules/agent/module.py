@@ -172,7 +172,7 @@ def current() -> runtime.SessionRuntime:
 
 @agent_module.command("session.create")
 def create_session(command: CreateSession, ctx: Context) -> SessionRow:
-    return current().create(command.title, command.context)
+    return current().create(command.title, command.context, command.agent)
 
 
 @agent_module.query("sessions.list")

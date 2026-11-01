@@ -24,19 +24,18 @@
     {
       "id": "agent",
       "labelKey": "nav.agent",
-      "arrivesKey": "placeholder.agent",
       "items": [
         { "id": "sessions", "labelKey": "nav.sessions", "icon": "sessions", "href": "/agent/sessions" },
         { "id": "channel", "labelKey": "nav.channel", "icon": "channel", "href": "/agent/channel" },
         { "id": "memory", "labelKey": "nav.memory", "icon": "memory", "href": "/agent/memory" },
         { "id": "background", "labelKey": "nav.background", "icon": "background", "href": "/agent/background" },
-        { "id": "schedules", "labelKey": "nav.schedules", "icon": "schedules", "href": "/agent/schedules", "arrivesKey": "placeholder.daily" }
+        { "id": "activity", "labelKey": "nav.activity", "icon": "activity", "href": "/agent/activity" },
+        { "id": "schedules", "labelKey": "nav.schedules", "icon": "schedules", "href": "/agent/schedules" }
       ]
     },
     {
       "id": "planner",
       "labelKey": "nav.planner",
-      "arrivesKey": "placeholder.daily",
       "items": [
         { "id": "tasks", "labelKey": "nav.tasks", "icon": "tasks", "href": "/planner/tasks" },
         { "id": "reminders", "labelKey": "nav.reminders", "icon": "reminders", "href": "/planner/reminders" }

@@ -106,7 +106,29 @@ def create_fake() -> FastAPI:
             def event(kind: str, **fields: Any) -> str:
                 return f"data: {json.dumps({'type': kind, **fields})}\n\n"
 
-            if last.get("type") == "function_call_output":
+            if "You triage one mail conversation" in body.get("instructions", ""):
+                urgent = "urgent" in said.lower()
+                reply = {
+                    "category": "Action",
+                    "importance": "high" if urgent else "normal",
+                    "status": "waiting_on_you",
+                    "summary": "Someone needs a reply.",
+                    "reason": "It asks you a direct question.",
+                    "facts": ["Due soon"],
+                    "suggested_action": "Reply today",
+                    "deadlines": [],
+                    "tasks": [{"title": "Reply to this mail", "due": None}]
+                    if "task" in said.lower()
+                    else [],
+                    "reminders": [],
+                    "draft": "Thanks, I'll look at this." if "draft" in said.lower() else None,
+                    "memory": "Remember this person." if "remember" in said.lower() else None,
+                    "question": "Is this urgent for you?" if "question" in said.lower() else None,
+                }
+                yield event("response.output_text.delta", delta=json.dumps(reply))
+            elif "Summarize a mail conversation" in body.get("instructions", ""):
+                yield event("response.output_text.delta", delta="They want the numbers by Friday.")
+            elif last.get("type") == "function_call_output":
                 yield event("response.output_text.delta", delta=f"Tool said: {last['output'][:60]}")
             elif "run a command" in said:
                 arguments = json.dumps(
