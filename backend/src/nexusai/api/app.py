@@ -44,6 +44,7 @@ from nexusai.modules.models.module import models_module, reset_login
 from nexusai.modules.notifications.module import notifications_module
 from nexusai.modules.onboarding.module import onboarding_module
 from nexusai.modules.panels.module import panels_module
+from nexusai.modules.planner.module import planner_module
 from nexusai.modules.settings.module import settings_module
 from nexusai.modules.system.module import system_module
 
@@ -56,6 +57,7 @@ MODULES: list[Module] = [
     mail_module,
     documents_module,
     panels_module,
+    planner_module,
     agent_module,
 ]
 log = structlog.get_logger()

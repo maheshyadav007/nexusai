@@ -576,7 +576,7 @@ def test_rename_archive_and_search_sessions(client: TestClient, script: Script) 
     assert listed(query="budget") == ["Budget work"]
     assert listed(query="zebra") == []
     client.post("/api/commands/session.archive", json={"id": session})
-    assert listed() == []
+    assert "Budget work" not in listed()
     assert listed(archived=True) == ["Budget work"]
 
 

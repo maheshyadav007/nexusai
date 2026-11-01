@@ -381,3 +381,37 @@ class PstImportAction(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: int
+
+
+CheckLevel = Literal["off", "warn", "block"]
+
+
+class SendCheckSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    external_recipient: CheckLevel = "warn"
+    missing_attachment: CheckLevel = "warn"
+    newer_reply: CheckLevel = "warn"
+    undo_seconds: int = Field(default=5, ge=0, le=60)
+
+
+class GetSendChecks(BaseModel):
+    pass
+
+
+class CheckDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    draft: Draft
+    written_after: str | None = Field(default=None, max_length=64)
+
+
+class SendProblem(BaseModel):
+    check: str
+    level: Literal["warn", "block"]
+    message: str
+
+
+class SendCheckResult(BaseModel):
+    problems: list[SendProblem]
+    undo_seconds: int

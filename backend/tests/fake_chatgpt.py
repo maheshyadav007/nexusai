@@ -109,8 +109,15 @@ def create_fake() -> FastAPI:
             if last.get("type") == "function_call_output":
                 yield event("response.output_text.delta", delta=f"Tool said: {last['output'][:60]}")
             elif "run a command" in said:
-                arguments = json.dumps({"command": "echo from-the-agent", "why": "Prove commands work"})
-                item = {"type": "function_call", "call_id": f"call-{uuid.uuid4().hex[:8]}", "name": "run_command", "arguments": arguments}
+                arguments = json.dumps(
+                    {"command": "echo from-the-agent", "why": "Prove commands work"}
+                )
+                item = {
+                    "type": "function_call",
+                    "call_id": f"call-{uuid.uuid4().hex[:8]}",
+                    "name": "run_command",
+                    "arguments": arguments,
+                }
                 yield event("response.output_item.done", item=item)
             elif "slow" in said:
                 for number in range(30):
@@ -119,7 +126,9 @@ def create_fake() -> FastAPI:
             else:
                 for piece in ("Hello ", "from ", body["model"]):
                     yield event("response.output_text.delta", delta=piece)
-            yield event("response.completed", response={"usage": {"input_tokens": 11, "output_tokens": 3}})
+            yield event(
+                "response.completed", response={"usage": {"input_tokens": 11, "output_tokens": 3}}
+            )
 
         return StreamingResponse(stream(), media_type="text/event-stream")
 

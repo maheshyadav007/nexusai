@@ -1,4 +1,5 @@
 import json
+import re
 import threading
 from datetime import UTC, datetime
 from email.utils import parseaddr
@@ -8,6 +9,7 @@ import structlog
 
 from nexusai.contracts.mail import (
     AddPstImport,
+    CheckDraft,
     ConnectionResult,
     Draft,
     DraftList,
@@ -15,6 +17,7 @@ from nexusai.contracts.mail import (
     GetMailStatus,
     GetPstImports,
     GetRules,
+    GetSendChecks,
     GetThread,
     ListDrafts,
     ListThreads,
@@ -38,7 +41,10 @@ from nexusai.contracts.mail import (
     SaveMailAccount,
     SearchMail,
     SearchResults,
+    SendCheckResult,
+    SendCheckSettings,
     SendDraft,
+    SendProblem,
     SetThreadCategory,
     SetThreadFlag,
     SetThreadRead,
@@ -55,6 +61,7 @@ from nexusai.modules.mail.parse import normalize_subject
 from nexusai.modules.mail.sync import MailSync
 
 log = structlog.get_logger()
+ATTACHED_WORDS = re.compile(r"\b(attached|attachment|enclosed|첨부)\b|첨부", re.I)
 mail_module = Module(name="mail", migrations=[*store.MIGRATIONS, pst.MIGRATION])
 
 _sync: MailSync | None = None
@@ -514,10 +521,88 @@ def reply_draft(query: ReplyContext, ctx: Context) -> ReplyDraft:
     )
 
 
+def _send_checks(ctx: Context) -> SendCheckSettings:
+    rows = ctx.bus.db.fetch_all("SELECT value FROM settings WHERE key = 'send_checks'")
+    return SendCheckSettings.model_validate_json(rows[0]["value"]) if rows else SendCheckSettings()
+
+
+@mail_module.query("sendChecks.get")
+def get_send_checks(query: GetSendChecks, ctx: Context) -> SendCheckSettings:
+    return _send_checks(ctx)
+
+
+@mail_module.command("sendChecks.save")
+def save_send_checks(command: SendCheckSettings, ctx: Context) -> SendCheckSettings:
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO settings (key, value) VALUES ('send_checks', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+            (command.model_dump_json(),),
+        )
+    return command
+
+
+def _problems(
+    ctx: Context, draft: Draft, written_after: str | None, settings: SendCheckSettings
+) -> list[SendProblem]:
+    found: list[SendProblem] = []
+
+    def add(check: str, level: str, message: str) -> None:
+        if level != "off":
+            found.append(SendProblem(check=check, level=level, message=message))  # type: ignore[arg-type]
+
+    active, profiles = accounts.read_accounts(ctx.config)
+    domain = profiles[active].auth.user.rsplit("@", 1)[-1].lower() if active else ""
+    recipients = [r.address.lower() for r in [*draft.to, *draft.cc, *draft.bcc]]
+    if draft.thread_id is not None and domain:
+        rows = ctx.bus.db.fetch_all(
+            "SELECT participants FROM threads WHERE id = ?", (draft.thread_id,)
+        )
+        people = json.loads(rows[0]["participants"]) if rows else []
+        internal = bool(people) and all(p.rsplit("@", 1)[-1] == domain for p in people)
+        outside = [a for a in recipients if a.rsplit("@", 1)[-1] != domain]
+        if internal and outside:
+            add(
+                "external_recipient",
+                settings.external_recipient,
+                f"This internal conversation would go outside: {', '.join(outside)}.",
+            )
+    if ATTACHED_WORDS.search(draft.body):
+        add(
+            "missing_attachment",
+            settings.missing_attachment,
+            "It mentions an attachment, but nothing is attached.",
+        )
+    if draft.thread_id is not None and written_after:
+        newer = ctx.bus.db.fetch_all(
+            "SELECT 1 FROM messages WHERE thread_id = ? AND date > ? AND folder_role = 'inbox' LIMIT 1",
+            (draft.thread_id, written_after),
+        )
+        if newer:
+            add(
+                "newer_reply",
+                settings.newer_reply,
+                "A new reply arrived after you started this draft.",
+            )
+    return found
+
+
+@mail_module.query("mail.checkSend")
+def check_send(query: CheckDraft, ctx: Context) -> SendCheckResult:
+    settings = _send_checks(ctx)
+    return SendCheckResult(
+        problems=_problems(ctx, query.draft, query.written_after, settings),
+        undo_seconds=settings.undo_seconds,
+    )
+
+
 @mail_module.command("mail.send")
 def send_mail(command: SendDraft, ctx: Context) -> MailDone:
     active, profile, password = _active_profile(ctx)
     draft = command.draft
+    # A Block setting can't be skipped by calling this directly.
+    blocked = [p for p in _problems(ctx, draft, None, _send_checks(ctx)) if p.level == "block"]
+    if blocked:
+        raise CommandError("mail.send_blocked", blocked[0].message, 422)
     in_reply_to, references = _threading_headers(ctx, draft)
     message = send.build_message(draft, profile, _sender_name(ctx), in_reply_to, references)
     try:

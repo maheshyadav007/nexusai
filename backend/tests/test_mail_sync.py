@@ -616,3 +616,46 @@ def test_mail_content_never_reaches_logs(
     thread_with(client, "Secret merger")
     logged = "".join(p.read_text() for p in (config.home / "system" / "logs").glob("*.jsonl"))
     assert "bluebird" not in logged and "Secret merger" not in logged and PASSWORD not in logged
+
+
+def test_send_checks_warn_block_and_can_be_turned_off(client: TestClient, fake: FakeMail) -> None:
+    connect(client, fake)
+    fake.state.deliver(
+        make_mail(
+            subject="Internal",
+            sender=f"boss@{USER.rsplit('@')[1]}",
+            message_id="<i@x>",
+            date="Mon, 5 Jan 2026 10:00:00 +0000",
+        )
+    )
+    thread = thread_with(client, "Internal")
+    draft = {
+        "thread_id": thread["id"],
+        "to": [{"address": "outsider@other.org"}],
+        "subject": "Re: Internal",
+        "body": "See the attached file.",
+    }
+
+    def check(**extra: Any) -> dict[str, Any]:
+        return client.post("/api/queries/mail.checkSend", json={"draft": draft, **extra}).json()
+
+    found = {p["check"]: p for p in check(written_after="2020-01-01")["problems"]}
+    assert set(found) == {"external_recipient", "missing_attachment", "newer_reply"}
+    assert all(p["level"] == "warn" for p in found.values())
+    assert "outsider@other.org" in found["external_recipient"]["message"]
+    assert check(written_after="2099-01-01")["undo_seconds"] == 5
+    assert client.post("/api/commands/mail.send", json={"draft": draft}).status_code == 200
+
+    client.post(
+        "/api/commands/sendChecks.save",
+        json={
+            "external_recipient": "block",
+            "missing_attachment": "off",
+            "newer_reply": "off",
+            "undo_seconds": 0,
+        },
+    )
+    assert [p["check"] for p in check()["problems"]] == ["external_recipient"]
+    refused = client.post("/api/commands/mail.send", json={"draft": draft})
+    assert refused.status_code == 422 and refused.json()["code"] == "mail.send_blocked"
+    assert len(fake.sent) == 1

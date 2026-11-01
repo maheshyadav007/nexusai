@@ -13,17 +13,21 @@ from typing import Any
 
 import structlog
 from langchain.agents import create_agent
+from langchain.agents.middleware import SummarizationMiddleware
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.errors import GraphRecursionError
 from langgraph.types import Command
 
 from nexusai.contracts.agent import ApprovalList, SessionRow, SessionView, ToolApproval
+from nexusai.contracts.documents import GetDocument
 from nexusai.kernel.database import Migration
 from nexusai.kernel.home import scratch_folder
 from nexusai.kernel.module import CommandError, Context
 from nexusai.modules.agent import (
+    channel,
     gateway,
     guard,
+    memory,
     policy,
     prompts_builder,
     providers,
@@ -31,6 +35,7 @@ from nexusai.modules.agent import (
     ui_stream,
 )
 from nexusai.modules.agent.model import GatewayChatModel
+from nexusai.modules.mail import store
 
 log = structlog.get_logger()
 MIGRATION = Migration(
@@ -199,6 +204,19 @@ class SessionRuntime:
 
     # Running
 
+    def context_text(self, session: str) -> str:
+        """What the person attached, as data for the model. Reading it counts as reading mail."""
+        rows = self.db.fetch_all("SELECT context FROM agent_sessions WHERE id = ?", (session,))
+        refs = json.loads(rows[0]["context"]) if rows else []
+        blocks = [resolve_context(self.ctx, ref) for ref in refs]
+        if not blocks:
+            return ""
+        with self.db.transaction() as tx:
+            tx.execute(
+                "UPDATE agent_sessions SET untrusted = 1, context = '[]' WHERE id = ?", (session,)
+            )
+        return "<untrusted>\n" + "\n\n".join(blocks) + "\n</untrusted>\n\n"
+
     def send(self, session: str, text: str) -> int:
         row = self.row(session)
         with self.lock:
@@ -217,22 +235,43 @@ class SessionRuntime:
                 text.strip().splitlines()[0][:TITLE_LENGTH] if text.strip() else row.title
             )
         self._set(session, **values)
-        self._submit(session, turn, {"messages": [{"role": "user", "content": text}]})
+        attached = self.context_text(session)
+        self._submit(session, turn, {"messages": [{"role": "user", "content": attached + text}]})
         return turn
+
+    def run_scheduled(self, title: str, prompt: str, agent: str) -> str:
+        session = self.create(title, [], agent)
+        self.send(session.id, prompt)
+        return session.id
 
     def _submit(self, session: str, turn: int, payload: Any) -> None:
         self.pool.submit(self._run, session, turn, payload)
 
     def _agent(self, session: str, row: SessionRow, control: tools.RunControl) -> Any:
-        context = self.ctx.config
+        config = self.ctx.config
+        latest = self.db.fetch_all(
+            "SELECT text FROM agent_turns WHERE session = ? ORDER BY id DESC LIMIT 1", (session,)
+        )
+        recalled = memory.relevant(
+            config.home,
+            row.agent,
+            latest[0]["text"] if latest else "",
+            config.agent.memory_max_chars,
+        )
         layers = prompts_builder.build_layers(
-            context,
-            "session",
-            scratch=str(context.home / "scratch" / session),
+            config, row.agent, memory=recalled, scratch=str(config.home / "scratch" / session)
         )
         model = GatewayChatModel(ctx=self.ctx, agent=row.agent, session=session, layers=layers)
+        summarizer = SummarizationMiddleware(
+            model=model.model_copy(update={"agent": "compress"}),
+            trigger=("tokens", config.agent.compress_after_chars // 4),
+            keep=("messages", 12),
+        )
         return create_agent(
-            model, tools.build_tools(self.ctx, session, control), checkpointer=self.saver
+            model,
+            tools.build_tools(self.ctx, session, control),
+            middleware=[summarizer],
+            checkpointer=self.saver,
         )
 
     def _run(self, session: str, turn: int, payload: Any) -> None:
@@ -268,7 +307,7 @@ class SessionRuntime:
                 self._append(turn, translator.close_open_blocks())
                 self._record_usage(session)
                 self._announce_approvals(turn, pending)
-                self._set(session, status="waiting", step="Waiting for your approval")
+                self._set(session, status="waiting", step="Waiting for you")
                 return
             self._finish(session, turn, translator, "done", None, "finish")
         except (
@@ -345,6 +384,12 @@ class SessionRuntime:
                 )
         self._append(turn, parts)
 
+    def answered(self, session: str) -> None:
+        """A question in the channel got its answer."""
+        turn = self.active_turn(session)
+        if turn is not None:
+            self._resume_if_ready(session, turn)
+
     def decide(self, approval: int, choice: str) -> None:
         rows = self.db.fetch_all("SELECT * FROM tool_approvals WHERE id = ?", (approval,))
         if not rows:
@@ -381,15 +426,14 @@ class SessionRuntime:
         )
         if not approved:
             self._append(turn, [{"type": "tool-output-denied", "toolCallId": row["tool_call_id"]}])
-        # Other approvals from the same step still wait. The run continues once they're all decided.
-        waiting = self.db.fetch_all(
-            "SELECT COUNT(*) AS n FROM tool_approvals WHERE session = ? AND status = 'pending'",
-            (session,),
-        )[0]["n"]
-        if waiting:
-            return
+        self._resume_if_ready(session, turn)
+
+    def _resume_if_ready(self, session: str, turn: int) -> None:
+        # Others from the same step may still wait. The run continues once they're all decided.
         interrupts = self._pending_interrupts(session)
         answers = {item_id: self._answer_for(value) for item_id, value in interrupts}
+        if not answers or any(answer is None for answer in answers.values()):
+            return
         self._set(session, status="queued", step=None)
         self._submit(session, turn, Command(resume=answers))
 
@@ -398,11 +442,23 @@ class SessionRuntime:
         snapshot = agent.get_state({"configurable": {"thread_id": session}})
         return [(item.id, item.value) for task in snapshot.tasks for item in task.interrupts]
 
-    def _answer_for(self, value: dict[str, Any]) -> str:
-        rows = self.db.fetch_all(
-            "SELECT status FROM tool_approvals WHERE id = ?", (value.get("approval"),)
-        )
-        return str(rows[0]["status"]) if rows else "denied"
+    def _answer_for(self, value: dict[str, Any]) -> str | None:
+        if "approval" in value:
+            rows = self.db.fetch_all(
+                "SELECT status FROM tool_approvals WHERE id = ?", (value["approval"],)
+            )
+            status = rows[0]["status"] if rows else "denied"
+            return None if status == "pending" else str(status)
+        if "channel" in value:
+            row = channel.get(self.db, value["channel"])
+            if row["status"] == "open":
+                return None
+            return (
+                str(row["answer"])
+                if row["status"] == "answered"
+                else "They skipped this. Use your best judgement."
+            )
+        return "denied"
 
     def stop(self, session: str) -> None:
         with self.lock:
@@ -501,6 +557,55 @@ def _row(row: Any) -> SessionRow:
         updated=row["updated"],
         archived=bool(row["archived"]),
     )
+
+
+def resolve_context(ctx: Context, ref: str) -> str:
+    """The text behind an attached item, such as thread:12, document:u:3, task:4 or text:..."""
+    kind, _, value = ref.partition(":")
+    if kind == "text":
+        return f"Selected text:\n{value}"
+    if kind == "thread":
+        view = store.thread_view(ctx.bus.db, int(value))
+        if view is None:
+            return ""
+        body = "\n\n".join(
+            f"From {m.from_name} <{m.from_addr}>\n{m.own_text}"
+            for m in view.messages[-ctx.config.agent.max_recent_thread_messages :]
+        )
+        return f"Mail conversation {value}: {view.thread.subject}\n{body}"[
+            : ctx.config.agent.max_thread_chars
+        ]
+    if kind == "document":
+        try:
+            return f"Document {value}:\n{tools.get_document(GetDocument(key=value), ctx).text}"[
+                : ctx.config.agent.max_thread_chars
+            ]
+        except CommandError:
+            return ""
+    if kind == "task":
+        rows = ctx.bus.db.fetch_all(
+            "SELECT title, notes, due, thread FROM tasks WHERE id = ?", (int(value),)
+        )
+        if not rows:
+            return ""
+        return f"Task {value}: {rows[0]['title']}\nDue: {rows[0]['due']}\nNotes: {rows[0]['notes']}\nConversation: {rows[0]['thread']}"
+    return ""
+
+
+def context_label(ctx: Context, ref: str) -> str:
+    kind, _, value = ref.partition(":")
+    if kind == "thread":
+        rows = ctx.bus.db.fetch_all("SELECT subject FROM threads WHERE id = ?", (int(value),))
+        return rows[0]["subject"] if rows else value
+    if kind == "document":
+        try:
+            return tools.get_document(GetDocument(key=value), ctx).document.name
+        except CommandError:
+            return value
+    if kind == "task":
+        rows = ctx.bus.db.fetch_all("SELECT title FROM tasks WHERE id = ?", (int(value),))
+        return rows[0]["title"] if rows else value
+    return value[:60]
 
 
 def approvals_view(db: Any) -> ApprovalList:

@@ -15,7 +15,7 @@ PERSONAL_ORDER = ("about-me.md", "importance.md", "categories.md", "senders.md",
 TOOLS_TO_REPORT = ("python3", "git", "node", "uv")
 
 
-def _packaged(name: str) -> str:
+def packaged(name: str) -> str:
     return resources.files(__package__).joinpath("prompts", name).read_text("utf-8")
 
 
@@ -49,18 +49,20 @@ def personal_prompts(home: Path) -> str:
 
 
 def agent_prompt(home: Path, agent: str) -> str:
-    base = _packaged(f"{agent}.md")
+    base = packaged(f"{agent}.md")
     added = home / "prompts" / "agents" / f"{agent}.md"
     return f"{base}\n\n{added.read_text('utf-8').strip()}" if added.exists() else base
 
 
 def build_layers(config: Config, agent: str, memory: str = "", **values: str) -> list[Layer]:
     home = config.home
+    # Only the known fields are filled in, so braces in someone's own prompt stay as written.
+    text = agent_prompt(home, agent)
+    for name, value in values.items():
+        text = text.replace(f"{{{name}}}", value)
     layers = [
-        Layer(
-            "System prompt", _packaged("system.md").format(system_context=system_context(config))
-        ),
-        Layer("Agent prompt", agent_prompt(home, agent).format(**values)),
+        Layer("System prompt", packaged("system.md").format(system_context=system_context(config))),
+        Layer("Agent prompt", text),
     ]
     personal = personal_prompts(home)
     if personal:
