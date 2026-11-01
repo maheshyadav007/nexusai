@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin:0; padding:0; background:#0B0D12; }
+  body { font-family:Inter, -apple-system, "SF Pro Display", system-ui, sans-serif; -webkit-font-smoothing:antialiased; color:#E7EAF0; }
+  a { color:#7FB0FF; text-decoration:none; }
+  a:hover { color:#A8C9FF; }
+  *::-webkit-scrollbar { width:8px; height:8px; }
+  *::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.07); border-radius:8px; }
+  *::-webkit-scrollbar-track { background:transparent; }
+  @keyframes nx-pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.45; transform:scale(.82); } }
+  @keyframes nx-rise { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes nx-bar { 0% { transform:scaleX(.15); } 50% { transform:scaleX(1); } 100% { transform:scaleX(.15); } }
+</style>
+</helmet>
+<div style="display:flex; height:100vh; min-height:720px; width:100%; min-width:1440px; overflow:hidden; background:
+  radial-gradient(1100px 600px at 18% -10%, rgba(76,141,255,0.10), transparent 60%),
+  radial-gradient(900px 500px at 100% 0%, rgba(53,194,217,0.06), transparent 55%), #0B0D12; color:#E7EAF0; font-size:14px;">
+
+  <!-- LEFT RAIL -->
+  <div style="width:76px; flex:0 0 76px; display:flex; flex-direction:column; align-items:center; padding:14px 0 16px; gap:4px; background:rgba(11,13,18,0.6); border-right:1px solid rgba(255,255,255,0.05); backdrop-filter:blur(24px);">
+    <div style="display:flex; gap:7px; align-self:flex-start; padding:2px 0 16px 16px;">
+      <div style="width:11px; height:11px; border-radius:50%; background:rgba(255,255,255,0.09);"></div>
+      <div style="width:11px; height:11px; border-radius:50%; background:rgba(255,255,255,0.09);"></div>
+      <div style="width:11px; height:11px; border-radius:50%; background:rgba(255,255,255,0.09);"></div>
+    </div>
+    <div style="width:34px; height:34px; border-radius:11px; display:grid; place-items:center; background:linear-gradient(150deg, rgba(76,141,255,0.9), rgba(53,194,217,0.75)); box-shadow:0 6px 18px rgba(76,141,255,0.28); margin-bottom:18px;">
+      <div style="width:11px; height:11px; background:#0B0D12; transform:rotate(45deg); border-radius:2px;"></div>
+    </div>
+
+    <div onClick="{{ goHome }}" title="Home" style="position:relative; width:46px; height:42px; border-radius:13px; display:grid; place-items:center; cursor:pointer; color:#8A93A3; transition:all 180ms ease;" style-hover="background:rgba(255,255,255,0.05); color:#E7EAF0;">
+      <sc-if value="{{ atHome }}" hint-placeholder-val="{{ true }}"><div style="position:absolute; inset:0; border-radius:13px; background:rgba(255,255,255,0.07); box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);"></div><div style="position:absolute; left:-15px; top:13px; width:3px; height:16px; border-radius:3px; background:#4C8DFF;"></div></sc-if>
+      <svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" style="position:relative;"><path d="M3.2 8.4 10 3.2l6.8 5.2V16a.9.9 0 0 1-.9.9H4.1a.9.9 0 0 1-.9-.9Z"></path></svg>
+    </div>
+
+    <div onClick="{{ goFeed }}" title="Feed" style="position:relative; width:46px; height:42px; border-radius:13px; display:grid; place-items:center; cursor:pointer; color:#8A93A3; transition:all 180ms ease;" style-hover="background:rgba(255,255,255,0.05); color:#E7EAF0;">
+      <sc-if value="{{ atFeed }}" hint-placeholder-val="{{ false }}"><div style="position:absolute; inset:0; border-radius:13px; background:rgba(255,255,255,0.07);"></div><div style="position:absolute; left:-15px; top:13px; width:3px; height:16px; border-radius:3px; background:#4C8DFF;"></div></sc-if>
+      <svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="position:relative;"><line x1="4" y1="6" x2="16" y2="6"></line><line x1="4" y1="10" x2="13" y2="10"></line><line x1="4" y1="14" x2="9" y2="14"></line></svg>
+    </div>
+
+    <div onClick="{{ goMail }}" title="Mail" style="position:relative; width:46px; height:42px; border-radius:13px; display:grid; place-items:center; cursor:pointer; color:#8A93A3; transition:all 180ms ease;" style-hover="background:rgba(255,255,255,0.05); color:#E7EAF0;">
+      <sc-if value="{{ atMail }}" hint-placeholder-val="{{ false }}"><div style="position:absolute; inset:0; border-radius:13px; background:rgba(255,255,255,0.07);"></div><div style="position:absolute; left:-15px; top:13px; width:3px; height:16px; border-radius:3px; background:#4C8DFF;"></div></sc-if>
+      <svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" style="position:relative;"><rect x="3" y="5" width="14" height="10" rx="2.2"></rect><path d="m3.6 6.4 5.6 4a1.4 1.4 0 0 0 1.6 0l5.6-4"></path></svg>
+      <div style="position:absolute; top:8px; right:9px; width:6px; height:6px; border-radius:50%; background:#4C8DFF; box-shadow:0 0 0 2.5px #0B0D12;"></div>
+    </div>
+
+    <div onClick="{{ goDocs }}" title="Documents" style="position:relative; width:46px; height:42px; border-radius:13px; display:grid; place-items:center; cursor:pointer; color:#8A93A3; transition:all 180ms ease;" style-hover="background:rgba(255,255,255,0.05); color:#E7EAF0;">
+      <sc-if value="{{ atDocs }}" hint-placeholder-val="{{ false }}"><div style="position:absolute; inset:0; border-radius:13px; background:rgba(255,255,255,0.07);"></div><div style="position:absolute; left:-15px; top:13px; width:3px; height:16px; border-radius:3px; background:#4C8DFF;"></div></sc-if>
+      <svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" style="position:relative;"><path d="M5 3.2h5.4L15 7.6V16a.8.8 0 0 1-.8.8H5a.8.8 0 0 1-.8-.8V4a.8.8 0 0 1 .8-.8Z"></path><path d="M10.2 3.4v4.2H14.6"></path></svg>
+    </div>
+
+    <div onClick="{{ goCalendar }}" title="Calendar" style="position:relative; width:46px; height:42px; border-radius:13px; display:grid; place-items:center; cursor:pointer; color:#8A93A3; transition:all 180ms ease;" style-hover="background:rgba(255,255,255,0.05); color:#E7EAF0;">
+      <sc-if value="{{ atCalendar }}" hint-placeholder-val="{{ false }}"><div style="position:absolute; inset:0; border-radius:13px; background:rgba(255,255,255,0.07);"></div><div style="position:absolute; left:-15px; top:13px; width:3px; height:16px; border-radius:3px; background:#4C8DFF;"></div></sc-if>
+      <svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="position:relative;"><rect x="3.2" y="4.6" width="13.6" height="12.2" rx="2.4"></rect><line x1="3.2" y1="8.4" x2="16.8" y2="8.4"></line><line x1="7" y1="3.2" x2="7" y2="5.6"></line><line x1="13" y1="3.2" x2="13" y2="5.6"></line></svg>
+    </div>
+
+    <div onClick="{{ goNotes }}" title="Notes" style="position:relative; width:46px; height:42px; border-radius:13px; display:grid; place-items:center; cursor:pointer; color:#8A93A3; transition:all 180ms ease;" style-hover="background:rgba(255,255,255,0.05); color:#E7EAF0;">
+      <sc-if value="{{ atNotes }}" hint-placeholder-val="{{ false }}"><div style="position:absolute; inset:0; border-radius:13px; background:rgba(255,255,255,0.07);"></div><div style="position:absolute; left:-15px; top:13px; width:3px; height:16px; border-radius:3px; background:#4C8DFF;"></div></sc-if>
+      <svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="position:relative;"><rect x="4" y="3.4" width="12" height="13.2" rx="2.4"></rect><line x1="7" y1="7.4" x2="13" y2="7.4"></line><line x1="7" y1="10.4" x2="13" y2="10.4"></line><line x1="7" y1="13.4" x2="10.4" y2="13.4"></line></svg>
+    </div>
+
+    <div onClick="{{ goTasks }}" title="Tasks" style="position:relative; width:46px; height:42px; border-radius:13px; display:grid; place-items:center; cursor:pointer; color:#8A93A3; transition:all 180ms ease;" style-hover="background:rgba(255,255,255,0.05); color:#E7EAF0;">
+      <sc-if value="{{ atTasks }}" hint-placeholder-val="{{ false }}"><div style="position:absolute; inset:0; border-radius:13px; background:rgba(255,255,255,0.07);"></div><div style="position:absolute; left:-15px; top:13px; width:3px; height:16px; border-radius:3px; background:#4C8DFF;"></div></sc-if>
+      <svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="position:relative;"><circle cx="10" cy="10" r="6.8"></circle><path d="m7.2 10.2 2 2 3.6-4"></path></svg>
+    </div>
+
+    <div onClick="{{ goKnowledge }}" title="Knowledge" style="position:relative; width:46px; height:42px; border-radius:13px; display:grid; place-items:center; cursor:pointer; color:#8A93A3; transition:all 180ms ease;" style-hover="background:rgba(255,255,255,0.05); color:#E7EAF0;">
+      <sc-if value="{{ atKnowledge }}" hint-placeholder-val="{{ false }}"><div style="position:absolute; inset:0; border-radius:13px; background:rgba(255,255,255,0.07);"></div><div style="position:absolute; left:-15px; top:13px; width:3px; height:16px; border-radius:3px; background:#4C8DFF;"></div></sc-if>
+      <svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" style="position:relative;"><circle cx="10" cy="5.2" r="2.2"></circle><circle cx="5" cy="14.2" r="2.2"></circle><circle cx="15" cy="14.2" r="2.2"></circle><line x1="8.8" y1="7.2" x2="6.1" y2="12.2"></line><line x1="11.2" y1="7.2" x2="13.9" y2="12.2"></line><line x1="7.2" y1="14.2" x2="12.8" y2="14.2"></line></svg>
+    </div>
+
+    <div onClick="{{ goSearch }}" title="Search" style="position:relative; width:46px; height:42px; border-radius:13px; display:grid; place-items:center; cursor:pointer; color:#8A93A3; transition:all 180ms ease;" style-hover="background:rgba(255,255,255,0.05); color:#E7EAF0;">
+      <sc-if value="{{ atSearch }}" hint-placeholder-val="{{ false }}"><div style="position:absolute; inset:0; border-radius:13px; background:rgba(255,255,255,0.07);"></div><div style="position:absolute; left:-15px; top:13px; width:3px; height:16px; border-radius:3px; background:#4C8DFF;"></div></sc-if>
+      <svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="position:relative;"><circle cx="9" cy="9" r="5.2"></circle><line x1="12.9" y1="12.9" x2="16.4" y2="16.4"></line></svg>
+    </div>
+
+    <div style="flex:1;"></div>
+
+    <div onClick="{{ goSettings }}" title="Settings" style="position:relative; width:46px; height:42px; border-radius:13px; display:grid; place-items:center; cursor:pointer; color:#8A93A3; transition:all 180ms ease;" style-hover="background:rgba(255,255,255,0.05); color:#E7EAF0;">
+      <sc-if value="{{ atSettings }}" hint-placeholder-val="{{ false }}"><div style="position:absolute; inset:0; border-radius:13px; background:rgba(255,255,255,0.07);"></div><div style="position:absolute; left:-15px; top:13px; width:3px; height:16px; border-radius:3px; background:#4C8DFF;"></div></sc-if>
+      <svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="position:relative;"><line x1="3.4" y1="6.6" x2="16.6" y2="6.6"></line><line x1="3.4" y1="13.4" x2="16.6" y2="13.4"></line><circle cx="12.4" cy="6.6" r="2.1" fill="#0B0D12"></circle><circle cx="7.6" cy="13.4" r="2.1" fill="#0B0D12"></circle></svg>
+    </div>
+
+    <div style="display:flex; flex-direction:column; align-items:center; gap:12px; padding-top:14px; margin-top:8px; border-top:1px solid rgba(255,255,255,0.05); width:44px;">
+      <div title="Agent active" style="display:flex; align-items:center; gap:5px;">
+        <div style="width:6px; height:6px; border-radius:50%; background:#34D399; box-shadow:0 0 8px rgba(52,211,153,0.7); animation:nx-pulse 2.6s ease-in-out infinite;"></div>
+        <div style="font-family:'JetBrains Mono', monospace; font-size:9px; letter-spacing:0.04em; color:#5C6472;">ON</div>
+      </div>
+      <div style="width:30px; height:30px; border-radius:50%; background:linear-gradient(160deg,#2A3340,#171C24); border:1px solid rgba(255,255,255,0.10); display:grid; place-items:center; font-size:11px; font-weight:600; color:#C3CAD6; cursor:pointer;">M</div>
+    </div>
+  </div>
+
+  <!-- WORKSPACE SIDEBAR -->
+  <sc-if value="{{ sidebarOn }}" hint-placeholder-val="{{ true }}">
+  <div style="width:298px; flex:0 0 298px; display:flex; flex-direction:column; background:#0E1117; border-right:1px solid rgba(255,255,255,0.05); overflow:hidden;">
+    <div style="padding:26px 22px 14px;">
+      <div style="font-size:17px; font-weight:600; letter-spacing:-0.01em;">{{ screenTitle }}</div>
+      <div style="font-size:12px; color:#5C6472; margin-top:4px;">{{ screenSub }}</div>
+    </div>
+
+    <sc-if value="{{ atHome }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:1; overflow-y:auto; padding:6px 14px 20px;">
+        <div style="font-size:10.5px; font-weight:600; letter-spacing:0.10em; text-transform:uppercase; color:#5C6472; padding:8px 8px 10px;">Today</div>
+        <div style="display:flex; flex-direction:column; gap:2px;">
+          <div style="display:grid; grid-template-columns:52px 1fr; gap:10px; padding:10px 8px; border-radius:11px; cursor:pointer; transition:background 160ms ease;" style-hover="background:rgba(255,255,255,0.04);">
+            <div style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#5C6472; padding-top:1px;">09:30</div>
+            <div><div style="font-size:13px; color:#C3CAD6;">Design review</div><div style="font-size:11.5px; color:#5C6472; margin-top:3px;">Completed · notes saved</div></div>
+          </div>
+          <div style="display:grid; grid-template-columns:52px 1fr; gap:10px; padding:10px 8px; border-radius:11px; cursor:pointer; background:rgba(76,141,255,0.07); box-shadow:inset 0 0 0 1px rgba(76,141,255,0.16);">
+            <div style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#7FB0FF; padding-top:1px;">14:00</div>
+            <div><div style="font-size:13px; color:#E7EAF0;">Meridian Health — QBR</div><div style="font-size:11.5px; color:#7FB0FF; margin-top:3px;">Brief ready · 4 attendees</div></div>
+          </div>
+          <div style="display:grid; grid-template-columns:52px 1fr; gap:10px; padding:10px 8px; border-radius:11px; cursor:pointer; transition:background 160ms ease;" style-hover="background:rgba(255,255,255,0.04);">
+            <div style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#5C6472; padding-top:1px;">16:15</div>
+            <div><div style="font-size:13px; color:#C3CAD6;">1:1 — Priya</div><div style="font-size:11.5px; color:#5C6472; margin-top:3px;">Agenda drafted</div></div>
+          </div>
+          <div style="display:grid; grid-template-columns:52px 1fr; gap:10px; padding:10px 8px; border-radius:11px; cursor:pointer; transition:background 160ms ease;" style-hover="background:rgba(255,255,255,0.04);">
+            <div style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#5C6472; padding-top:1px;">18:00</div>
+            <div><div style="font-size:13px; color:#C3CAD6;">Q3 forecast due</div><div style="font-size:11.5px; color:#F5B547; margin-top:3px;">Deadline · 2 inputs missing</div></div>
+          </div>
+        </div>
+
+        <div style="font-size:10.5px; font-weight:600; letter-spacing:0.10em; text-transform:uppercase; color:#5C6472; padding:22px 8px 10px;">Watching for you</div>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <div style="padding:12px 13px; border-radius:12px; background:#12161D; border:1px solid rgba(255,255,255,0.05);">
+            <div style="font-size:12.5px; color:#C3CAD6;">Reply from Legal on the MSA</div>
+            <div style="font-family:'JetBrains Mono', monospace; font-size:10.5px; color:#5C6472; margin-top:5px;">waiting 2d 4h</div>
+          </div>
+          <div style="padding:12px 13px; border-radius:12px; background:#12161D; border:1px solid rgba(255,255,255,0.05);">
+            <div style="font-size:12.5px; color:#C3CAD6;">Vendor invoice approval</div>
+            <div style="font-family:'JetBrains Mono', monospace; font-size:10.5px; color:#5C6472; margin-top:5px;">waiting 6h</div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ atMail }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:1; overflow-y:auto; padding:6px 14px 20px;">
+        <div style="display:flex; flex-direction:column; gap:2px;">
+          <div style="display:flex; align-items:center; gap:11px; padding:11px 12px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,0.06);">
+            <div style="width:6px; height:6px; border-radius:50%; background:#F2555A;"></div>
+            <div style="flex:1; font-size:13.5px; color:#E7EAF0;">Priority</div>
+            <div style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#8A93A3;">6</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:11px; padding:11px 12px; border-radius:12px; cursor:pointer; transition:background 160ms ease;" style-hover="background:rgba(255,255,255,0.04);">
+            <div style="width:6px; height:6px; border-radius:50%; background:#F5B547;"></div>
+            <div style="flex:1; font-size:13.5px; color:#C3CAD6;">Waiting</div>
+            <div style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#5C6472;">11</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:11px; padding:11px 12px; border-radius:12px; cursor:pointer; transition:background 160ms ease;" style-hover="background:rgba(255,255,255,0.04);">
+            <div style="width:6px; height:6px; border-radius:50%; background:#35C2D9;"></div>
+            <div style="flex:1; font-size:13.5px; color:#C3CAD6;">Knowledge</div>
+            <div style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#5C6472;">34</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:11px; padding:11px 12px; border-radius:12px; cursor:pointer; transition:background 160ms ease;" style-hover="background:rgba(255,255,255,0.04);">
+            <div style="width:6px; height:6px; border-radius:50%; background:#3D4653;"></div>
+            <div style="flex:1; font-size:13.5px; color:#C3CAD6;">Automated</div>
+            <div style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#5C6472;">128</div>
+          </div>
+        </div>
+        <div style="font-size:10.5px; font-weight:600; letter-spacing:0.10em; text-transform:uppercase; color:#5C6472; padding:24px 12px 10px;">Threads by theme</div>
+        <div style="display:flex; flex-direction:column; gap:2px;">
+          <div style="display:flex; justify-content:space-between; padding:10px 12px; border-radius:11px; font-size:13px; color:#C3CAD6; cursor:pointer;" style-hover="background:rgba(255,255,255,0.04);"><span>Meetings</span><span style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#5C6472;">4</span></div>
+          <div style="display:flex; justify-content:space-between; padding:10px 12px; border-radius:11px; font-size:13px; color:#C3CAD6; cursor:pointer;" style-hover="background:rgba(255,255,255,0.04);"><span>Finance</span><span style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#5C6472;">3</span></div>
+          <div style="display:flex; justify-content:space-between; padding:10px 12px; border-radius:11px; font-size:13px; color:#C3CAD6; cursor:pointer;" style-hover="background:rgba(255,255,255,0.04);"><span>Engineering</span><span style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#5C6472;">9</span></div>
+          <div style="display:flex; justify-content:space-between; padding:10px 12px; border-radius:11px; font-size:13px; color:#C3CAD6; cursor:pointer;" style-hover="background:rgba(255,255,255,0.04);"><span>Personal</span><span style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#5C6472;">2</span></div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ atDocs }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:1; overflow-y:auto; padding:6px 14px 20px;">
+        <div style="display:flex; flex-direction:column; gap:2px;">
+          <div style="display:flex; justify-content:space-between; padding:11px 12px; border-radius:12px; font-size:13.5px; color:#E7EAF0; background:rgba(255,255,255,0.06); cursor:pointer;"><span>Recent</span><span style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#8A93A3;">18</span></div>
+          <div style="display:flex; justify-content:space-between; padding:11px 12px; border-radius:12px; font-size:13.5px; color:#C3CAD6; cursor:pointer;" style-hover="background:rgba(255,255,255,0.04);"><span>Attachments</span><span style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#5C6472;">246</span></div>
+          <div style="display:flex; justify-content:space-between; padding:11px 12px; border-radius:12px; font-size:13.5px; color:#C3CAD6; cursor:pointer;" style-hover="background:rgba(255,255,255,0.04);"><span>Reports</span><span style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#5C6472;">31</span></div>
+          <div style="display:flex; justify-content:space-between; padding:11px 12px; border-radius:12px; font-size:13.5px; color:#C3CAD6; cursor:pointer;" style-hover="background:rgba(255,255,255,0.04);"><span>Shared with me</span><span style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#5C6472;">12</span></div>
+        </div>
+        <div style="font-size:10.5px; font-weight:600; letter-spacing:0.10em; text-transform:uppercase; color:#5C6472; padding:24px 12px 10px;">Index status</div>
+        <div style="padding:14px; border-radius:13px; background:#12161D; border:1px solid rgba(255,255,255,0.05);">
+          <div style="font-size:12.5px; color:#C3CAD6;">1,284 documents read</div>
+          <div style="height:3px; border-radius:3px; background:rgba(255,255,255,0.07); margin:11px 0 9px; overflow:hidden;"><div style="height:100%; width:92%; border-radius:3px; background:linear-gradient(90deg,#4C8DFF,#35C2D9);"></div></div>
+          <div style="font-family:'JetBrains Mono', monospace; font-size:10.5px; color:#5C6472;">92% indexed · 3 pending OCR</div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ atOther }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:1; padding:20px 22px; font-size:13px; color:#5C6472; line-height:1.7;">Nexus is keeping this area quiet. Nothing here needs you today.</div>
+    </sc-if>
+  </div>
+  </sc-if>
+
+  <!-- MAIN COLUMN -->
+  <div style="flex:1; min-width:560px; display:flex; flex-direction:column;">
+    <div style="height:58px; flex:0 0 58px; display:flex; align-items:center; gap:16px; padding:0 26px; border-bottom:1px solid rgba(255,255,255,0.05);">
+      <div style="font-size:13px; color:#8A93A3; display:flex; align-items:center; gap:9px;"><span style="color:#E7EAF0;">{{ screenTitle }}</span><span style="color:#3D4653;">/</span><span>{{ screenSub }}</span></div>
+      <div style="flex:1;"></div>
+      <div onClick="{{ toggleSidebar }}" style="display:flex; align-items:center; gap:9px; height:32px; padding:0 13px; border-radius:10px; border:1px solid rgba(255,255,255,0.07); color:#8A93A3; font-size:12.5px; cursor:pointer; transition:all 160ms ease;" style-hover="color:#E7EAF0; border-color:rgba(255,255,255,0.14);">Focus mode</div>
+      <div style="display:flex; align-items:center; gap:10px; height:32px; padding:0 12px 0 13px; border-radius:10px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06); color:#8A93A3; font-size:12.5px; cursor:pointer; transition:all 160ms ease;" style-hover="background:rgba(255,255,255,0.07); color:#C3CAD6;">
+        <span>Ask Nexus anything</span>
+        <span style="font-family:'JetBrains Mono', monospace; font-size:10.5px; color:#5C6472; padding:2px 6px; border-radius:6px; background:rgba(255,255,255,0.05);">⌘ Space</span>
+      </div>
+    </div>
+
+    <div style="flex:1; overflow-y:auto; padding:34px 40px 48px;">
+
+      <!-- HOME -->
+      <sc-if value="{{ atHome }}" hint-placeholder-val="{{ true }}">
+      <div style="max-width:860px; animation:nx-rise 320ms ease both;">
+        <div style="font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#5C6472;">Thursday, 30 July</div>
+        <h1 style="margin:14px 0 0; font-size:34px; font-weight:600; letter-spacing:-0.025em; line-height:1.15;">Good morning, Mahesh.</h1>
+        <p style="margin:14px 0 0; font-size:16px; line-height:1.65; color:#8A93A3; max-width:620px; text-wrap:pretty;">I went through 214 messages, 9 documents and your calendar overnight. Four things genuinely need you today — the rest is handled or waiting.</p>
+
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:26px;">
+          <div style="padding:16px 17px; border-radius:14px; background:#12161D; border:1px solid rgba(255,255,255,0.05);"><div style="font-size:24px; font-weight:600; letter-spacing:-0.02em;">3</div><div style="font-size:12px; color:#8A93A3; margin-top:5px;">Important conversations</div></div>
+          <div style="padding:16px 17px; border-radius:14px; background:#12161D; border:1px solid rgba(255,255,255,0.05);"><div style="font-size:24px; font-weight:600; letter-spacing:-0.02em;">2</div><div style="font-size:12px; color:#8A93A3; margin-top:5px;">Action items</div></div>
+          <div style="padding:16px 17px; border-radius:14px; background:#12161D; border:1px solid rgba(255,255,255,0.05);"><div style="font-size:24px; font-weight:600; letter-spacing:-0.02em;">1</div><div style="font-size:12px; color:#8A93A3; margin-top:5px;">Upcoming meeting</div></div>
+          <div style="padding:16px 17px; border-radius:14px; background:#12161D; border:1px solid rgba(255,255,255,0.05);"><div style="font-size:24px; font-weight:600; letter-spacing:-0.02em;">4</div><div style="font-size:12px; color:#8A93A3; margin-top:5px;">Documents to review</div></div>
+        </div>
+
+        <div style="display:flex; align-items:baseline; gap:12px; margin:44px 0 16px;">
+          <div style="font-size:15px; font-weight:600; letter-spacing:-0.01em;">Daily focus</div>
+          <div style="font-size:12.5px; color:#5C6472;">Three things. Nothing more.</div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <div style="display:flex; align-items:center; gap:14px; padding:15px 18px; border-radius:14px; background:#12161D; border:1px solid rgba(255,255,255,0.05); cursor:pointer; transition:all 180ms ease;" style-hover="background:#161B22; border-color:rgba(255,255,255,0.10); transform:translateY(-1px);">
+            <div style="width:17px; height:17px; border-radius:50%; border:1.5px solid #3D4653;"></div>
+            <div style="flex:1; font-size:14.5px;">Approve the Meridian escalation reply</div>
+            <div style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#F2555A;">SLA 2h</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:14px; padding:15px 18px; border-radius:14px; background:#12161D; border:1px solid rgba(255,255,255,0.05); cursor:pointer; transition:all 180ms ease;" style-hover="background:#161B22; border-color:rgba(255,255,255,0.10); transform:translateY(-1px);">
+            <div style="width:17px; height:17px; border-radius:50%; border:1.5px solid #3D4653;"></div>
+            <div style="flex:1; font-size:14.5px;">Sign off Q3 forecast inputs</div>
+            <div style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#F5B547;">due 18:00</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:14px; padding:15px 18px; border-radius:14px; background:#12161D; border:1px solid rgba(255,255,255,0.05); cursor:pointer; transition:all 180ms ease;" style-hover="background:#161B22; border-color:rgba(255,255,255,0.10); transform:translateY(-1px);">
+            <div style="width:17px; height:17px; border-radius:50%; border:1.5px solid #3D4653;"></div>
+            <div style="flex:1; font-size:14.5px;">Read the QBR brief before 14:00</div>
+            <div style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#5C6472;">6 min</div>
+          </div>
+        </div>
+
+        <div style="display:flex; align-items:baseline; gap:12px; margin:46px 0 16px;">
+          <div style="font-size:15px; font-weight:600; letter-spacing:-0.01em;">Live board</div>
+          <div style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:#5C6472;"><span style="width:5px; height:5px; border-radius:50%; background:#34D399; animation:nx-pulse 2.6s ease-in-out infinite;"></span>Updated 40 seconds ago</div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <div style="padding:19px 20px; border-radius:16px; background:#12161D; border:1px solid rgba(255,255,255,0.05); transition:all 200ms ease;" style-hover="background:#151A21; border-color:rgba(255,255,255,0.10);">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div style="display:flex; align-items:center; gap:6px; padding:3px 9px; border-radius:7px; background:rgba(242,85,90,0.12); color:#FF8A8E; font-size:10.5px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase;">Urgent</div>
+              <div style="flex:1; font-size:15.5px; font-weight:600; letter-spacing:-0.01em;">Customer escalation — Meridian Health</div>
+              <div style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#5C6472;">07:42</div>
+            </div>
+            <sc-if value="{{ reasoningOn }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex; gap:9px; margin-top:12px; padding-left:2px;">
+                <div style="width:2px; border-radius:2px; background:rgba(76,141,255,0.35); flex:0 0 2px;"></div>
+                <div style="font-size:13.5px; line-height:1.6; color:#8A93A3; text-wrap:pretty;">Third message in 18 hours, sentiment falling, and the contract SLA expires at 10:00. I drafted a reply that acknowledges the outage, cites the credit clause and offers Thursday for a call.</div>
+              </div>
+            </sc-if>
+            <div style="display:flex; align-items:center; gap:9px; margin-top:16px;">
+              <div style="height:32px; padding:0 15px; border-radius:9px; display:grid; place-items:center; background:#4C8DFF; color:#08101F; font-size:13px; font-weight:600; cursor:pointer; transition:all 160ms ease;" style-hover="background:#6BA1FF;">Approve &amp; send</div>
+              <div style="height:32px; padding:0 15px; border-radius:9px; display:grid; place-items:center; border:1px solid rgba(255,255,255,0.09); color:#C3CAD6; font-size:13px; cursor:pointer; transition:all 160ms ease;" style-hover="background:rgba(255,255,255,0.05);">Modify draft</div>
+              <div style="flex:1;"></div>
+              <div style="display:flex; gap:2px; color:#4E5766;">
+                <div title="Good call" style="width:28px; height:28px; border-radius:8px; display:grid; place-items:center; cursor:pointer; transition:all 150ms ease;" style-hover="background:rgba(255,255,255,0.06); color:#34D399;"><svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M6 17V8.6l3.4-5a1.6 1.6 0 0 1 2.9 1.1L11.6 8h3.6a1.6 1.6 0 0 1 1.6 1.9l-1 5.6A1.9 1.9 0 0 1 13.9 17Z"></path><rect x="3" y="8.6" width="3" height="8.4" rx="1"></rect></svg></div>
+                <div title="Not useful" style="width:28px; height:28px; border-radius:8px; display:grid; place-items:center; cursor:pointer; transition:all 150ms ease;" style-hover="background:rgba(255,255,255,0.06); color:#C3CAD6;"><svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" transform="rotate(180)"><path d="M6 17V8.6l3.4-5a1.6 1.6 0 0 1 2.9 1.1L11.6 8h3.6a1.6 1.6 0 0 1 1.6 1.9l-1 5.6A1.9 1.9 0 0 1 13.9 17Z"></path><rect x="3" y="8.6" width="3" height="8.4" rx="1"></rect></svg></div>
+                <div title="Pin" style="width:28px; height:28px; border-radius:8px; display:grid; place-items:center; cursor:pointer; transition:all 150ms ease;" style-hover="background:rgba(255,255,255,0.06); color:#C3CAD6;"><svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="10" y1="11.5" x2="10" y2="17"></line><path d="M6.2 4.5h7.6l-1.2 4.2 1.8 2.3H5.6l1.8-2.3Z"></path></svg></div>
+                <div title="Snooze" style="width:28px; height:28px; border-radius:8px; display:grid; place-items:center; cursor:pointer; transition:all 150ms ease;" style-hover="background:rgba(255,255,255,0.06); color:#C3CAD6;"><svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="10" cy="10" r="6.8"></circle><path d="M10 6.2V10l2.6 1.8"></path></svg></div>
+                <div title="Archive" style="width:28px; height:28px; border-radius:8px; display:grid; place-items:center; cursor:pointer; transition:all 150ms ease;" style-hover="background:rgba(255,255,255,0.06); color:#C3CAD6;"><svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3.2" y="4.4" width="13.6" height="3.4" rx="1.2"></rect><path d="M4.6 7.8v7a1.2 1.2 0 0 0 1.2 1.2h8.4a1.2 1.2 0 0 0 1.2-1.2v-7"></path><line x1="8.2" y1="11" x2="11.8" y2="11"></line></svg></div>
+              </div>
+            </div>
+          </div>
+
+          <div style="padding:19px 20px; border-radius:16px; background:#12161D; border:1px solid rgba(255,255,255,0.05); transition:all 200ms ease;" style-hover="background:#151A21; border-color:rgba(255,255,255,0.10);">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div style="padding:3px 9px; border-radius:7px; background:rgba(52,211,153,0.10); color:#5EE0AE; font-size:10.5px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase;">Completed</div>
+              <div style="flex:1; font-size:15.5px; font-weight:600; letter-spacing:-0.01em;">Model retraining finished — v4.2</div>
+              <div style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#5C6472;">06:15</div>
+            </div>
+            <sc-if value="{{ reasoningOn }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex; gap:9px; margin-top:12px; padding-left:2px;">
+                <div style="width:2px; border-radius:2px; background:rgba(52,211,153,0.30); flex:0 0 2px;"></div>
+                <div style="font-size:13.5px; line-height:1.6; color:#8A93A3; text-wrap:pretty;">Precision improved 2.1% against the June baseline with no regression on latency. Nothing needs your decision — I wrote the summary for Thursday's engineering review.</div>
+              </div>
+            </sc-if>
+            <div style="display:flex; align-items:center; gap:9px; margin-top:16px;">
+              <div style="height:32px; padding:0 15px; border-radius:9px; display:grid; place-items:center; border:1px solid rgba(255,255,255,0.09); color:#C3CAD6; font-size:13px; cursor:pointer; transition:all 160ms ease;" style-hover="background:rgba(255,255,255,0.05);">View report</div>
+              <div style="height:32px; padding:0 15px; border-radius:9px; display:grid; place-items:center; color:#8A93A3; font-size:13px; cursor:pointer; transition:all 160ms ease;" style-hover="background:rgba(255,255,255,0.04); color:#C3CAD6;">Share with team</div>
+            </div>
+          </div>
+
+          <div style="padding:19px 20px; border-radius:16px; background:#12161D; border:1px solid rgba(255,255,255,0.05); transition:all 200ms ease;" style-hover="background:#151A21; border-color:rgba(255,255,255,0.10);">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div style="padding:3px 9px; border-radius:7px; background:rgba(76,141,255,0.11); color:#7FB0FF; font-size:10.5px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase;">Active</div>
+              <div style="flex:1; font-size:15.5px; font-weight:600; letter-spacing:-0.01em;">QBR with Meridian moved to 14:00</div>
+              <div style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#5C6472;">05:58</div>
+            </div>
+            <sc-if value="{{ reasoningOn }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex; gap:9px; margin-top:12px; padding-left:2px;">
+                <div style="width:2px; border-radius:2px; background:rgba(76,141,255,0.30); flex:0 0 2px;"></div>
+                <div style="font-size:13.5px; line-height:1.6; color:#8A93A3; text-wrap:pretty;">I accepted on your behalf — the slot was free and the attendees match the escalation thread. A six-minute brief with usage trends and open tickets is ready.</div>
+              </div>
+            </sc-if>
+            <div style="display:flex; align-items:center; gap:9px; margin-top:16px;">
+              <div style="height:32px; padding:0 15px; border-radius:9px; display:grid; place-items:center; border:1px solid rgba(255,255,255,0.09); color:#C3CAD6; font-size:13px; cursor:pointer; transition:all 160ms ease;" style-hover="background:rgba(255,255,255,0.05);">Open brief</div>
+              <div style="height:32px; padding:0 15px; border-radius:9px; display:grid; place-items:center; color:#8A93A3; font-size:13px; cursor:pointer; transition:all 160ms ease;" style-hover="background:rgba(255,255,255,0.04); color:#C3CAD6;">Delegate prep</div>
+            </div>
+          </div>
+
+          <div style="padding:19px 20px; border-radius:16px; background:#12161D; border:1px solid rgba(255,255,255,0.05); transition:all 200ms ease;" style-hover="background:#151A21; border-color:rgba(255,255,255,0.10);">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div style="padding:3px 9px; border-radius:7px; background:rgba(245,181,71,0.11); color:#F5C77A; font-size:10.5px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase;">Attention</div>
+              <div style="flex:1; font-size:15.5px; font-weight:600; letter-spacing:-0.01em;">Two forecast inputs still missing</div>
+              <div style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#5C6472;">yesterday</div>
+            </div>
+            <sc-if value="{{ reasoningOn }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex; gap:9px; margin-top:12px; padding-left:2px;">
+                <div style="width:2px; border-radius:2px; background:rgba(245,181,71,0.30); flex:0 0 2px;"></div>
+                <div style="font-size:13.5px; line-height:1.6; color:#8A93A3; text-wrap:pretty;">Sales EMEA and Support have not filed numbers. I can send a single reminder with the template pre-filled from last quarter.</div>
+              </div>
+            </sc-if>
+            <div style="display:flex; align-items:center; gap:9px; margin-top:16px;">
+              <div style="height:32px; padding:0 15px; border-radius:9px; display:grid; place-items:center; border:1px solid rgba(255,255,255,0.09); color:#C3CAD6; font-size:13px; cursor:pointer; transition:all 160ms ease;" style-hover="background:rgba(255,255,255,0.05);">Send reminder</div>
+              <div style="height:32px; padding:0 15px; border-radius:9px; display:grid; place-items:center; color:#8A93A3; font-size:13px; cursor:pointer; transition:all 160ms ease;" style-hover="background:rgba(255,255,255,0.04); color:#C3CAD6;">Snooze to 15:00</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:26px; text-align:center; font-size:13px; color:#4E5766;">That's everything. The other 210 messages are filed.</div>
+      </div>
+      </sc-if>
+
+      <!-- MAIL -->
+      <sc-if value="{{ atMail }}" hint-placeholder-val="{{ false }}">
+      <div style="max-width:860px; animation:nx-rise 320ms ease both;">
+        <h1 style="margin:0; font-size:26px; font-weight:600; letter-spacing:-0.02em;">Priority</h1>
+        <p style="margin:10px 0 0; font-size:14.5px; color:#8A93A3;">Six conversations where a reply from you actually changes something.</p>
+        <div style="display:flex; flex-direction:column; gap:10px; margin-top:26px;">
+          <div style="padding:20px; border-radius:16px; background:#12161D; border:1px solid rgba(255,255,255,0.05); transition:all 200ms ease;" style-hover="background:#151A21; border-color:rgba(255,255,255,0.10);">
+            <div style="display:flex; align-items:center; gap:12px;">
+              <div style="width:28px; height:28px; border-radius:50%; background:linear-gradient(160deg,#33404F,#1A2029); display:grid; place-items:center; font-size:11px; font-weight:600; color:#C3CAD6;">DK</div>
+              <div style="flex:1; font-size:15px; font-weight:600; letter-spacing:-0.01em;">Daniel Kaur · Meridian Health</div>
+              <div style="width:6px; height:6px; border-radius:50%; background:#F2555A;"></div>
+              <div style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#5C6472;">07:42</div>
+            </div>
+            <div style="font-size:14px; line-height:1.65; color:#C3CAD6; margin-top:13px; text-wrap:pretty;">Escalating the ingestion outage — asks for a credit decision and a call this week. Tone has shifted from patient to formal.</div>
+            <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:14px;">
+              <div style="padding:4px 10px; border-radius:8px; background:rgba(255,255,255,0.045); font-size:11.5px; color:#8A93A3;">Meridian Health</div>
+              <div style="padding:4px 10px; border-radius:8px; background:rgba(255,255,255,0.045); font-size:11.5px; color:#8A93A3;">SLA · 99.5%</div>
+              <div style="padding:4px 10px; border-radius:8px; background:rgba(255,255,255,0.045); font-size:11.5px; color:#8A93A3;">MSA_2024.pdf</div>
+            </div>
+            <div style="display:flex; gap:9px; margin-top:16px;">
+              <div style="height:32px; padding:0 15px; border-radius:9px; display:grid; place-items:center; background:#4C8DFF; color:#08101F; font-size:13px; font-weight:600; cursor:pointer;" style-hover="background:#6BA1FF;">Open drafted reply</div>
+              <div style="height:32px; padding:0 15px; border-radius:9px; display:grid; place-items:center; border:1px solid rgba(255,255,255,0.09); color:#C3CAD6; font-size:13px; cursor:pointer;" style-hover="background:rgba(255,255,255,0.05);">Summarise thread</div>
+            </div>
+          </div>
+
+          <div style="padding:20px; border-radius:16px; background:#12161D; border:1px solid rgba(255,255,255,0.05); transition:all 200ms ease;" style-hover="background:#151A21; border-color:rgba(255,255,255,0.10);">
+            <div style="display:flex; align-items:center; gap:12px;">
+              <div style="width:28px; height:28px; border-radius:50%; background:linear-gradient(160deg,#33404F,#1A2029); display:grid; place-items:center; font-size:11px; font-weight:600; color:#C3CAD6;">PS</div>
+              <div style="flex:1; font-size:15px; font-weight:600; letter-spacing:-0.01em;">Priya Sharma · Finance</div>
+              <div style="width:6px; height:6px; border-radius:50%; background:#F5B547;"></div>
+              <div style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#5C6472;">yesterday</div>
+            </div>
+            <div style="font-size:14px; line-height:1.65; color:#C3CAD6; margin-top:13px; text-wrap:pretty;">Needs your sign-off on Q3 forecast assumptions before the board pack is locked at 18:00 today.</div>
+            <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:14px;">
+              <div style="padding:4px 10px; border-radius:8px; background:rgba(255,255,255,0.045); font-size:11.5px; color:#8A93A3;">Q3 forecast</div>
+              <div style="padding:4px 10px; border-radius:8px; background:rgba(255,255,255,0.045); font-size:11.5px; color:#8A93A3;">Board pack</div>
+              <div style="padding:4px 10px; border-radius:8px; background:rgba(255,255,255,0.045); font-size:11.5px; color:#8A93A3;">forecast_v7.xlsx</div>
+            </div>
+            <div style="display:flex; gap:9px; margin-top:16px;">
+              <div style="height:32px; padding:0 15px; border-radius:9px; display:grid; place-items:center; border:1px solid rgba(255,255,255,0.09); color:#C3CAD6; font-size:13px; cursor:pointer;" style-hover="background:rgba(255,255,255,0.05);">Review changes</div>
+              <div style="height:32px; padding:0 15px; border-radius:9px; display:grid; place-items:center; color:#8A93A3; font-size:13px; cursor:pointer;" style-hover="background:rgba(255,255,255,0.04); color:#C3CAD6;">Reply “approved”</div>
+            </div>
+          </div>
+
+          <div style="padding:20px; border-radius:16px; background:#12161D; border:1px solid rgba(255,255,255,0.05); transition:all 200ms ease;" style-hover="background:#151A21; border-color:rgba(255,255,255,0.10);">
+            <div style="display:flex; align-items:center; gap:12px;">
+              <div style="width:28px; height:28px; border-radius:50%; background:linear-gradient(160deg,#33404F,#1A2029); display:grid; place-items:center; font-size:11px; font-weight:600; color:#C3CAD6;">AR</div>
+              <div style="flex:1; font-size:15px; font-weight:600; letter-spacing:-0.01em;">Alex Roy · Engineering</div>
+              <div style="width:6px; height:6px; border-radius:50%; background:#4C8DFF;"></div>
+              <div style="font-family:'JetBrains Mono', monospace; font-size:11px; color:#5C6472;">Tue</div>
+            </div>
+            <div style="font-size:14px; line-height:1.65; color:#C3CAD6; margin-top:13px; text-wrap:pretty;">Wants a decision between shipping v4.2 on Friday or holding for the latency fix. Two engineers are blocked either way.</div>
+            <div style="display:flex; gap:9px; margin-top:16px;">
+              <div style="height:32px; padding:0 15px; border-radius:9px; display:grid; place-items:center; border:1px solid rgba(255,255,255,0.09); color:#C3CAD6; font-size:13px; cursor:pointer;" style-hover="background:rgba(255,255,255,0.05);">See both options</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- DOCUMENTS -->
+      <sc-if value="{{ atDocs }}" hint-placeholder-val="{{ false }}">
+      <div style="max-width:900px; animation:nx-rise 320ms ease both;">
+        <h1 style="margin:0; font-size:26px; font-weight:600; letter-spacing:-0.02em;">Documents</h1>
+        <p style="margin:10px 0 0; font-size:14.5px; color:#8A93A3;">Everything here has already been read. Ask in plain language.</p>
+        <div style="display:flex; align-items:center; gap:12px; margin-top:22px; height:50px; padding:0 18px; border-radius:14px; background:#12161D; border:1px solid rgba(255,255,255,0.07);">
+          <svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="#5C6472" stroke-width="1.5" stroke-linecap="round"><circle cx="9" cy="9" r="5.2"></circle><line x1="12.9" y1="12.9" x2="16.4" y2="16.4"></line></svg>
+          <div style="flex:1; font-size:14.5px; color:#5C6472;">Which contracts renew before October and what do they cost us?</div>
+          <div style="font-family:'JetBrains Mono', monospace; font-size:10.5px; color:#5C6472; padding:3px 7px; border-radius:6px; background:rgba(255,255,255,0.05);">↵</div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-top:24px;">
+          <div style="padding:20px; border-radius:16px; background:#12161D; border:1px solid rgba(255,255,255,0.05); transition:all 200ms ease;" style-hover="background:#151A21; border-color:rgba(255,255,255,0.10); transform:translateY(-1px);">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div style="width:26px; height:32px; border-radius:5px; background:linear-gradient(160deg,#222A35,#161B22); border:1px solid rgba(255,255,255,0.07);"></div>
+              <div style="flex:1;"><div style="font-size:14.5px; font-weight:600; letter-spacing:-0.01em;">MSA_Meridian_2024.pdf</div><div style="font-family:'JetBrains Mono', monospace; font-size:10.5px; color:#5C6472; margin-top:3px;">42 pages · read 3d ago</div></div>
+            </div>
+            <div style="font-size:13.5px; line-height:1.6; color:#8A93A3; margin-top:13px; text-wrap:pretty;">Auto-renews 1 Oct unless cancelled 60 days prior. Service credits capped at 15% of monthly fees.</div>
+            <div style="display:flex; gap:6px; margin-top:13px;"><div style="padding:4px 10px; border-radius:8px; background:rgba(242,85,90,0.10); font-size:11.5px; color:#FF8A8E;">Renews in 63 days</div><div style="padding:4px 10px; border-radius:8px; background:rgba(255,255,255,0.045); font-size:11.5px; color:#8A93A3;">3 citations</div></div>
+          </div>
+          <div style="padding:20px; border-radius:16px; background:#12161D; border:1px solid rgba(255,255,255,0.05); transition:all 200ms ease;" style-hover="background:#151A21; border-color:rgba(255,255,255,0.10); transform:translateY(-1px);">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div style="width:26px; height:32px; border-radius:5px; background:linear-gradient(160deg,#222A35,#161B22); border:1px solid rgba(255,255,255,0.07);"></div>
+              <div style="flex:1;"><div style="font-size:14.5px; font-weight:600; letter-spacing:-0.01em;">Q3_forecast_v7.xlsx</div><div style="font-family:'JetBrains Mono', monospace; font-size:10.5px; color:#5C6472; margin-top:3px;">9 sheets · updated 2h ago</div></div>
+            </div>
+            <div style="font-size:13.5px; line-height:1.6; color:#8A93A3; margin-top:13px; text-wrap:pretty;">EMEA and Support tabs are empty. Every other region is within 4% of the June plan.</div>
+            <div style="display:flex; gap:6px; margin-top:13px;"><div style="padding:4px 10px; border-radius:8px; background:rgba(245,181,71,0.10); font-size:11.5px; color:#F5C77A;">2 gaps</div></div>
+          </div>
+          <div style="padding:20px; border-radius:16px; background:#12161D; border:1px solid rgba(255,255,255,0.05); transition:all 200ms ease;" style-hover="background:#151A21; border-color:rgba(255,255,255,0.10); transform:translateY(-1px);">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div style="width:26px; height:32px; border-radius:5px; background:linear-gradient(160deg,#222A35,#161B22); border:1px solid rgba(255,255,255,0.07);"></div>
+              <div style="flex:1;"><div style="font-size:14.5px; font-weight:600; letter-spacing:-0.01em;">Model_v4.2_eval.md</div><div style="font-family:'JetBrains Mono', monospace; font-size:10.5px; color:#5C6472; margin-top:3px;">generated by Nexus · 06:15</div></div>
+            </div>
+            <div style="font-size:13.5px; line-height:1.6; color:#8A93A3; margin-top:13px; text-wrap:pretty;">Precision +2.1%, latency flat, no regressions across the 12 evaluation sets.</div>
+            <div style="display:flex; gap:6px; margin-top:13px;"><div style="padding:4px 10px; border-radius:8px; background:rgba(52,211,153,0.10); font-size:11.5px; color:#5EE0AE;">Ready to share</div></div>
+          </div>
+          <div style="padding:20px; border-radius:16px; background:#12161D; border:1px solid rgba(255,255,255,0.05); transition:all 200ms ease;" style-hover="background:#151A21; border-color:rgba(255,255,255,0.10); transform:translateY(-1px);">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div style="width:26px; height:32px; border-radius:5px; background:linear-gradient(160deg,#222A35,#161B22); border:1px solid rgba(255,255,255,0.07);"></div>
+              <div style="flex:1;"><div style="font-size:14.5px; font-weight:600; letter-spacing:-0.01em;">Board_pack_July.key</div><div style="font-family:'JetBrains Mono', monospace; font-size:10.5px; color:#5C6472; margin-top:3px;">31 slides · shared by Priya</div></div>
+            </div>
+            <div style="font-size:13.5px; line-height:1.6; color:#8A93A3; margin-top:13px; text-wrap:pretty;">Slides 12–14 reference forecast numbers that changed this morning.</div>
+            <div style="display:flex; gap:6px; margin-top:13px;"><div style="padding:4px 10px; border-radius:8px; background:rgba(255,255,255,0.045); font-size:11.5px; color:#8A93A3;">Conflict detected</div></div>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- QUIET SCREENS -->
+      <sc-if value="{{ atOther }}" hint-placeholder-val="{{ false }}">
+      <div style="height:100%; min-height:420px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; animation:nx-rise 320ms ease both;">
+        <div style="width:40px; height:40px; border-radius:14px; border:1px solid rgba(255,255,255,0.08); display:grid; place-items:center;"><div style="width:8px; height:8px; border-radius:50%; background:#3D4653;"></div></div>
+        <div style="font-size:17px; font-weight:600; letter-spacing:-0.01em;">Nothing needs your attention right now.</div>
+        <div style="font-size:13.5px; color:#5C6472;">I'll surface {{ screenTitle }} the moment something changes.</div>
+      </div>
+      </sc-if>
+    </div>
+  </div>
+
+  <!-- AI COMPANION PANEL -->
+  <sc-if value="{{ panelOn }}" hint-placeholder-val="{{ true }}">
+  <div style="width:418px; flex:0 0 418px; display:flex; flex-direction:column; background:rgba(14,17,23,0.72); backdrop-filter:blur(28px); border-left:1px solid rgba(255,255,255,0.05);">
+    <div style="height:58px; flex:0 0 58px; display:flex; align-items:center; gap:11px; padding:0 20px; border-bottom:1px solid rgba(255,255,255,0.05);">
+      <div style="width:22px; height:22px; border-radius:7px; background:linear-gradient(150deg, rgba(76,141,255,0.9), rgba(53,194,217,0.75)); display:grid; place-items:center;"><div style="width:7px; height:7px; background:#0B0D12; transform:rotate(45deg); border-radius:1px;"></div></div>
+      <div style="font-size:14px; font-weight:600; letter-spacing:-0.01em;">Nexus</div>
+      <div style="display:flex; align-items:center; gap:6px; padding:3px 9px; border-radius:7px; background:rgba(52,211,153,0.10);"><span style="width:5px; height:5px; border-radius:50%; background:#34D399; animation:nx-pulse 2.6s ease-in-out infinite;"></span><span style="font-size:11px; color:#5EE0AE;">Working</span></div>
+      <div style="flex:1;"></div>
+      <div style="font-family:'JetBrains Mono', monospace; font-size:10.5px; color:#5C6472;">3 tasks</div>
+    </div>
+
+    <div style="flex:1; overflow-y:auto; padding:22px 20px; display:flex; flex-direction:column; gap:18px;">
+      <div style="align-self:flex-end; max-width:80%; padding:11px 15px; border-radius:14px 14px 4px 14px; background:rgba(76,141,255,0.12); border:1px solid rgba(76,141,255,0.16); font-size:13.5px; line-height:1.55; color:#DCE6F7;">What's the real risk with Meridian, and can you draft the reply?</div>
+
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div style="padding:13px 15px; border-radius:13px; background:rgba(255,255,255,0.025); border:1px solid rgba(255,255,255,0.05);">
+          <div style="font-family:'JetBrains Mono', monospace; font-size:10.5px; letter-spacing:0.08em; text-transform:uppercase; color:#5C6472; margin-bottom:11px;">Reasoning</div>
+          <div style="display:flex; flex-direction:column; gap:9px; font-family:'JetBrains Mono', monospace; font-size:11.5px; color:#8A93A3;">
+            <div style="display:flex; gap:9px;"><span style="color:#34D399;">✓</span><span style="flex:1;">read thread · 14 messages</span><span style="color:#4E5766;">0.4s</span></div>
+            <div style="display:flex; gap:9px;"><span style="color:#34D399;">✓</span><span style="flex:1;">retrieved MSA_2024 · §7 credits</span><span style="color:#4E5766;">1.1s</span></div>
+            <div style="display:flex; gap:9px;"><span style="color:#34D399;">✓</span><span style="flex:1;">checked uptime · 99.1% in July</span><span style="color:#4E5766;">0.6s</span></div>
+            <div style="display:flex; gap:9px; color:#7FB0FF;"><span>›</span><span style="flex:1;">drafting reply</span><span style="color:#4E5766;">…</span></div>
+          </div>
+          <div style="height:2px; border-radius:2px; background:rgba(76,141,255,0.35); margin-top:12px; transform-origin:left; animation:nx-bar 1.8s ease-in-out infinite;"></div>
+        </div>
+
+        <div style="font-size:13.5px; line-height:1.7; color:#C3CAD6; text-wrap:pretty;">The commercial risk is small — credits are capped at 15% of monthly fees, roughly $4.2k. The relationship risk is larger: this is Daniel's third message and the renewal is 63 days out.</div>
+
+        <div style="border-radius:14px; background:#12161D; border:1px solid rgba(255,255,255,0.07); overflow:hidden;">
+          <div style="display:flex; align-items:center; gap:9px; padding:12px 15px; border-bottom:1px solid rgba(255,255,255,0.05);">
+            <div style="width:6px; height:6px; border-radius:50%; background:#4C8DFF;"></div>
+            <div style="flex:1; font-size:12.5px; font-weight:600;">Draft — Re: ingestion outage</div>
+            <div style="font-family:'JetBrains Mono', monospace; font-size:10.5px; color:#5C6472;">186 words</div>
+          </div>
+          <div style="padding:14px 15px; font-size:12.5px; line-height:1.65; color:#8A93A3;">Hi Daniel — you're right to push on this. The ingestion pipeline was degraded for 11 hours on 24 July; we've applied the §7 service credit automatically…</div>
+          <div style="display:flex; gap:8px; padding:0 15px 14px;">
+            <div style="height:30px; padding:0 14px; border-radius:9px; display:grid; place-items:center; background:#4C8DFF; color:#08101F; font-size:12.5px; font-weight:600; cursor:pointer;" style-hover="background:#6BA1FF;">Send</div>
+            <div style="height:30px; padding:0 14px; border-radius:9px; display:grid; place-items:center; border:1px solid rgba(255,255,255,0.09); color:#C3CAD6; font-size:12.5px; cursor:pointer;" style-hover="background:rgba(255,255,255,0.05);">Open in editor</div>
+          </div>
+        </div>
+
+        <div style="display:flex; flex-wrap:wrap; gap:7px;">
+          <div style="padding:7px 12px; border-radius:9px; border:1px solid rgba(255,255,255,0.07); font-size:12.5px; color:#8A93A3; cursor:pointer; transition:all 160ms ease;" style-hover="background:rgba(255,255,255,0.05); color:#E7EAF0;">Make it warmer</div>
+          <div style="padding:7px 12px; border-radius:9px; border:1px solid rgba(255,255,255,0.07); font-size:12.5px; color:#8A93A3; cursor:pointer; transition:all 160ms ease;" style-hover="background:rgba(255,255,255,0.05); color:#E7EAF0;">Add call times</div>
+          <div style="padding:7px 12px; border-radius:9px; border:1px solid rgba(255,255,255,0.07); font-size:12.5px; color:#8A93A3; cursor:pointer; transition:all 160ms ease;" style-hover="background:rgba(255,255,255,0.05); color:#E7EAF0;">Brief me before the QBR</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:14px 18px 18px; border-top:1px solid rgba(255,255,255,0.05);">
+      <div style="display:flex; align-items:flex-end; gap:10px; padding:12px 14px; border-radius:14px; background:#12161D; border:1px solid rgba(255,255,255,0.07); transition:border-color 180ms ease;" style-hover="border-color:rgba(255,255,255,0.13);">
+        <div style="flex:1; font-size:13.5px; color:#4E5766; line-height:1.5;">Ask, or tell me what to handle…</div>
+        <div style="font-family:'JetBrains Mono', monospace; font-size:10.5px; color:#5C6472; padding:3px 7px; border-radius:6px; background:rgba(255,255,255,0.05);">⌘ ↵</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; margin-top:10px; font-size:11.5px; color:#4E5766;">
+        <span style="width:5px; height:5px; border-radius:50%; background:#35C2D9;"></span>
+        <span>Connected to Mail, Drive, Calendar and Linear</span>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1600,&quot;height&quot;:980},&quot;showAiPanel&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Layout&quot;},&quot;showSidebar&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Layout&quot;},&quot;showReasoning&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Live board&quot;}}">
+class Component extends DCLogic {
+  state = { screen: 'home', sidebar: true };
+  go(screen) { return () => this.setState({ screen }); }
+  renderVals() {
+    const s = this.state.screen;
+    const titles = {
+      home: ['Home', 'Thursday briefing'], feed: ['Feed', 'Everything, filed'],
+      mail: ['Mail', 'Triaged by intent'], docs: ['Documents', '1,284 read'],
+      calendar: ['Calendar', 'Next 7 days'], notes: ['Notes', 'Captured by Nexus'],
+      tasks: ['Tasks', 'Today and upcoming'], knowledge: ['Knowledge', 'People, projects, terms'],
+      search: ['Search', 'Ask across everything'], settings: ['Settings', 'Workspace']
+    };
+    const [title, sub] = titles[s] || titles.home;
+    return {
+      screenTitle: title, screenSub: sub,
+      atHome: s === 'home', atFeed: s === 'feed', atMail: s === 'mail', atDocs: s === 'docs',
+      atCalendar: s === 'calendar', atNotes: s === 'notes', atTasks: s === 'tasks',
+      atKnowledge: s === 'knowledge', atSearch: s === 'search', atSettings: s === 'settings',
+      atOther: !['home', 'mail', 'docs'].includes(s),
+      sidebarOn: this.state.sidebar && (this.props.showSidebar ?? true),
+      panelOn: this.props.showAiPanel ?? true,
+      reasoningOn: this.props.showReasoning ?? true,
+      toggleSidebar: () => this.setState(p => ({ sidebar: !p.sidebar })),
+      goHome: this.go('home'), goFeed: this.go('feed'), goMail: this.go('mail'),
+      goDocs: this.go('docs'), goCalendar: this.go('calendar'), goNotes: this.go('notes'),
+      goTasks: this.go('tasks'), goKnowledge: this.go('knowledge'),
+      goSearch: this.go('search'), goSettings: this.go('settings')
+    };
+  }
+}
+</script>
+</body>
+</html>

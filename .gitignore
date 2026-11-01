@@ -1,0 +1,30 @@
+# Dependencies and builds
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.import_linter_cache/
+
+# Local data and secrets: never commit
+.env
+.env.*
+!.env.example
+.dev-home/
+*.db
+*.db-wal
+*.db-shm
+*.pst
+
+# Test output
+playwright-report/
+test-results/
+
+# OS
+.DS_Store
