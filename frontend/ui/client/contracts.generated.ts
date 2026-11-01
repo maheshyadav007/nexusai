@@ -5,15 +5,382 @@
  * and run json-schema-to-typescript to regenerate this file.
  */
 
-export type Code = string;
+export type Host = string;
+export type Port = number;
+export type Secure = boolean;
+export type Type = "password";
+export type User = string;
+export type Label = string;
+export type Mailboxes = string[];
+export type Name = string;
+export type HasPassword = boolean;
+export type Active = string | null;
+export type Accounts = MailAccountView[];
+export type Name1 = string;
+export type Password = string | null;
+export type MakeActive = boolean;
+export type Password1 = string | null;
+export type Service = "imap" | "smtp";
+export type Ok = boolean;
 export type Message = string;
+export type Ok1 = boolean;
+export type Results = ConnectionResult[];
+export type Name2 = string;
+export type Account = string | null;
+export type State = "off" | "connecting" | "syncing" | "backfilling" | "live" | "offline" | "failed";
+export type Message1 = string | null;
+export type Messages = number;
+export type BackfillRemaining = boolean;
+export type Folder = "inbox" | "sent" | "drafts" | "trash" | "archive" | "other";
+export type Category = string | null;
+/**
+ * Paging cursor
+ */
+export type Before = string | null;
+export type Limit = number;
+export type Id = number;
+export type Subject = string;
+export type Participants = string[];
+export type LastDate = string;
+export type Snippet = string;
+export type MessageCount = number;
+export type UnreadCount = number;
+export type Flagged = boolean;
+export type HasAttachments = boolean;
+export type Category1 = string | null;
+export type CategorySource = string | null;
+export type Why = string | null;
+export type Status = "none" | "waiting_on_you" | "waiting_on_others" | "resolved" | "fyi";
+export type Importance = "low" | "normal" | "high";
+export type Threads = ThreadRow[];
+export type NextBefore = string | null;
+export type Categories = string[];
+export type Id1 = number;
+export type Index = number;
+export type Filename = string;
+export type ContentType = string;
+export type Size = number;
+export type Kind = "signature" | "inline" | "attachment" | "calendar" | "risky";
+export type Id2 = number;
+export type Subject1 = string;
+export type FromName = string;
+export type FromAddr = string;
+export type To = string[];
+export type Cc = string[];
+export type Date = string;
+export type OwnText = string;
+export type Text = string;
+export type Html = string | null;
+export type Read = boolean;
+export type Flagged1 = boolean;
+export type Folder1 = "inbox" | "sent" | "drafts" | "trash" | "archive" | "other";
+export type Encrypted = ("smime" | "pgp") | null;
+export type Signed = boolean;
+export type Why1 = string | null;
+export type Added = string[];
+export type Dropped = string[];
+export type Attachments = AttachmentView[];
+export type HiddenAttachments = number;
+export type Messages1 = MessageView[];
+export type Id3 = number;
+export type Read1 = boolean;
+export type Id4 = number;
+export type Flagged2 = boolean;
+export type Id5 = number;
+export type To1 = "inbox" | "sent" | "drafts" | "trash" | "archive" | "other";
+export type Id6 = number;
+export type Status1 = "none" | "waiting_on_you" | "waiting_on_others" | "resolved" | "fyi";
+export type Id7 = number;
+export type Category2 = string | null;
+export type Ok2 = boolean;
+export type Field = "subject" | "body" | "sender" | "header" | "has_attachment";
+export type Value = string;
+export type Header = string | null;
+export type Category3 = string | null;
+export type MarkRead = boolean;
+export type SkipAgent = boolean;
+export type Notify = boolean;
+export type Tag = string | null;
+export type Name3 = string;
+export type Enabled = boolean;
+/**
+ * @minItems 1
+ * @maxItems 20
+ */
+export type Conditions =
+  | [RuleCondition]
+  | [RuleCondition, RuleCondition]
+  | [RuleCondition, RuleCondition, RuleCondition]
+  | [RuleCondition, RuleCondition, RuleCondition, RuleCondition]
+  | [RuleCondition, RuleCondition, RuleCondition, RuleCondition, RuleCondition]
+  | [RuleCondition, RuleCondition, RuleCondition, RuleCondition, RuleCondition, RuleCondition]
+  | [RuleCondition, RuleCondition, RuleCondition, RuleCondition, RuleCondition, RuleCondition, RuleCondition]
+  | [
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition
+    ]
+  | [
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition
+    ]
+  | [
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition
+    ]
+  | [
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition
+    ]
+  | [
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition
+    ]
+  | [
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition
+    ]
+  | [
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition
+    ]
+  | [
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition
+    ]
+  | [
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition
+    ]
+  | [
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition
+    ]
+  | [
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition
+    ]
+  | [
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition
+    ]
+  | [
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition,
+      RuleCondition
+    ];
+/**
+ * @maxItems 500
+ */
+export type Rules = MailRule[];
+export type Name4 = string;
+export type Address = string;
+export type Id8 = number | null;
+export type ThreadId = number | null;
+export type ReplyToMessageId = number | null;
+/**
+ * @maxItems 500
+ */
+export type To2 = Recipient[];
+/**
+ * @maxItems 500
+ */
+export type Cc1 = Recipient[];
+/**
+ * @maxItems 500
+ */
+export type Bcc = Recipient[];
+export type Subject2 = string;
+export type Body = string;
+export type Source = "user" | "agent";
+export type Drafts = Draft[];
+export type Id9 = number;
+export type MessageId = number;
+export type ReplyAll = boolean;
+export type Dropped1 = string[];
+export type Query = string;
+export type Sender = string | null;
+export type DateFrom = string | null;
+export type DateTo = string | null;
+export type Category4 = string | null;
+export type HasAttachment = boolean | null;
+export type Folder2 = ("inbox" | "sent" | "drafts" | "trash" | "archive" | "other") | null;
+export type Limit1 = number;
+export type MessageId1 = number;
+export type Excerpt = string;
+export type MatchedAttachment = boolean;
+export type Hits = SearchHit[];
+export type Threads1 = number;
+export type Reason = string;
+export type State1 = "off" | "connecting" | "syncing" | "backfilling" | "live" | "offline" | "failed";
+export type MessageId2 = number;
+export type ThreadId1 = number;
+export type Rule = string | null;
+export type ThreadId2 = number;
+export type Field1 = string;
+export type Code = string;
+export type Message2 = string;
 export type TraceId = string | null;
-export type Id = string;
+export type Id10 = string;
 export type Seq = number;
-export type Type = string;
+export type Type1 = string;
 export type Version = number;
 export type Time = string;
-export type Source = string;
+export type Source1 = string;
 export type TraceId1 = string;
 export type CauseId = string | null;
 export type Depth = number;
@@ -39,15 +406,15 @@ export type Accent1 = ("terracotta" | "cobalt" | "moss" | "plum") | null;
 export type DefaultScreen1 = ("today" | "inbox") | null;
 export type DateFormat1 = ("system" | "day-month" | "month-day" | "iso") | null;
 export type TimeFormat1 = ("system" | "12" | "24") | null;
-export type Id1 = string;
-export type Name = string;
+export type Id11 = string;
+export type Name5 = string;
 export type Models = AvailableModel[];
-export type State = "idle" | "waiting" | "failed";
+export type State2 = "idle" | "waiting" | "failed";
 export type UserCode = string | null;
 export type VerificationUrl = string | null;
 export type Error1 = string | null;
 export type Model = string;
-export type Text = string;
+export type Text1 = string;
 export type Change = "login_started" | "login_failed" | "login_cancelled" | "connected" | "disconnected" | "selected";
 export type Connected = boolean;
 export type AccountEmail = string | null;
@@ -63,40 +430,40 @@ export type Path3 = string;
 export type Parent = string | null;
 export type Folders = string[];
 export type Path4 = string;
-export type Ok = boolean;
+export type Ok3 = boolean;
 export type Problems = string[];
 export type Warnings = string[];
 export type FreeBytes = number | null;
 export type IsExistingHome = boolean;
-export type State1 = "ready" | "unset" | "missing";
+export type State3 = "ready" | "unset" | "missing";
 export type Path5 = string | null;
 export type DefaultPath = string;
-export type Message1 = string | null;
+export type Message3 = string | null;
 export type Step = string | null;
 export type Completed = boolean;
 export type Completed1 = boolean;
 export type CurrentStep = string | null;
 export type Step1 = string;
-export type Name1 = string;
+export type Name6 = string;
 export type Role = string;
 export type Signature = string;
 export type Tone = "formal" | "friendly" | "brief";
 export type Vips = string;
 export type About = string;
 export type Fields = string[];
-export type Kind = string | null;
-export type Id2 = number | null;
-export type Id3 = number;
+export type Kind1 = string | null;
+export type Id12 = number | null;
+export type Id13 = number;
 export type Time2 = string;
-export type Kind1 = string;
+export type Kind2 = string;
 export type Title = string;
 export type Detail = string;
 export type Link = string | null;
-export type Read = boolean;
+export type Read2 = boolean;
 export type Items = Notification[];
 export type Unread = number;
 export type Kinds = string[];
-export type Kind2 = string;
+export type Kind3 = string;
 export type Title1 = string;
 export type Detail1 = string;
 export type Link1 = string | null;
@@ -124,13 +491,13 @@ export type TraceId2 = string;
 export type Lines = {
   [k: string]: unknown;
 }[];
-export type Name2 = string;
-export type Host = string;
-export type Ok1 = boolean;
+export type Name7 = string;
+export type Host1 = string;
+export type Ok4 = boolean;
 export type Detail2 = string;
 export type Checks = NetworkCheck[];
 export type Level = string | null;
-export type Text1 = string | null;
+export type Text2 = string | null;
 export type Events1 = {
   [k: string]: unknown;
 }[];
@@ -139,6 +506,52 @@ export type Lines1 = {
 }[];
 
 export interface Contracts {
+  ServerSettings?: ServerSettings;
+  MailAuth?: MailAuth;
+  MailProfile?: MailProfile;
+  GetMailAccounts?: GetMailAccounts;
+  MailAccountView?: MailAccountView;
+  MailAccounts?: MailAccounts;
+  SaveMailAccount?: SaveMailAccount;
+  TestMailAccount?: TestMailAccount;
+  ConnectionResult?: ConnectionResult;
+  MailTestResult?: MailTestResult;
+  RemoveMailAccount?: RemoveMailAccount;
+  GetMailStatus?: GetMailStatus;
+  MailStatus?: MailStatus;
+  ListThreads?: ListThreads;
+  ThreadRow?: ThreadRow;
+  ThreadList?: ThreadList;
+  GetThread?: GetThread;
+  AttachmentView?: AttachmentView;
+  MessageView?: MessageView;
+  ThreadView?: ThreadView;
+  SetThreadRead?: SetThreadRead;
+  SetThreadFlag?: SetThreadFlag;
+  MoveThread?: MoveThread;
+  SetThreadStatus?: SetThreadStatus;
+  SetThreadCategory?: SetThreadCategory;
+  MailDone?: MailDone;
+  RuleCondition?: RuleCondition;
+  RuleActions?: RuleActions;
+  MailRule?: MailRule;
+  GetRules?: GetRules;
+  RuleSet?: RuleSet;
+  Recipient?: Recipient;
+  Draft?: Draft;
+  SendDraft?: SendDraft;
+  ListDrafts?: ListDrafts;
+  DraftList?: DraftList;
+  RemoveDraft?: RemoveDraft;
+  ReplyContext?: ReplyContext;
+  ReplyDraft?: ReplyDraft;
+  SearchMail?: SearchMail;
+  SearchHit?: SearchHit;
+  SearchResults?: SearchResults;
+  MailChanged?: MailChanged;
+  MailSyncChanged?: MailSyncChanged;
+  MailReceived?: MailReceived;
+  ThreadUpdated?: ThreadUpdated;
   ApiError?: ApiError;
   AppEvent?: AppEvent;
   EventLog?: EventLog;
@@ -198,11 +611,464 @@ export interface Contracts {
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ServerSettings".
+ */
+export interface ServerSettings {
+  host: Host;
+  port: Port;
+  secure?: Secure;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MailAuth".
+ */
+export interface MailAuth {
+  type?: Type;
+  user: User;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MailProfile".
+ */
+export interface MailProfile {
+  label: Label;
+  imap: ServerSettings;
+  smtp: ServerSettings;
+  auth: MailAuth;
+  mailboxes?: Mailboxes;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "GetMailAccounts".
+ */
+export interface GetMailAccounts {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MailAccountView".
+ */
+export interface MailAccountView {
+  name: Name;
+  profile: MailProfile;
+  has_password: HasPassword;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MailAccounts".
+ */
+export interface MailAccounts {
+  active: Active;
+  accounts: Accounts;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SaveMailAccount".
+ */
+export interface SaveMailAccount {
+  name: Name1;
+  profile: MailProfile;
+  password?: Password;
+  make_active?: MakeActive;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "TestMailAccount".
+ */
+export interface TestMailAccount {
+  profile: MailProfile;
+  password?: Password1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ConnectionResult".
+ */
+export interface ConnectionResult {
+  service: Service;
+  ok: Ok;
+  message: Message;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MailTestResult".
+ */
+export interface MailTestResult {
+  ok: Ok1;
+  results: Results;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "RemoveMailAccount".
+ */
+export interface RemoveMailAccount {
+  name: Name2;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "GetMailStatus".
+ */
+export interface GetMailStatus {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MailStatus".
+ */
+export interface MailStatus {
+  account: Account;
+  state: State;
+  message?: Message1;
+  messages?: Messages;
+  backfill_remaining?: BackfillRemaining;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ListThreads".
+ */
+export interface ListThreads {
+  folder?: Folder;
+  category?: Category;
+  before?: Before;
+  limit?: Limit;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ThreadRow".
+ */
+export interface ThreadRow {
+  id: Id;
+  subject: Subject;
+  participants: Participants;
+  last_date: LastDate;
+  snippet: Snippet;
+  message_count: MessageCount;
+  unread_count: UnreadCount;
+  flagged: Flagged;
+  has_attachments: HasAttachments;
+  category: Category1;
+  category_source: CategorySource;
+  why: Why;
+  status: Status;
+  importance: Importance;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ThreadList".
+ */
+export interface ThreadList {
+  threads: Threads;
+  next_before: NextBefore;
+  categories: Categories;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "GetThread".
+ */
+export interface GetThread {
+  id: Id1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "AttachmentView".
+ */
+export interface AttachmentView {
+  index: Index;
+  filename: Filename;
+  content_type: ContentType;
+  size: Size;
+  kind: Kind;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MessageView".
+ */
+export interface MessageView {
+  id: Id2;
+  subject: Subject1;
+  from_name: FromName;
+  from_addr: FromAddr;
+  to: To;
+  cc: Cc;
+  date: Date;
+  own_text: OwnText;
+  text: Text;
+  html: Html;
+  read: Read;
+  flagged: Flagged1;
+  folder: Folder1;
+  encrypted: Encrypted;
+  signed: Signed;
+  why: Why1;
+  added: Added;
+  dropped: Dropped;
+  attachments: Attachments;
+  hidden_attachments: HiddenAttachments;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ThreadView".
+ */
+export interface ThreadView {
+  thread: ThreadRow;
+  messages: Messages1;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SetThreadRead".
+ */
+export interface SetThreadRead {
+  id: Id3;
+  read: Read1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SetThreadFlag".
+ */
+export interface SetThreadFlag {
+  id: Id4;
+  flagged: Flagged2;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MoveThread".
+ */
+export interface MoveThread {
+  id: Id5;
+  to: To1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SetThreadStatus".
+ */
+export interface SetThreadStatus {
+  id: Id6;
+  status: Status1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SetThreadCategory".
+ */
+export interface SetThreadCategory {
+  id: Id7;
+  category?: Category2;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MailDone".
+ */
+export interface MailDone {
+  ok?: Ok2;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "RuleCondition".
+ */
+export interface RuleCondition {
+  field: Field;
+  value?: Value;
+  header?: Header;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "RuleActions".
+ */
+export interface RuleActions {
+  category?: Category3;
+  mark_read?: MarkRead;
+  skip_agent?: SkipAgent;
+  notify?: Notify;
+  tag?: Tag;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MailRule".
+ */
+export interface MailRule {
+  name: Name3;
+  enabled?: Enabled;
+  conditions: Conditions;
+  actions: RuleActions;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "GetRules".
+ */
+export interface GetRules {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "RuleSet".
+ */
+export interface RuleSet {
+  rules: Rules;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "Recipient".
+ */
+export interface Recipient {
+  name?: Name4;
+  address: Address;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "Draft".
+ */
+export interface Draft {
+  id?: Id8;
+  thread_id?: ThreadId;
+  reply_to_message_id?: ReplyToMessageId;
+  to?: To2;
+  cc?: Cc1;
+  bcc?: Bcc;
+  subject?: Subject2;
+  body?: Body;
+  source?: Source;
+}
+/**
+ * Sending is the person's own click; nothing else calls this without their approval.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SendDraft".
+ */
+export interface SendDraft {
+  draft: Draft;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ListDrafts".
+ */
+export interface ListDrafts {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "DraftList".
+ */
+export interface DraftList {
+  drafts: Drafts;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "RemoveDraft".
+ */
+export interface RemoveDraft {
+  id: Id9;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ReplyContext".
+ */
+export interface ReplyContext {
+  message_id: MessageId;
+  reply_all?: ReplyAll;
+}
+/**
+ * A starting draft, plus anyone from the conversation who won't get it (THR-9).
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ReplyDraft".
+ */
+export interface ReplyDraft {
+  draft: Draft;
+  dropped: Dropped1;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SearchMail".
+ */
+export interface SearchMail {
+  query?: Query;
+  sender?: Sender;
+  date_from?: DateFrom;
+  date_to?: DateTo;
+  category?: Category4;
+  has_attachment?: HasAttachment;
+  folder?: Folder2;
+  limit?: Limit1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SearchHit".
+ */
+export interface SearchHit {
+  thread: ThreadRow;
+  message_id: MessageId1;
+  excerpt: Excerpt;
+  matched_attachment: MatchedAttachment;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SearchResults".
+ */
+export interface SearchResults {
+  hits: Hits;
+  [k: string]: unknown;
+}
+/**
+ * Counts and IDs only, never content.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MailChanged".
+ */
+export interface MailChanged {
+  threads: Threads1;
+  reason: Reason;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MailSyncChanged".
+ */
+export interface MailSyncChanged {
+  state: State1;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MailReceived".
+ */
+export interface MailReceived {
+  message_id: MessageId2;
+  thread_id: ThreadId1;
+  rule: Rule;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ThreadUpdated".
+ */
+export interface ThreadUpdated {
+  thread_id: ThreadId2;
+  field: Field1;
+  value?: Value1;
+  [k: string]: unknown;
+}
+export interface Value1 {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "ApiError".
  */
 export interface ApiError {
   code: Code;
-  message: Message;
+  message: Message2;
   trace_id?: TraceId;
   [k: string]: unknown;
 }
@@ -213,12 +1079,12 @@ export interface ApiError {
  * via the `definition` "AppEvent".
  */
 export interface AppEvent {
-  id: Id;
+  id: Id10;
   seq: Seq;
-  type: Type;
+  type: Type1;
   version: Version;
   time: Time;
-  source: Source;
+  source: Source1;
   trace_id: TraceId1;
   cause_id?: CauseId;
   depth?: Depth;
@@ -309,8 +1175,8 @@ export interface UpdateSettings {
  * via the `definition` "AvailableModel".
  */
 export interface AvailableModel {
-  id: Id1;
-  name: Name;
+  id: Id11;
+  name: Name5;
   [k: string]: unknown;
 }
 /**
@@ -356,7 +1222,7 @@ export interface ListModels {
  * via the `definition` "ModelLogin".
  */
 export interface ModelLogin {
-  state: State;
+  state: State2;
   user_code?: UserCode;
   verification_url?: VerificationUrl;
   error?: Error1;
@@ -368,7 +1234,7 @@ export interface ModelLogin {
  */
 export interface ModelReply {
   model: Model;
-  text: Text;
+  text: Text1;
   [k: string]: unknown;
 }
 /**
@@ -456,7 +1322,7 @@ export interface FolderListing {
  */
 export interface HomeCheck {
   path: Path4;
-  ok: Ok;
+  ok: Ok3;
   problems: Problems;
   warnings: Warnings;
   free_bytes?: FreeBytes;
@@ -468,10 +1334,10 @@ export interface HomeCheck {
  * via the `definition` "HomeStatus".
  */
 export interface HomeStatus {
-  state: State1;
+  state: State3;
   path?: Path5;
   default_path: DefaultPath;
-  message?: Message1;
+  message?: Message3;
   [k: string]: unknown;
 }
 /**
@@ -525,7 +1391,7 @@ export interface GetProfile {
  * via the `definition` "Profile".
  */
 export interface Profile {
-  name?: Name1;
+  name?: Name6;
   role?: Role;
   signature?: Signature;
   tone?: Tone;
@@ -548,7 +1414,7 @@ export interface ProfileChanged {
  * via the `definition` "ListNotifications".
  */
 export interface ListNotifications {
-  kind?: Kind;
+  kind?: Kind1;
 }
 /**
  * No id means all of them.
@@ -557,20 +1423,20 @@ export interface ListNotifications {
  * via the `definition` "MarkNotificationsRead".
  */
 export interface MarkNotificationsRead {
-  id?: Id2;
+  id?: Id12;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "Notification".
  */
 export interface Notification {
-  id: Id3;
+  id: Id13;
   time: Time2;
-  kind: Kind1;
+  kind: Kind2;
   title: Title;
   detail: Detail;
   link: Link;
-  read: Read;
+  read: Read2;
   [k: string]: unknown;
 }
 /**
@@ -590,7 +1456,7 @@ export interface NotificationList {
  * via the `definition` "NotificationRequested".
  */
 export interface NotificationRequested {
-  kind: Kind2;
+  kind: Kind3;
   title: Title1;
   detail?: Detail1;
   link?: Link1;
@@ -691,9 +1557,9 @@ export interface LogLines {
  * via the `definition` "NetworkCheck".
  */
 export interface NetworkCheck {
-  name: Name2;
-  host: Host;
-  ok: Ok1;
+  name: Name7;
+  host: Host1;
+  ok: Ok4;
   detail: Detail2;
   [k: string]: unknown;
 }
@@ -711,7 +1577,7 @@ export interface NetworkChecks {
  */
 export interface SearchLogs {
   level?: Level;
-  text?: Text1;
+  text?: Text2;
 }
 /**
  * Everything that happened under one trace ID, oldest first.

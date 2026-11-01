@@ -1,4 +1,33 @@
 import type {
+  Draft,
+  DraftList,
+  GetMailAccounts,
+  GetMailStatus,
+  GetRules,
+  GetThread,
+  ListDrafts,
+  ListThreads,
+  MailAccounts,
+  MailDone,
+  MailStatus,
+  MailTestResult,
+  MoveThread,
+  RemoveDraft,
+  RemoveMailAccount,
+  ReplyContext,
+  ReplyDraft,
+  RuleSet,
+  SaveMailAccount,
+  SearchMail,
+  SearchResults,
+  SendDraft,
+  SetThreadCategory,
+  SetThreadFlag,
+  SetThreadRead,
+  SetThreadStatus,
+  TestMailAccount,
+  ThreadList,
+  ThreadView,
   ApiError,
   AvailableModels,
   CancelModelLogin,
@@ -52,6 +81,18 @@ interface Commands {
   "sidebar.reset": [ResetSidebar, SidebarLayout];
   "notifications.markRead": [MarkNotificationsRead, NotificationsChanged];
   "network.check": [CheckNetwork, NetworkChecks];
+  "mail.accounts.test": [TestMailAccount, MailTestResult];
+  "mail.accounts.save": [SaveMailAccount, MailAccounts];
+  "mail.accounts.remove": [RemoveMailAccount, MailAccounts];
+  "thread.setRead": [SetThreadRead, MailDone];
+  "thread.setFlag": [SetThreadFlag, MailDone];
+  "thread.move": [MoveThread, MailDone];
+  "thread.setStatus": [SetThreadStatus, MailDone];
+  "thread.setCategory": [SetThreadCategory, MailDone];
+  "rules.save": [RuleSet, RuleSet];
+  "drafts.save": [Draft, Draft];
+  "drafts.remove": [RemoveDraft, MailDone];
+  "mail.send": [SendDraft, MailDone];
 }
 
 interface Queries {
@@ -65,6 +106,14 @@ interface Queries {
   "logs.search": [SearchLogs, LogLines];
   "trace.get": [GetTrace, TraceView];
   "diagnostics.get": [GetDiagnostics, Diagnostics];
+  "mail.accounts": [GetMailAccounts, MailAccounts];
+  "mail.status": [GetMailStatus, MailStatus];
+  "threads.list": [ListThreads, ThreadList];
+  "thread.get": [GetThread, ThreadView];
+  "rules.get": [GetRules, RuleSet];
+  "drafts.list": [ListDrafts, DraftList];
+  "mail.replyDraft": [ReplyContext, ReplyDraft];
+  "search.run": [SearchMail, SearchResults];
 }
 
 export class ApiRequestError extends Error {

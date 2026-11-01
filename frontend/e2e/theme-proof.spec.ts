@@ -11,7 +11,7 @@ test.beforeAll(async ({ request }) => {
   await request.post("/api/commands/onboarding.finish", { data: {} });
 });
 
-const SCREENS = ["/today", "/settings", "/settings?section=profile", "/settings?section=preferences", "/settings?section=models", "/settings?section=home", "/settings?section=network", "/settings?section=about", "/logs", "/mail/inbox", "/gallery", "/gallery/shell"];
+const SCREENS = ["/today", "/settings", "/settings?section=profile", "/settings?section=preferences", "/settings?section=accounts", "/settings?section=rules", "/settings?section=models", "/settings?section=home", "/settings?section=network", "/settings?section=about", "/logs", "/mail/inbox", "/mail/sent", "/mail/drafts", "/mail/categories", "/search", "/gallery", "/gallery/shell"];
 
 for (const path of SCREENS) {
   test(`${path} loads with no browser errors`, async ({ page }) => {
@@ -262,13 +262,13 @@ test("logs show live, filter, open a trace, and never hold a secret", async ({ p
   const row = page.getByTestId("log-row").filter({ hasText: "settings.changed" }).first();
   await expect(row).toBeVisible();
 
-  await page.getByRole("textbox", { name: "Search" }).fill("tracee2e");
+  await page.getByRole("textbox", { name: "Search", exact: true }).fill("tracee2e");
   await expect(page.getByTestId("log-row").first()).toContainText("settings.changed");
   await page.getByTestId("log-row").first().getByRole("button", { name: "View" }).click();
   await expect(page.getByTestId("trace-events")).toContainText("settings.changed");
   await page.keyboard.press("Escape");
 
-  await page.getByRole("textbox", { name: "Search" }).fill("no such log line");
+  await page.getByRole("textbox", { name: "Search", exact: true }).fill("no such log line");
   await expect(page.getByText("Nothing matches")).toBeVisible();
   await request.post("/api/commands/settings.update", { data: { density: "comfortable" } });
 });

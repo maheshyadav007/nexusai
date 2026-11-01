@@ -1,4 +1,4 @@
-import { Activity, AlarmClock, Archive, ArrowDown, ArrowUp, Bell, Bot, BrainCircuit, CalendarDays, Check, ChevronDown, ChevronRight, CircleAlert, Clock, FileText, FolderOpen, GripVertical, Inbox, LayoutPanelTop, ListChecks, Loader, Mails, MessagesSquare, PanelLeftClose, PanelLeftOpen, PenLine, ScrollText, Search, Send, Settings, ShieldCheck, SlidersHorizontal, Sun, Tags, Terminal, Upload, WifiOff, X } from "lucide-react";
+import { Activity, AlarmClock, Archive, ArrowDown, ArrowUp, Bell, Flag, Paperclip, Bot, BrainCircuit, CalendarDays, Check, ChevronDown, ChevronRight, CircleAlert, Clock, FileText, FolderOpen, GripVertical, Inbox, LayoutPanelTop, ListChecks, Loader, Mails, MessagesSquare, PanelLeftClose, PanelLeftOpen, PenLine, ScrollText, Search, Send, Settings, ShieldCheck, SlidersHorizontal, Sun, Tags, Terminal, Upload, WifiOff, X } from "lucide-react";
 
 // Features name an icon by what it's for, so one change here updates every use.
 export const ICONS = {
@@ -7,6 +7,7 @@ export const ICONS = {
   all: FolderOpen,
   approvals: ShieldCheck,
   archive: Archive,
+  attachment: Paperclip,
   categories: Tags,
   channel: MessagesSquare,
   check: Check,
@@ -19,6 +20,7 @@ export const ICONS = {
   drafts: PenLine,
   error: CircleAlert,
   expand: PanelLeftOpen,
+  flag: Flag,
   fromEmail: Mails,
   grip: GripVertical,
   inbox: Inbox,

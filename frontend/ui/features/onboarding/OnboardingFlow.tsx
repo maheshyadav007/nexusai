@@ -5,6 +5,7 @@ import { useEffect, type ReactNode } from "react";
 import { useHomeStatus } from "@/ui/client/home";
 import { useFinishOnboarding, useOnboarding, useSetStep } from "@/ui/client/onboarding";
 import { HomeChooser } from "@/ui/features/home/HomeChooser";
+import { AccountSettings } from "@/ui/features/settings/AccountSettings";
 import { AppearanceSettings } from "@/ui/features/settings/AppearanceSettings";
 import { ModelSettings } from "@/ui/features/settings/ModelSettings";
 import { ProfileForm } from "@/ui/features/settings/ProfileForm";
@@ -22,11 +23,12 @@ interface Step {
   optional?: boolean;
 }
 
-// Mail, the setup interview, priorities, PST import and permissions join as their stages arrive.
+// The setup interview, priorities, PST import and permissions join as their stages arrive.
 const STEPS: readonly Step[] = [
   { id: "home", label: "setup.home.label", title: "setup.home.title", description: "setup.home.description" },
   { id: "theme", label: "setup.theme.label", title: "setup.theme.title", description: "setup.theme.description" },
   { id: "profile", label: "setup.profile.label", title: "setup.profile.title", description: "setup.profile.description" },
+  { id: "mail", label: "setup.mail.label", title: "setup.mail.title", description: "setup.mail.description", optional: true },
   { id: "model", label: "setup.model.label", title: "setup.model.title", description: "setup.model.description", optional: true },
 ];
 
@@ -119,6 +121,7 @@ export function OnboardingFlow() {
       }
     >
       {step.id === "theme" ? <AppearanceSettings /> : null}
+      {step.id === "mail" ? <AccountSettings /> : null}
       {step.id === "model" ? <ModelSettings /> : null}
     </Frame>
   );

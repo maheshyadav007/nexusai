@@ -45,7 +45,7 @@ export function NotificationCenter() {
           ) : null}
         </div>
         {(list.data?.kinds.length ?? 0) > 1 ? (
-          <Select value={kind} options={[{ value: ALL, label: t("notifications.all") }, ...(list.data?.kinds ?? []).map((value) => ({ value, label: value }))]} onChange={setKind} />
+          <Select label={t("notifications.filter")} value={kind} options={[{ value: ALL, label: t("notifications.all") }, ...(list.data?.kinds ?? []).map((value) => ({ value, label: value }))]} onChange={setKind} />
         ) : null}
         {list.isPending ? <Skeleton /> : null}
         {list.isError ? <ErrorState title={t("notifications.error")} onRetry={() => void list.refetch()} /> : null}

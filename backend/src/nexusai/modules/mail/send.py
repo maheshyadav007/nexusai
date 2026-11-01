@@ -7,6 +7,9 @@ from email.utils import formataddr, formatdate, make_msgid
 
 from nexusai.contracts.mail import Draft, MailProfile, Recipient
 
+IMPLICIT_TLS_PORT = 465
+HELLO_NAME = "[127.0.0.1]"
+
 
 class SendFailed(Exception):
     """The message is shown to the user, and the draft is kept."""
@@ -43,25 +46,39 @@ def build_message(
     return message
 
 
+def _connect(profile: MailProfile, password: str, timeout: float) -> smtplib.SMTP:
+    """A signed-in connection. The fixed hostname skips smtplib's slow lookup of this computer's
+    name (seconds on some networks), and keeps that name from going to the server."""
+    server = profile.smtp
+    client: smtplib.SMTP
+    if server.secure and server.port == IMPLICIT_TLS_PORT:
+        client = smtplib.SMTP_SSL(
+            server.host,
+            server.port,
+            local_hostname=HELLO_NAME,
+            timeout=timeout,
+            context=ssl.create_default_context(),
+        )
+    else:
+        client = smtplib.SMTP(server.host, server.port, local_hostname=HELLO_NAME, timeout=timeout)
+    try:
+        if server.secure and server.port != IMPLICIT_TLS_PORT:
+            client.starttls(context=ssl.create_default_context())
+        client.login(profile.auth.user, password)
+    except BaseException:
+        client.close()
+        raise
+    return client
+
+
 def send(
     message: EmailMessage, draft: Draft, profile: MailProfile, password: str, timeout: float
 ) -> None:
     recipients = [r.address for r in [*draft.to, *draft.cc, *draft.bcc]]
     if not recipients:
         raise SendFailed("Add at least one recipient.")
-    server = profile.smtp
     try:
-        client: smtplib.SMTP
-        if server.secure and server.port == 465:
-            client = smtplib.SMTP_SSL(
-                server.host, server.port, timeout=timeout, context=ssl.create_default_context()
-            )
-        else:
-            client = smtplib.SMTP(server.host, server.port, timeout=timeout)
-        with client:
-            if server.secure and server.port != 465:
-                client.starttls(context=ssl.create_default_context())
-            client.login(profile.auth.user, password)
+        with _connect(profile, password, timeout) as client:
             client.send_message(message, from_addr=profile.auth.user, to_addrs=recipients)
     except smtplib.SMTPAuthenticationError as error:
         raise SendFailed("The mail server refused the username or password.") from error
@@ -75,21 +92,11 @@ def send(
 
 def test_smtp(profile: MailProfile, password: str, timeout: float) -> str | None:
     """None if it worked, or what went wrong in plain words."""
-    server = profile.smtp
     try:
-        client: smtplib.SMTP
-        if server.secure and server.port == 465:
-            client = smtplib.SMTP_SSL(
-                server.host, server.port, timeout=timeout, context=ssl.create_default_context()
-            )
-        else:
-            client = smtplib.SMTP(server.host, server.port, timeout=timeout)
-        with client:
-            if server.secure and server.port != 465:
-                client.starttls(context=ssl.create_default_context())
-            client.login(profile.auth.user, password)
+        with _connect(profile, password, timeout):
+            return None
     except smtplib.SMTPAuthenticationError:
         return "The server refused that username or password."
     except (smtplib.SMTPException, OSError) as error:
+        server = profile.smtp
         return f"Couldn't connect to {server.host}:{server.port}. {type(error).__name__}"
-    return None

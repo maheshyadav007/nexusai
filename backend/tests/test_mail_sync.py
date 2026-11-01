@@ -84,6 +84,19 @@ def test_account_test_reports_each_service(client: TestClient, fake: FakeMail) -
     assert all("refused" in result["message"] for result in bad["results"])
 
 
+def test_smtp_never_looks_up_this_computers_name(
+    client: TestClient, fake: FakeMail, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail(*_: Any) -> str:
+        raise AssertionError("getfqdn is slow on some networks, and shares the computer's name")
+
+    monkeypatch.setattr(socket, "getfqdn", fail)
+    result = client.post(
+        "/api/commands/mail.accounts.test", json={"profile": fake.profile(), "password": PASSWORD}
+    )
+    assert result.json()["ok"] is True
+
+
 def test_plain_connections_only_to_this_computer(client: TestClient, fake: FakeMail) -> None:
     profile = fake.profile()
     profile["imap"]["host"] = "mail.example.com"

@@ -6,10 +6,12 @@ import type { ReactNode } from "react";
 import { ErrorBoundary } from "@/ui/primitives/ErrorBoundary";
 import { Card } from "@/ui/primitives/Card";
 import { t, type StringKey } from "@/ui/strings";
+import { AccountSettings } from "./AccountSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { ModelSettings } from "./ModelSettings";
 import { PreferencesSettings } from "./PreferencesSettings";
 import { ProfileForm } from "./ProfileForm";
+import { RulesSettings } from "./RulesSettings";
 import { AboutSettings, HomeSettings, NetworkSettings } from "./SystemSettings";
 
 // Accounts, permissions, connectors, rules and more join as their stages arrive.
@@ -25,6 +27,8 @@ const SECTIONS: readonly { id: string; label: StringKey; content: () => ReactNod
     ),
   },
   { id: "preferences", label: "settings.section.preferences", content: () => <PreferencesSettings /> },
+  { id: "accounts", label: "settings.section.accounts", content: () => <AccountSettings /> },
+  { id: "rules", label: "settings.section.rules", content: () => <RulesSettings /> },
   { id: "models", label: "settings.models.title", content: () => <ModelSettings /> },
   { id: "home", label: "settings.section.home", content: () => <HomeSettings /> },
   { id: "network", label: "settings.section.network", content: () => <NetworkSettings /> },

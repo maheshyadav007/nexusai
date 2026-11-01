@@ -36,6 +36,10 @@ test("a new person goes from landing through setup into the app, and setup resum
   await noViolations(page);
   await page.getByRole("button", { name: "Continue" }).click();
 
+  await expect(page.getByRole("heading", { name: "Connect your mail" })).toBeVisible();
+  await noViolations(page);
+  await page.getByRole("button", { name: "Continue" }).click();
+
   // Closing midway resumes at the same step.
   await expect(page.getByRole("heading", { name: "Connect a model" })).toBeVisible();
   await page.goto("/");
@@ -44,7 +48,11 @@ test("a new person goes from landing through setup into the app, and setup resum
   await noViolations(page);
 
   await page.getByRole("button", { name: "Back" }).click();
+  await expect(page.getByRole("heading", { name: "Connect your mail" })).toBeVisible();
+  await page.getByRole("button", { name: "Back" }).click();
   await expect(page.getByRole("textbox", { name: "Name" })).toHaveValue("Asha Rao");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: "Connect your mail" })).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
 
   await page.getByRole("button", { name: "Enter NexusAI" }).click();

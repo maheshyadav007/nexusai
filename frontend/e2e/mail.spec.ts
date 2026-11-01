@@ -1,0 +1,189 @@
+import AxeBuilder from "@axe-core/playwright";
+import { expect, test, type Page } from "@playwright/test";
+
+const CONTROL = "http://127.0.0.1:8767/";
+const USER = "tester@example.com";
+const unique = (word: string) => `${word} ${Date.now()}${Math.floor(Math.random() * 1000)}`;
+
+const deliver = async (page: Page, mail: Record<string, unknown>) => {
+  const response = await page.request.post(CONTROL, { data: mail });
+  expect(response.ok()).toBe(true);
+};
+
+const noViolations = async (page: Page) => {
+  const { violations } = await new AxeBuilder({ page }).analyze();
+  expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
+};
+
+test.beforeAll(async ({ request }) => {
+  await request.post("/api/home/choose", { data: { path: `${process.env.E2E_HOME}/NexusAI` } });
+  await request.post("/api/commands/onboarding.finish", { data: {} });
+});
+
+test.describe.configure({ mode: "serial" });
+
+test("a mail account can be tested, and a wrong password says so", async ({ page }) => {
+  await page.goto("/mail/inbox");
+  await expect(page.getByText("No mail account connected")).toBeVisible();
+  await page.getByRole("link", { name: "Connect mail in Settings" }).click();
+  await expect(page).toHaveURL(/section=accounts/);
+
+  await page.getByRole("radio", { name: "Other" }).click();
+  await page.getByRole("textbox", { name: "Email address" }).fill(USER);
+  await page.getByLabel("Password").fill("wrong-password");
+  await page.getByRole("textbox", { name: "IMAP server" }).fill("127.0.0.1");
+  await page.getByRole("textbox", { name: "IMAP port" }).fill("8143");
+  await page.getByRole("textbox", { name: "SMTP server" }).fill("127.0.0.1");
+  await page.getByRole("textbox", { name: "SMTP port" }).fill("8025");
+  await page.getByRole("switch", { name: "Encrypted connection" }).click();
+  await noViolations(page);
+
+  await page.getByRole("button", { name: "Test connection" }).click();
+  await expect(page.getByTestId("connection-results")).toContainText("refused that username or password");
+
+  await page.getByLabel("Password").fill("test-password");
+  await page.getByRole("button", { name: "Test connection" }).click();
+  await expect(page.getByTestId("connection-results").getByText("Connected")).toHaveCount(2);
+
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page.getByTestId("mail-state")).toContainText("Up to date", { timeout: 20_000 });
+  await expect(page.getByText(USER)).toBeVisible();
+  await expect(page.getByLabel("Password")).toHaveCount(0);
+});
+
+test("new mail appears by itself, opens safely, and reads as read", async ({ page }) => {
+  await page.goto("/mail/inbox");
+  const subject = unique("Contract review");
+  await deliver(page, {
+    subject,
+    body: "Please review the contract.",
+    html: '<p>Please review the contract.</p><script>window.parent.document.title="HACKED"</script><img src="https://tracker.example/pixel.png">',
+  });
+  const row = page.getByTestId("thread-row").filter({ hasText: subject });
+  // No reload: the screen is told by an event.
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await noViolations(page);
+
+  const tracker: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("tracker.example")) tracker.push(request.url());
+  });
+  await row.getByRole("link").click();
+  await expect(page.getByRole("heading", { name: subject })).toBeVisible();
+  const frame = page.frameLocator("iframe");
+  await expect(frame.locator("p")).toHaveText("Please review the contract.");
+  expect(await page.title()).not.toBe("HACKED");
+  expect(tracker).toEqual([]);
+  await expect(page.getByText("Remote images are blocked")).toBeVisible();
+  await noViolations(page);
+
+  await page.goto("/mail/inbox");
+  await expect(page.getByTestId("thread-row").filter({ hasText: subject }).locator("span.bg-accent-default")).toHaveCount(0);
+});
+
+test("replying goes out with the right people and joins the conversation", async ({ page }) => {
+  await page.goto("/mail/inbox");
+  const subject = unique("Budget question");
+  await deliver(page, { subject, to: `${USER}, sam@example.com`, cc: "lee@example.com", body: "Can you confirm the numbers?" });
+  await page.getByTestId("thread-row").filter({ hasText: subject }).getByRole("link").click();
+
+  await page.getByRole("button", { name: "Reply", exact: true }).click();
+  await expect(page.getByText("This reply leaves out")).toContainText("sam@example.com");
+  await expect(page.getByRole("textbox", { name: "To", exact: true })).toHaveValue("priya@example.com");
+  await page.getByRole("button", { name: "Discard" }).click();
+
+  await page.getByRole("button", { name: "Reply all" }).click();
+  await expect(page.getByRole("textbox", { name: "Cc", exact: true })).toHaveValue("sam@example.com, lee@example.com");
+  await page.getByRole("textbox", { name: "Message" }).fill("Numbers confirmed.");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.getByText("Message sent").first()).toBeVisible();
+
+  const sent = (await (await page.request.get(CONTROL)).json()) as { to: string[]; raw: string }[];
+  const mine = sent.find((item) => item.raw.includes("Numbers confirmed."));
+  expect(mine?.to.sort()).toEqual(["lee@example.com", "priya@example.com", "sam@example.com"]);
+  expect(mine?.raw).toContain("In-Reply-To:");
+  await expect(page.getByTestId("message")).toHaveCount(2, { timeout: 15_000 });
+});
+
+test("a bad address blocks sending, and a saved draft can be reopened", async ({ page }) => {
+  await page.goto("/mail/inbox");
+  await page.getByRole("button", { name: "New message" }).click();
+  await page.getByRole("textbox", { name: "To", exact: true }).fill("not-an-address");
+  await expect(page.getByText("isn't a valid address")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
+
+  const subject = unique("Draft for later");
+  await page.getByRole("textbox", { name: "To", exact: true }).fill("someone@example.com");
+  await page.getByRole("textbox", { name: "Subject" }).fill(subject);
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page.getByText("Draft saved").first()).toBeVisible();
+  await page.getByRole("button", { name: "Close" }).click();
+
+  await page.goto("/mail/drafts");
+  await page.getByTestId("draft-row").filter({ hasText: subject }).click();
+  await expect(page.getByRole("textbox", { name: "Subject" })).toHaveValue(subject);
+  await page.getByRole("button", { name: "Discard" }).click();
+  await expect(page.getByTestId("draft-row").filter({ hasText: subject })).toHaveCount(0);
+});
+
+test("search finds mail from the top bar and filters narrow it", async ({ page }) => {
+  await page.goto("/mail/inbox");
+  const word = `zebra${Date.now()}`;
+  await deliver(page, { subject: `About ${word}`, body: `The ${word} report.` });
+  await expect(page.getByTestId("thread-row").filter({ hasText: word })).toBeVisible({ timeout: 15_000 });
+
+  await page.getByRole("searchbox").fill(word);
+  await page.getByRole("searchbox").press("Enter");
+  await expect(page).toHaveURL(/\/search\?q=/);
+  await expect(page.getByTestId("search-hit")).toHaveCount(1);
+  await noViolations(page);
+  await page.getByRole("textbox", { name: "From" }).fill("nobody-matches");
+  await expect(page.getByText("Nothing found")).toBeVisible();
+});
+
+test("a rule files new mail, and the reason is shown", async ({ page }) => {
+  await page.goto("/settings?section=rules");
+  await page.getByRole("button", { name: "Add rule" }).click();
+  await page.getByRole("textbox", { name: "Rule name" }).fill("Invoices");
+  await page.getByRole("textbox", { name: "Contains" }).fill("invoice");
+  await page.getByRole("textbox", { name: "Category" }).fill("Finance");
+  await noViolations(page);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByText("Rules saved").first()).toBeVisible();
+
+  await page.goto("/mail/inbox");
+  const subject = unique("Invoice");
+  await deliver(page, { subject });
+  const row = page.getByTestId("thread-row").filter({ hasText: subject });
+  await expect(row).toContainText("Finance", { timeout: 15_000 });
+  await row.getByRole("link").click();
+  await expect(page.getByText("Matched the rule “Invoices”").first()).toBeVisible();
+});
+
+test("status and flag are kept, and archive removes it from the inbox", async ({ page }) => {
+  await page.goto("/mail/inbox");
+  const subject = unique("Archive this");
+  await deliver(page, { subject });
+  await page.getByTestId("thread-row").filter({ hasText: subject }).getByRole("link").click();
+
+  await page.getByRole("button", { name: "Flag", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Remove flag" })).toBeVisible();
+  await page.getByRole("combobox", { name: "Status" }).click();
+  await page.getByRole("option", { name: "Waiting on others" }).click();
+  await page.reload();
+  await expect(page.getByRole("combobox", { name: "Status" })).toHaveText("Waiting on others");
+
+  await page.getByRole("button", { name: "Archive" }).click();
+  await expect(page).toHaveURL(/\/mail\/inbox$/);
+  await expect(page.getByTestId("thread-row").filter({ hasText: subject })).toHaveCount(0);
+});
+
+test("the inbox stays fast and scrollable with many threads", async ({ page, request }) => {
+  await page.goto("/mail/inbox");
+  await page.setViewportSize({ width: 1366, height: 768 });
+  const rendered = await page.getByTestId("thread-row").count();
+  expect(rendered).toBeLessThan(60);
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBe(0);
+  expect((await request.post("/api/queries/mail.status", { data: {} })).ok()).toBe(true);
+});

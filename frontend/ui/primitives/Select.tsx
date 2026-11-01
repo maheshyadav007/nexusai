@@ -9,10 +9,10 @@ export interface SelectOption {
   label: string;
 }
 
-export function Select({ id, value, options, placeholder, invalid = false, disabled, describedBy, onChange }: { id?: string; value?: string; options: readonly SelectOption[]; placeholder?: string; invalid?: boolean; disabled?: boolean; describedBy?: string; onChange: (value: string) => void }) {
+export function Select({ id, label, value, options, placeholder, invalid = false, disabled, describedBy, onChange }: { id?: string; label?: string; value?: string; options: readonly SelectOption[]; placeholder?: string; invalid?: boolean; disabled?: boolean; describedBy?: string; onChange: (value: string) => void }) {
   return (
     <RadixSelect.Root {...(value === undefined ? {} : { value })} onValueChange={onChange} {...(disabled === undefined ? {} : { disabled })}>
-      <RadixSelect.Trigger id={id} aria-describedby={describedBy} aria-invalid={invalid || undefined} className={`${controlClass(invalid)} flex items-center justify-between gap-2 text-left`}>
+      <RadixSelect.Trigger id={id} aria-label={label} aria-describedby={describedBy} aria-invalid={invalid || undefined} className={`${controlClass(invalid)} flex items-center justify-between gap-2 text-left`}>
         <RadixSelect.Value {...(placeholder ? { placeholder } : {})} />
         <RadixSelect.Icon>
           <Icon name="chevronDown" />
