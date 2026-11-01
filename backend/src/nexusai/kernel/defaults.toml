@@ -29,7 +29,17 @@ refresh_skew_seconds = 120
 model_list_client_versions = ["99.0.0", "0.0.0"]
 test_instructions = "You are NexusAI's connection test. Reply briefly."
 
+[logs]
+retention_days = 30
+
+[network]
+check_timeout_seconds = 8
+
 [settings]
 theme = "nexus-light"
 density = "comfortable"
 text_size = "medium"
+accent = "terracotta"
+default_screen = "today"
+date_format = "system"
+time_format = "system"

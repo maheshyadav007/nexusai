@@ -3,10 +3,14 @@ import json
 from nexusai.contracts.settings import (
     GetProfile,
     GetSettings,
+    GetSidebar,
     Profile,
     ProfileChanged,
+    ResetSidebar,
     Settings,
     SettingsChanged,
+    SidebarChanged,
+    SidebarLayout,
     UpdateSettings,
 )
 from nexusai.kernel.database import Migration
@@ -22,6 +26,11 @@ settings_module = Module(
         Migration(
             "settings_002",
             "CREATE TABLE profile (id INTEGER PRIMARY KEY CHECK (id = 1), value TEXT NOT NULL)",
+        ),
+        Migration(
+            "settings_003",
+            "CREATE TABLE settings_layout ("
+            " id INTEGER PRIMARY KEY CHECK (id = 1), value TEXT NOT NULL)",
         ),
     ],
 )
@@ -86,3 +95,35 @@ def update_profile(command: Profile, ctx: Context) -> Profile:
                 trace_id=ctx.trace_id,
             )
     return command
+
+
+def _save_sidebar(ctx: Context, layout: SidebarLayout, reset: bool) -> SidebarLayout:
+    with ctx.bus.unit_of_work() as work:
+        work.tx.execute(
+            "INSERT INTO settings_layout (id, value) VALUES (1, ?)"
+            " ON CONFLICT (id) DO UPDATE SET value = excluded.value",
+            (layout.model_dump_json(),),
+        )
+        work.emit(
+            "sidebar.changed",
+            SidebarChanged(reset=reset).model_dump(),
+            source=settings_module.name,
+            trace_id=ctx.trace_id,
+        )
+    return layout
+
+
+@settings_module.query("sidebar.get")
+def get_sidebar(query: GetSidebar, ctx: Context) -> SidebarLayout:
+    rows = ctx.bus.db.fetch_all("SELECT value FROM settings_layout")
+    return SidebarLayout.model_validate_json(rows[0]["value"]) if rows else SidebarLayout()
+
+
+@settings_module.command("sidebar.update")
+def update_sidebar(command: SidebarLayout, ctx: Context) -> SidebarLayout:
+    return _save_sidebar(ctx, command, reset=False)
+
+
+@settings_module.command("sidebar.reset")
+def reset_sidebar(command: ResetSidebar, ctx: Context) -> SidebarLayout:
+    return _save_sidebar(ctx, SidebarLayout(), reset=True)

@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { EVENTS_URL, latestSeq } from "./api";
 import type { AppEvent } from "./contracts.generated";
 import { useHomeStatus } from "./home";
@@ -12,6 +12,8 @@ const INVALIDATES: Record<string, readonly string[]> = {
   "models.changed": ["models", "models-available"],
   "onboarding.changed": ["onboarding"],
   "profile.changed": ["profile"],
+  "sidebar.changed": ["sidebar"],
+  "notifications.changed": ["notifications"],
 };
 
 type Listener = (event: AppEvent) => void;
@@ -70,10 +72,10 @@ export function EventsProvider({ children }: { children: ReactNode }) {
     };
   }, [client, ready, reachable]);
 
-  const subscribe = (listener: Listener) => {
+  const subscribe = useCallback((listener: Listener) => {
     listeners.current.add(listener);
     return () => void listeners.current.delete(listener);
-  };
+  }, []);
 
   return <EventsContext.Provider value={{ connected, subscribe }}>{children}</EventsContext.Provider>;
 }

@@ -1,6 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { ICONS } from "../ui/icons";
 import { findNavItem, NAV_BOTTOM, NAV_SECTIONS, NAV_TOP } from "../ui/shell/nav";
+import { arrange } from "../ui/shell/sidebarLayout";
 import en from "../ui/strings/en.json";
 import { describe, expect, it } from "vitest";
 import { themeToCss } from "../ui/theme/css";
@@ -40,6 +41,35 @@ describe("themes", () => {
     const changed = { ...light, color: { ...light.color, surface: { ...light.color.surface, page: "#102030" } } };
     expect(themeToCss(light, true)).toContain("--color-surface-page: 247 244 238;");
     expect(themeToCss(changed, true)).toContain("--color-surface-page: 16 32 48;");
+  });
+});
+
+describe("accents", () => {
+  it("each one overrides the accent, in every theme", () => {
+    expect(themeToCss(light, true)).toContain('[data-theme="nexus-light"][data-accent="cobalt"]');
+    expect(themeToCss(light, true)).toContain(":where(:root)[data-accent=\"cobalt\"]");
+  });
+
+  it("an unreadable accent fails the check", () => {
+    const pale = { ...light.accents.moss, default: "#EFE9DF" };
+    const bad = { ...light, accents: { ...light.accents, moss: pale } };
+    expect(contrastFailures(bad).join()).toContain("accents.moss.default on surface.page");
+  });
+});
+
+describe("sidebar layout", () => {
+  it("applies the saved order, marks hidden entries and keeps new ones", () => {
+    const arranged = arrange(NAV_SECTIONS, { sections: ["agent", "gone", "mail"], items: { mail: ["sent", "inbox"] }, hidden: ["drafts", "planner"] });
+    expect(arranged.slice(0, 2).map((section) => section.id)).toEqual(["agent", "mail"]);
+    expect(arranged.map((section) => section.id)).toEqual(expect.arrayContaining(["documents", "planner"]));
+    const mail = arranged.find((section) => section.id === "mail")!;
+    expect(mail.items.slice(0, 2).map((item) => item.id)).toEqual(["sent", "inbox"]);
+    expect(mail.items.find((item) => item.id === "drafts")!.hidden).toBe(true);
+    expect(arranged.find((section) => section.id === "planner")!.hidden).toBe(true);
+  });
+
+  it("with nothing saved, matches the default", () => {
+    expect(arrange(NAV_SECTIONS, undefined).map((section) => section.id)).toEqual(NAV_SECTIONS.map((section) => section.id));
   });
 });
 

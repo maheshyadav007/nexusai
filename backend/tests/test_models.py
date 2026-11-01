@@ -181,6 +181,14 @@ def test_ended_sign_in_disconnects_with_a_clear_message(
     assert "Connect ChatGPT again" in refused.json()["message"]
     assert status(client)["connected"] is False
     assert event_changes(client)[-1] == "disconnected"
+    for _ in range(200):
+        notices = client.post("/api/queries/notifications.list", json={}).json()
+        if notices["items"]:
+            break
+        time.sleep(0.01)
+    assert notices["unread"] == 1
+    assert notices["items"][0]["title"] == "ChatGPT was disconnected"
+    assert notices["items"][0]["link"] == "/settings?section=models"
 
 
 def test_disconnect_forgets_tokens_and_selection(client: TestClient, config: Config) -> None:

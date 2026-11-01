@@ -32,6 +32,14 @@ from nexusai.contracts.models import (
     StartModelLogin,
     TestModel,
 )
+from nexusai.contracts.notifications import (
+    ListNotifications,
+    MarkNotificationsRead,
+    Notification,
+    NotificationList,
+    NotificationRequested,
+    NotificationsChanged,
+)
 from nexusai.contracts.onboarding import (
     FinishOnboarding,
     GetOnboarding,
@@ -42,11 +50,26 @@ from nexusai.contracts.onboarding import (
 from nexusai.contracts.settings import (
     GetProfile,
     GetSettings,
+    GetSidebar,
     Profile,
     ProfileChanged,
+    ResetSidebar,
     Settings,
     SettingsChanged,
+    SidebarChanged,
+    SidebarLayout,
     UpdateSettings,
+)
+from nexusai.contracts.system import (
+    CheckNetwork,
+    Diagnostics,
+    GetDiagnostics,
+    GetTrace,
+    LogLines,
+    NetworkCheck,
+    NetworkChecks,
+    SearchLogs,
+    TraceView,
 )
 
 MODELS: list[type[BaseModel]] = [
@@ -86,6 +109,25 @@ MODELS: list[type[BaseModel]] = [
     GetProfile,
     Profile,
     ProfileChanged,
+    ListNotifications,
+    MarkNotificationsRead,
+    Notification,
+    NotificationList,
+    NotificationRequested,
+    NotificationsChanged,
+    GetSidebar,
+    ResetSidebar,
+    SidebarChanged,
+    SidebarLayout,
+    CheckNetwork,
+    Diagnostics,
+    GetDiagnostics,
+    GetTrace,
+    LogLines,
+    NetworkCheck,
+    NetworkChecks,
+    SearchLogs,
+    TraceView,
 ]
 
 

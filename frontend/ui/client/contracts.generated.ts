@@ -28,9 +28,17 @@ export type Since = number;
 export type Theme = string;
 export type Density = "compact" | "comfortable" | "spacious";
 export type TextSize = "small" | "medium" | "large";
+export type Accent = "terracotta" | "cobalt" | "moss" | "plum";
+export type DefaultScreen = "today" | "inbox";
+export type DateFormat = "system" | "day-month" | "month-day" | "iso";
+export type TimeFormat = "system" | "12" | "24";
 export type Theme1 = string | null;
 export type Density1 = ("compact" | "comfortable" | "spacious") | null;
 export type TextSize1 = ("small" | "medium" | "large") | null;
+export type Accent1 = ("terracotta" | "cobalt" | "moss" | "plum") | null;
+export type DefaultScreen1 = ("today" | "inbox") | null;
+export type DateFormat1 = ("system" | "day-month" | "month-day" | "iso") | null;
+export type TimeFormat1 = ("system" | "12" | "24") | null;
 export type Id1 = string;
 export type Name = string;
 export type Models = AvailableModel[];
@@ -76,6 +84,59 @@ export type Tone = "formal" | "friendly" | "brief";
 export type Vips = string;
 export type About = string;
 export type Fields = string[];
+export type Kind = string | null;
+export type Id2 = number | null;
+export type Id3 = number;
+export type Time2 = string;
+export type Kind1 = string;
+export type Title = string;
+export type Detail = string;
+export type Link = string | null;
+export type Read = boolean;
+export type Items = Notification[];
+export type Unread = number;
+export type Kinds = string[];
+export type Kind2 = string;
+export type Title1 = string;
+export type Detail1 = string;
+export type Link1 = string | null;
+export type Unread1 = number;
+export type Reset = boolean;
+/**
+ * @maxItems 64
+ */
+export type Sections = string[];
+/**
+ * @maxItems 256
+ */
+export type Hidden = string[];
+export type Version1 = string;
+export type Platform = string;
+export type Python = string;
+export type Home = string;
+export type FreeBytes1 = number;
+export type DatabaseBytes = number;
+export type Proxy = string | null;
+export type EventCount = number;
+export type FailedEvents = number;
+export type Report = string;
+export type TraceId2 = string;
+export type Lines = {
+  [k: string]: unknown;
+}[];
+export type Name2 = string;
+export type Host = string;
+export type Ok1 = boolean;
+export type Detail2 = string;
+export type Checks = NetworkCheck[];
+export type Level = string | null;
+export type Text1 = string | null;
+export type Events1 = {
+  [k: string]: unknown;
+}[];
+export type Lines1 = {
+  [k: string]: unknown;
+}[];
 
 export interface Contracts {
   ApiError?: ApiError;
@@ -114,6 +175,25 @@ export interface Contracts {
   GetProfile?: GetProfile;
   Profile?: Profile;
   ProfileChanged?: ProfileChanged;
+  ListNotifications?: ListNotifications;
+  MarkNotificationsRead?: MarkNotificationsRead;
+  Notification?: Notification;
+  NotificationList?: NotificationList;
+  NotificationRequested?: NotificationRequested;
+  NotificationsChanged?: NotificationsChanged;
+  GetSidebar?: GetSidebar;
+  ResetSidebar?: ResetSidebar;
+  SidebarChanged?: SidebarChanged;
+  SidebarLayout?: SidebarLayout;
+  CheckNetwork?: CheckNetwork;
+  Diagnostics?: Diagnostics;
+  GetDiagnostics?: GetDiagnostics;
+  GetTrace?: GetTrace;
+  LogLines?: LogLines;
+  NetworkCheck?: NetworkCheck;
+  NetworkChecks?: NetworkChecks;
+  SearchLogs?: SearchLogs;
+  TraceView?: TraceView;
   [k: string]: unknown;
 }
 /**
@@ -192,6 +272,10 @@ export interface Settings {
   theme: Theme;
   density: Density;
   text_size: TextSize;
+  accent: Accent;
+  default_screen: DefaultScreen;
+  date_format: DateFormat;
+  time_format: TimeFormat;
   [k: string]: unknown;
 }
 /**
@@ -215,6 +299,10 @@ export interface UpdateSettings {
   theme?: Theme1;
   density?: Density1;
   text_size?: TextSize1;
+  accent?: Accent1;
+  default_screen?: DefaultScreen1;
+  date_format?: DateFormat1;
+  time_format?: TimeFormat1;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -453,5 +541,186 @@ export interface Profile {
  */
 export interface ProfileChanged {
   fields: Fields;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ListNotifications".
+ */
+export interface ListNotifications {
+  kind?: Kind;
+}
+/**
+ * No id means all of them.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MarkNotificationsRead".
+ */
+export interface MarkNotificationsRead {
+  id?: Id2;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "Notification".
+ */
+export interface Notification {
+  id: Id3;
+  time: Time2;
+  kind: Kind1;
+  title: Title;
+  detail: Detail;
+  link: Link;
+  read: Read;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "NotificationList".
+ */
+export interface NotificationList {
+  items: Items;
+  unread: Unread;
+  kinds: Kinds;
+  [k: string]: unknown;
+}
+/**
+ * Any module asks for a notification by emitting this. Holds short facts, not content.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "NotificationRequested".
+ */
+export interface NotificationRequested {
+  kind: Kind2;
+  title: Title1;
+  detail?: Detail1;
+  link?: Link1;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "NotificationsChanged".
+ */
+export interface NotificationsChanged {
+  unread: Unread1;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "GetSidebar".
+ */
+export interface GetSidebar {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ResetSidebar".
+ */
+export interface ResetSidebar {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SidebarChanged".
+ */
+export interface SidebarChanged {
+  reset: Reset;
+  [k: string]: unknown;
+}
+/**
+ * Order and visibility only. Unknown or missing IDs are ignored, so updates add new items.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SidebarLayout".
+ */
+export interface SidebarLayout {
+  sections?: Sections;
+  items?: Items1;
+  hidden?: Hidden;
+}
+export interface Items1 {
+  [k: string]: string[];
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "CheckNetwork".
+ */
+export interface CheckNetwork {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "Diagnostics".
+ */
+export interface Diagnostics {
+  version: Version1;
+  platform: Platform;
+  python: Python;
+  home: Home;
+  free_bytes: FreeBytes1;
+  database_bytes: DatabaseBytes;
+  proxy: Proxy;
+  event_count: EventCount;
+  failed_events: FailedEvents;
+  report: Report;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "GetDiagnostics".
+ */
+export interface GetDiagnostics {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "GetTrace".
+ */
+export interface GetTrace {
+  trace_id: TraceId2;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "LogLines".
+ */
+export interface LogLines {
+  lines: Lines;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "NetworkCheck".
+ */
+export interface NetworkCheck {
+  name: Name2;
+  host: Host;
+  ok: Ok1;
+  detail: Detail2;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "NetworkChecks".
+ */
+export interface NetworkChecks {
+  checks: Checks;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SearchLogs".
+ */
+export interface SearchLogs {
+  level?: Level;
+  text?: Text1;
+}
+/**
+ * Everything that happened under one trace ID, oldest first.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "TraceView".
+ */
+export interface TraceView {
+  events: Events1;
+  lines: Lines1;
   [k: string]: unknown;
 }

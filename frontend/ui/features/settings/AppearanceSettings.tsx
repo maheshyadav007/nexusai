@@ -6,6 +6,13 @@ import { Segmented } from "@/ui/primitives/Segmented";
 import { t } from "@/ui/strings";
 import { THEMES } from "@/ui/theme/generated/theme-list";
 
+const ACCENTS = [
+  { value: "terracotta", label: t("settings.accent.terracotta") },
+  { value: "cobalt", label: t("settings.accent.cobalt") },
+  { value: "moss", label: t("settings.accent.moss") },
+  { value: "plum", label: t("settings.accent.plum") },
+] as const;
+
 const DENSITIES = [
   { value: "compact", label: t("settings.density.compact") },
   { value: "comfortable", label: t("settings.density.comfortable") },
@@ -27,8 +34,14 @@ export function AppearanceSettings() {
         <Segmented
           label={t("settings.theme")}
           value={settings.data?.theme}
-          options={THEMES.map((theme) => ({ value: theme.id as string, label: theme.name }))}
+          options={[...THEMES.map((theme) => ({ value: theme.id as string, label: theme.name })), { value: "system", label: t("settings.theme.system") }]}
           onChange={(theme) => update.mutate({ theme })}
+        />
+        <Segmented
+          label={t("settings.accent")}
+          value={settings.data?.accent}
+          options={ACCENTS}
+          onChange={(accent) => update.mutate({ accent })}
         />
         <Segmented
           label={t("settings.density")}

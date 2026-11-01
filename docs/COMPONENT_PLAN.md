@@ -313,7 +313,7 @@ Status: built. Agent host and Heavy jobs processes, the backend supervisor, live
 
 ### Stage 1: Shell
 
-Status: 1.1 to 1.3 built, and ChatGPT sign-in, model choice and a test message work in Settings ahead of Stage 3. Windows and corporate laptop testing wait until the web app is fully built. Primitives still to add when first needed: `Radio`, `Slider`, `Accordion`, `Stack`, `Grid`, `FolderPicker` and `FileDrop` (1.2 and 1.3), and `ResizeHandle`, `SplitPane`, `VirtualList` and `Sortable` (1.5 and Stage 2). `Drawer` is a shape of `Dialog`, and `Link` is `TextLink`. No Beautiful UI or AICSS component has been imported yet; those start with the agent screens.
+Status: built, and ChatGPT sign-in, model choice and a test message work in Settings ahead of Stage 3. Windows and corporate laptop testing wait until the web app is fully built. Primitives still to add when first needed: `Radio`, `Slider`, `Accordion`, `Stack`, `Grid`, `FolderPicker` and `FileDrop` (1.2 and 1.3), and `ResizeHandle`, `SplitPane`, `VirtualList` and `Sortable` (1.5 and Stage 2). `Drawer` is a shape of `Dialog`, and `Link` is `TextLink`. No Beautiful UI or AICSS component has been imported yet; those start with the agent screens.
 
 | # | Build | Done when |
 |---|---|---|

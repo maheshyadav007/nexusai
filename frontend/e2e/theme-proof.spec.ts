@@ -11,7 +11,7 @@ test.beforeAll(async ({ request }) => {
   await request.post("/api/commands/onboarding.finish", { data: {} });
 });
 
-const SCREENS = ["/today", "/settings", "/mail/inbox", "/gallery", "/gallery/shell"];
+const SCREENS = ["/today", "/settings", "/settings?section=profile", "/settings?section=preferences", "/settings?section=models", "/settings?section=home", "/settings?section=network", "/settings?section=about", "/logs", "/mail/inbox", "/gallery", "/gallery/shell"];
 
 for (const path of SCREENS) {
   test(`${path} loads with no browser errors`, async ({ page }) => {
@@ -96,13 +96,15 @@ test("changing the theme goes through every layer, and reaches other windows", a
   await page.getByRole("radio", { name: "Nexus Dark" }).click();
 
   await expect.poll(() => background(page)).not.toBe(lightBackground);
-  await expect(page.getByTestId("event-row").first()).toContainText("settings.changed");
-  await expect(page.getByTestId("event-row").first()).toContainText("nexus-dark");
+  const logs = await context.newPage();
+  await logs.goto("/logs");
+  await logs.getByRole("tab", { name: "Events" }).click();
+  await expect(logs.getByTestId("event-row").first()).toContainText("settings.changed");
+  await expect(logs.getByTestId("event-row").first()).toContainText("nexus-dark");
 
   // The second window was told by an event; it did not ask.
   await expect(other.getByRole("radio", { name: "Nexus Dark" })).toBeChecked();
   await expect.poll(() => background(other)).not.toBe(lightBackground);
-  await expect(other.getByTestId("event-row").first()).toContainText("settings.changed");
 
   // Saved, and applied before first paint after a reload.
   await page.reload();
@@ -130,7 +132,7 @@ test("every catalog font loads, and a theme's choice reaches the text", async ({
 
 test("ChatGPT connects, lists models, remembers the choice and answers a test", async ({ page }) => {
   test.setTimeout(45_000);
-  await page.goto("/settings");
+  await page.goto("/settings?section=models");
   await page.getByRole("button", { name: "Connect ChatGPT" }).click();
 
   // The screen is told by an event when sign-in finishes; it doesn't ask.
@@ -179,6 +181,106 @@ test("a change during a window's first load isn't lost", async ({ page, request 
 
   await request.post("/api/commands/settings.update", { data: { density: "comfortable" } });
   await expect(page.locator("html")).toHaveAttribute("data-density", "comfortable");
+});
+
+test("follow system matches the system, and an accent recolors the app", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.goto("/settings");
+  await page.getByRole("radio", { name: "Follow system" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "nexus-dark");
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "nexus-light");
+
+  const accent = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--color-accent-default").trim());
+  const before = await accent();
+  await page.getByRole("radio", { name: "Cobalt" }).click();
+  await expect.poll(accent).not.toBe(before);
+  await page.getByRole("radio", { name: "Terracotta" }).click();
+  await page.getByRole("radio", { name: "Nexus Light" }).click();
+});
+
+test("profile saves from Settings, and preferences choose the first screen", async ({ page }) => {
+  await page.goto("/settings?section=profile");
+  await page.getByRole("textbox", { name: "Role" }).fill("Programme lead");
+  await page.getByRole("button", { name: "Save" }).click();
+  await page.goto("/settings?section=preferences");
+  await page.reload();
+  await page.goto("/settings?section=profile");
+  await expect(page.getByRole("textbox", { name: "Role" })).toHaveValue("Programme lead");
+
+  await page.goto("/settings?section=preferences");
+  await page.getByRole("radio", { name: "Inbox" }).click();
+  await expect(page.getByRole("radio", { name: "Inbox" })).toBeChecked();
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/mail\/inbox$/);
+  await page.goto("/settings?section=preferences");
+  await page.getByRole("radio", { name: "Today" }).click();
+  await expect(page.getByRole("radio", { name: "Today" })).toBeChecked();
+});
+
+test("the sidebar can be reordered, hidden and reset, by keyboard and buttons", async ({ page }) => {
+  await page.goto("/today");
+  // Found by attribute, because an open dialog hides everything behind it from role lookups.
+  const nav = page.locator('nav[aria-label="Main navigation"]');
+  const firstSection = () => nav.locator("section").first().getAttribute("aria-label");
+  await expect.poll(firstSection).toBe("Mail");
+
+  await nav.getByRole("button", { name: "Customize sidebar" }).click();
+  const editor = page.getByRole("dialog");
+  await editor.getByRole("button", { name: "Move Mail down" }).click();
+  await expect.poll(firstSection).toBe("Documents");
+
+  // The keyboard route on the drag handle.
+  await editor.getByRole("button", { name: "Drag Documents" }).focus();
+  // At a person's pace: the drag library measures positions between key presses.
+  await page.keyboard.press("Space");
+  await page.waitForTimeout(200);
+  await page.keyboard.press("ArrowDown");
+  await page.waitForTimeout(200);
+  await page.keyboard.press("Space");
+  await expect.poll(firstSection).toBe("Mail");
+
+  await editor.getByRole("switch", { name: "Drafts" }).click();
+  await page.keyboard.press("Escape");
+  await expect(nav.getByRole("link", { name: "Drafts" })).toBeHidden();
+  await expect(nav.getByRole("link", { name: "Sent" })).toBeVisible();
+  await page.reload();
+  await expect(nav.getByRole("link", { name: "Sent" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Drafts" })).toBeHidden();
+
+  await nav.getByRole("button", { name: "Customize sidebar" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Reset layout" }).click();
+  await page.keyboard.press("Escape");
+  await expect(nav.getByRole("link", { name: "Drafts" })).toBeVisible();
+  await expect.poll(firstSection).toBe("Mail");
+});
+
+test("logs show live, filter, open a trace, and never hold a secret", async ({ page, request }) => {
+  await page.goto("/logs");
+  await expect(page.getByText("Live")).toBeVisible();
+  await request.post("/api/commands/settings.update", { data: { density: "compact" }, headers: { "x-trace-id": "tracee2e" } });
+  const row = page.getByTestId("log-row").filter({ hasText: "settings.changed" }).first();
+  await expect(row).toBeVisible();
+
+  await page.getByRole("textbox", { name: "Search" }).fill("tracee2e");
+  await expect(page.getByTestId("log-row").first()).toContainText("settings.changed");
+  await page.getByTestId("log-row").first().getByRole("button", { name: "View" }).click();
+  await expect(page.getByTestId("trace-events")).toContainText("settings.changed");
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("textbox", { name: "Search" }).fill("no such log line");
+  await expect(page.getByText("Nothing matches")).toBeVisible();
+  await request.post("/api/commands/settings.update", { data: { density: "comfortable" } });
+});
+
+test("the support report copies, and the network check reports each service", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/settings?section=network");
+  await page.getByRole("button", { name: "Copy support report" }).click();
+  await expect(page.getByText("Support report copied").first()).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/^NexusAI /);
+  await page.getByRole("button", { name: "Check connection" }).click();
+  await expect(page.getByTestId("network-results").getByRole("listitem")).toHaveCount(2);
 });
 
 test("density and text size apply instantly", async ({ page }) => {

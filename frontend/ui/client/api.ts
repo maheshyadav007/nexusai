@@ -2,24 +2,39 @@ import type {
   ApiError,
   AvailableModels,
   CancelModelLogin,
+  CheckNetwork,
+  Diagnostics,
   DisconnectModel,
   EventLog,
   EventLogQuery,
   FinishOnboarding,
+  GetDiagnostics,
   GetModelStatus,
   GetOnboarding,
   GetProfile,
   GetSettings,
+  GetSidebar,
+  GetTrace,
   ListModels,
+  ListNotifications,
+  LogLines,
+  MarkNotificationsRead,
   ModelReply,
   ModelStatus,
+  NetworkChecks,
+  NotificationList,
+  NotificationsChanged,
   OnboardingState,
   Profile,
+  ResetSidebar,
+  SearchLogs,
   SelectModel,
   SetOnboardingStep,
   Settings,
+  SidebarLayout,
   StartModelLogin,
   TestModel,
+  TraceView,
   UpdateSettings,
 } from "./contracts.generated";
 
@@ -33,6 +48,10 @@ interface Commands {
   "onboarding.setStep": [SetOnboardingStep, OnboardingState];
   "onboarding.finish": [FinishOnboarding, OnboardingState];
   "profile.update": [Profile, Profile];
+  "sidebar.update": [SidebarLayout, SidebarLayout];
+  "sidebar.reset": [ResetSidebar, SidebarLayout];
+  "notifications.markRead": [MarkNotificationsRead, NotificationsChanged];
+  "network.check": [CheckNetwork, NetworkChecks];
 }
 
 interface Queries {
@@ -41,6 +60,11 @@ interface Queries {
   "models.list": [ListModels, AvailableModels];
   "onboarding.state": [GetOnboarding, OnboardingState];
   "profile.get": [GetProfile, Profile];
+  "sidebar.get": [GetSidebar, SidebarLayout];
+  "notifications.list": [ListNotifications, NotificationList];
+  "logs.search": [SearchLogs, LogLines];
+  "trace.get": [GetTrace, TraceView];
+  "diagnostics.get": [GetDiagnostics, Diagnostics];
 }
 
 export class ApiRequestError extends Error {

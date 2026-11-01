@@ -28,5 +28,10 @@ export function themeToCss(theme: Theme, isDefault: boolean): string {
     ...Object.entries(theme.scale.density).map(([k, v]) => `${selector.split(", ").map((s) => `${s}[data-density="${k}"]`).join(", ")} { --density-scale: ${v}; }`),
     ...Object.entries(theme.scale.text).map(([k, v]) => `${selector.split(", ").map((s) => `${s}[data-text-size="${k}"]`).join(", ")} { --text-scale: ${v}; }`),
   ];
-  return `${selector} {\n  --density-scale: 1;\n  --text-scale: 1;\n${body}\n}\n${scales.join("\n")}\n`;
+  const accents = Object.entries(theme.accents).map(([name, values]) => {
+    const scoped = selector.split(", ").map((s) => `${s}[data-accent="${name}"]`).join(", ");
+    const body = Object.entries(values).map(([key, value]) => `  --color-accent-${key}: ${channels(value)};`).join("\n");
+    return `${scoped} {\n${body}\n}`;
+  });
+  return `${selector} {\n  --density-scale: 1;\n  --text-scale: 1;\n${body}\n}\n${scales.join("\n")}\n${accents.join("\n")}\n`;
 }

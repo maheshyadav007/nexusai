@@ -1,16 +1,28 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import appConfig from "@/app.config.json";
 import { useSettings } from "@/ui/client/settings";
 
 /** Applies saved appearance to the page. Components only ever see CSS variables. */
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const { data } = useSettings();
+  const followsSystem = data?.theme === "system";
+  const [systemDark, setSystemDark] = useState(false);
+
+  useEffect(() => {
+    if (!followsSystem) return;
+    const query = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => setSystemDark(query.matches);
+    apply();
+    query.addEventListener("change", apply);
+    return () => query.removeEventListener("change", apply);
+  }, [followsSystem]);
 
   useEffect(() => {
     if (!data) return;
-    const attributes = { theme: data.theme, density: data.density, "text-size": data.text_size };
+    const theme = data.theme === "system" ? appConfig.systemThemes[systemDark ? "dark" : "light"] : data.theme;
+    const attributes = { theme, density: data.density, "text-size": data.text_size, accent: data.accent };
     for (const [name, value] of Object.entries(attributes)) {
       document.documentElement.setAttribute(`data-${name}`, value);
     }
@@ -19,7 +31,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     } catch {
       // Storage can be blocked; the theme still applies once settings load.
     }
-  }, [data]);
+  }, [data, systemDark]);
 
   return children;
 }

@@ -20,6 +20,7 @@ from nexusai.contracts.models import (
     StartModelLogin,
     TestModel,
 )
+from nexusai.contracts.notifications import NotificationRequested
 from nexusai.kernel.database import Migration
 from nexusai.kernel.module import CommandError, Context, Module
 from nexusai.kernel.secrets import secret_store
@@ -89,6 +90,28 @@ def _forget_tokens(ctx: Context) -> None:
     secret_store(ctx.config.secrets_test_file).delete(TOKENS)
 
 
+def _sign_in_ended(ctx: Context) -> None:
+    _forget_tokens(ctx)
+    with ctx.bus.unit_of_work() as work:
+        work.emit(
+            "models.changed",
+            ModelsChanged(change="disconnected").model_dump(),
+            source=models_module.name,
+            trace_id=ctx.trace_id,
+        )
+        work.emit(
+            "notification.requested",
+            NotificationRequested(
+                kind="model",
+                title="ChatGPT was disconnected",
+                detail="Your sign-in ended. Connect ChatGPT again in Settings.",
+                link="/settings?section=models",
+            ).model_dump(),
+            source=models_module.name,
+            trace_id=ctx.trace_id,
+        )
+
+
 def _fresh_tokens(ctx: Context, client: ChatGptClient, *, force: bool = False) -> Tokens:
     """A usable access token, renewed if it's about to expire."""
     with _refresh_lock:
@@ -102,8 +125,7 @@ def _fresh_tokens(ctx: Context, client: ChatGptClient, *, force: bool = False) -
         try:
             renewed = client.refresh(tokens)
         except SignInRequired as error:
-            _forget_tokens(ctx)
-            _announce(ctx, "disconnected")
+            _sign_in_ended(ctx)
             raise CommandError("models.sign_in_required", str(error), 401) from error
         except ChatGptError as error:
             raise CommandError("models.unavailable", str(error), 502) from error
@@ -120,8 +142,7 @@ def _with_token[T](ctx: Context, call: Callable[[ChatGptClient, str], T]) -> T:
         except SignInRequired:
             return call(client, _fresh_tokens(ctx, client, force=True).access_token)
     except SignInRequired as error:
-        _forget_tokens(ctx)
-        _announce(ctx, "disconnected")
+        _sign_in_ended(ctx)
         raise CommandError("models.sign_in_required", str(error), 401) from error
     except ChatGptError as error:
         raise CommandError("models.unavailable", str(error), 502) from error

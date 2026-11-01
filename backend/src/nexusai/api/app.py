@@ -2,7 +2,7 @@ import asyncio
 import json
 import threading
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -16,7 +16,7 @@ from pydantic import ValidationError
 from nexusai.api.security import LocalOnlyMiddleware
 from nexusai.api.sse import sse_stream
 from nexusai.contracts.errors import ApiError
-from nexusai.contracts.events import EventLog, EventLogQuery
+from nexusai.contracts.events import AppEvent, EventLog, EventLogQuery
 from nexusai.contracts.home import (
     BrowseFolders,
     CheckHome,
@@ -29,12 +29,21 @@ from nexusai.kernel import home as homes
 from nexusai.kernel.config import Config, load_config
 from nexusai.kernel.database import Database
 from nexusai.kernel.event_bus import EventBus
-from nexusai.kernel.module import CommandError, Context, Endpoint, Module
+from nexusai.kernel.logging import configure_logging, sink
+from nexusai.kernel.module import CommandError, Context, Endpoint, Listener, Module
 from nexusai.modules.models.module import models_module, reset_login
+from nexusai.modules.notifications.module import notifications_module
 from nexusai.modules.onboarding.module import onboarding_module
 from nexusai.modules.settings.module import settings_module
+from nexusai.modules.system.module import system_module
 
-MODULES: list[Module] = [settings_module, models_module, onboarding_module]
+MODULES: list[Module] = [
+    settings_module,
+    models_module,
+    onboarding_module,
+    notifications_module,
+    system_module,
+]
 log = structlog.get_logger()
 
 
@@ -52,18 +61,26 @@ class Runtime:
     bus: EventBus
 
 
+def _bound(handler: Listener, bus: EventBus, config: Config) -> Callable[[AppEvent], None]:
+    return lambda event: handler(event, Context(bus=bus, config=config, trace_id=event.trace_id))
+
+
 def _open_runtime(config: Config, home: Path) -> Runtime:
     homes.create_home(home)
     opened = replace(config, home_dir=home)
     db = Database(opened.database_path)
     bus = EventBus(db, opened)
+    sink.attach(opened.home / "system" / "logs", opened.log_retention_days)
     for module in MODULES:
         db.migrate(module.migrations)
+        for name, pattern, handler in module.listeners:
+            bus.subscribe(name, pattern, _bound(handler, bus, opened))
     bus.start()
     return Runtime(opened, db, bus)
 
 
 def create_app(config: Config | None = None) -> FastAPI:
+    configure_logging()
     cfg = config or load_config()
     data_dir = homes.app_data_dir()
     commands = {name: ep for m in MODULES for name, ep in m.commands.items()}
@@ -96,6 +113,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         if runtime is not None:
             runtime.bus.stop()
             runtime.db.close()
+            sink.detach()
 
     app = FastAPI(title="NexusAI", lifespan=lifespan)
     app.add_middleware(
@@ -189,6 +207,25 @@ def create_app(config: Config | None = None) -> FastAPI:
     @app.post("/api/queries/{name}")
     async def query(name: str, request: Request) -> JSONResponse:
         return await run(queries.get(name), name, request)
+
+    @app.get("/api/logs/stream")
+    async def log_stream(request: Request) -> StreamingResponse:
+        async def body() -> AsyncIterator[str]:
+            queue, stop = sink.follow()
+            yield ": connected\n\n"
+            try:
+                while not await request.is_disconnected():
+                    try:
+                        line = await asyncio.wait_for(queue.get(), cfg.sse_keepalive_seconds)
+                    except TimeoutError:
+                        yield ": keepalive\n\n"
+                        continue
+                    yield f"data: {json.dumps(line, default=str)}\n\n"
+            finally:
+                stop()
+
+        headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+        return StreamingResponse(body(), media_type="text/event-stream", headers=headers)
 
     @app.post("/api/events/log", response_model=None)
     async def event_log(query: EventLogQuery) -> EventLog | JSONResponse:

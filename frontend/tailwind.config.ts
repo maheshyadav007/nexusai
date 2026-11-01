@@ -5,6 +5,8 @@ import light from "./ui/theme/themes/nexus-light.json";
 // Replacing these scales removes Tailwind's defaults, so only theme tokens can be used.
 const vars = (prefix: string, values: object) =>
   Object.fromEntries(Object.keys(values).map((key) => [key, `var(--${prefix}-${key})`]));
+const kebab = (key: string) => key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+const layout = Object.fromEntries(Object.keys(light.layout).map((key) => [kebab(key), `var(--layout-${key})`]));
 
 const colors = Object.fromEntries(
   Object.entries(light.color).map(([group, values]) => [
@@ -29,10 +31,11 @@ const config: Config = {
     boxShadow: { none: "none", ...vars("shadow", light.shadow) },
     transitionDuration: vars("motion", durations),
     transitionTimingFunction: { DEFAULT: "var(--motion-easing)" },
-    maxWidth: { none: "none", full: "100%", ...vars("layout", light.layout) },
+    maxWidth: { none: "none", full: "100%", ...layout },
     extend: {
-      width: vars("layout", light.layout),
-      height: vars("layout", light.layout),
+      width: layout,
+      height: layout,
+      maxHeight: layout,
       keyframes: {
         fade: { from: { opacity: "0" } },
         rise: { from: { opacity: "0", transform: "translateY(var(--space-2))" } },

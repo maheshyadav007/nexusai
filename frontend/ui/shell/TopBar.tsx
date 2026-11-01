@@ -5,6 +5,7 @@ import { IconButton } from "@/ui/primitives/IconButton";
 import { Popover } from "@/ui/primitives/Popover";
 import { t } from "@/ui/strings";
 import { ActivityIsland, type Activity } from "./ActivityIsland";
+import { NotificationCenter } from "./NotificationCenter";
 
 export function TopBar({ activities }: { activities?: readonly Activity[] }) {
   return (
@@ -14,9 +15,7 @@ export function TopBar({ activities }: { activities?: readonly Activity[] }) {
         <Popover label={t("approvals.title")} trigger={<IconButton icon="approvals" label={t("approvals.title")} />}>
           <EmptyState icon="approvals" title={t("approvals.empty.title")} description={t("approvals.empty.description")} />
         </Popover>
-        <Popover label={t("notifications.title")} trigger={<IconButton icon="notifications" label={t("notifications.title")} />}>
-          <EmptyState icon="notifications" title={t("notifications.empty.title")} description={t("notifications.empty.description")} />
-        </Popover>
+        <NotificationCenter />
       </div>
     </header>
   );

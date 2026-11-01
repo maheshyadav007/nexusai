@@ -47,7 +47,7 @@
   ],
   "bottom": [
     { "id": "panels", "labelKey": "nav.panels", "icon": "panels", "href": "/panels", "arrivesKey": "placeholder.mail" },
-    { "id": "logs", "labelKey": "nav.logs", "icon": "logs", "href": "/logs", "arrivesKey": "placeholder.shell" },
+    { "id": "logs", "labelKey": "nav.logs", "icon": "logs", "href": "/logs" },
     { "id": "settings", "labelKey": "nav.settings", "icon": "settings", "href": "/settings" }
   ]
 }

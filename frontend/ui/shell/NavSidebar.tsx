@@ -5,11 +5,14 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import appConfig from "@/app.config.json";
 import { Icon } from "@/ui/icons";
+import { useSidebar } from "@/ui/client/settings";
 import { IconButton } from "@/ui/primitives/IconButton";
 import { ScrollArea } from "@/ui/primitives/ScrollArea";
 import { Tooltip } from "@/ui/primitives/Tooltip";
 import { t } from "@/ui/strings";
 import { NAV_BOTTOM, NAV_SECTIONS, NAV_TOP, type NavItem } from "./nav";
+import { SidebarEditor } from "./SidebarEditor";
+import { arrange } from "./sidebarLayout";
 
 function NavRow({ item, active, collapsed, count }: { item: NavItem; active: boolean; collapsed: boolean; count: number | undefined }) {
   const label = t(item.label);
@@ -36,6 +39,8 @@ function NavRow({ item, active, collapsed, count }: { item: NavItem; active: boo
 
 export function NavSidebar({ counts = {} }: { counts?: Readonly<Record<string, number>> }) {
   const pathname = usePathname();
+  const layout = useSidebar();
+  const sections = arrange(NAV_SECTIONS, layout.data).filter((section) => !section.hidden);
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
@@ -69,15 +74,18 @@ export function NavSidebar({ counts = {} }: { counts?: Readonly<Record<string, n
     <nav aria-label={t("nav.label")} className={`flex h-full shrink-0 flex-col border-r border-line-subtle bg-surface-page ${collapsed ? "w-rail" : "w-sidebar"}`}>
       <div className={`flex h-topbar shrink-0 items-center px-3 ${collapsed ? "justify-center" : "justify-between"}`}>
         {collapsed ? null : <span className="text-lg font-medium text-ink-primary">{t("app.name")}</span>}
-        <IconButton icon={collapsed ? "expand" : "collapse"} label={t(collapsed ? "nav.expand" : "nav.collapse")} aria-expanded={!collapsed} onClick={toggle} />
+        <div className="flex items-center">
+          {collapsed ? null : <SidebarEditor />}
+          <IconButton icon={collapsed ? "expand" : "collapse"} label={t(collapsed ? "nav.expand" : "nav.collapse")} aria-expanded={!collapsed} onClick={toggle} />
+        </div>
       </div>
       <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-5 px-2 pb-4">
           <ul className="flex flex-col gap-px">{NAV_TOP.map(row)}</ul>
-          {NAV_SECTIONS.map((section) => (
+          {sections.map((section) => (
             <section key={section.id} aria-label={t(section.label)}>
               {collapsed ? null : <h2 className="mb-1 px-2 text-sm text-ink-muted">{t(section.label)}</h2>}
-              <ul className="flex flex-col gap-px">{section.items.map(row)}</ul>
+              <ul className="flex flex-col gap-px">{section.items.filter((item) => !item.hidden).map(row)}</ul>
             </section>
           ))}
         </div>

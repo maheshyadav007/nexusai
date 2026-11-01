@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 import { useHomeStatus } from "@/ui/client/home";
 import { useOnboarding } from "@/ui/client/onboarding";
+import { useSettings } from "@/ui/client/settings";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { t } from "@/ui/strings";
@@ -55,8 +56,11 @@ export function AppGate({ children }: { children: ReactNode }) {
 export function EntryRedirect() {
   const router = useRouter();
   const { route, pending, failed, retry } = useEntryRoute();
+  const settings = useSettings();
+  const start = settings.data?.default_screen === "inbox" ? "/mail/inbox" : "/today";
+  const waiting = pending || (!route && settings.isPending);
   useEffect(() => {
-    if (!pending && !failed) router.replace(route ?? "/today");
-  }, [route, pending, failed, router]);
+    if (!waiting && !failed) router.replace(route ?? start);
+  }, [route, waiting, failed, start, router]);
   return failed ? <BackendDown retry={retry} /> : <Waiting />;
 }

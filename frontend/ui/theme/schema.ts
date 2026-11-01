@@ -4,6 +4,7 @@ import { FONT_CATALOG } from "./font-catalog";
 const hex = z.string().regex(/^#[0-9A-Fa-f]{6}$/);
 const size = z.string().regex(/^\d+(\.\d+)?(px|rem)$/);
 const scale = z.number().positive();
+const accent = z.strictObject({ default: hex, hover: hex, bright: hex, on: hex });
 
 export const themeSchema = z
   .object({
@@ -18,6 +19,7 @@ export const themeSchema = z
       agent: z.strictObject({ running: hex, waiting: hex, done: hex, failed: hex }),
       line: z.strictObject({ subtle: hex, strong: hex }),
     }),
+    accents: z.strictObject({ terracotta: accent, cobalt: accent, moss: accent, plum: accent }),
     type: z.strictObject({
       minSize: size,
       size: z.strictObject({ xs: size, sm: size, md: size, lg: size, xl: size, display: size, hero: size }),
@@ -27,7 +29,7 @@ export const themeSchema = z
     radius: z.strictObject({ sm: size, md: size, lg: size, full: size }),
     shadow: z.strictObject({ raised: z.string(), overlay: z.string() }),
     motion: z.strictObject({ fast: z.string(), normal: z.string(), easing: z.string() }),
-    layout: z.strictObject({ content: size, page: size, sidebar: size, rail: size, topbar: size, popover: size, drawer: size, dialog: size }),
+    layout: z.strictObject({ content: size, page: size, sidebar: size, rail: size, railWide: size, topbar: size, popover: size, drawer: size, dialog: size }),
     icon: z.strictObject({ stroke: z.string() }),
     scale: z.strictObject({
       density: z.strictObject({ compact: scale, comfortable: scale, spacious: scale }),
@@ -76,10 +78,16 @@ function colorAt(theme: Theme, path: string): string {
 }
 
 export function contrastFailures(theme: Theme): string[] {
-  return CONTRAST_PAIRS.flatMap(([text, background]) => {
-    const ratio = contrast(colorAt(theme, text), colorAt(theme, background));
-    return ratio < MIN_CONTRAST
-      ? [`${theme.id}: ${text} on ${background} is ${ratio.toFixed(2)}:1, needs ${MIN_CONTRAST}:1`]
-      : [];
-  });
+  const failure = (text: string, background: string, a: string, b: string) => {
+    const ratio = contrast(a, b);
+    return ratio < MIN_CONTRAST ? [`${theme.id}: ${text} on ${background} is ${ratio.toFixed(2)}:1, needs ${MIN_CONTRAST}:1`] : [];
+  };
+  return [
+    ...CONTRAST_PAIRS.flatMap(([text, background]) => failure(text, background, colorAt(theme, text), colorAt(theme, background))),
+    ...Object.entries(theme.accents).flatMap(([name, values]) => [
+      ...failure(`accents.${name}.default`, "surface.page", values.default, theme.color.surface.page),
+      ...failure(`accents.${name}.default`, "surface.sunken", values.default, theme.color.surface.sunken),
+      ...failure(`accents.${name}.on`, `accents.${name}.default`, values.on, values.default),
+    ]),
+  ];
 }

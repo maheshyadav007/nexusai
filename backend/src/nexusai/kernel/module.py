@@ -5,6 +5,7 @@ from typing import Any, get_type_hints
 
 from pydantic import BaseModel
 
+from nexusai.contracts.events import AppEvent
 from nexusai.kernel.config import Config
 from nexusai.kernel.database import Migration
 from nexusai.kernel.event_bus import EventBus
@@ -28,6 +29,7 @@ class Context:
 
 
 Route = Callable[[Any, Context], BaseModel]
+Listener = Callable[[AppEvent, Context], None]
 
 
 @dataclass(frozen=True)
@@ -46,6 +48,16 @@ class Module:
     migrations: list[Migration] = field(default_factory=list)
     commands: dict[str, Endpoint] = field(default_factory=dict)
     queries: dict[str, Endpoint] = field(default_factory=dict)
+    listeners: list[tuple[str, str, Listener]] = field(default_factory=list)
+
+    def on(self, pattern: str, name: str) -> Callable[[Listener], Listener]:
+        """Runs after matching events. The name keeps its place in the event log across restarts."""
+
+        def decorator(handler: Listener) -> Listener:
+            self.listeners.append((name, pattern, handler))
+            return handler
+
+        return decorator
 
     def command(self, name: str) -> Callable[[Route], Route]:
         return self._register(self.commands, name)

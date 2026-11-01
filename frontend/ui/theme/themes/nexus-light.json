@@ -88,7 +88,8 @@
     "popover": "320px",
     "drawer": "420px",
     "dialog": "480px",
-    "page": "1200px"
+    "page": "1200px",
+    "railWide": "180px"
   },
   "scale": {
     "density": {
@@ -104,5 +105,31 @@
   },
   "icon": {
     "stroke": "1.5"
+  },
+  "accents": {
+    "terracotta": {
+      "default": "#A8441F",
+      "hover": "#8E3717",
+      "bright": "#C0532E",
+      "on": "#FCF3EE"
+    },
+    "cobalt": {
+      "default": "#2B5C8A",
+      "hover": "#224A70",
+      "bright": "#3A74AB",
+      "on": "#FFFFFF"
+    },
+    "moss": {
+      "default": "#4A6B35",
+      "hover": "#3B5629",
+      "bright": "#5D8343",
+      "on": "#FFFFFF"
+    },
+    "plum": {
+      "default": "#7A3F6B",
+      "hover": "#633256",
+      "bright": "#935081",
+      "on": "#FFFFFF"
+    }
   }
 }
