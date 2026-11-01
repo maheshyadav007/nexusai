@@ -297,6 +297,8 @@ Each step ends with something you can see working. **Unslop and the quality bar 
 
 ### Stage 0: Foundation
 
+Status: built except 0.5. Agent host and Heavy jobs processes, the backend supervisor, live events and the per-install token arrive with the first features that need them.
+
 | # | Build | Done when |
 |---|---|---|
 | 0.1 | `frontend/` and `backend/` projects with pinned dependencies; `uv` for Python; ruff, pytest, `import-linter`, type checks and the no-hardcoding check | A hardcoded color fails the check |

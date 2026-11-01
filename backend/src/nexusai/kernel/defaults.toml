@@ -1,0 +1,22 @@
+# Every tunable value lives here. Environment variables named NEXUSAI_<KEY> override these.
+[server]
+host = "127.0.0.1"
+port = 8765
+allowed_hosts = ["127.0.0.1:8765", "localhost:8765", "127.0.0.1:3000", "localhost:3000"]
+allowed_origins = ["http://127.0.0.1:3000", "http://localhost:3000"]
+
+[home]
+# Stage 1 replaces this with the folder the user picks during onboarding.
+dir = ".dev-home"
+
+[events]
+max_chain_depth = 20
+handler_max_attempts = 3
+handler_retry_delay_seconds = 0.2
+sse_keepalive_seconds = 15
+log_page_size = 200
+
+[settings]
+theme = "nexus-light"
+density = "comfortable"
+text_size = "medium"

@@ -1,0 +1,40 @@
+{
+  "name": "nexusai-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "theme": "tsx ui/theme/generate.ts",
+    "contracts": "cd ../backend && uv run --quiet python -m nexusai.api.export_contracts ../frontend/ui/client/contracts.schema.json && cd ../frontend && json2ts -i ui/client/contracts.schema.json -o ui/client/contracts.generated.ts --unreachableDefinitions && rm ui/client/contracts.schema.json",
+    "predev": "npm run theme",
+    "dev": "next dev",
+    "prebuild": "npm run theme",
+    "build": "next build",
+    "typecheck": "npm run theme && tsc --noEmit",
+    "check:hardcode": "node scripts/check-no-hardcode.mjs ui app",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "check": "npm run typecheck && npm run check:hardcode && npm run test"
+  },
+  "dependencies": {
+    "@radix-ui/react-radio-group": "1.5.1",
+    "@tanstack/react-query": "5.105.1",
+    "next": "16.4.3",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@types/node": "26.6.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "autoprefixer": "10.6.2",
+    "json-schema-to-typescript": "16.0.0",
+    "postcss": "8.5.32",
+    "tailwindcss": "3.4.19",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "5.0.5"
+  }
+}

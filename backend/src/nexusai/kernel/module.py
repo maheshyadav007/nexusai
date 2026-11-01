@@ -1,0 +1,54 @@
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from inspect import signature
+from typing import Any, get_type_hints
+
+from pydantic import BaseModel
+
+from nexusai.kernel.config import Config
+from nexusai.kernel.database import Migration
+from nexusai.kernel.event_bus import EventBus
+
+
+@dataclass(frozen=True)
+class Context:
+    bus: EventBus
+    config: Config
+    trace_id: str
+
+
+Route = Callable[[Any, Context], BaseModel]
+
+
+@dataclass(frozen=True)
+class Endpoint:
+    name: str
+    handler: Route
+    input_model: type[BaseModel]
+    output_model: type[BaseModel]
+
+
+@dataclass
+class Module:
+    """One area of the app. Its commands, queries and events are the only way in or out."""
+
+    name: str
+    migrations: list[Migration] = field(default_factory=list)
+    commands: dict[str, Endpoint] = field(default_factory=dict)
+    queries: dict[str, Endpoint] = field(default_factory=dict)
+
+    def command(self, name: str) -> Callable[[Route], Route]:
+        return self._register(self.commands, name)
+
+    def query(self, name: str) -> Callable[[Route], Route]:
+        return self._register(self.queries, name)
+
+    @staticmethod
+    def _register(target: dict[str, Endpoint], name: str) -> Callable[[Route], Route]:
+        def decorator(handler: Route) -> Route:
+            hints = get_type_hints(handler)
+            input_param = next(iter(signature(handler).parameters))
+            target[name] = Endpoint(name, handler, hints[input_param], hints["return"])
+            return handler
+
+        return decorator

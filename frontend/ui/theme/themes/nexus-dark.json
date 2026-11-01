@@ -1,0 +1,95 @@
+{
+  "id": "nexus-dark",
+  "name": "Nexus Dark",
+  "mode": "dark",
+  "color": {
+    "surface": {
+      "page": "#121010",
+      "raised": "#1B1815",
+      "sunken": "#0F0E0D",
+      "inverse": "#F8EAE2"
+    },
+    "ink": {
+      "primary": "#F6E7DE",
+      "secondary": "#D3C4B8",
+      "muted": "#A79B8D",
+      "faint": "#6E645A",
+      "inverse": "#191714"
+    },
+    "accent": {
+      "default": "#E0784F",
+      "hover": "#EE9270",
+      "bright": "#F0A080",
+      "on": "#191714"
+    },
+    "status": {
+      "success": "#8FBF80",
+      "warning": "#D9A94A",
+      "danger": "#EB8074"
+    },
+    "agent": {
+      "running": "#E0784F",
+      "waiting": "#D9A94A",
+      "done": "#8FBF80",
+      "failed": "#EB8074"
+    },
+    "line": {
+      "subtle": "#2E2620",
+      "strong": "#5C4A3F"
+    }
+  },
+  "type": {
+    "minSize": "11px",
+    "size": {
+      "xs": "11px",
+      "sm": "12px",
+      "md": "13px",
+      "lg": "15px",
+      "xl": "19px",
+      "display": "32px"
+    },
+    "family": {
+      "sans": "var(--font-sans)",
+      "serif": "var(--font-serif)",
+      "mono": "var(--font-mono)"
+    }
+  },
+  "space": {
+    "1": "4px",
+    "2": "8px",
+    "3": "12px",
+    "4": "16px",
+    "5": "24px",
+    "6": "32px",
+    "7": "48px"
+  },
+  "radius": {
+    "sm": "6px",
+    "md": "9px",
+    "lg": "14px",
+    "full": "999px"
+  },
+  "shadow": {
+    "raised": "0 1px 2px rgb(0 0 0 / 0.4), 0 6px 16px -8px rgb(0 0 0 / 0.6)",
+    "overlay": "0 22px 48px -24px rgb(0 0 0 / 0.8)"
+  },
+  "motion": {
+    "fast": "120ms",
+    "normal": "200ms"
+  },
+  "layout": {
+    "content": "960px"
+  },
+  "scale": {
+    "density": {
+      "compact": 0.85,
+      "comfortable": 1,
+      "spacious": 1.2
+    },
+    "text": {
+      "small": 0.92,
+      "medium": 1,
+      "large": 1.15
+    }
+  }
+}

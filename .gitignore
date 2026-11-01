@@ -22,6 +22,9 @@ __pycache__/
 *.db-shm
 *.pst
 
+# Generated theme output
+frontend/ui/theme/generated/
+
 # Test output
 playwright-report/
 test-results/
