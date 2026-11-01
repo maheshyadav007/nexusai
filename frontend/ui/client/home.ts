@@ -21,10 +21,10 @@ export function useHomeCheck(path: string) {
   });
 }
 
-export function useFolders(path: string | null, enabled: boolean) {
+export function useFolders(path: string | null, enabled: boolean, extension?: string) {
   return useQuery({
-    queryKey: ["home-folders", path],
-    queryFn: () => post<FolderListing>("/api/home/browse", { path }),
+    queryKey: ["home-folders", path, extension],
+    queryFn: () => post<FolderListing>("/api/home/browse", { path, ...(extension ? { extension } : {}) }),
     enabled,
     staleTime: 0,
   });

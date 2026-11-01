@@ -55,6 +55,9 @@ test("a new person goes from landing through setup into the app, and setup resum
   await expect(page.getByRole("heading", { name: "Connect your mail" })).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
 
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: "Bring in old mail" })).toBeVisible();
+  await noViolations(page);
   await page.getByRole("button", { name: "Enter NexusAI" }).click();
   await expect(page).toHaveURL(/\/today$/);
 

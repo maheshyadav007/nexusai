@@ -101,10 +101,10 @@ Status legend: **In use** (in the repo today) · **Decided** (agreed, not built 
 | Choice | Status | Notes |
 |---|---|---|
 | **IMAP + SMTP, profile-based config** | Decided | `mail-accounts.json` with named profiles (corporate server, Gmail test account). Corporate login is plain username + password over TLS (no custom root certificate). Passwords in the OS credential store, never in the file. |
-| `aioimaplib` | To confirm | Async IMAP client with IDLE. Confirm against the corporate server in Stage 2. |
+| `imapclient` | In use | IMAP with IDLE, on a dedicated worker thread. Replaced `aioimaplib` because it's simpler and mature. Works against Gmail; confirm against the corporate server. |
 | Python `email` package | Decided | Parses raw messages (MIME, attachments, headers). |
-| `aiosmtplib` | Decided | SMTP sending. |
-| `libpff-python` (`pypff`) | To confirm | Reads Outlook PST archives. Confirm with a real multi-GB archive, and on Windows, in Stage 2. |
+| `smtplib` (standard library) | In use | SMTP sending. Replaced `aiosmtplib`, because handlers already run on worker threads. |
+| `libpff-python` (`pypff`) | In use | Reads Outlook PST archives in a separate process. Works on a real 2,178-message archive on macOS. Confirm with a multi-GB archive and on Windows. |
 | SQLite FTS5 | Decided | Full-text search over all mail history (~10K+ messages). |
 | Rule engine (`rules.json`) | Decided | Our own: built-in header rules + user rules run before the agent. |
 | Model provider interface | Decided | One interface for all models, with a capability flag for tool calling and a JSON-in-prompt fallback for models without it. |
@@ -147,6 +147,7 @@ The MVP build stages and feature targets are in [`FEATURES.md`](FEATURES.md).
 
 | Date | Change |
 |---|---|
+| 2026-11-01 | Mail stage built: `imapclient` and `smtplib` replace the async clients, `nh3` sanitizes mail, `pypdf` and the Office libraries read attachments. Synced and sent with the real Gmail test account. |
 | 2026-11-01 | ChatGPT subscription connected by device-code sign-in, with models chosen from the account's list. Internal API assumed to be LiteLLM. Web app gets built fully before Windows and corporate laptop testing. |
 | 2026-11-01 | Design direction approved: warm paper surfaces and Instrument Sans. Fonts are chosen per theme from a catalog. |
 | 2026-11-01 | Initial stack: Electron shell over the existing Next.js app; Playwright + Windows CI/VM for testing; v9 chosen as design reference. |

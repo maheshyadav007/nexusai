@@ -13,12 +13,16 @@ const INVALIDATES: Record<string, readonly string[]> = {
   "onboarding.changed": ["onboarding"],
   "profile.changed": ["profile"],
   "sidebar.changed": ["sidebar"],
-  "mail.changed": ["threads", "thread", "mail-status", "search"],
+  "mail.changed": ["threads", "thread", "mail-status", "search", "documents", "panel-results"],
   "mail.syncChanged": ["mail-status"],
   "mail.accountsChanged": ["mail-accounts", "mail-status", "threads"],
   "thread.updated": ["threads", "thread"],
   "drafts.changed": ["drafts"],
   "rules.changed": ["rules"],
+  "documents.changed": ["documents", "panel-results"],
+  "document.indexed": ["documents", "search"],
+  "pst.progress": ["pst", "mail-status"],
+  "panels.changed": ["panels"],
   "notifications.changed": ["notifications"],
 };
 

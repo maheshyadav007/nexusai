@@ -11,10 +11,10 @@ import { Skeleton } from "@/ui/primitives/Skeleton";
 import { t } from "@/ui/strings";
 
 /** Browsers can't hand a web page a folder path, so the local backend lists folders instead. */
-export function FolderPicker({ start, trigger, onPick }: { start: string; trigger: React.ReactNode; onPick: (path: string) => void }) {
+export function FolderPicker({ start, trigger, extension, onPick }: { start: string; trigger: React.ReactNode; extension?: string; onPick: (path: string) => void }) {
   const [open, setOpen] = useState(false);
   const [path, setPath] = useState<string | null>(start);
-  const folders = useFolders(path, open);
+  const folders = useFolders(path, open, extension);
   const listing = folders.data;
   return (
     <Dialog
@@ -50,7 +50,22 @@ export function FolderPicker({ start, trigger, onPick }: { start: string; trigge
                 </button>
               </li>
             ))}
-            {listing.folders.length === 0 ? <li className="px-2 py-1 text-md text-ink-muted">{t("home.picker.empty")}</li> : null}
+            {(listing.files ?? []).map((name) => (
+              <li key={name}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onPick(`${listing.path}/${name}`);
+                    setOpen(false);
+                  }}
+                  className="focus-ring flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-md text-accent-default transition-colors duration-fast hover:bg-surface-sunken"
+                >
+                  <Icon name="documents" />
+                  <span className="truncate">{name}</span>
+                </button>
+              </li>
+            ))}
+            {listing.folders.length === 0 && !listing.files?.length ? <li className="px-2 py-1 text-md text-ink-muted">{t("home.picker.empty")}</li> : null}
           </ul>
         </ScrollArea>
       ) : null}
@@ -58,16 +73,18 @@ export function FolderPicker({ start, trigger, onPick }: { start: string; trigge
         <Button variant="quiet" onClick={() => setOpen(false)}>
           {t("home.picker.cancel")}
         </Button>
-        <Button
-          variant="primary"
-          disabled={!listing}
-          onClick={() => {
-            if (listing) onPick(listing.path);
-            setOpen(false);
-          }}
-        >
-          {t("home.picker.use")}
-        </Button>
+        {extension ? null : (
+          <Button
+            variant="primary"
+            disabled={!listing}
+            onClick={() => {
+              if (listing) onPick(listing.path);
+              setOpen(false);
+            }}
+          >
+            {t("home.picker.use")}
+          </Button>
+        )}
       </div>
     </Dialog>
   );

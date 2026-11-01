@@ -1,4 +1,21 @@
 import type {
+  AddPstImport,
+  DocumentDone,
+  DocumentLibrary,
+  DocumentPreview,
+  GetDocument,
+  GetPanelBoard,
+  GetPanelResults,
+  GetPstImports,
+  ListDocuments,
+  PanelBoard,
+  PanelResults,
+  PstImportAction,
+  PstImports,
+  RemoveDocument,
+  ResetPanelBoard,
+  SaveFolders,
+  UpdateDocument,
   Draft,
   DraftList,
   GetMailAccounts,
@@ -93,6 +110,14 @@ interface Commands {
   "drafts.save": [Draft, Draft];
   "drafts.remove": [RemoveDraft, MailDone];
   "mail.send": [SendDraft, MailDone];
+  "documents.update": [UpdateDocument, DocumentDone];
+  "documents.saveFolders": [SaveFolders, DocumentDone];
+  "documents.remove": [RemoveDocument, DocumentDone];
+  "pst.add": [AddPstImport, PstImports];
+  "pst.pause": [PstImportAction, PstImports];
+  "pst.resume": [PstImportAction, PstImports];
+  "panels.saveBoard": [PanelBoard, PanelBoard];
+  "panels.reset": [ResetPanelBoard, PanelBoard];
 }
 
 interface Queries {
@@ -114,6 +139,11 @@ interface Queries {
   "drafts.list": [ListDrafts, DraftList];
   "mail.replyDraft": [ReplyContext, ReplyDraft];
   "search.run": [SearchMail, SearchResults];
+  "documents.list": [ListDocuments, DocumentLibrary];
+  "documents.get": [GetDocument, DocumentPreview];
+  "pst.imports": [GetPstImports, PstImports];
+  "panels.board": [GetPanelBoard, PanelBoard];
+  "panels.results": [GetPanelResults, PanelResults];
 }
 
 export class ApiRequestError extends Error {

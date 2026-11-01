@@ -13,7 +13,7 @@ const BANNED = [
   [/\buppercase\b/, "uppercase label; use sentence case"],
   [/\bfont-(?:bold|extrabold|black)\b/, "heavy weight; use size and color for hierarchy"],
   [/\banimate-(?:pulse|ping|bounce)\b/, "looping animation; only real running work may move"],
-  [/\b(?:bg-gradient|from|via)-[a-z]/, "gradient; use a solid surface"],
+  [/\bbg-gradient-|\b(?:from|via)-(?:surface|ink|accent|status|agent|line)\b/, "gradient; use a solid surface"],
   [/\bfont-serif\b.*\btabular-nums\b|\btabular-nums\b.*\bfont-serif\b/, "numbers in the serif; its 1 reads as l"],
 ];
 const TEXT_ATTRIBUTES = new Set(["title", "placeholder", "alt", "aria-label", "label", "description"]);

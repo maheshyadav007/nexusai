@@ -188,3 +188,91 @@ test("the inbox stays fast and scrollable with many threads", async ({ page, req
   expect(overflow).toBe(0);
   expect((await request.post("/api/queries/mail.status", { data: {} })).ok()).toBe(true);
 });
+
+test("a document uploads, opens with its text, and can be filed, tagged and removed", async ({ page }) => {
+  await page.goto("/documents/all");
+  const name = `${unique("notes").replace(" ", "-")}.txt`;
+  await page.getByTestId("file-input").setInputFiles({ name, mimeType: "text/plain", buffer: Buffer.from("The walrus budget is approved.") });
+  const row = page.getByTestId("document-row").filter({ hasText: name });
+  await expect(row).toBeVisible();
+  await noViolations(page);
+
+  await page.getByRole("textbox", { name: "Search documents" }).fill("walrus");
+  await expect(row).toBeVisible();
+  await page.getByRole("textbox", { name: "Search documents" }).fill("giraffe-nothing");
+  await expect(row).toHaveCount(0);
+  await page.getByRole("textbox", { name: "Search documents" }).fill("");
+
+  await page.getByRole("textbox", { name: "New folder" }).fill("Legal");
+  await page.getByRole("textbox", { name: "New folder" }).press("Enter");
+  await expect(page.getByRole("navigation", { name: "Folders" }).getByRole("button", { name: "Legal", exact: true })).toBeVisible();
+
+  await row.click();
+  await expect(page.getByTestId("document-text")).toHaveText("The walrus budget is approved.");
+  await page.getByRole("textbox", { name: "Add a tag" }).fill("urgent");
+  await page.getByRole("textbox", { name: "Add a tag" }).press("Enter");
+  await expect(page.getByRole("button", { name: "Remove tag urgent" })).toBeVisible();
+  await page.getByRole("combobox", { name: "Folder" }).click();
+  await page.getByRole("option", { name: "Legal" }).click();
+  await page.keyboard.press("Escape");
+  await expect(row).toContainText("Legal");
+  await expect(row).toContainText("urgent");
+
+  await row.click();
+  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(row).toHaveCount(0);
+});
+
+test("PST imports show progress and can be paused and resumed", async ({ page }) => {
+  await page.goto("/mail/archive");
+  await page.getByRole("textbox", { name: "PST file" }).fill("/no/such/file.pst");
+  await page.getByRole("button", { name: "Import" }).click();
+  await expect(page.getByText("That file doesn't exist")).toBeVisible();
+  await noViolations(page);
+
+  const job = { id: 1, name: "old.pst", path: "/x/old.pst", total: 100, position: 40, imported: 38, duplicates: 2, failed: 0, error: null };
+  let status = "running";
+  await page.route("**/api/queries/pst.imports", (route) => route.fulfill({ json: { imports: [{ ...job, status }] } }));
+  await page.route("**/api/commands/pst.pause", (route) => {
+    status = "paused";
+    return route.fulfill({ json: { imports: [{ ...job, status }] } });
+  });
+  await page.route("**/api/commands/pst.resume", (route) => {
+    status = "running";
+    return route.fulfill({ json: { imports: [{ ...job, status }] } });
+  });
+  await page.reload();
+  const card = page.getByTestId("pst-import");
+  await expect(card).toContainText("40 of 100 read, 38 added, 2 already here");
+  await card.getByRole("button", { name: "Pause" }).click();
+  await expect(card).toContainText("Paused");
+  await card.getByRole("button", { name: "Resume" }).click();
+  await expect(card).toContainText("Importing");
+});
+
+test("panels show live results, and can be added, resized, reordered and reset", async ({ page }) => {
+  await page.goto("/panels");
+  await expect(page.getByTestId("panel")).toHaveCount(4);
+  await noViolations(page);
+
+  const person = `person${Date.now()}@example.com`;
+  await page.getByRole("button", { name: "Add panel" }).click();
+  await page.getByRole("textbox", { name: "Name" }).fill("From this person");
+  await page.getByRole("textbox", { name: "From" }).fill(person);
+  await page.getByRole("button", { name: "Create panel" }).click();
+  const panel = page.getByRole("region", { name: "From this person" });
+  await expect(panel).toContainText("Nothing here right now");
+
+  await deliver(page, { subject: "Panel mail", sender: person });
+  await expect(panel).toContainText("Panel mail", { timeout: 15_000 });
+
+  await panel.getByRole("radio", { name: "Large" }).click();
+  await expect(panel.getByRole("radio", { name: "Large" })).toBeChecked();
+  await page.getByRole("button", { name: "Move From this person up" }).click();
+  await page.reload();
+  await expect(page.getByTestId("panel").nth(3)).toHaveAttribute("aria-label", "From this person");
+  await expect(page.getByRole("region", { name: "From this person" }).getByRole("radio", { name: "Large" })).toBeChecked();
+
+  await page.getByRole("button", { name: "Reset panels" }).click();
+  await expect(page.getByTestId("panel")).toHaveCount(4);
+});

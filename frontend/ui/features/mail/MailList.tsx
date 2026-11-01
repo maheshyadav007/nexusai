@@ -38,7 +38,7 @@ export function NoAccount() {
   return <EmptyState icon="inbox" title={t("mail.noAccount.title")} description={t("mail.noAccount.description")} action={<TextLink href="/settings?section=accounts">{t("mail.noAccount.action")}</TextLink>} />;
 }
 
-export function MailList({ title, folder, emptyIcon, emptyTitle, actions, showCategories = true }: { title: string; folder: FolderRole; emptyIcon: IconName; emptyTitle: StringKey; actions?: ReactNode; showCategories?: boolean }) {
+export function MailList({ title, folder, emptyIcon, emptyTitle, actions, showCategories = true, requireAccount = true }: { title: string; folder: FolderRole; emptyIcon: IconName; emptyTitle: StringKey; actions?: ReactNode; showCategories?: boolean; requireAccount?: boolean }) {
   const accounts = useMailAccounts();
   const [category, setCategory] = useState(ALL);
   const threads = useThreads(folder, category === ALL ? null : category);
@@ -54,7 +54,7 @@ export function MailList({ title, folder, emptyIcon, emptyTitle, actions, showCa
     if (last && last.index >= rows.length - 1 && hasNextPage && !isFetchingNextPage) void fetchNextPage();
   }, [last, rows.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  if (accounts.data && !accounts.data.active) {
+  if (requireAccount && accounts.data && !accounts.data.active) {
     return (
       <div className="mx-auto max-w-content p-6">
         <h1 className="mb-4 font-serif text-display text-ink-primary">{title}</h1>

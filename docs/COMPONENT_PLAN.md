@@ -325,6 +325,8 @@ Status: built, and ChatGPT sign-in, model choice and a test message work in Sett
 
 ### Stage 2: Mail
 
+Status: built, except that the 100,000-message speed target and a multi-GB PST haven't been measured yet, and the corporate server is untested. OCR and image description wait for the local models (`MDL-3`, Next).
+
 | # | Build | Done when |
 |---|---|---|
 | 2.1 | Connector host, Mail connector, sync, IDLE | Gmail test account syncs, and new mail appears with no polling |

@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { ErrorBoundary } from "@/ui/primitives/ErrorBoundary";
 import { Card } from "@/ui/primitives/Card";
 import { t, type StringKey } from "@/ui/strings";
+import { PstImportCard } from "@/ui/features/mail/PstImportCard";
 import { AccountSettings } from "./AccountSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { ModelSettings } from "./ModelSettings";
@@ -28,6 +29,7 @@ const SECTIONS: readonly { id: string; label: StringKey; content: () => ReactNod
   },
   { id: "preferences", label: "settings.section.preferences", content: () => <PreferencesSettings /> },
   { id: "accounts", label: "settings.section.accounts", content: () => <AccountSettings /> },
+  { id: "archive", label: "nav.archive", content: () => <PstImportCard /> },
   { id: "rules", label: "settings.section.rules", content: () => <RulesSettings /> },
   { id: "models", label: "settings.models.title", content: () => <ModelSettings /> },
   { id: "home", label: "settings.section.home", content: () => <HomeSettings /> },

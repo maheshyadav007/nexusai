@@ -5,6 +5,7 @@ import { useEffect, type ReactNode } from "react";
 import { useHomeStatus } from "@/ui/client/home";
 import { useFinishOnboarding, useOnboarding, useSetStep } from "@/ui/client/onboarding";
 import { HomeChooser } from "@/ui/features/home/HomeChooser";
+import { PstImportCard } from "@/ui/features/mail/PstImportCard";
 import { AccountSettings } from "@/ui/features/settings/AccountSettings";
 import { AppearanceSettings } from "@/ui/features/settings/AppearanceSettings";
 import { ModelSettings } from "@/ui/features/settings/ModelSettings";
@@ -23,13 +24,14 @@ interface Step {
   optional?: boolean;
 }
 
-// The setup interview, priorities, PST import and permissions join as their stages arrive.
+// The setup interview, priorities and permissions join as their stages arrive.
 const STEPS: readonly Step[] = [
   { id: "home", label: "setup.home.label", title: "setup.home.title", description: "setup.home.description" },
   { id: "theme", label: "setup.theme.label", title: "setup.theme.title", description: "setup.theme.description" },
   { id: "profile", label: "setup.profile.label", title: "setup.profile.title", description: "setup.profile.description" },
   { id: "mail", label: "setup.mail.label", title: "setup.mail.title", description: "setup.mail.description", optional: true },
   { id: "model", label: "setup.model.label", title: "setup.model.title", description: "setup.model.description", optional: true },
+  { id: "pst", label: "setup.pst.label", title: "setup.pst.title", description: "setup.pst.description", optional: true },
 ];
 
 function Frame({ step, index, actions, children }: { step: Step; index: number; actions?: ReactNode; children: ReactNode }) {
@@ -123,6 +125,7 @@ export function OnboardingFlow() {
       {step.id === "theme" ? <AppearanceSettings /> : null}
       {step.id === "mail" ? <AccountSettings /> : null}
       {step.id === "model" ? <ModelSettings /> : null}
+      {step.id === "pst" ? <PstImportCard /> : null}
     </Frame>
   );
 }

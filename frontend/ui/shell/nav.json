@@ -4,7 +4,6 @@
     {
       "id": "mail",
       "labelKey": "nav.mail",
-      "arrivesKey": "placeholder.mail",
       "items": [
         { "id": "inbox", "labelKey": "nav.inbox", "icon": "inbox", "href": "/mail/inbox" },
         { "id": "categories", "labelKey": "nav.categories", "icon": "categories", "href": "/mail/categories" },
@@ -16,7 +15,6 @@
     {
       "id": "documents",
       "labelKey": "nav.documents",
-      "arrivesKey": "placeholder.mail",
       "items": [
         { "id": "documents-all", "labelKey": "nav.documents.all", "icon": "all", "href": "/documents/all" },
         { "id": "documents-uploaded", "labelKey": "nav.documents.uploaded", "icon": "uploaded", "href": "/documents/uploaded" },
@@ -46,7 +44,7 @@
     }
   ],
   "bottom": [
-    { "id": "panels", "labelKey": "nav.panels", "icon": "panels", "href": "/panels", "arrivesKey": "placeholder.mail" },
+    { "id": "panels", "labelKey": "nav.panels", "icon": "panels", "href": "/panels" },
     { "id": "logs", "labelKey": "nav.logs", "icon": "logs", "href": "/logs" },
     { "id": "settings", "labelKey": "nav.settings", "icon": "settings", "href": "/settings" }
   ]
