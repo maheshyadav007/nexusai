@@ -11,7 +11,7 @@ import httpx
 from nexusai.kernel.config import Config
 from nexusai.kernel.module import Context
 from nexusai.modules.models import module as models
-from nexusai.modules.models.chatgpt import ChatGptClient, ChatGptError, SignInRequired
+from nexusai.modules.models.chatgpt import ChatGptError, SignInRequired
 
 FLAGGED = re.compile(r"flagged|content.?filter|policy violation|content.?policy|moderation", re.I)
 JSON_TOOL_NOTE = (
@@ -138,30 +138,28 @@ class ChatGptProvider:
                 for t in request.tools
             ]
 
-        def call(client: ChatGptClient, token: str) -> list[dict[str, Any]]:
-            return list(client.stream_events(token, body))
-
         try:
-            events = models.with_chatgpt_token(self.ctx, call)
+            for event in models.chatgpt_events(self.ctx, body):
+                kind = event.get("type")
+                if kind == "response.output_text.delta":
+                    yield TextChunk(event.get("delta", ""))
+                elif kind == "response.output_item.done":
+                    item = event.get("item", {})
+                    if item.get("type") == "function_call":
+                        yield ToolCall(
+                            item["call_id"], item["name"], _arguments(item.get("arguments", "{}"))
+                        )
+                elif kind == "response.completed":
+                    usage = (event.get("response") or {}).get("usage") or {}
+                    yield Usage(
+                        int(usage.get("input_tokens", 0)), int(usage.get("output_tokens", 0))
+                    )
         except SignInRequired as error:
             raise ModelNotConfigured(str(error)) from error
         except ChatGptError as error:
             if FLAGGED.search(str(error)):
                 raise ModelFlagged(str(error)) from error
             raise ModelUnavailable(str(error)) from error
-        for event in events:
-            kind = event.get("type")
-            if kind == "response.output_text.delta":
-                yield TextChunk(event.get("delta", ""))
-            elif kind == "response.output_item.done":
-                item = event.get("item", {})
-                if item.get("type") == "function_call":
-                    yield ToolCall(
-                        item["call_id"], item["name"], _arguments(item.get("arguments", "{}"))
-                    )
-            elif kind == "response.completed":
-                usage = (event.get("response") or {}).get("usage") or {}
-                yield Usage(int(usage.get("input_tokens", 0)), int(usage.get("output_tokens", 0)))
 
 
 def _arguments(text: str) -> dict[str, Any]:

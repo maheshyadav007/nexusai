@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import pytest
@@ -137,6 +138,13 @@ def test_block_rules_refuse_to_send(ctx: Context) -> None:
     rules.rules[0].action = "block"
     with pytest.raises(GuardBlocked):
         DataGuard(ctx.bus.db, rules).mask(SECRET)
+
+
+def test_rules_file_survives_being_created_by_many_sessions_at_once(config: Config) -> None:
+    create_home(config.home)
+    with ThreadPoolExecutor(8) as pool:
+        results = list(pool.map(lambda _: guard.load_rules(config.home), range(32)))
+    assert all(r == results[0] for r in results)
 
 
 def test_rule_test_reports_without_saving_tokens(ctx: Context) -> None:

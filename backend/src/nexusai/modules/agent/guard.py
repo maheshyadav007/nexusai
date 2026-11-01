@@ -6,6 +6,7 @@ Local data keeps its real values. Masking happens only at the model gateway.
 import json
 import re
 import sqlite3
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from importlib import resources
@@ -53,7 +54,8 @@ def load_rules(home: Path) -> GuardRules:
 def save_rules(home: Path, rules: GuardRules) -> None:
     path = home / "system" / FILE_NAME
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(".tmp")
+    # A unique name, because sessions starting together can all arrive here at once.
+    temporary = path.with_suffix(f".{uuid.uuid4().hex}.tmp")
     temporary.write_text(rules.model_dump_json(indent=2))
     temporary.replace(path)
 

@@ -1,7 +1,7 @@
 """The one door for model calls. Nothing else in the app talks to a model."""
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -14,6 +14,7 @@ from nexusai.kernel.module import Context
 from nexusai.modules.agent import guard as guards
 from nexusai.modules.agent.guard import DataGuard
 from nexusai.modules.agent.providers import (
+    Chunk,
     Message,
     ModelFlagged,
     ModelNotConfigured,
@@ -106,7 +107,7 @@ def _message_text(message: Message) -> str:
     return "\n".join(parts)
 
 
-def call_model(
+def stream_model(
     ctx: Context,
     *,
     agent: str,
@@ -114,9 +115,8 @@ def call_model(
     layers: list[Layer],
     messages: list[Message],
     tools: list[ToolSpec] | None = None,
-    on_text: TextListener | None = None,
     model_override: str | None = None,
-) -> GatewayResult:
+) -> Iterator[Chunk]:
     """Every prompt layer, message and tool description is masked before it leaves.
 
     Whatever returns is restored: text as it streams, and tool arguments before any tool sees them.
@@ -169,46 +169,80 @@ def call_model(
         )
         call_id = int(cursor.lastrowid or 0)
 
-    result = GatewayResult(call_id=call_id)
+    usage = Usage()
     restorer = guard.stream_restorer()
-    parts: list[str] = []
     raw_calls: list[ToolCall] = []
-
-    def emit(text: str) -> None:
-        if text:
-            parts.append(text)
-            if on_text:
-                on_text(text)
 
     def finish(status: str, error: str | None) -> None:
         with db.transaction() as tx:
             tx.execute(
                 "UPDATE model_calls SET status = ?, error = ?, input_tokens = ?, output_tokens = ? WHERE id = ?",
-                (status, error, result.usage.input_tokens, result.usage.output_tokens, call_id),
+                (status, error, usage.input_tokens, usage.output_tokens, call_id),
             )
 
     try:
         for chunk in provider.stream(request):
             if isinstance(chunk, TextChunk):
-                emit(restorer.feed(chunk.text))
+                text = restorer.feed(chunk.text)
+                if text:
+                    yield TextChunk(text)
             elif isinstance(chunk, ToolCall):
                 raw_calls.append(chunk)
             elif isinstance(chunk, Usage):
-                result.usage = chunk
-        emit(restorer.finish())
-        result.text = "".join(parts)
-        result.tool_calls = [
-            ToolCall(call.id, call.name, guard.restore_arguments(call.arguments))
-            for call in raw_calls
-        ]
+                usage = chunk
+        text = restorer.finish()
+        if text:
+            yield TextChunk(text)
+        for call in raw_calls:
+            yield ToolCall(call.id, call.name, guard.restore_arguments(call.arguments))
     except (ModelUnavailable, ModelFlagged, ModelNotConfigured, guards.DamagedToken) as error:
         status = "flagged" if isinstance(error, ModelFlagged) else "failed"
         finish(status, str(error))
         log.info("model_call_failed", agent=agent, kind=type(error).__name__)
         raise
+    except GeneratorExit:
+        finish("stopped", None)
+        raise
     finish("done", None)
     _warn_near_cap(ctx, cap)
-    log.info("model_call", agent=agent, provider=provider.name, tokens=result.usage.output_tokens)
+    log.info("model_call", agent=agent, provider=provider.name, tokens=usage.output_tokens)
+    yield usage
+
+
+def call_model(
+    ctx: Context,
+    *,
+    agent: str,
+    session: str | None,
+    layers: list[Layer],
+    messages: list[Message],
+    tools: list[ToolSpec] | None = None,
+    on_text: TextListener | None = None,
+    model_override: str | None = None,
+) -> GatewayResult:
+    """The whole reply at once, for work with no one watching it arrive."""
+    result = GatewayResult()
+    parts: list[str] = []
+    for chunk in stream_model(
+        ctx,
+        agent=agent,
+        session=session,
+        layers=layers,
+        messages=messages,
+        tools=tools,
+        model_override=model_override,
+    ):
+        if isinstance(chunk, TextChunk):
+            parts.append(chunk.text)
+            if on_text:
+                on_text(chunk.text)
+        elif isinstance(chunk, ToolCall):
+            result.tool_calls.append(chunk)
+        else:
+            result.usage = chunk
+    result.text = "".join(parts)
+    rows = ctx.bus.db.fetch_all("SELECT MAX(id) AS id FROM model_calls WHERE agent = ?", (agent,))
+    result.call_id = int(rows[0]["id"] or 0)
     return result
 
 

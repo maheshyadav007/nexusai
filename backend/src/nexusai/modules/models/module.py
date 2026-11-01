@@ -1,7 +1,7 @@
 import json
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlparse
@@ -218,25 +218,29 @@ def _poll_login(
     _announce(ctx, "login_failed")
 
 
-def with_chatgpt_token[T](ctx: Context, call: Callable[[ChatGptClient, str], T]) -> T:
-    """Runs a call with a fresh token. Errors stay as ChatGPT errors, for the caller to classify."""
+def chatgpt_events(ctx: Context, body: dict[str, Any]) -> Iterator[dict[str, Any]]:
+    """ChatGPT's reply as it arrives. A rejected token is renewed once, before anything streams."""
     client = ChatGptClient(ctx.config.chatgpt)
-    try:
-        tokens = _fresh_tokens(ctx, client)
-    except CommandError as error:
-        raise SignInRequired(error.message) from error
-    try:
-        return call(client, tokens.access_token)
-    except SignInRequired:
+
+    def access_token(*, force: bool = False) -> str:
         try:
-            tokens = _fresh_tokens(ctx, client, force=True)
+            return _fresh_tokens(ctx, client, force=force).access_token
         except CommandError as error:
             raise SignInRequired(error.message) from error
+
+    stream = client.stream_events(access_token(), body)
+    try:
+        first = next(stream, None)
+    except SignInRequired:
+        stream = client.stream_events(access_token(force=True), body)
         try:
-            return call(client, tokens.access_token)
+            first = next(stream, None)
         except SignInRequired:
             _sign_in_ended(ctx)
             raise
+    if first is not None:
+        yield first
+        yield from stream
 
 
 @dataclass(frozen=True)

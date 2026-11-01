@@ -16,6 +16,7 @@ from pydantic import ValidationError
 
 from nexusai.api.security import LocalOnlyMiddleware
 from nexusai.api.sse import sse_stream
+from nexusai.contracts.agent import SessionChat
 from nexusai.contracts.documents import DocumentRow
 from nexusai.contracts.errors import ApiError
 from nexusai.contracts.events import AppEvent, EventLog, EventLogQuery
@@ -33,6 +34,8 @@ from nexusai.kernel.database import Database
 from nexusai.kernel.event_bus import EventBus
 from nexusai.kernel.logging import configure_logging, sink
 from nexusai.kernel.module import CommandError, Context, Endpoint, Listener, Module
+from nexusai.modules.agent import module as agent
+from nexusai.modules.agent.module import agent_module
 from nexusai.modules.documents import module as documents
 from nexusai.modules.documents.module import documents_module
 from nexusai.modules.mail import store as mail_store
@@ -53,6 +56,7 @@ MODULES: list[Module] = [
     mail_module,
     documents_module,
     panels_module,
+    agent_module,
 ]
 log = structlog.get_logger()
 
@@ -269,6 +273,38 @@ def create_app(config: Config | None = None) -> FastAPI:
             "X-Content-Type-Options": "nosniff",
         }
         return Response(found[1], media_type="application/octet-stream", headers=headers)
+
+    ui_stream_headers = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+        # The AI SDK reads this to know which stream format it's getting.
+        "x-vercel-ai-ui-message-stream": "v1",
+    }
+
+    @app.post("/api/sessions/chat", response_model=None)
+    async def session_chat(body: SessionChat, request: Request) -> Response:
+        """Starts a turn and streams it. The turn keeps running if this connection drops."""
+        if runtime is None:
+            return _error(409, "home.not_ready", "Choose a NexusAI Home first.")
+        try:
+            sessions = agent.current()
+            turn = await asyncio.to_thread(sessions.send, body.id, body.text)
+        except CommandError as error:
+            return _error(error.status, error.code, error.message)
+        stream = sessions.stream_turn(turn, request.is_disconnected)
+        return StreamingResponse(stream, media_type="text/event-stream", headers=ui_stream_headers)
+
+    @app.get("/api/sessions/chat/{session}/stream", response_model=None)
+    async def session_stream(session: str, request: Request) -> Response:
+        """Reattaches to a running turn from its start. 204 means nothing is running."""
+        if runtime is None:
+            return _error(409, "home.not_ready", "Choose a NexusAI Home first.")
+        sessions = agent.current()
+        turn = await asyncio.to_thread(sessions.active_turn, session)
+        if turn is None:
+            return Response(status_code=204)
+        stream = sessions.stream_turn(turn, request.is_disconnected)
+        return StreamingResponse(stream, media_type="text/event-stream", headers=ui_stream_headers)
 
     @app.post("/api/commands/{name}")
     async def command(name: str, request: Request) -> JSONResponse:
