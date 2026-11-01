@@ -36,6 +36,13 @@ CREATE TABLE agent_channel_muted (topic TEXT PRIMARY KEY);
 CREATE TABLE quiet_hours (id INTEGER PRIMARY KEY CHECK (id = 1), value TEXT NOT NULL);
 """,
 )
+QUESTIONS_MIGRATION = Migration(
+    "agent_channel_questions_001",
+    """
+ALTER TABLE channel_messages ADD COLUMN multiple INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE channel_messages ADD COLUMN tool_call TEXT;
+""",
+)
 
 
 def _now() -> str:
@@ -91,6 +98,8 @@ def post(
     options: list[str] | None = None,
     urgent: bool = False,
     triage_message: int | None = None,
+    multiple: bool = False,
+    tool_call: str | None = None,
 ) -> int | None:
     """A message to the person. Repeats group together, and a daily limit keeps noise down.
 
@@ -100,10 +109,15 @@ def post(
     limit = load_quiet(db).channel_daily_limit
     today = datetime.now(UTC).strftime("%Y-%m-%d")
     with ctx.bus.unit_of_work() as work:
-        same = work.tx.execute(
-            "SELECT id FROM channel_messages WHERE status = 'open' AND kind = ? AND agent = ? AND text = ?",
-            (kind, agent, text),
-        ).fetchone()
+        # A session's question belongs to its own call, so identical ones don't merge.
+        same = (
+            None
+            if tool_call
+            else work.tx.execute(
+                "SELECT id FROM channel_messages WHERE status = 'open' AND kind = ? AND agent = ? AND text = ?",
+                (kind, agent, text),
+            ).fetchone()
+        )
         if same:
             work.tx.execute(
                 "UPDATE channel_messages SET count = count + 1 WHERE id = ?", (same[0],)
@@ -131,6 +145,10 @@ def post(
             ),
         )
         identifier = int(cursor.lastrowid or 0)
+        work.tx.execute(
+            "UPDATE channel_messages SET multiple = ?, tool_call = ? WHERE id = ?",
+            (int(multiple), tool_call, identifier),
+        )
         work.emit("channel.posted", {"id": identifier}, source="agent", trace_id=ctx.trace_id)
         if urgent:
             notify(ctx, work, text, "", "/today", "ask", True)
@@ -153,6 +171,7 @@ def _message(row: Any) -> ChannelMessage:
         thread=row["thread"],
         text=row["text"],
         options=json.loads(row["options"]),
+        multiple=bool(row["multiple"]),
         status=row["status"],
         answer=row["answer"],
         time=row["time"],
@@ -275,3 +294,13 @@ def set_muted(db: Database, topic: str, muted: bool) -> None:
             tx.execute("INSERT OR IGNORE INTO agent_channel_muted (topic) VALUES (?)", (topic,))
         else:
             tx.execute("DELETE FROM agent_channel_muted WHERE topic = ?", (topic,))
+
+
+def open_ask(db: Database, session: str) -> Any:
+    """The question this session is waiting on, if any."""
+    rows = db.fetch_all(
+        "SELECT * FROM channel_messages WHERE session = ? AND kind = 'ask' AND status = 'open'"
+        " ORDER BY id LIMIT 1",
+        (session,),
+    )
+    return rows[0] if rows else None

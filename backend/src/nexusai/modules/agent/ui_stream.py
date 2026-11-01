@@ -3,9 +3,36 @@
 This is the only file that knows either format, so a change in v3 stops here.
 """
 
+import json
+from datetime import UTC, datetime
 from typing import Any
 
 MODEL_NODE = "model"
+FOLLOWUPS_OPEN = "<followups>"
+FOLLOWUPS_CLOSE = "</followups>"
+MAX_FOLLOWUPS = 4
+
+
+def _held_back(text: str) -> int:
+    """How much of the end could be the start of the tag, so it isn't shown yet."""
+    for size in range(min(len(text), len(FOLLOWUPS_OPEN) - 1), 0, -1):
+        if FOLLOWUPS_OPEN.startswith(text[-size:]):
+            return size
+    return 0
+
+
+def followups_part(raw: str) -> list[dict[str, Any]]:
+    """Next steps the model offered, as their own part. Anything malformed is dropped."""
+    try:
+        parsed = json.loads(raw.split(FOLLOWUPS_CLOSE)[0])
+    except ValueError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    questions = [item.strip() for item in parsed if isinstance(item, str) and item.strip()]
+    if not questions:
+        return []
+    return [{"type": "data-followups", "data": {"questions": questions[:MAX_FOLLOWUPS]}}]
 
 
 class UiTranslator:
@@ -30,7 +57,8 @@ class UiTranslator:
         if self.started:
             return []
         self.started = True
-        return [{"type": "start"}]
+        time = datetime.now(UTC).isoformat()
+        return [{"type": "start", "messageMetadata": {"time": time}}]
 
     def feed(self, event: dict[str, Any]) -> list[dict[str, Any]]:
         method = event.get("method")
@@ -94,7 +122,7 @@ class UiTranslator:
         if block is None:
             return []
         if block["kind"] == "text" and delta.get("type") == "text-delta":
-            return [{"type": "text-delta", "id": block["id"], "delta": delta.get("text", "")}]
+            return self._visible_text(block, delta.get("text", ""))
         if block["kind"] == "reasoning" and delta.get("type") == "reasoning-delta":
             return [
                 {"type": "reasoning-delta", "id": block["id"], "delta": delta.get("reasoning", "")}
@@ -114,7 +142,7 @@ class UiTranslator:
         if block is None:
             return []
         if block["kind"] == "text":
-            return [{"type": "text-end", "id": block["id"]}]
+            return self._end_text(block)
         if block["kind"] == "reasoning":
             return [{"type": "reasoning-end", "id": block["id"]}]
         return [
@@ -149,12 +177,38 @@ class UiTranslator:
             ]
         return []
 
+    def _visible_text(self, block: dict[str, Any], delta: str) -> list[dict[str, Any]]:
+        """Keeps the follow-up tag out of the words, even when it arrives split across chunks."""
+        if "hidden" in block:
+            block["hidden"] += delta
+            return []
+        text = block.get("held", "") + delta
+        at = text.find(FOLLOWUPS_OPEN)
+        if at >= 0:
+            block["hidden"] = text[at + len(FOLLOWUPS_OPEN) :]
+            block["held"] = ""
+            text = text[:at]
+        else:
+            size = _held_back(text)
+            block["held"] = text[-size:] if size else ""
+            text = text[:-size] if size else text
+        return [{"type": "text-delta", "id": block["id"], "delta": text}] if text else []
+
+    def _end_text(self, block: dict[str, Any]) -> list[dict[str, Any]]:
+        parts: list[dict[str, Any]] = []
+        if block.get("held"):
+            parts.append({"type": "text-delta", "id": block["id"], "delta": block["held"]})
+        parts.append({"type": "text-end", "id": block["id"]})
+        if "hidden" in block:
+            parts += followups_part(block["hidden"])
+        return parts
+
     def close_open_blocks(self) -> list[dict[str, Any]]:
         """After a stop or an error, so the screen doesn't show text still arriving."""
         parts: list[dict[str, Any]] = []
         for block in self.blocks.values():
             if block["kind"] == "text":
-                parts.append({"type": "text-end", "id": block["id"]})
+                parts += self._end_text(block)
             elif block["kind"] == "reasoning":
                 parts.append({"type": "reasoning-end", "id": block["id"]})
         self.blocks = {}
@@ -174,11 +228,20 @@ def assemble_messages(turns: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "id": f"user-{turn['id']}",
                     "role": "user",
                     "parts": [{"type": "text", "text": turn["text"]}],
+                    "metadata": {"time": turn.get("created")},
                 }
             )
         parts = _assemble_parts(turn["parts"])
         if parts:
-            messages.append({"id": f"assistant-{turn['id']}", "role": "assistant", "parts": parts})
+            started: dict[str, Any] = next((p for p in turn["parts"] if p["type"] == "start"), {})
+            messages.append(
+                {
+                    "id": f"assistant-{turn['id']}",
+                    "role": "assistant",
+                    "parts": parts,
+                    "metadata": started.get("messageMetadata", {}),
+                }
+            )
     return messages
 
 
@@ -227,4 +290,6 @@ def _assemble_parts(stream: list[dict[str, Any]]) -> list[dict[str, Any]]:
             )
         elif kind == "error":
             parts.append({"type": "data-error", "data": {"text": part["errorText"]}})
+        elif kind.startswith("data-"):
+            parts.append({"type": kind, "data": part["data"]})
     return parts

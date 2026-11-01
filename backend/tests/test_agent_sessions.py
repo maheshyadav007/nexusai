@@ -141,6 +141,7 @@ def test_a_reply_streams_in_the_ai_sdk_format_and_is_kept(
     assert (saved["session"]["input_tokens"], saved["session"]["output_tokens"]) == (7, 2)
     assert saved["active"] is False
     assert saved["messages"][0] == {
+        "metadata": saved["messages"][0]["metadata"],
         "id": saved["messages"][0]["id"],
         "role": "user",
         "parts": [{"type": "text", "text": "Say hello please"}],

@@ -8,6 +8,7 @@ from nexusai.contracts.agent import (
     ActivityRow,
     AgentChannelList,
     AgentDone,
+    AnswerSession,
     ApprovalList,
     BoardList,
     ChannelList,
@@ -22,6 +23,7 @@ from nexusai.contracts.agent import (
     GetQuietHours,
     GetThreadRuns,
     GetToday,
+    GetToolCatalog,
     GetUsage,
     GuardRules,
     GuardTestResult,
@@ -67,6 +69,8 @@ from nexusai.contracts.agent import (
     ThreadSummary,
     TodayThread,
     TodayView,
+    ToolCatalog,
+    ToolInfo,
     TriageEstimate,
     TriageExisting,
     UndoActivity,
@@ -106,8 +110,10 @@ agent_module = Module(
         policy.MIGRATION,
         tools.MIGRATION,
         runtime.MIGRATION,
+        runtime.EDIT_MIGRATION,
         memory.MIGRATION,
         channel.MIGRATION,
+        channel.QUESTIONS_MIGRATION,
         mail_agent.MIGRATION,
         scheduler.MIGRATION,
     ],
@@ -694,4 +700,28 @@ def today_view(query: GetToday, ctx: Context) -> TodayView:
         automated_count=automated,
         prep_session=prep_session,
         prep_text=prep_text,
+    )
+
+
+@agent_module.command("session.answer")
+def answer_session(command: AnswerSession, ctx: Context) -> AgentDone:
+    current().answer(command.id, command.answer)
+    return AgentDone()
+
+
+@agent_module.query("tools.catalog")
+def tool_catalog(query: GetToolCatalog, ctx: Context) -> ToolCatalog:
+    permissions = policy.load_permissions(ctx.bus.db)
+    return ToolCatalog(
+        tools=[
+            ToolInfo(
+                name=entry.name,
+                group=entry.group,
+                label=entry.label,
+                description=entry.description,
+                level=policy.tool_level(permissions, entry),
+                can_allow=entry.action != "send",
+            )
+            for entry in policy.TOOL_ENTRIES
+        ]
     )

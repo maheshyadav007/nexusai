@@ -9,8 +9,12 @@ import structlog
 
 from nexusai.contracts.mail import (
     AddPstImport,
+    CategoryList,
+    CategoryName,
+    CategorySaved,
     CheckDraft,
     ConnectionResult,
+    DecideCategory,
     Draft,
     DraftList,
     GetMailAccounts,
@@ -19,13 +23,16 @@ from nexusai.contracts.mail import (
     GetRules,
     GetSendChecks,
     GetThread,
+    ListCategories,
     ListDrafts,
     ListThreads,
     MailAccounts,
     MailAccountView,
+    MailCategory,
     MailChanged,
     MailDone,
     MailProfile,
+    MailRule,
     MailStatus,
     MailTestResult,
     MoveThread,
@@ -37,7 +44,10 @@ from nexusai.contracts.mail import (
     RemoveMailAccount,
     ReplyContext,
     ReplyDraft,
+    RuleActions,
+    RuleCondition,
     RuleSet,
+    SaveCategory,
     SaveMailAccount,
     SearchMail,
     SearchResults,
@@ -405,6 +415,174 @@ def save_rules(command: RuleSet, ctx: Context) -> RuleSet:
             "rules.changed", {"count": len(command.rules)}, source="mail", trace_id=ctx.trace_id
         )
     return command
+
+
+# Categories
+
+CATEGORY_RULE_PREFIX = "Category: "
+SUGGESTED, DECLINED = 1, 2
+
+
+def category_rows(ctx: Context) -> list[MailCategory]:
+    db = ctx.bus.db
+    account = accounts.current_account(ctx.config)
+    counts = {
+        row["category"]: (row["n"], row["unread"])
+        for row in db.fetch_all(
+            "SELECT category, COUNT(*) AS n, SUM(unread_count > 0) AS unread FROM threads"
+            " WHERE account = ? AND category IS NOT NULL AND (in_inbox = 1 OR in_archive = 1)"
+            " GROUP BY category",
+            (account,),
+        )
+    }
+    found = []
+    named = set()
+    for row in db.fetch_all("SELECT * FROM mail_categories ORDER BY name"):
+        named.add(row["name"])
+        # One the person turned down stays recorded, so it isn't suggested again.
+        if row["proposed"] == DECLINED:
+            continue
+        count, unread = counts.get(row["name"], (0, 0))
+        found.append(
+            MailCategory(
+                name=row["name"],
+                source=row["source"],
+                in_priority=bool(row["in_priority"]),
+                proposed=row["proposed"] == SUGGESTED,
+                why=row["why"],
+                sender=row["sender"],
+                subject=row["subject"],
+                count=count,
+                unread=unread or 0,
+            )
+        )
+    # Rules can name a category nobody created, like Newsletters.
+    for name, (count, unread) in sorted(counts.items()):
+        if name not in named:
+            found.append(
+                MailCategory(
+                    name=name,
+                    source="rule",
+                    in_priority=False,
+                    proposed=False,
+                    count=count,
+                    unread=unread or 0,
+                )
+            )
+    return sorted(found, key=lambda category: category.name.casefold())
+
+
+def _apply_category_rule(ctx: Context, name: str, sender: str | None, subject: str | None) -> int:
+    """Mail from now on follows the rule, and what's already here is filed too."""
+    conditions = []
+    if sender:
+        conditions.append(RuleCondition(field="sender", value=sender))
+    if subject:
+        conditions.append(RuleCondition(field="subject", value=subject))
+    rule_name = CATEGORY_RULE_PREFIX + name
+    kept = [rule for rule in rules.load_rules(ctx.config.home) if rule.name != rule_name]
+    if conditions:
+        kept.append(
+            MailRule(name=rule_name, conditions=conditions, actions=RuleActions(category=name))
+        )
+    rules.save_rules(ctx.config.home, RuleSet(rules=kept))
+    if not conditions:
+        return 0
+    where = ["t.id = m.thread_id"]
+    params: list[object] = []
+    if sender:
+        where.append("(m.from_addr LIKE ? OR m.from_name LIKE ?)")
+        params += [f"%{sender}%", f"%{sender}%"]
+    if subject:
+        where.append("m.subject LIKE ?")
+        params.append(f"%{subject}%")
+    with ctx.bus.db.transaction() as tx:
+        cursor = tx.execute(
+            "UPDATE threads AS t SET category = ?, category_source = 'rule', why = ? WHERE"  # noqa: S608
+            " COALESCE(t.category_source, '') != 'user' AND EXISTS"
+            f" (SELECT 1 FROM messages m WHERE {' AND '.join(where)})",
+            (name, f"Matched the category “{name}”", *params),
+        )
+        return int(cursor.rowcount)
+
+
+def _categories_changed(ctx: Context) -> None:
+    with ctx.bus.unit_of_work() as work:
+        work.emit("categories.changed", {}, source="mail", trace_id=ctx.trace_id)
+        work.emit(
+            "mail.changed",
+            {"threads": 0, "reason": "categories"},
+            source="mail",
+            trace_id=ctx.trace_id,
+        )
+
+
+@mail_module.query("categories.list")
+def list_categories(query: ListCategories, ctx: Context) -> CategoryList:
+    return CategoryList(categories=category_rows(ctx))
+
+
+@mail_module.command("categories.save")
+def save_category(command: SaveCategory, ctx: Context) -> CategorySaved:
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO mail_categories (name, source, in_priority, proposed, sender, subject, created)"
+            " VALUES (?, ?, ?, 0, ?, ?, ?) ON CONFLICT (name) DO UPDATE SET"
+            " in_priority = excluded.in_priority, proposed = 0, sender = excluded.sender,"
+            " subject = excluded.subject",
+            (
+                command.name,
+                command.source,
+                int(command.in_priority),
+                command.sender,
+                command.subject,
+                datetime.now(UTC).isoformat(),
+            ),
+        )
+    filed = _apply_category_rule(ctx, command.name, command.sender, command.subject)
+    _categories_changed(ctx)
+    return CategorySaved(categories=category_rows(ctx), filed=filed)
+
+
+@mail_module.command("categories.remove")
+def remove_category(command: CategoryName, ctx: Context) -> CategoryList:
+    """Its mail stays where it is, only without this label."""
+    with ctx.bus.db.transaction() as tx:
+        tx.execute("DELETE FROM mail_categories WHERE name = ?", (command.name,))
+        tx.execute(
+            "UPDATE threads SET category = NULL, category_source = NULL WHERE category = ?",
+            (command.name,),
+        )
+    _apply_category_rule(ctx, command.name, None, None)
+    _categories_changed(ctx)
+    return CategoryList(categories=category_rows(ctx))
+
+
+@mail_module.command("categories.decide")
+def decide_category(command: DecideCategory, ctx: Context) -> CategoryList:
+    """An agent's suggestion. Saying no keeps the row, so it won't be suggested again."""
+    rows = ctx.bus.db.fetch_all("SELECT * FROM mail_categories WHERE name = ?", (command.name,))
+    if not rows:
+        raise CommandError("category.not_found", "That category no longer exists.", 404)
+    row = rows[0]
+    if command.accept:
+        save_category(
+            SaveCategory(
+                name=row["name"],
+                in_priority=bool(row["in_priority"]),
+                sender=row["sender"],
+                subject=row["subject"],
+                source="agent",
+            ),
+            ctx,
+        )
+    else:
+        with ctx.bus.db.transaction() as tx:
+            tx.execute(
+                "UPDATE mail_categories SET proposed = ? WHERE name = ?", (DECLINED, command.name)
+            )
+        _categories_changed(ctx)
+    return CategoryList(categories=category_rows(ctx))
 
 
 # Writing

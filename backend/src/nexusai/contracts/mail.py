@@ -96,7 +96,7 @@ class MailStatus(BaseModel):
 class ListThreads(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    folder: FolderRole = "inbox"
+    folder: FolderRole | Literal["priority", "all"] = "inbox"
     category: str | None = Field(default=None, max_length=64)
     before: str | None = Field(default=None, max_length=64, description="Paging cursor")
     limit: int = Field(default=100, ge=1, le=500)
@@ -231,6 +231,53 @@ class MailRule(BaseModel):
     enabled: bool = True
     conditions: list[RuleCondition] = Field(min_length=1, max_length=20)
     actions: RuleActions
+
+
+class MailCategory(BaseModel):
+    name: str
+    source: Literal["user", "agent", "rule"]
+    in_priority: bool
+    proposed: bool
+    why: str | None = None
+    sender: str | None = None
+    subject: str | None = None
+    count: int = 0
+    unread: int = 0
+
+
+class ListCategories(BaseModel):
+    pass
+
+
+class CategoryList(BaseModel):
+    categories: list[MailCategory]
+
+
+class SaveCategory(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=64)
+    in_priority: bool = False
+    sender: str | None = Field(default=None, max_length=320)
+    subject: str | None = Field(default=None, max_length=500)
+    source: Literal["user", "agent"] = "user"
+
+
+class CategorySaved(CategoryList):
+    filed: int = 0
+
+
+class CategoryName(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=64)
+
+
+class DecideCategory(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=64)
+    accept: bool
 
 
 class GetRules(BaseModel):

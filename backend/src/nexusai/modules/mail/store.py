@@ -82,8 +82,29 @@ CREATE VIRTUAL TABLE mail_search USING fts5(subject, sender, body, attachments, 
         "mail_messages_date_001",
         "CREATE INDEX messages_date ON messages (account, date DESC);",
     ),
+    Migration(
+        "mail_categories_001",
+        """
+CREATE TABLE mail_categories (
+  name TEXT PRIMARY KEY, source TEXT NOT NULL, in_priority INTEGER NOT NULL DEFAULT 0,
+  proposed INTEGER NOT NULL DEFAULT 0, why TEXT, sender TEXT, subject TEXT, created TEXT NOT NULL);
+CREATE INDEX threads_date ON threads (account, last_date DESC, id DESC);
+CREATE INDEX threads_category ON threads (account, category, last_date DESC, id DESC);
+""",
+    ),
 ]
 THREAD_COLUMNS = {"inbox": "in_inbox", "sent": "in_sent", "drafts": "in_drafts", "trash": "in_trash", "archive": "in_archive", "other": "in_other"}  # fmt: skip
+FOLDER_FILTERS = {
+    **{name: f"{column} = 1" for name, column in THREAD_COLUMNS.items()},
+    # What came in, wherever it's been filed since.
+    "all": "(in_inbox = 1 OR in_archive = 1)",
+    # What needs attention: judged important, waiting on the person, in a category they marked,
+    # or not judged yet, so nothing is hidden just because no model has looked at it.
+    "priority": (
+        "(in_inbox = 1 AND (importance = 'high' OR status = 'waiting_on_you' OR category IS NULL"
+        " OR category IN (SELECT name FROM mail_categories WHERE in_priority = 1)))"
+    ),
+}
 SUBJECT_WINDOW_DAYS = 30
 # How many of the newest matches get ranked, and how many of those can become results.
 SEARCH_RANKED = 5000
@@ -331,8 +352,7 @@ def row_of(row: sqlite3.Row) -> ThreadRow:
 def list_threads(
     db: Database, account: str, folder: str, category: str | None, before: str | None, limit: int
 ) -> ThreadList:
-    column = THREAD_COLUMNS[folder]
-    where = ["account = ?", f"{column} = 1"]
+    where = ["account = ?", FOLDER_FILTERS[folder]]
     params: list[object] = [account]
     if category:
         where.append("category = ?")
@@ -348,7 +368,7 @@ def list_threads(
     )
     page = rows[:limit]
     categories = db.fetch_all(
-        f"SELECT DISTINCT category FROM threads WHERE account = ? AND {column} = 1"  # noqa: S608
+        f"SELECT DISTINCT category FROM threads WHERE account = ? AND {FOLDER_FILTERS[folder]}"  # noqa: S608
         " AND category IS NOT NULL ORDER BY category",
         (account,),
     )

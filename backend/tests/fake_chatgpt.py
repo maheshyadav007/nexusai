@@ -130,6 +130,55 @@ def create_fake() -> FastAPI:
                 yield event("response.output_text.delta", delta="They want the numbers by Friday.")
             elif last.get("type") == "function_call_output":
                 yield event("response.output_text.delta", delta=f"Tool said: {last['output'][:60]}")
+            elif "remind me" in said:
+                yield event(
+                    "response.output_item.done",
+                    item={
+                        "type": "function_call",
+                        "call_id": "reminder-call",
+                        "name": "create_reminder",
+                        "arguments": json.dumps(
+                            {"title": "Call the vendor", "when": "2031-05-01T09:00"}
+                        ),
+                    },
+                )
+            elif "ask me something" in said:
+                yield event(
+                    "response.output_item.done",
+                    item={
+                        "type": "function_call",
+                        "call_id": f"ask-{uuid.uuid4().hex}",
+                        "name": "ask_user",
+                        "arguments": json.dumps(
+                            {
+                                "question": "Which day works?",
+                                "options": ["Monday", "Tuesday"],
+                                "multiple": "several" in said,
+                            }
+                        ),
+                    },
+                )
+            elif "send an email" in said:
+                yield event(
+                    "response.output_item.done",
+                    item={
+                        "type": "function_call",
+                        "call_id": f"send-{uuid.uuid4().hex}",
+                        "name": "send_mail",
+                        "arguments": json.dumps(
+                            {
+                                "to": ["sam@example.com"],
+                                "subject": "Numbers",
+                                "body": "Here they are.",
+                            }
+                        ),
+                    },
+                )
+            elif "offer next steps" in said:
+                yield event("response.output_text.delta", delta="Here is the **answer**.\n<follow")
+                yield event(
+                    "response.output_text.delta", delta='ups>["Tell me more", "Do it"]</followups>'
+                )
             elif "run a command" in said:
                 arguments = json.dumps(
                     {"command": "echo from-the-agent", "why": "Prove commands work"}

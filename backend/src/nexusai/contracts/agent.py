@@ -207,8 +207,39 @@ class Permissions(BaseModel):
     read: Permission = "allow"
     write: Permission = "allow"
     command: Permission = "ask"
+    # Changes to the person's own data, such as tasks, reminders and categories.
+    data: Permission = "allow"
+    # One tool's setting, which wins over the groups above.
+    tools: dict[str, Permission] = Field(default_factory=dict)
     folders: list[str] = Field(default_factory=list, max_length=100)
     full_computer_access: bool = False
+
+
+class ToolInfo(BaseModel):
+    name: str
+    group: str
+    label: str
+    description: str
+    level: Permission
+    # Sending always asks, so "allow" isn't offered.
+    can_allow: bool = True
+
+
+class GetToolCatalog(BaseModel):
+    pass
+
+
+class ToolCatalog(BaseModel):
+    tools: list[ToolInfo]
+
+
+class AnswerSession(BaseModel):
+    """Answers whatever the session is asking, from its card or the message box."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(max_length=64)
+    answer: str = Field(min_length=1, max_length=20000)
 
 
 class ActivityRow(BaseModel):
@@ -241,6 +272,8 @@ class SessionChat(BaseModel):
 
     id: str = Field(max_length=64)
     text: str = Field(min_length=1, max_length=200000)
+    # Replaces the person's nth message, and everything after it.
+    edit_index: int | None = Field(default=None, ge=0)
 
 
 MemoryLevel = Literal["user", "agent"]
@@ -330,6 +363,7 @@ class ChannelMessage(BaseModel):
     thread: int | None
     text: str
     options: list[str]
+    multiple: bool = False
     status: Literal["open", "answered", "dismissed"]
     answer: str | None
     time: str

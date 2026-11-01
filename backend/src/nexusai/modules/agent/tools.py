@@ -25,7 +25,7 @@ from nexusai.contracts.mail import SearchMail
 from nexusai.kernel.database import Migration
 from nexusai.kernel.home import scratch_folder
 from nexusai.kernel.module import CommandError, Context
-from nexusai.modules.agent import channel, memory, policy
+from nexusai.modules.agent import channel, memory, policy, work_tools
 from nexusai.modules.agent.policy import Action
 from nexusai.modules.documents.module import get_document as _get_document
 from nexusai.modules.documents.module import list_documents as _list_documents
@@ -176,11 +176,16 @@ def _guarded(
 ) -> str:
     db = ctx.bus.db
     kind = f"{tool}:{path.parent if path else ''}"
+    permissions = policy.load_permissions(db)
+    if permissions.tools.get(tool) == "off":
+        reason = "This tool is turned off in Settings."
+        _log_call(ctx, session, call_id, tool, detail or summary, reason, "refused", None, 0)
+        return f"Not allowed: {reason}"
     decision = policy.decide(
         action,
         path=path,
         home=ctx.config.home,
-        permissions=policy.load_permissions(db),
+        permissions=policy.for_tool(permissions, tool),
         untrusted=_is_untrusted(ctx, session),
         session_allowed=policy.allowed_for_session(db, session, kind),
     )
@@ -372,7 +377,11 @@ class _ReadThread(BaseModel):
 
 class _AskUser(BaseModel):
     question: str = Field(description="What you need to know.")
-    options: list[str] = Field(default_factory=list, description="Choices to offer, if any.")
+    options: list[str] = Field(
+        default_factory=list,
+        description="Choices to offer, when a few likely answers exist. They can always type one.",
+    )
+    multiple: bool = Field(default=False, description="Whether they can pick more than one.")
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
@@ -593,11 +602,17 @@ def build_tools(ctx: Context, session: str, control: RunControl) -> list[Structu
             marks_untrusted=True,
         )
 
-    def ask_user(question: str, tool_call_id: str, options: list[str] | None = None) -> str:
+    def ask_user(
+        question: str,
+        tool_call_id: str,
+        options: list[str] | None = None,
+        multiple: bool = False,
+    ) -> str:
         """Waits for the answer. Other work carries on meanwhile."""
+        # By call, because the same question can fairly be asked twice.
         row = ctx.bus.db.fetch_all(
-            "SELECT id, status, answer FROM channel_messages WHERE session = ? AND text = ? AND kind = 'ask' ORDER BY id DESC LIMIT 1",
-            (session, question),
+            "SELECT id, status, answer FROM channel_messages WHERE session = ? AND tool_call = ?",
+            (session, tool_call_id),
         )
         if row and row[0]["status"] == "answered":
             return f"They answered: {row[0]['answer']}"
@@ -607,7 +622,14 @@ def build_tools(ctx: Context, session: str, control: RunControl) -> list[Structu
             row[0]["id"]
             if row
             else channel.post(
-                ctx, "ask", "Session", question, session=session, options=options or []
+                ctx,
+                "ask",
+                "Session",
+                question,
+                session=session,
+                options=options or [],
+                multiple=multiple,
+                tool_call=tool_call_id,
             )
         )
         answer = interrupt({"channel": identifier, "tool_call_id": tool_call_id})
@@ -812,6 +834,33 @@ def build_tools(ctx: Context, session: str, control: RunControl) -> list[Structu
         (search_mail, _Search, "Search the person's mail and attachments."),
         (read_thread, _ReadThread, "Read a mail conversation."),
     ]
+
+    def guarded(
+        call_id: str,
+        tool: str,
+        action: Action,
+        summary: str,
+        detail: str,
+        work: Callable[[], str],
+        path: Path | None = None,
+        *,
+        marks_untrusted: bool = False,
+    ) -> str:
+        return _guarded(
+            ctx,
+            session,
+            call_id,
+            tool,
+            action,
+            path,
+            summary,
+            detail,
+            False,
+            work,
+            marks_untrusted=marks_untrusted,
+        )
+
+    specs += work_tools.specs(ctx, guarded, _untrusted)
     return [
         StructuredTool.from_function(
             func=func, name=func.__name__, description=description, args_schema=schema

@@ -50,7 +50,16 @@ CREATE TABLE agent_parts (id INTEGER PRIMARY KEY AUTOINCREMENT, turn INTEGER NOT
 CREATE INDEX agent_parts_turn ON agent_parts (turn, id);
 """,
 )
+EDIT_MIGRATION = Migration(
+    "agent_turns_edit_001",
+    """
+ALTER TABLE agent_turns ADD COLUMN created TEXT;
+ALTER TABLE agent_turns ADD COLUMN checkpoint TEXT;
+""",
+)
 FINISHED = {"done", "failed", "stopped"}
+# Agents that work by themselves, with nobody on the other end of a message box.
+NOT_CHATTABLE = {"mail"}
 RESUMABLE = {"queued", "running"}
 KEEPALIVE_SECONDS = 15
 TITLE_LENGTH = 60
@@ -180,7 +189,14 @@ class SessionRuntime:
             if not turn["closed"]:
                 # The open turn comes through the stream, so it isn't drawn twice.
                 active = True
-                assembled.append({"id": turn["id"], "text": turn["text"], "parts": []})
+                assembled.append(
+                    {
+                        "id": turn["id"],
+                        "text": turn["text"],
+                        "created": turn["created"],
+                        "parts": [],
+                    }
+                )
                 continue
             parts = self.db.fetch_all(
                 "SELECT part FROM agent_parts WHERE turn = ? ORDER BY id", (turn["id"],)
@@ -189,6 +205,7 @@ class SessionRuntime:
                 {
                     "id": turn["id"],
                     "text": turn["text"],
+                    "created": turn["created"],
                     "parts": [json.loads(p["part"]) for p in parts],
                 }
             )
@@ -218,16 +235,31 @@ class SessionRuntime:
             )
         return "<untrusted>\n" + "\n\n".join(blocks) + "\n</untrusted>\n\n"
 
-    def send(self, session: str, text: str) -> int:
+    def _latest_checkpoint(self, session: str) -> str | None:
+        found = self.saver.get_tuple({"configurable": {"thread_id": session}})
+        return str(found.config["configurable"]["checkpoint_id"]) if found else None
+
+    def send(self, session: str, text: str, edit_index: int | None = None) -> int:
         row = self.row(session)
+        if row.agent in NOT_CHATTABLE:
+            raise CommandError(
+                "session.not_chattable", "This agent works by itself, so it can't be messaged.", 409
+            )
         with self.lock:
             if self.active_turn(session) is not None:
                 raise CommandError(
                     "session.busy", "This session is still working. Wait for it, or stop it.", 409
                 )
+            start_from: str | None = None
+            replacing = False
+            if edit_index is not None:
+                start_from = self._forget_from(session, edit_index)
+                replacing = True
+            checkpoint = start_from if replacing else self._latest_checkpoint(session)
             with self.db.transaction() as tx:
                 cursor = tx.execute(
-                    "INSERT INTO agent_turns (session, text) VALUES (?, ?)", (session, text)
+                    "INSERT INTO agent_turns (session, text, created, checkpoint) VALUES (?, ?, ?, ?)",
+                    (session, text, _now(), checkpoint),
                 )
                 turn = int(cursor.lastrowid or 0)
         values: dict[str, Any] = {"status": "queued", "error": None}
@@ -237,7 +269,8 @@ class SessionRuntime:
             )
         self._set(session, **values)
         attached = self.context_text(session)
-        self._submit(session, turn, {"messages": [{"role": "user", "content": attached + text}]})
+        payload = {"messages": [{"role": "user", "content": attached + text}]}
+        self._submit(session, turn, payload, start_from)
         return turn
 
     def run_scheduled(self, title: str, prompt: str, agent: str, token_limit: int = 0) -> str:
@@ -246,8 +279,40 @@ class SessionRuntime:
         self.send(session.id, prompt)
         return session.id
 
-    def _submit(self, session: str, turn: int, payload: Any) -> None:
-        self.pool.submit(self._run, session, turn, payload)
+    def _forget_from(self, session: str, index: int) -> str | None:
+        """Editing a message goes back to just before it. What the tools did stays done."""
+        said = self.db.fetch_all(
+            "SELECT id, checkpoint FROM agent_turns WHERE session = ? AND text != '' ORDER BY id",
+            (session,),
+        )
+        if index >= len(said):
+            raise CommandError("session.no_message", "That message no longer exists.", 404)
+        target = said[index]
+        with self.db.transaction() as tx:
+            tx.execute(
+                "DELETE FROM agent_parts WHERE turn IN"
+                " (SELECT id FROM agent_turns WHERE session = ? AND id >= ?)",
+                (session, target["id"]),
+            )
+            tx.execute(
+                "DELETE FROM agent_turns WHERE session = ? AND id >= ?", (session, target["id"])
+            )
+        checkpoint = target["checkpoint"]
+        if checkpoint is None:
+            # It was the first message, so there's nothing earlier to go back to.
+            self.saver.delete_thread(session)
+        return str(checkpoint) if checkpoint else None
+
+    def answer(self, session: str, answer: str) -> None:
+        """From the question's card, or typed into the message box while it waits."""
+        ask = channel.open_ask(self.db, session)
+        if ask is None:
+            raise CommandError("session.no_question", "This session isn't asking anything.", 409)
+        channel.close(self.ctx, ask["id"], "answered", answer)
+        self.answered(session)
+
+    def _submit(self, session: str, turn: int, payload: Any, checkpoint: str | None = None) -> None:
+        self.pool.submit(self._run, session, turn, payload, checkpoint)
 
     def _agent(self, session: str, row: SessionRow, control: tools.RunControl) -> Any:
         config = self.ctx.config
@@ -276,7 +341,7 @@ class SessionRuntime:
             checkpointer=self.saver,
         )
 
-    def _run(self, session: str, turn: int, payload: Any) -> None:
+    def _run(self, session: str, turn: int, payload: Any, checkpoint: str | None = None) -> None:
         if self.closing:
             return
         live = _Live()
@@ -288,8 +353,11 @@ class SessionRuntime:
         translator = ui_stream.UiTranslator(started=started, declined_text=tools.DENIED)
         self._append(turn, translator.start())
         self._set(session, status="running", step=None)
+        configurable = {"thread_id": session}
+        if checkpoint:
+            configurable["checkpoint_id"] = checkpoint
         config = {
-            "configurable": {"thread_id": session},
+            "configurable": configurable,
             "recursion_limit": self.ctx.config.agent.max_steps * 2,
         }
         try:

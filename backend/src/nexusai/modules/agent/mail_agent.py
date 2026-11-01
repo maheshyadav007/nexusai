@@ -204,6 +204,14 @@ class MailAgent:
             task += "\n\nThe person answered your earlier question: " + " ".join(answers)
         recalled = memory.relevant(ctx.config.home, "mail", text, self.config.memory_max_chars)
         layers = prompts_builder.build_layers(ctx.config, "mail", memory=recalled)
+        known = [
+            row["name"]
+            for row in ctx.bus.db.fetch_all(
+                "SELECT name FROM mail_categories WHERE proposed = 0 ORDER BY name"
+            )
+        ]
+        if known:
+            layers.append(Layer("Categories that exist", ", ".join(known)))
         parsed = None
         try:
             for _ in range(PARSE_ATTEMPTS):
@@ -294,9 +302,9 @@ class MailAgent:
                 )
                 work.tx.execute("UPDATE messages SET why = ? WHERE id = ?", (why, row["message"]))
                 work.tx.execute("DELETE FROM triage_queue WHERE message = ?", (row["message"],))
-            # What the person chose stays. Only an agent or rule category can change.
+            # What the person chose stays, and so does what their rule filed.
             work.tx.execute(
-                "UPDATE threads SET category = ?, category_source = 'agent', why = ? WHERE id = ? AND COALESCE(category_source, '') != 'user'",
+                "UPDATE threads SET category = ?, category_source = 'agent', why = ? WHERE id = ? AND COALESCE(category_source, '') NOT IN ('user', 'rule')",
                 (category, why, thread),
             )
             work.tx.execute(
@@ -328,6 +336,8 @@ class MailAgent:
                 work.emit(
                     "mail.urgent", {"thread_id": thread}, source="agent", trace_id=ctx.trace_id
                 )
+        self._note_category(category)
+        self._suggest_category(parsed.get("suggest_category"))
         self._proposals(thread, parsed, subject)
         if question:
             channel.post(
@@ -341,6 +351,35 @@ class MailAgent:
                 triage_message=latest,
             )
         _record_turn(ctx, f"Triage: {subject}", f"{summary}\n\n{reason}".strip())
+
+    def _note_category(self, category: str | None) -> None:
+        """A name the agent came up with appears in the sidebar, marked as the agent's."""
+        if not category:
+            return
+        with self.ctx.bus.db.transaction() as tx:
+            tx.execute(
+                "INSERT OR IGNORE INTO mail_categories (name, source, created) VALUES (?, 'agent', ?)",
+                (category, _now()),
+            )
+
+    def _suggest_category(self, suggestion: Any) -> None:
+        """Mail that keeps coming from one place. The person decides, on Today."""
+        if not isinstance(suggestion, dict) or not suggestion.get("name"):
+            return
+        name = str(suggestion["name"])[:64]
+        with self.ctx.bus.unit_of_work() as work:
+            cursor = work.tx.execute(
+                "INSERT OR IGNORE INTO mail_categories (name, source, proposed, why, sender, created)"
+                " VALUES (?, 'agent', 1, ?, ?, ?)",
+                (
+                    name,
+                    str(suggestion.get("reason") or "")[:500],
+                    str(suggestion.get("sender") or "")[:320] or None,
+                    _now(),
+                ),
+            )
+            if cursor.rowcount:
+                work.emit("categories.changed", {}, source="agent", trace_id=self.ctx.trace_id)
 
     def _proposals(self, thread: int, parsed: dict[str, Any], subject: str) -> None:
         """The agent proposes. The person accepts tasks and reminders, and sends drafts."""
