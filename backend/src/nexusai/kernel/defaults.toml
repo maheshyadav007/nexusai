@@ -42,6 +42,21 @@ reconnect_max_seconds = 300
 signature_max_bytes = 30000
 signature_repeat_count = 3
 
+[agent]
+# 0 means no limit.
+daily_token_cap = 0
+max_running_sessions = 3
+triage_batch = 10
+triage_retry_seconds = 60
+max_recent_thread_messages = 8
+max_thread_chars = 20000
+memory_max_chars = 4000
+compress_after_chars = 60000
+command_timeout_seconds = 120
+max_tool_output_chars = 20000
+max_agent_messages_per_run = 20
+max_steps = 40
+
 [logs]
 retention_days = 30
 

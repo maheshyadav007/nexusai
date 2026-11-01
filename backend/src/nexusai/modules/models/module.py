@@ -1,8 +1,12 @@
+import json
 import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
+from urllib.parse import urlparse
 
+import httpx
 import structlog
 
 from nexusai.contracts.models import (
@@ -10,12 +14,16 @@ from nexusai.contracts.models import (
     AvailableModels,
     CancelModelLogin,
     DisconnectModel,
+    GetModelProvider,
     GetModelStatus,
     ListModels,
+    ListProviderModels,
     ModelLogin,
+    ModelProviderView,
     ModelReply,
     ModelsChanged,
     ModelStatus,
+    SaveModelProvider,
     SelectModel,
     StartModelLogin,
     TestModel,
@@ -37,6 +45,7 @@ from nexusai.modules.models.chatgpt import (
 
 log = structlog.get_logger()
 TOKENS = "chatgpt.tokens"
+LITELLM_KEY = "litellm.key"
 
 models_module = Module(
     name="models",
@@ -44,7 +53,12 @@ models_module = Module(
         Migration(
             "models_001",
             "CREATE TABLE model_selection (provider TEXT PRIMARY KEY, model TEXT NOT NULL)",
-        )
+        ),
+        Migration(
+            "models_002",
+            "CREATE TABLE model_provider_settings ("
+            " id INTEGER PRIMARY KEY CHECK (id = 1), value TEXT NOT NULL)",
+        ),
     ],
 )
 
@@ -202,6 +216,130 @@ def _poll_login(
         _login.state = ModelLogin(state="failed", error=failure)
         _login.stop = None
     _announce(ctx, "login_failed")
+
+
+def with_chatgpt_token[T](ctx: Context, call: Callable[[ChatGptClient, str], T]) -> T:
+    """Runs a call with a fresh token. Errors stay as ChatGPT errors, for the caller to classify."""
+    client = ChatGptClient(ctx.config.chatgpt)
+    try:
+        tokens = _fresh_tokens(ctx, client)
+    except CommandError as error:
+        raise SignInRequired(error.message) from error
+    try:
+        return call(client, tokens.access_token)
+    except SignInRequired:
+        try:
+            tokens = _fresh_tokens(ctx, client, force=True)
+        except CommandError as error:
+            raise SignInRequired(error.message) from error
+        try:
+            return call(client, tokens.access_token)
+        except SignInRequired:
+            _sign_in_ended(ctx)
+            raise
+
+
+@dataclass(frozen=True)
+class ActiveModel:
+    provider: str
+    model: str | None
+    base_url: str | None
+    supports_tools: bool
+
+
+def _provider_row(ctx: Context) -> dict[str, Any]:
+    rows = ctx.bus.db.fetch_all("SELECT value FROM model_provider_settings")
+    return json.loads(rows[0]["value"]) if rows else {"provider": "chatgpt"}
+
+
+def active_settings(ctx: Context) -> ActiveModel:
+    raw = _provider_row(ctx)
+    provider = raw.get("provider", "chatgpt")
+    if provider == "litellm":
+        return ActiveModel(
+            "litellm", raw.get("model"), raw.get("base_url"), bool(raw.get("supports_tools"))
+        )
+    return ActiveModel("chatgpt", _selected(ctx), None, True)
+
+
+def litellm_key(ctx: Context) -> str | None:
+    return secret_store(ctx.config.secrets_test_file).get(LITELLM_KEY)
+
+
+def _save_provider(ctx: Context, values: dict[str, Any]) -> None:
+    with ctx.bus.unit_of_work() as work:
+        work.tx.execute(
+            "INSERT INTO model_provider_settings (id, value) VALUES (1, ?)"
+            " ON CONFLICT (id) DO UPDATE SET value = excluded.value",
+            (json.dumps(values),),
+        )
+        work.emit(
+            "models.changed",
+            ModelsChanged(change="selected").model_dump(),
+            source=models_module.name,
+            trace_id=ctx.trace_id,
+        )
+
+
+def _provider_view(ctx: Context) -> ModelProviderView:
+    raw = _provider_row(ctx)
+    return ModelProviderView(
+        provider=raw.get("provider", "chatgpt"),
+        base_url=raw.get("base_url"),
+        model=raw.get("model"),
+        supports_tools=bool(raw.get("supports_tools")),
+        has_key=litellm_key(ctx) is not None,
+    )
+
+
+@models_module.query("models.provider")
+def get_provider(query: GetModelProvider, ctx: Context) -> ModelProviderView:
+    return _provider_view(ctx)
+
+
+@models_module.command("models.provider.save")
+def save_provider(command: SaveModelProvider, ctx: Context) -> ModelProviderView:
+    if command.provider == "litellm" and command.base_url:
+        parsed = urlparse(command.base_url)
+        local = parsed.hostname in {"127.0.0.1", "localhost"}
+        if parsed.scheme != "https" and not local:
+            raise CommandError(
+                "models.not_encrypted", "Use an https:// address for the model server.", 422
+            )
+    if command.api_key:
+        secret_store(ctx.config.secrets_test_file).set(LITELLM_KEY, command.api_key)
+    _save_provider(
+        ctx,
+        {
+            "provider": command.provider,
+            "base_url": command.base_url,
+            "model": command.model,
+            "supports_tools": command.supports_tools,
+        },
+    )
+    return _provider_view(ctx)
+
+
+@models_module.command("models.provider.listModels")
+def list_provider_models(command: ListProviderModels, ctx: Context) -> AvailableModels:
+    key = command.api_key or litellm_key(ctx)
+    if not key:
+        raise CommandError("models.no_key", "Enter the API key first.", 422)
+    try:
+        response = httpx.get(
+            f"{command.base_url.rstrip('/')}/models",
+            headers={"Authorization": f"Bearer {key}"},
+            timeout=ctx.config.network_check_timeout_seconds,
+        )
+        response.raise_for_status()
+        names = sorted(str(item["id"]) for item in response.json().get("data", []))
+    except (httpx.HTTPError, ValueError, KeyError, TypeError) as error:
+        raise CommandError(
+            "models.unreachable",
+            "Couldn't list models from that server. Check the address and key.",
+            502,
+        ) from error
+    return AvailableModels(models=[AvailableModel(id=name, name=name) for name in names])
 
 
 @models_module.query("models.status")

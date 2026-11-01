@@ -76,3 +76,37 @@ class ModelsChanged(BaseModel):
     change: Literal[
         "login_started", "login_failed", "login_cancelled", "connected", "disconnected", "selected"
     ]
+
+
+ProviderName = Literal["chatgpt", "litellm"]
+
+
+class GetModelProvider(BaseModel):
+    pass
+
+
+class ModelProviderView(BaseModel):
+    """Never carries the key."""
+
+    provider: ProviderName
+    base_url: str | None = None
+    model: str | None = None
+    supports_tools: bool = False
+    has_key: bool = False
+
+
+class SaveModelProvider(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: ProviderName
+    base_url: str | None = Field(default=None, max_length=500)
+    api_key: str | None = Field(default=None, max_length=2000)
+    model: str | None = Field(default=None, max_length=200)
+    supports_tools: bool = False
+
+
+class ListProviderModels(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    base_url: str = Field(min_length=1, max_length=500)
+    api_key: str | None = Field(default=None, max_length=2000)

@@ -34,6 +34,22 @@ class MailConfig:
 
 
 @dataclass(frozen=True)
+class AgentConfig:
+    daily_token_cap: int
+    max_running_sessions: int
+    triage_batch: int
+    triage_retry_seconds: float
+    max_recent_thread_messages: int
+    max_thread_chars: int
+    memory_max_chars: int
+    compress_after_chars: int
+    command_timeout_seconds: float
+    max_tool_output_chars: int
+    max_agent_messages_per_run: int
+    max_steps: int
+
+
+@dataclass(frozen=True)
 class Config:
     host: str
     port: int
@@ -52,6 +68,7 @@ class Config:
     network_check_timeout_seconds: float
     chatgpt: ChatGptConfig
     mail: MailConfig
+    agent: AgentConfig
     secrets_test_file: Path | None = None
 
     @property
@@ -88,6 +105,7 @@ def load_config(home_dir: Path | None = None) -> Config:
         log_page_size=events["log_page_size"],
         default_settings=raw["settings"],
         mail=MailConfig(**raw["mail"]),
+        agent=AgentConfig(**raw["agent"]),
         chatgpt=ChatGptConfig(
             issuer=os.environ.get("NEXUSAI_CHATGPT_ISSUER", chatgpt["issuer"]),
             base_url=os.environ.get("NEXUSAI_CHATGPT_BASE_URL", chatgpt["base_url"]),

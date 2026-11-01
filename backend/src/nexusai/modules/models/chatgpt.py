@@ -202,6 +202,11 @@ class ChatGptClient:
             "store": False,
             "stream": True,
         }
+        for event in self.stream_events(access_token, body):
+            if event.get("type") == "response.output_text.delta":
+                yield event.get("delta", "")
+
+    def stream_events(self, access_token: str, body: dict[str, Any]) -> Iterator[dict[str, Any]]:
         headers = {**self._account_headers(access_token), "Accept": "text/event-stream"}
         try:
             with self.http.stream(
@@ -215,13 +220,12 @@ class ChatGptClient:
                         continue
                     event = json.loads(line[5:].strip())
                     kind = event.get("type")
-                    if kind == "response.output_text.delta":
-                        yield event.get("delta", "")
-                    elif kind in {"response.failed", "error"}:
+                    if kind in {"response.failed", "error"}:
                         detail = (event.get("response") or event).get("error") or {}
                         raise ChatGptError(
                             detail.get("message") or "ChatGPT couldn't answer. Try again."
                         )
+                    yield event
         except httpx.HTTPError as error:
             raise ChatGptError("The connection to ChatGPT dropped. Try again.") from error
 
