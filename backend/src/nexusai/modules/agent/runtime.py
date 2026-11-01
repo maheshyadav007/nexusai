@@ -239,8 +239,9 @@ class SessionRuntime:
         self._submit(session, turn, {"messages": [{"role": "user", "content": attached + text}]})
         return turn
 
-    def run_scheduled(self, title: str, prompt: str, agent: str) -> str:
+    def run_scheduled(self, title: str, prompt: str, agent: str, token_limit: int = 0) -> str:
         session = self.create(title, [], agent)
+        gateway.set_run_limit(self.db, session.id, token_limit)
         self.send(session.id, prompt)
         return session.id
 
@@ -319,6 +320,8 @@ class SessionRuntime:
             guard.GuardBlocked,
         ) as error:
             self._finish(session, turn, translator, "failed", str(error), "error")
+        except gateway.RunLimitReached as error:
+            self._finish(session, turn, translator, "stopped", str(error), "error")
         except GraphRecursionError:
             self._finish(
                 session,

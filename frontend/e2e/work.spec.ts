@@ -139,6 +139,17 @@ test("a schedule is created and runs on demand", async ({ page }) => {
   await row.getByRole("button", { name: "Run now" }).click();
   await expect(row.getByRole("link", { name: "Last run" })).toBeVisible({ timeout: 20_000 });
 
+  // Daily prep's time and its nightly limit are the person's to set.
+  const prep = page.getByTestId("schedule").filter({ hasText: "Daily prep" });
+  await prep.getByRole("button", { name: "Edit", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit Daily prep" });
+  await noViolations(page);
+  await dialog.getByLabel("Time").fill("05:30");
+  await dialog.getByRole("spinbutton", { name: "Token limit for each run" }).fill("20000");
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(prep).toContainText("Limit: 20000 tokens");
+  await expect(prep).toContainText("5:30");
+
   await page.getByRole("switch", { name: "Time check for reminders and deadlines" }).click();
   await page.reload();
   await expect(page.getByRole("switch", { name: "Time check for reminders and deadlines" })).not.toBeChecked();

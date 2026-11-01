@@ -37,7 +37,14 @@ PHONE = "+91 98765 43210"
 def ctx(config: Config) -> Iterator[Context]:
     create_home(config.home)
     db = Database(config.database_path)
-    db.migrate([guard.MIGRATION, gateway.MIGRATION, *notifications_module.migrations])
+    db.migrate(
+        [
+            guard.MIGRATION,
+            gateway.MIGRATION,
+            gateway.RUN_LIMIT_MIGRATION,
+            *notifications_module.migrations,
+        ]
+    )
     bus = EventBus(db, config)
     yield Context(bus=bus, config=config, trace_id="t")
     db.close()

@@ -44,6 +44,16 @@ CREATE TABLE model_limits (id INTEGER PRIMARY KEY CHECK (id = 1), daily_cap INTE
 NEAR_CAP_SHARE = 0.8
 
 
+RUN_LIMIT_MIGRATION = Migration(
+    "agent_gateway_run_limits_001",
+    "CREATE TABLE model_run_limits (session TEXT PRIMARY KEY, token_limit INTEGER NOT NULL);",
+)
+
+
+class RunLimitReached(Exception):
+    """This run has used what the person allowed it. What it already did is kept."""
+
+
 class DailyCapReached(Exception):
     pass
 
@@ -107,6 +117,31 @@ def _message_text(message: Message) -> str:
     return "\n".join(parts)
 
 
+def set_run_limit(db: Database, session: str, token_limit: int) -> None:
+    if token_limit:
+        with db.transaction() as tx:
+            tx.execute(
+                "INSERT INTO model_run_limits (session, token_limit) VALUES (?, ?)",
+                (session, token_limit),
+            )
+
+
+def _check_run_limit(db: Database, session: str | None) -> None:
+    """Checked before each call, so a run can pass its limit by at most the call in progress."""
+    if not session:
+        return
+    limits = db.fetch_all("SELECT token_limit FROM model_run_limits WHERE session = ?", (session,))
+    if not limits:
+        return
+    limit = int(limits[0]["token_limit"])
+    used = db.fetch_all(
+        "SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS used FROM model_calls WHERE session = ?",
+        (session,),
+    )
+    if int(used[0]["used"]) >= limit:
+        raise RunLimitReached(f"Stopped at its limit of {limit} tokens. What it finished is kept.")
+
+
 def stream_model(
     ctx: Context,
     *,
@@ -129,6 +164,7 @@ def stream_model(
         raise DailyCapReached(
             "Today's model limit is used up. Raise it in Settings, or wait until tomorrow."
         )
+    _check_run_limit(db, session)
 
     provider, default_model = resolve_provider(ctx)
     model = model_override or default_model

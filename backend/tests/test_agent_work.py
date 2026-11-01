@@ -20,6 +20,7 @@ from nexusai.modules.agent.providers import (
     ModelUnavailable,
     TextChunk,
     ToolCall,
+    Usage,
 )
 
 
@@ -893,6 +894,35 @@ def test_a_one_time_schedule_runs_once(client: TestClient, script: Script) -> No
         "run",
     )
     assert done["id"] == row["id"] and done["next_run"] is None and done["enabled"] is False
+
+
+def test_a_scheduled_run_stops_at_its_token_limit_and_keeps_its_work(
+    client: TestClient, script: Script
+) -> None:
+    saved = client.post(
+        "/api/commands/schedules.save",
+        json={"title": "Small prep", "prompt": "Use a tool", "token_limit": 1},
+    ).json()["schedules"]
+    schedule = next(row for row in saved if row["title"] == "Small prep")
+    script.replies = [
+        [Usage(input_tokens=10, output_tokens=5), ToolCall("c1", "read_work_board", {})],
+        ["This call must not happen"],
+    ]
+    client.post("/api/commands/schedules.runNow", json={"id": schedule["id"]})
+    row = wait(
+        lambda: next(
+            (
+                s
+                for s in client.post("/api/queries/sessions.list", json={}).json()["sessions"]
+                if s["title"] == "Small prep" and s["status"] == "stopped"
+            ),
+            None,
+        ),
+        "stopped",
+    )
+    assert "limit of 1 tokens" in row["error"]
+    assert len(script.requests) == 1
+    assert client.post("/api/queries/usage.get").json()["total_today"] == 15
 
 
 def test_daily_prep_shows_on_today(client: TestClient, script: Script, fake: FakeMail) -> None:

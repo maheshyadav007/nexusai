@@ -691,5 +691,12 @@
   "setup.priorities.title": "What matters in your mail?",
   "setup.priorities.description": "A starter set you can change. The agent uses it to judge each email.",
   "setup.permissions.title": "What may the agent do?",
-  "setup.permissions.description": "You can change this any time in Settings."
+  "setup.permissions.description": "You can change this any time in Settings.",
+  "schedules.scope": "What should it prepare?",
+  "schedules.scope.hint": "Leave empty to prepare from the work board.",
+  "schedules.limit": "Token limit for each run",
+  "schedules.limit.hint": "0 means no limit. The run stops before its next model call once this is used, and keeps what it finished.",
+  "schedules.limit.value": "Limit: {limit} tokens",
+  "schedules.edit": "Edit {title}",
+  "schedules.editAction": "Edit"
 }

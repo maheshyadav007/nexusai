@@ -102,6 +102,7 @@ agent_module = Module(
     migrations=[
         guard.MIGRATION,
         gateway.MIGRATION,
+        gateway.RUN_LIMIT_MIGRATION,
         policy.MIGRATION,
         tools.MIGRATION,
         runtime.MIGRATION,
@@ -120,7 +121,7 @@ _runtime_lock = threading.Lock()
 def _run_schedule(schedule: Schedule) -> str:
     agent = "daily-prep" if schedule.kind == "daily-prep" else "scheduled"
     prompt = schedule.prompt or "Prepare my morning from the work board."
-    return current().run_scheduled(schedule.title, prompt, agent)
+    return current().run_scheduled(schedule.title, prompt, agent, schedule.token_limit)
 
 
 def _startup(ctx: Context) -> None:
