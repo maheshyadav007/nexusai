@@ -3,9 +3,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { command, query } from "./api";
 import type { ModelStatus } from "./contracts.generated";
+import { useHomeReady } from "./home";
 
 export function useModelStatus() {
-  return useQuery({ queryKey: ["models"], queryFn: () => query("models.status", {}) });
+  const ready = useHomeReady();
+  return useQuery({ queryKey: ["models"], queryFn: () => query("models.status", {}), enabled: ready });
 }
 
 export function useAvailableModels(enabled: boolean) {

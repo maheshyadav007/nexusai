@@ -26,19 +26,26 @@ class Config:
     port: int
     allowed_hosts: frozenset[str]
     allowed_origins: frozenset[str]
-    home_dir: Path
+    home_dir: Path | None
     max_chain_depth: int
     handler_max_attempts: int
     handler_retry_delay_seconds: float
     sse_keepalive_seconds: float
     log_page_size: int
     default_settings: dict[str, Any]
+    min_free_bytes: int
     chatgpt: ChatGptConfig
     secrets_test_file: Path | None = None
 
     @property
     def database_path(self) -> Path:
-        return self.home_dir / "system" / "nexusai.db"
+        return self.home / "system" / "nexusai.db"
+
+    @property
+    def home(self) -> Path:
+        if self.home_dir is None:
+            raise RuntimeError("Home isn't open yet")
+        return self.home_dir
 
 
 def load_config(home_dir: Path | None = None) -> Config:
@@ -50,7 +57,10 @@ def load_config(home_dir: Path | None = None) -> Config:
         port=int(os.environ.get("NEXUSAI_PORT", server["port"])),
         allowed_hosts=frozenset(server["allowed_hosts"]),
         allowed_origins=frozenset(server["allowed_origins"]),
-        home_dir=home_dir or Path(os.environ.get("NEXUSAI_HOME", raw["home"]["dir"])).resolve(),
+        # Normally None: the user's choice is read from the pointer file at startup.
+        home_dir=home_dir
+        or (Path(fixed).resolve() if (fixed := os.environ.get("NEXUSAI_HOME")) else None),
+        min_free_bytes=raw["home"]["min_free_bytes"],
         max_chain_depth=events["max_chain_depth"],
         handler_max_attempts=events["handler_max_attempts"],
         handler_retry_delay_seconds=events["handler_retry_delay_seconds"],

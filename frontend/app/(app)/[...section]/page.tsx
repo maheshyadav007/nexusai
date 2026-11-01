@@ -3,7 +3,7 @@ import { EmptyState } from "@/ui/primitives/EmptyState";
 import { findNavItem } from "@/ui/shell/nav";
 import { t } from "@/ui/strings";
 
-// Screens in the sidebar that later stages replace. Unknown paths are real 404s.
+// Screens in the sidebar that later stages replace.
 export default async function ComingLaterPage({ params }: { params: Promise<{ section: string[] }> }) {
   const { section } = await params;
   const item = findNavItem(`/${section.join("/")}`);

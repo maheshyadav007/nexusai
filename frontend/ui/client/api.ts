@@ -5,12 +5,18 @@ import type {
   DisconnectModel,
   EventLog,
   EventLogQuery,
+  FinishOnboarding,
   GetModelStatus,
+  GetOnboarding,
+  GetProfile,
   GetSettings,
   ListModels,
   ModelReply,
   ModelStatus,
+  OnboardingState,
+  Profile,
   SelectModel,
+  SetOnboardingStep,
   Settings,
   StartModelLogin,
   TestModel,
@@ -24,12 +30,17 @@ interface Commands {
   "models.disconnect": [DisconnectModel, ModelStatus];
   "models.select": [SelectModel, ModelStatus];
   "models.test": [TestModel, ModelReply];
+  "onboarding.setStep": [SetOnboardingStep, OnboardingState];
+  "onboarding.finish": [FinishOnboarding, OnboardingState];
+  "profile.update": [Profile, Profile];
 }
 
 interface Queries {
   "settings.get": [GetSettings, Settings];
   "models.status": [GetModelStatus, ModelStatus];
   "models.list": [ListModels, AvailableModels];
+  "onboarding.state": [GetOnboarding, OnboardingState];
+  "profile.get": [GetProfile, Profile];
 }
 
 export class ApiRequestError extends Error {
@@ -38,7 +49,7 @@ export class ApiRequestError extends Error {
   }
 }
 
-async function post<T>(path: string, body: unknown): Promise<T> {
+export async function post<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

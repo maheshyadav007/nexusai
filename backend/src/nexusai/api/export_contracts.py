@@ -9,6 +9,14 @@ from pydantic import BaseModel
 
 from nexusai.contracts.errors import ApiError
 from nexusai.contracts.events import AppEvent, EventLog, EventLogQuery, FailedEvent
+from nexusai.contracts.home import (
+    BrowseFolders,
+    CheckHome,
+    ChooseHome,
+    FolderListing,
+    HomeCheck,
+    HomeStatus,
+)
 from nexusai.contracts.models import (
     AvailableModel,
     AvailableModels,
@@ -24,7 +32,22 @@ from nexusai.contracts.models import (
     StartModelLogin,
     TestModel,
 )
-from nexusai.contracts.settings import GetSettings, Settings, SettingsChanged, UpdateSettings
+from nexusai.contracts.onboarding import (
+    FinishOnboarding,
+    GetOnboarding,
+    OnboardingChanged,
+    OnboardingState,
+    SetOnboardingStep,
+)
+from nexusai.contracts.settings import (
+    GetProfile,
+    GetSettings,
+    Profile,
+    ProfileChanged,
+    Settings,
+    SettingsChanged,
+    UpdateSettings,
+)
 
 MODELS: list[type[BaseModel]] = [
     ApiError,
@@ -49,6 +72,20 @@ MODELS: list[type[BaseModel]] = [
     SelectModel,
     StartModelLogin,
     TestModel,
+    BrowseFolders,
+    CheckHome,
+    ChooseHome,
+    FolderListing,
+    HomeCheck,
+    HomeStatus,
+    FinishOnboarding,
+    GetOnboarding,
+    OnboardingChanged,
+    OnboardingState,
+    SetOnboardingStep,
+    GetProfile,
+    Profile,
+    ProfileChanged,
 ]
 
 

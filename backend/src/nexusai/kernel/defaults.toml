@@ -6,8 +6,7 @@ allowed_hosts = ["127.0.0.1:8765", "localhost:8765", "127.0.0.1:3000", "localhos
 allowed_origins = ["http://127.0.0.1:3000", "http://localhost:3000"]
 
 [home]
-# Stage 1 replaces this with the folder the user picks during onboarding.
-dir = ".dev-home"
+min_free_bytes = 5368709120
 
 [events]
 max_chain_depth = 20

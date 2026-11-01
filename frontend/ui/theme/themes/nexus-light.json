@@ -47,7 +47,8 @@
       "md": "13px",
       "lg": "15px",
       "xl": "19px",
-      "display": "32px"
+      "display": "32px",
+      "hero": "60px"
     },
     "family": {
       "sans": "instrument-sans",
@@ -86,7 +87,8 @@
     "topbar": "56px",
     "popover": "320px",
     "drawer": "420px",
-    "dialog": "480px"
+    "dialog": "480px",
+    "page": "1200px"
   },
   "scale": {
     "density": {

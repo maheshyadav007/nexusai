@@ -3,9 +3,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { command, query } from "./api";
 import type { UpdateSettings } from "./contracts.generated";
+import { useHomeReady } from "./home";
 
 export function useSettings() {
-  return useQuery({ queryKey: ["settings"], queryFn: () => query("settings.get", {}) });
+  const ready = useHomeReady();
+  return useQuery({ queryKey: ["settings"], queryFn: () => query("settings.get", {}), enabled: ready });
 }
 
 export function useUpdateSettings() {

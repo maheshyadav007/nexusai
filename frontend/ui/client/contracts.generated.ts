@@ -47,6 +47,35 @@ export type Plan = string | null;
 export type SelectedModel = string | null;
 export type Model1 = string;
 export type Prompt = string;
+export type Path = string | null;
+export type Path1 = string;
+export type Path2 = string;
+export type MustExist = boolean;
+export type Path3 = string;
+export type Parent = string | null;
+export type Folders = string[];
+export type Path4 = string;
+export type Ok = boolean;
+export type Problems = string[];
+export type Warnings = string[];
+export type FreeBytes = number | null;
+export type IsExistingHome = boolean;
+export type State1 = "ready" | "unset" | "missing";
+export type Path5 = string | null;
+export type DefaultPath = string;
+export type Message1 = string | null;
+export type Step = string | null;
+export type Completed = boolean;
+export type Completed1 = boolean;
+export type CurrentStep = string | null;
+export type Step1 = string;
+export type Name1 = string;
+export type Role = string;
+export type Signature = string;
+export type Tone = "formal" | "friendly" | "brief";
+export type Vips = string;
+export type About = string;
+export type Fields = string[];
 
 export interface Contracts {
   ApiError?: ApiError;
@@ -71,6 +100,20 @@ export interface Contracts {
   SelectModel?: SelectModel;
   StartModelLogin?: StartModelLogin;
   TestModel?: TestModel;
+  BrowseFolders?: BrowseFolders;
+  CheckHome?: CheckHome;
+  ChooseHome?: ChooseHome;
+  FolderListing?: FolderListing;
+  HomeCheck?: HomeCheck;
+  HomeStatus?: HomeStatus;
+  FinishOnboarding?: FinishOnboarding;
+  GetOnboarding?: GetOnboarding;
+  OnboardingChanged?: OnboardingChanged;
+  OnboardingState?: OnboardingState;
+  SetOnboardingStep?: SetOnboardingStep;
+  GetProfile?: GetProfile;
+  Profile?: Profile;
+  ProfileChanged?: ProfileChanged;
   [k: string]: unknown;
 }
 /**
@@ -284,4 +327,131 @@ export interface StartModelLogin {
  */
 export interface TestModel {
   prompt: Prompt;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "BrowseFolders".
+ */
+export interface BrowseFolders {
+  path?: Path;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "CheckHome".
+ */
+export interface CheckHome {
+  path: Path1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ChooseHome".
+ */
+export interface ChooseHome {
+  path: Path2;
+  must_exist?: MustExist;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "FolderListing".
+ */
+export interface FolderListing {
+  path: Path3;
+  parent: Parent;
+  folders: Folders;
+  [k: string]: unknown;
+}
+/**
+ * Problems block the choice. Warnings only inform it.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "HomeCheck".
+ */
+export interface HomeCheck {
+  path: Path4;
+  ok: Ok;
+  problems: Problems;
+  warnings: Warnings;
+  free_bytes?: FreeBytes;
+  is_existing_home?: IsExistingHome;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "HomeStatus".
+ */
+export interface HomeStatus {
+  state: State1;
+  path?: Path5;
+  default_path: DefaultPath;
+  message?: Message1;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "FinishOnboarding".
+ */
+export interface FinishOnboarding {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "GetOnboarding".
+ */
+export interface GetOnboarding {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "OnboardingChanged".
+ */
+export interface OnboardingChanged {
+  step?: Step;
+  completed: Completed;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "OnboardingState".
+ */
+export interface OnboardingState {
+  completed: Completed1;
+  current_step?: CurrentStep;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SetOnboardingStep".
+ */
+export interface SetOnboardingStep {
+  step: Step1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "GetProfile".
+ */
+export interface GetProfile {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "Profile".
+ */
+export interface Profile {
+  name?: Name1;
+  role?: Role;
+  signature?: Signature;
+  tone?: Tone;
+  vips?: Vips;
+  about?: About;
+  [k: string]: unknown;
+}
+/**
+ * Which fields changed, not what they now say.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProfileChanged".
+ */
+export interface ProfileChanged {
+  fields: Fields;
+  [k: string]: unknown;
 }

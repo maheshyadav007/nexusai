@@ -5,6 +5,12 @@ import { FONT_CATALOG } from "../ui/theme/font-catalog";
 const background = (page: import("@playwright/test").Page) =>
   page.evaluate(() => getComputedStyle(document.body).backgroundColor);
 
+test.beforeAll(async ({ request }) => {
+  // So this file also works alone: a Home and a finished setup. Harmless if they already exist.
+  await request.post("/api/home/choose", { data: { path: `${process.env.E2E_HOME}/NexusAI` } });
+  await request.post("/api/commands/onboarding.finish", { data: {} });
+});
+
 const SCREENS = ["/today", "/settings", "/mail/inbox", "/gallery", "/gallery/shell"];
 
 for (const path of SCREENS) {
@@ -55,9 +61,11 @@ test("the sidebar navigates, marks where you are, and remembers being collapsed"
   await expect(page.getByRole("link", { name: "Inbox" })).toBeVisible();
 });
 
-test("an unknown path is a real 404", async ({ page }) => {
-  const response = await page.goto("/no-such-screen");
-  expect(response?.status()).toBe(404);
+test("an unknown path says so, and offers a way back", async ({ page }) => {
+  await page.goto("/no-such-screen");
+  await expect(page.getByRole("heading", { name: "Page not found" })).toBeVisible();
+  await page.getByRole("link", { name: "Go to the app" }).click();
+  await expect(page).toHaveURL(/\/today$/);
 });
 
 test("overlays open, trap focus and close with Escape", async ({ page }) => {

@@ -20,14 +20,14 @@ export const themeSchema = z
     }),
     type: z.strictObject({
       minSize: size,
-      size: z.strictObject({ xs: size, sm: size, md: size, lg: size, xl: size, display: size }),
+      size: z.strictObject({ xs: size, sm: size, md: size, lg: size, xl: size, display: size, hero: size }),
       family: z.strictObject({ sans: z.enum(FONT_CATALOG.sans), serif: z.enum(FONT_CATALOG.serif), mono: z.enum(FONT_CATALOG.mono) }),
     }),
     space: z.record(z.string(), size),
     radius: z.strictObject({ sm: size, md: size, lg: size, full: size }),
     shadow: z.strictObject({ raised: z.string(), overlay: z.string() }),
     motion: z.strictObject({ fast: z.string(), normal: z.string(), easing: z.string() }),
-    layout: z.strictObject({ content: size, sidebar: size, rail: size, topbar: size, popover: size, drawer: size, dialog: size }),
+    layout: z.strictObject({ content: size, page: size, sidebar: size, rail: size, topbar: size, popover: size, drawer: size, dialog: size }),
     icon: z.strictObject({ stroke: z.string() }),
     scale: z.strictObject({
       density: z.strictObject({ compact: scale, comfortable: scale, spacious: scale }),

@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation";
+import { EntryRedirect } from "@/ui/shell/AppGate";
 
-// The landing page replaces this in Stage 1.
 export default function HomePage() {
-  redirect("/today");
+  return <EntryRedirect />;
 }
