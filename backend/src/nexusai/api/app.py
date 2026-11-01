@@ -17,10 +17,11 @@ from nexusai.contracts.events import EventLog, EventLogQuery
 from nexusai.kernel.config import Config, load_config
 from nexusai.kernel.database import Database
 from nexusai.kernel.event_bus import EventBus
-from nexusai.kernel.module import Context, Endpoint, Module
+from nexusai.kernel.module import CommandError, Context, Endpoint, Module
+from nexusai.modules.models.module import models_module, reset_login
 from nexusai.modules.settings.module import settings_module
 
-MODULES: list[Module] = [settings_module]
+MODULES: list[Module] = [settings_module, models_module]
 log = structlog.get_logger()
 
 
@@ -43,6 +44,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         bus.start()
         yield
+        reset_login()
         bus.stop()
         db.close()
 
@@ -68,6 +70,9 @@ def create_app(config: Config | None = None) -> FastAPI:
             ctx = Context(bus=bus, config=cfg, trace_id=trace_id)
             try:
                 result = await asyncio.to_thread(endpoint.handler, data, ctx)
+            except CommandError as error:
+                log.info("command_refused", code=error.code)
+                return _error(error.status, error.code, error.message, trace_id)
             except Exception:
                 log.exception("handler_failed")
                 return _error(500, "internal.error", "Something went wrong.", trace_id)

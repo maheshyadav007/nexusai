@@ -7,6 +7,20 @@ from typing import Any
 
 
 @dataclass(frozen=True)
+class ChatGptConfig:
+    issuer: str
+    base_url: str
+    client_id: str
+    originator: str
+    timeout_seconds: float
+    login_timeout_seconds: float
+    min_poll_seconds: float
+    refresh_skew_seconds: float
+    model_list_client_versions: tuple[str, ...]
+    test_instructions: str
+
+
+@dataclass(frozen=True)
 class Config:
     host: str
     port: int
@@ -19,6 +33,8 @@ class Config:
     sse_keepalive_seconds: float
     log_page_size: int
     default_settings: dict[str, Any]
+    chatgpt: ChatGptConfig
+    secrets_test_file: Path | None = None
 
     @property
     def database_path(self) -> Path:
@@ -27,7 +43,8 @@ class Config:
 
 def load_config(home_dir: Path | None = None) -> Config:
     raw = tomllib.loads(resources.files(__package__).joinpath("defaults.toml").read_text("utf-8"))
-    server, events = raw["server"], raw["events"]
+    server, events, chatgpt = raw["server"], raw["events"], raw["chatgpt"]
+    secrets_test_file = os.environ.get("NEXUSAI_SECRETS_TEST_FILE")
     return Config(
         host=os.environ.get("NEXUSAI_HOST", server["host"]),
         port=int(os.environ.get("NEXUSAI_PORT", server["port"])),
@@ -40,4 +57,17 @@ def load_config(home_dir: Path | None = None) -> Config:
         sse_keepalive_seconds=events["sse_keepalive_seconds"],
         log_page_size=events["log_page_size"],
         default_settings=raw["settings"],
+        chatgpt=ChatGptConfig(
+            issuer=os.environ.get("NEXUSAI_CHATGPT_ISSUER", chatgpt["issuer"]),
+            base_url=os.environ.get("NEXUSAI_CHATGPT_BASE_URL", chatgpt["base_url"]),
+            client_id=chatgpt["client_id"],
+            originator=chatgpt["originator"],
+            timeout_seconds=chatgpt["timeout_seconds"],
+            login_timeout_seconds=chatgpt["login_timeout_seconds"],
+            min_poll_seconds=chatgpt["min_poll_seconds"],
+            refresh_skew_seconds=chatgpt["refresh_skew_seconds"],
+            model_list_client_versions=tuple(chatgpt["model_list_client_versions"]),
+            test_instructions=chatgpt["test_instructions"],
+        ),
+        secrets_test_file=Path(secrets_test_file) if secrets_test_file else None,
     )

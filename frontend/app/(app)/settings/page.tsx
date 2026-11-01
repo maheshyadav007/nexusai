@@ -1,5 +1,6 @@
 import { AppearanceSettings } from "@/ui/features/settings/AppearanceSettings";
 import { EventInspector } from "@/ui/features/inspector/EventInspector";
+import { ModelSettings } from "@/ui/features/settings/ModelSettings";
 import { ErrorBoundary } from "@/ui/primitives/ErrorBoundary";
 import { t } from "@/ui/strings";
 
@@ -9,6 +10,9 @@ export default function SettingsPage() {
       <h1 className="font-serif text-display text-ink-primary">{t("settings.title")}</h1>
       <ErrorBoundary>
         <AppearanceSettings />
+      </ErrorBoundary>
+      <ErrorBoundary>
+        <ModelSettings />
       </ErrorBoundary>
       <ErrorBoundary>
         <EventInspector />

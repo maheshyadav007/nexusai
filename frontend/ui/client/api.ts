@@ -1,18 +1,35 @@
 import type {
   ApiError,
+  AvailableModels,
+  CancelModelLogin,
+  DisconnectModel,
   EventLog,
   EventLogQuery,
+  GetModelStatus,
   GetSettings,
+  ListModels,
+  ModelReply,
+  ModelStatus,
+  SelectModel,
   Settings,
+  StartModelLogin,
+  TestModel,
   UpdateSettings,
 } from "./contracts.generated";
 
 interface Commands {
   "settings.update": [UpdateSettings, Settings];
+  "models.login.start": [StartModelLogin, ModelStatus];
+  "models.login.cancel": [CancelModelLogin, ModelStatus];
+  "models.disconnect": [DisconnectModel, ModelStatus];
+  "models.select": [SelectModel, ModelStatus];
+  "models.test": [TestModel, ModelReply];
 }
 
 interface Queries {
   "settings.get": [GetSettings, Settings];
+  "models.status": [GetModelStatus, ModelStatus];
+  "models.list": [ListModels, AvailableModels];
 }
 
 export class ApiRequestError extends Error {

@@ -108,7 +108,9 @@ Status legend: **In use** (in the repo today) · **Decided** (agreed, not built 
 | SQLite FTS5 | Decided | Full-text search over all mail history (~10K+ messages). |
 | Rule engine (`rules.json`) | Decided | Our own: built-in header rules + user rules run before the agent. |
 | Model provider interface | Decided | One interface for all models, with a capability flag for tool calling and a JSON-in-prompt fallback for models without it. |
-| Internal company LLM API | Decided | Available now without tool calling (uses the fallback); a version with tool calling is coming. |
+| Internal company LLM API | Decided, not built | Assumed to be a LiteLLM server, so it's an OpenAI-compatible address and key, with its model list read from the server. Available now without tool calling (uses the fallback); a version with tool calling is coming. |
+| **ChatGPT subscription** | In use for testing | Device-code sign-in with no API key, the method Hermes Agent and OpenClaw use. Models come from the account's own list. Tokens stay in the OS credential store. Requests carry NexusAI's own name. It uses Codex's sign-in client because OpenAI hasn't issued one for NexusAI, so OpenAI could change or stop this. Test data only: it's a personal subscription, so corporate mail needs a company-approved model. |
+| Claude subscription | Rejected | Anthropic's terms don't allow Free, Pro or Max sign-ins in other tools. Claude would need an API key. |
 | Gemini via Google Cloud (enterprise auth) | Decided | Native tool calling. Approved for mail content. |
 | **ONNX Runtime** (`onnxruntime`) | Decided | Local models for text embeddings, OCR and image description. CPU everywhere; DirectML (Windows) / CoreML (macOS) when available. Specific models to be chosen. |
 | MCP (Model Context Protocol) | Decided | Connectors are MCP servers with tools, skills and resources; built-in ones such as Mail run in-process, others connect by URL or as separate processes. |
@@ -129,6 +131,8 @@ We adapt these to speed up the build. Everything copied is rebuilt on our theme 
 
 ## Windows corporate checklist
 
+- [ ] ChatGPT tokens fit Windows Credential Manager, which limits each secret's size; split them if not
+
 - [ ] Code-signing certificate (company cert or IT approval); unsigned `.exe` is blocked by SmartScreen/AppLocker
 - [ ] Per-user installer works without admin rights
 - [ ] Node-side network calls respect the corporate proxy (Chromium requests already do)
@@ -143,6 +147,7 @@ The MVP build stages and feature targets are in [`FEATURES.md`](FEATURES.md).
 
 | Date | Change |
 |---|---|
+| 2026-11-01 | ChatGPT subscription connected by device-code sign-in, with models chosen from the account's list. Internal API assumed to be LiteLLM. Web app gets built fully before Windows and corporate laptop testing. |
 | 2026-11-01 | Design direction approved: warm paper surfaces and Instrument Sans. Fonts are chosen per theme from a catalog. |
 | 2026-11-01 | Initial stack: Electron shell over the existing Next.js app; Playwright + Windows CI/VM for testing; v9 chosen as design reference. |
 | 2026-11-01 | Added design resources: Beautiful UI, unslop, AICSS (free tier only), Amicro. |

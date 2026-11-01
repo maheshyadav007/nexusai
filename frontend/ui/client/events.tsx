@@ -8,6 +8,7 @@ import type { AppEvent } from "./contracts.generated";
 /** Which saved query goes out of date when an event happens. Screens never poll. */
 const INVALIDATES: Record<string, readonly string[]> = {
   "settings.changed": ["settings"],
+  "models.changed": ["models", "models-available"],
 };
 
 type Listener = (event: AppEvent) => void;

@@ -9,6 +9,21 @@ from pydantic import BaseModel
 
 from nexusai.contracts.errors import ApiError
 from nexusai.contracts.events import AppEvent, EventLog, EventLogQuery, FailedEvent
+from nexusai.contracts.models import (
+    AvailableModel,
+    AvailableModels,
+    CancelModelLogin,
+    DisconnectModel,
+    GetModelStatus,
+    ListModels,
+    ModelLogin,
+    ModelReply,
+    ModelsChanged,
+    ModelStatus,
+    SelectModel,
+    StartModelLogin,
+    TestModel,
+)
 from nexusai.contracts.settings import GetSettings, Settings, SettingsChanged, UpdateSettings
 
 MODELS: list[type[BaseModel]] = [
@@ -21,6 +36,19 @@ MODELS: list[type[BaseModel]] = [
     Settings,
     SettingsChanged,
     UpdateSettings,
+    AvailableModel,
+    AvailableModels,
+    CancelModelLogin,
+    DisconnectModel,
+    GetModelStatus,
+    ListModels,
+    ModelLogin,
+    ModelReply,
+    ModelsChanged,
+    ModelStatus,
+    SelectModel,
+    StartModelLogin,
+    TestModel,
 ]
 
 

@@ -10,6 +10,16 @@ from nexusai.kernel.database import Migration
 from nexusai.kernel.event_bus import EventBus
 
 
+class CommandError(Exception):
+    """A failure the user should see. The message says what to do next."""
+
+    def __init__(self, code: str, message: str, status: int) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.status = status
+
+
 @dataclass(frozen=True)
 class Context:
     bus: EventBus

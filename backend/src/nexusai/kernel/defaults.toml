@@ -16,6 +16,20 @@ handler_retry_delay_seconds = 0.2
 sse_keepalive_seconds = 15
 log_page_size = 200
 
+[chatgpt]
+issuer = "https://auth.openai.com"
+base_url = "https://chatgpt.com/backend-api/codex"
+# Codex's public sign-in client. OpenAI hasn't issued one for NexusAI.
+client_id = "app_EMoamEEZ73f0CkXaXp7hrann"
+originator = "nexusai"
+timeout_seconds = 60
+login_timeout_seconds = 900
+min_poll_seconds = 3
+refresh_skew_seconds = 120
+# The list hides newer models from older client versions; 0.0.0 is the fallback.
+model_list_client_versions = ["99.0.0", "0.0.0"]
+test_instructions = "You are NexusAI's connection test. Reply briefly."
+
 [settings]
 theme = "nexus-light"
 density = "comfortable"

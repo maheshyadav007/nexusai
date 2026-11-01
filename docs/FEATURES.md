@@ -356,7 +356,7 @@ Tools: **Read, Write, Edit** and **Command** (zsh on macOS, PowerShell on Window
 
 | ID | Feature | Pri |
 |---|---|---|
-| MDL-1 | Model providers: internal API (no tool calling, JSON fallback), internal API v2 (tools), Gemini (enterprise auth); every call passes through the data guard | MVP |
+| MDL-1 | Model providers: ChatGPT subscription sign-in (for testing), internal API through LiteLLM (no tool calling, JSON fallback), internal API v2 (tools), Gemini (enterprise auth); choose from the models each one offers; every call passes through the data guard | MVP |
 | MDL-5 | Model usage limits and view: tokens and cost per agent, daily cap, warning near it | MVP |
 | MDL-6 | Model failure behaviour: mail, search and documents keep working, and queued agent work resumes when the model returns | MVP |
 | MDL-7 | Automatic fallback to a second model | Next |

@@ -279,7 +279,7 @@ Each owns its data, and exposes only commands, queries and events.
 | `prompt-builder` | Assembles the five layers, with system context | `PMT-1`, `PMT-2`, `PMT-6`, `PMT-11` |
 | `memory` | Files in Home, index, relevance, proposals | `MEM-1`, `MEM-3`, `MEM-4` |
 | `model-gateway` | The one door for model calls: guard, limits, provider, logging, failure handling | `ARC-4`, `MDL-5`, `MDL-6` |
-| `providers` | `InternalApiProvider` (with JSON fallback), `GeminiProvider` | `MDL-1` |
+| `providers` | `ChatGptClient` (built), `InternalApiProvider` through LiteLLM (with JSON fallback), `GeminiProvider` | `MDL-1` |
 | `data-guard` | Masking, restoring, token map, rules, flagged-request errors | `SDG-1`, `SDG-2`, `SDG-3`, `SDG-4`, `SDG-8`, `SDG-9` |
 | `tool-gateway` | The one door for tools: restore values, permission check, approval, logging, masking results | `ARC-4`, `AGT-5`, `TOL-3` |
 | `policy` | Permission table, untrusted content rule, folder limits, send checks | `TOL-2`, `TOL-5`, `TOL-7`, `TOL-9` |
@@ -313,7 +313,7 @@ Status: built. Agent host and Heavy jobs processes, the backend supervisor, live
 
 ### Stage 1: Shell
 
-Status: 1.1 built. Primitives still to add when first needed: `Radio`, `Slider`, `Accordion`, `Stack`, `Grid`, `FolderPicker` and `FileDrop` (1.2 and 1.3), and `ResizeHandle`, `SplitPane`, `VirtualList` and `Sortable` (1.5 and Stage 2). `Drawer` is a shape of `Dialog`, and `Link` is `TextLink`. No Beautiful UI or AICSS component has been imported yet; those start with the agent screens.
+Status: 1.1 built, and ChatGPT sign-in, model choice and a test message work in Settings ahead of Stage 3. Windows and corporate laptop testing wait until the web app is fully built. Primitives still to add when first needed: `Radio`, `Slider`, `Accordion`, `Stack`, `Grid`, `FolderPicker` and `FileDrop` (1.2 and 1.3), and `ResizeHandle`, `SplitPane`, `VirtualList` and `Sortable` (1.5 and Stage 2). `Drawer` is a shape of `Dialog`, and `Link` is `TextLink`. No Beautiful UI or AICSS component has been imported yet; those start with the agent screens.
 
 | # | Build | Done when |
 |---|---|---|

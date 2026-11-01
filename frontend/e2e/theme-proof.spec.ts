@@ -120,6 +120,33 @@ test("every catalog font loads, and a theme's choice reaches the text", async ({
   await expect.poll(bodyFont).toMatch(/Space.Grotesk/i);
 });
 
+test("ChatGPT connects, lists models, remembers the choice and answers a test", async ({ page }) => {
+  test.setTimeout(45_000);
+  await page.goto("/settings");
+  await page.getByRole("button", { name: "Connect ChatGPT" }).click();
+
+  // The screen is told by an event when sign-in finishes; it doesn't ask.
+  await expect(page.getByTestId("user-code")).toHaveText("WXYZ-1234");
+  await expect(page.getByRole("link", { name: "Open the sign-in page" })).toHaveAttribute("href", /\/codex\/device$/);
+  await expect(page.getByText("tester@example.com")).toBeVisible({ timeout: 20_000 });
+
+  await page.getByRole("combobox", { name: "Model" }).click();
+  await expect(page.getByRole("option")).toHaveText(["GPT Best", "GPT Slow"]);
+  await page.getByRole("option", { name: "GPT Best" }).click();
+
+  await page.getByRole("button", { name: "Send test" }).click();
+  await expect(page.getByTestId("model-reply")).toHaveText("Hello from gpt-best");
+
+  await page.reload();
+  await expect(page.getByRole("combobox", { name: "Model" })).toHaveText("GPT Best");
+
+  const { violations } = await new AxeBuilder({ page }).analyze();
+  expect(violations.map((v) => v.id)).toEqual([]);
+
+  await page.getByRole("button", { name: "Disconnect" }).click();
+  await expect(page.getByRole("button", { name: "Connect ChatGPT" })).toBeVisible();
+});
+
 test("density and text size apply instantly", async ({ page }) => {
   await page.goto("/settings");
   await page.getByRole("radio", { name: "Large" }).click();

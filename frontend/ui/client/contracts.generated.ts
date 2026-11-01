@@ -31,6 +31,22 @@ export type TextSize = "small" | "medium" | "large";
 export type Theme1 = string | null;
 export type Density1 = ("compact" | "comfortable" | "spacious") | null;
 export type TextSize1 = ("small" | "medium" | "large") | null;
+export type Id1 = string;
+export type Name = string;
+export type Models = AvailableModel[];
+export type State = "idle" | "waiting" | "failed";
+export type UserCode = string | null;
+export type VerificationUrl = string | null;
+export type Error1 = string | null;
+export type Model = string;
+export type Text = string;
+export type Change = "login_started" | "login_failed" | "login_cancelled" | "connected" | "disconnected" | "selected";
+export type Connected = boolean;
+export type AccountEmail = string | null;
+export type Plan = string | null;
+export type SelectedModel = string | null;
+export type Model1 = string;
+export type Prompt = string;
 
 export interface Contracts {
   ApiError?: ApiError;
@@ -42,6 +58,19 @@ export interface Contracts {
   Settings?: Settings;
   SettingsChanged?: SettingsChanged;
   UpdateSettings?: UpdateSettings;
+  AvailableModel?: AvailableModel;
+  AvailableModels?: AvailableModels;
+  CancelModelLogin?: CancelModelLogin;
+  DisconnectModel?: DisconnectModel;
+  GetModelStatus?: GetModelStatus;
+  ListModels?: ListModels;
+  ModelLogin?: ModelLogin;
+  ModelReply?: ModelReply;
+  ModelsChanged?: ModelsChanged;
+  ModelStatus?: ModelStatus;
+  SelectModel?: SelectModel;
+  StartModelLogin?: StartModelLogin;
+  TestModel?: TestModel;
   [k: string]: unknown;
 }
 /**
@@ -143,4 +172,116 @@ export interface UpdateSettings {
   theme?: Theme1;
   density?: Density1;
   text_size?: TextSize1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "AvailableModel".
+ */
+export interface AvailableModel {
+  id: Id1;
+  name: Name;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "AvailableModels".
+ */
+export interface AvailableModels {
+  models: Models;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "CancelModelLogin".
+ */
+export interface CancelModelLogin {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "DisconnectModel".
+ */
+export interface DisconnectModel {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "GetModelStatus".
+ */
+export interface GetModelStatus {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ListModels".
+ */
+export interface ListModels {
+  [k: string]: unknown;
+}
+/**
+ * A sign-in in progress. The code is shown to the user; it isn't a credential by itself.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ModelLogin".
+ */
+export interface ModelLogin {
+  state: State;
+  user_code?: UserCode;
+  verification_url?: VerificationUrl;
+  error?: Error1;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ModelReply".
+ */
+export interface ModelReply {
+  model: Model;
+  text: Text;
+  [k: string]: unknown;
+}
+/**
+ * Facts only: no codes, tokens or account details.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ModelsChanged".
+ */
+export interface ModelsChanged {
+  change: Change;
+  [k: string]: unknown;
+}
+/**
+ * Never carries tokens.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ModelStatus".
+ */
+export interface ModelStatus {
+  connected: Connected;
+  account_email?: AccountEmail;
+  plan?: Plan;
+  selected_model?: SelectedModel;
+  login: ModelLogin;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SelectModel".
+ */
+export interface SelectModel {
+  model: Model1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "StartModelLogin".
+ */
+export interface StartModelLogin {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "TestModel".
+ */
+export interface TestModel {
+  prompt: Prompt;
 }
