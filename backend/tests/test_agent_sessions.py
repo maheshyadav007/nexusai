@@ -283,6 +283,8 @@ def test_a_declined_command_never_runs_and_the_agent_is_told(
     assert not marker.exists()
     told = [m.text for m in script.requests[1].messages if m.role == "tool"]
     assert told == ["The person declined this."]
+    parts = view(client, session)["messages"][1]["parts"]
+    assert next(p for p in parts if p["type"] == "tool-run_command")["state"] == "output-denied"
 
 
 def test_allow_for_session_stops_asking_for_the_same_kind_only(

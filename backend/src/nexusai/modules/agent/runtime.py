@@ -244,7 +244,7 @@ class SessionRuntime:
         started = bool(
             self.db.fetch_all("SELECT 1 FROM agent_parts WHERE turn = ? LIMIT 1", (turn,))
         )
-        translator = ui_stream.UiTranslator(started=started)
+        translator = ui_stream.UiTranslator(started=started, declined_text=tools.DENIED)
         self._append(turn, translator.start())
         self._set(session, status="running", step=None)
         config = {

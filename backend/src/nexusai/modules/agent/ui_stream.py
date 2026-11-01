@@ -11,8 +11,9 @@ MODEL_NODE = "model"
 class UiTranslator:
     """One per run. It carries what a stream needs to keep straight across events."""
 
-    def __init__(self, *, started: bool) -> None:
+    def __init__(self, *, started: bool, declined_text: str = "") -> None:
         self.started = started
+        self.declined_text = declined_text
         self.step_open = False
         self.blocks: dict[int, dict[str, Any]] = {}
         self.announced: set[str] = set()
@@ -133,6 +134,9 @@ class UiTranslator:
             self.finished_tools.add(call_id)
             output = data.get("output")
             content = getattr(output, "content", output)
+            # A decline was already announced, and the screen should keep saying so.
+            if self.declined_text and content == self.declined_text:
+                return []
             return [{"type": "tool-output-available", "toolCallId": call_id, "output": content}]
         if kind == "tool-error" and call_id not in self.finished_tools:
             self.finished_tools.add(call_id)

@@ -11,7 +11,7 @@ test.beforeAll(async ({ request }) => {
   await request.post("/api/commands/onboarding.finish", { data: {} });
 });
 
-const SCREENS = ["/today", "/settings", "/settings?section=profile", "/settings?section=preferences", "/settings?section=accounts", "/settings?section=rules", "/settings?section=models", "/settings?section=home", "/settings?section=network", "/settings?section=about", "/logs", "/mail/inbox", "/mail/sent", "/mail/drafts", "/mail/categories", "/mail/archive", "/search", "/documents/all", "/documents/uploaded", "/documents/from-email", "/panels", "/settings?section=archive", "/gallery", "/gallery/shell"];
+const SCREENS = ["/today", "/settings", "/settings?section=profile", "/settings?section=preferences", "/settings?section=accounts", "/settings?section=rules", "/settings?section=models", "/settings?section=home", "/settings?section=network", "/settings?section=about", "/logs", "/mail/inbox", "/mail/sent", "/mail/drafts", "/mail/categories", "/mail/archive", "/search", "/documents/all", "/documents/uploaded", "/documents/from-email", "/panels", "/agent/sessions", "/settings?section=archive", "/gallery", "/gallery/shell"];
 
 for (const path of SCREENS) {
   test(`${path} loads with no browser errors`, async ({ page }) => {

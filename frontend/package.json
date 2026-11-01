@@ -18,6 +18,7 @@
     "check": "npm run typecheck && npm run check:hardcode && npm run check:boundaries && npm run test"
   },
   "dependencies": {
+    "@ai-sdk/react": "4.0.163",
     "@dnd-kit/core": "6.3.1",
     "@dnd-kit/sortable": "10.0.0",
     "@dnd-kit/utilities": "3.2.2",
@@ -34,6 +35,7 @@
     "@radix-ui/react-tooltip": "1.4.1",
     "@tanstack/react-query": "5.105.1",
     "@tanstack/react-virtual": "3.14.25",
+    "ai": "7.0.159",
     "lucide-react": "1.66.0",
     "next": "16.4.3",
     "react": "19.3.1",

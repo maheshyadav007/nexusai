@@ -1,9 +1,11 @@
 """A stand-in for OpenAI's sign-in and ChatGPT servers, so no test touches a real account."""
 
+import asyncio
 import base64
 import json
 import os
 import time
+import uuid
 from typing import Any
 from urllib.parse import parse_qs
 
@@ -97,13 +99,33 @@ def create_fake() -> FastAPI:
         body = await request.json()
         state["bodies"].append(body)
 
+        last = body["input"][-1]
+        said = "".join(p.get("text", "") for p in last.get("content", []) if isinstance(p, dict))
+
         async def stream() -> Any:
-            for piece in ("Hello ", "from ", body["model"]):
-                event = {"type": "response.output_text.delta", "delta": piece}
-                yield f"data: {json.dumps(event)}\n\n"
-            yield f"data: {json.dumps({'type': 'response.completed'})}\n\n"
+            def event(kind: str, **fields: Any) -> str:
+                return f"data: {json.dumps({'type': kind, **fields})}\n\n"
+
+            if last.get("type") == "function_call_output":
+                yield event("response.output_text.delta", delta=f"Tool said: {last['output'][:60]}")
+            elif "run a command" in said:
+                arguments = json.dumps({"command": "echo from-the-agent", "why": "Prove commands work"})
+                item = {"type": "function_call", "call_id": f"call-{uuid.uuid4().hex[:8]}", "name": "run_command", "arguments": arguments}
+                yield event("response.output_item.done", item=item)
+            elif "slow" in said:
+                for number in range(30):
+                    yield event("response.output_text.delta", delta=f"word{number} ")
+                    await asyncio.sleep(0.2)
+            else:
+                for piece in ("Hello ", "from ", body["model"]):
+                    yield event("response.output_text.delta", delta=piece)
+            yield event("response.completed", response={"usage": {"input_tokens": 11, "output_tokens": 3}})
 
         return StreamingResponse(stream(), media_type="text/event-stream")
+
+    @app.get("/__sent")
+    async def sent() -> list[dict[str, Any]]:
+        return state["bodies"]
 
     return app
 

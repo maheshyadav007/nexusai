@@ -147,6 +147,7 @@ The MVP build stages and feature targets are in [`FEATURES.md`](FEATURES.md).
 
 | Date | Change |
 |---|---|
+| 2026-11-01 | Agent runtime: LangChain `create_agent` with `stream_events(version="v3")` (beta in the current release, so versions are pinned), and the Vercel AI SDK's `useChat` for the session screen. One file translates between them. Tested with the real ChatGPT account, including approvals and reconnecting mid-reply. |
 | 2026-11-01 | Mail stage built: `imapclient` and `smtplib` replace the async clients, `nh3` sanitizes mail, `pypdf` and the Office libraries read attachments. Synced and sent with the real Gmail test account. |
 | 2026-11-01 | ChatGPT subscription connected by device-code sign-in, with models chosen from the account's list. Internal API assumed to be LiteLLM. Web app gets built fully before Windows and corporate laptop testing. |
 | 2026-11-01 | Design direction approved: warm paper surfaces and Instrument Sans. Fonts are chosen per theme from a catalog. |

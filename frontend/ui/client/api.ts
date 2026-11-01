@@ -1,4 +1,19 @@
 import type {
+  AgentDone,
+  ApprovalList,
+  CreateSession,
+  DecideApproval,
+  GetModelCall,
+  GetPermissions,
+  ListApprovals,
+  ListSessions,
+  ModelCallView,
+  Permissions,
+  RenameSession,
+  SessionAction,
+  SessionList,
+  SessionRow,
+  SessionView,
   AddPstImport,
   DocumentDone,
   DocumentLibrary,
@@ -118,6 +133,12 @@ interface Commands {
   "pst.resume": [PstImportAction, PstImports];
   "panels.saveBoard": [PanelBoard, PanelBoard];
   "panels.reset": [ResetPanelBoard, PanelBoard];
+  "session.create": [CreateSession, SessionRow];
+  "session.stop": [SessionAction, AgentDone];
+  "session.rename": [RenameSession, AgentDone];
+  "session.archive": [SessionAction, AgentDone];
+  "approvals.decide": [DecideApproval, AgentDone];
+  "permissions.save": [Permissions, Permissions];
 }
 
 interface Queries {
@@ -144,6 +165,11 @@ interface Queries {
   "pst.imports": [GetPstImports, PstImports];
   "panels.board": [GetPanelBoard, PanelBoard];
   "panels.results": [GetPanelResults, PanelResults];
+  "sessions.list": [ListSessions, SessionList];
+  "session.get": [SessionAction, SessionView];
+  "approvals.list": [ListApprovals, ApprovalList];
+  "modelCall.get": [GetModelCall, ModelCallView];
+  "permissions.get": [GetPermissions, Permissions];
 }
 
 export class ApiRequestError extends Error {

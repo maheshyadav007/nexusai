@@ -1,10 +1,8 @@
 "use client";
 
-import { EmptyState } from "@/ui/primitives/EmptyState";
-import { IconButton } from "@/ui/primitives/IconButton";
-import { Popover } from "@/ui/primitives/Popover";
 import { t } from "@/ui/strings";
 import { ActivityIsland, type Activity } from "./ActivityIsland";
+import { ApprovalQueue } from "./ApprovalQueue";
 import { NotificationCenter } from "./NotificationCenter";
 import { SearchBox } from "./SearchBox";
 
@@ -16,9 +14,7 @@ export function TopBar({ activities }: { activities?: readonly Activity[] }) {
         <SearchBox />
       </div>
       <div className="flex items-center gap-1">
-        <Popover label={t("approvals.title")} trigger={<IconButton icon="approvals" label={t("approvals.title")} />}>
-          <EmptyState icon="approvals" title={t("approvals.empty.title")} description={t("approvals.empty.description")} />
-        </Popover>
+        <ApprovalQueue />
         <NotificationCenter />
       </div>
     </header>

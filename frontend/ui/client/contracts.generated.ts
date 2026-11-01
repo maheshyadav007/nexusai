@@ -436,14 +436,255 @@ export type Panels = Panel[];
 export type Limit3 = number;
 export type Threads2 = ThreadRow[];
 export type Documents1 = DocumentRow[];
+export type Name7 = string;
+export type Kind1 = string;
+export type Pattern = string;
+export type Action = "mask" | "block";
+export type Enabled1 = boolean;
+/**
+ * @maxItems 200
+ */
+export type Rules1 = GuardRule[];
+/**
+ * @maxItems 200
+ */
+export type Rules2 = GuardRule[];
+export type Sample = string;
+export type Rule1 = string;
+export type Value2 = string;
+export type Action1 = "mask" | "block";
+export type Masked = string;
+export type Findings = GuardFinding[];
+export type Errors = string[];
+export type Name8 = string;
+export type Real = string;
+export type Masked1 = string;
+export type Id13 = number;
+export type Time = string;
+export type Session = string | null;
+export type Agent = string;
+export type Provider = string;
+export type Model = string;
+export type InputTokens = number;
+export type OutputTokens = number;
+export type Layers = PromptLayerView[];
+export type Status4 = string;
+export type Error1 = string | null;
+export type Id14 = number | null;
+export type Session1 = string | null;
+export type Agent1 = string;
+export type InputTokens1 = number;
+export type OutputTokens1 = number;
+export type Calls = number;
+export type Today = UsageRow[];
+export type TotalToday = number;
+export type DailyCap = number;
+export type NearCap = boolean;
+export type DailyCap1 = number;
+export type Kind2 = string;
+export type Id15 = string | number | null;
+export type Title1 = string | null;
+/**
+ * @maxItems 20
+ */
+export type Context =
+  | []
+  | [string]
+  | [string, string]
+  | [string, string, string]
+  | [string, string, string, string]
+  | [string, string, string, string, string]
+  | [string, string, string, string, string, string]
+  | [string, string, string, string, string, string, string]
+  | [string, string, string, string, string, string, string, string]
+  | [string, string, string, string, string, string, string, string, string]
+  | [string, string, string, string, string, string, string, string, string, string]
+  | [string, string, string, string, string, string, string, string, string, string, string]
+  | [string, string, string, string, string, string, string, string, string, string, string, string]
+  | [string, string, string, string, string, string, string, string, string, string, string, string, string]
+  | [string, string, string, string, string, string, string, string, string, string, string, string, string, string]
+  | [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string
+    ]
+  | [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string
+    ]
+  | [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string
+    ]
+  | [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string
+    ]
+  | [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string
+    ]
+  | [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string
+    ];
+export type Id16 = string;
+export type Title2 = string;
+export type Agent2 = string;
+export type Status5 = "queued" | "running" | "waiting" | "done" | "failed" | "stopped";
+export type Step = string | null;
+export type Error2 = string | null;
+export type Untrusted = boolean;
+export type InputTokens2 = number;
+export type OutputTokens2 = number;
+export type Created = string;
+export type Updated = string;
+export type Archived = boolean;
+export type Query3 = string;
+export type Archived1 = boolean;
+export type Sessions = SessionRow[];
+export type Running = number;
+export type Limit4 = number;
+export type Id17 = string;
+export type Id18 = string;
+export type Title3 = string;
+export type Messages2 = {
+  [k: string]: unknown;
+}[];
+export type Active1 = boolean;
+export type Id19 = number;
+export type Session2 = string;
+export type SessionTitle = string;
+export type ToolCallId = string;
+export type Tool = string;
+export type Summary = string;
+export type Reason1 = string;
+export type Detail1 = string;
+export type Undoable = boolean;
+export type Status6 = "pending" | "approved" | "denied";
+export type Time1 = string;
+export type Approvals = ToolApproval[];
+export type Id20 = number;
+export type Choice = "once" | "session" | "deny";
+export type Ok4 = boolean;
+export type Read2 = "off" | "ask" | "allow";
+export type Write = "off" | "ask" | "allow";
+export type Command = "off" | "ask" | "allow";
+/**
+ * @maxItems 100
+ */
+export type Folders2 = string[];
+export type FullComputerAccess = boolean;
+export type Id21 = number;
+export type Time2 = string;
+export type Session3 = string | null;
+export type Summary1 = string;
+export type Undoable1 = boolean;
+export type Undone = boolean;
+export type Items = ActivityRow[];
+export type Id22 = number;
+export type Id23 = string;
+export type Text2 = string;
 export type Code = string;
 export type Message2 = string;
 export type TraceId = string | null;
-export type Id13 = string;
+export type Id24 = string;
 export type Seq = number;
 export type Type1 = string;
 export type Version = number;
-export type Time = string;
+export type Time3 = string;
 export type Source4 = string;
 export type TraceId1 = string;
 export type CauseId = string | null;
@@ -452,8 +693,8 @@ export type Events = AppEvent[];
 export type Listener = string;
 export type EventSeq = number;
 export type EventType = string;
-export type Error1 = string;
-export type Time1 = string;
+export type Error3 = string;
+export type Time4 = string;
 export type Failed1 = FailedEvent[];
 export type Since = number;
 export type Theme = string;
@@ -470,21 +711,21 @@ export type Accent1 = ("terracotta" | "cobalt" | "moss" | "plum") | null;
 export type DefaultScreen1 = ("today" | "inbox") | null;
 export type DateFormat1 = ("system" | "day-month" | "month-day" | "iso") | null;
 export type TimeFormat1 = ("system" | "12" | "24") | null;
-export type Id14 = string;
-export type Name7 = string;
+export type Id25 = string;
+export type Name9 = string;
 export type Models = AvailableModel[];
 export type State2 = "idle" | "waiting" | "failed";
 export type UserCode = string | null;
 export type VerificationUrl = string | null;
-export type Error2 = string | null;
-export type Model = string;
-export type Text2 = string;
+export type Error4 = string | null;
+export type Model1 = string;
+export type Text3 = string;
 export type Change = "login_started" | "login_failed" | "login_cancelled" | "connected" | "disconnected" | "selected";
 export type Connected = boolean;
 export type AccountEmail = string | null;
 export type Plan = string | null;
 export type SelectedModel = string | null;
-export type Model1 = string;
+export type Model2 = string;
 export type Prompt = string;
 export type Path2 = string | null;
 export type Extension = string | null;
@@ -493,10 +734,10 @@ export type Path4 = string;
 export type MustExist = boolean;
 export type Path5 = string;
 export type Parent = string | null;
-export type Folders2 = string[];
+export type Folders3 = string[];
 export type Files = string[];
 export type Path6 = string;
-export type Ok4 = boolean;
+export type Ok5 = boolean;
 export type Problems = string[];
 export type Warnings = string[];
 export type FreeBytes = number | null;
@@ -505,33 +746,33 @@ export type State3 = "ready" | "unset" | "missing";
 export type Path7 = string | null;
 export type DefaultPath = string;
 export type Message3 = string | null;
-export type Step = string | null;
+export type Step1 = string | null;
 export type Completed = boolean;
 export type Completed1 = boolean;
 export type CurrentStep = string | null;
-export type Step1 = string;
-export type Name8 = string;
+export type Step2 = string;
+export type Name10 = string;
 export type Role = string;
 export type Signature = string;
 export type Tone = "formal" | "friendly" | "brief";
 export type Vips = string;
 export type About = string;
 export type Fields = string[];
-export type Kind1 = string | null;
-export type Id15 = number | null;
-export type Id16 = number;
-export type Time2 = string;
-export type Kind2 = string;
-export type Title1 = string;
-export type Detail = string;
+export type Kind3 = string | null;
+export type Id26 = number | null;
+export type Id27 = number;
+export type Time5 = string;
+export type Kind4 = string;
+export type Title4 = string;
+export type Detail2 = string;
 export type Link = string | null;
-export type Read2 = boolean;
-export type Items = Notification[];
+export type Read3 = boolean;
+export type Items1 = Notification[];
 export type Unread = number;
 export type Kinds = string[];
-export type Kind3 = string;
-export type Title2 = string;
-export type Detail1 = string;
+export type Kind5 = string;
+export type Title5 = string;
+export type Detail3 = string;
 export type Link1 = string | null;
 export type Unread1 = number;
 export type Reset = boolean;
@@ -557,13 +798,13 @@ export type TraceId2 = string;
 export type Lines = {
   [k: string]: unknown;
 }[];
-export type Name9 = string;
+export type Name11 = string;
 export type Host1 = string;
-export type Ok5 = boolean;
-export type Detail2 = string;
+export type Ok6 = boolean;
+export type Detail4 = string;
 export type Checks = NetworkCheck[];
 export type Level = string | null;
-export type Text3 = string | null;
+export type Text4 = string | null;
 export type Events1 = {
   [k: string]: unknown;
 }[];
@@ -639,6 +880,39 @@ export interface Contracts {
   ResetPanelBoard?: ResetPanelBoard;
   GetPanelResults?: GetPanelResults;
   PanelResults?: PanelResults;
+  GuardRule?: GuardRule;
+  GuardRules?: GuardRules;
+  GetGuardRules?: GetGuardRules;
+  TestGuardRules?: TestGuardRules;
+  GuardFinding?: GuardFinding;
+  GuardTestResult?: GuardTestResult;
+  PromptLayerView?: PromptLayerView;
+  ModelCallView?: ModelCallView;
+  GetModelCall?: GetModelCall;
+  GetUsage?: GetUsage;
+  UsageRow?: UsageRow;
+  UsageView?: UsageView;
+  SetDailyCap?: SetDailyCap;
+  AgentChanged?: AgentChanged;
+  CreateSession?: CreateSession;
+  SessionRow?: SessionRow;
+  ListSessions?: ListSessions;
+  SessionList?: SessionList;
+  SessionAction?: SessionAction;
+  RenameSession?: RenameSession;
+  SessionView?: SessionView;
+  ToolApproval?: ToolApproval;
+  ListApprovals?: ListApprovals;
+  ApprovalList?: ApprovalList;
+  DecideApproval?: DecideApproval;
+  AgentDone?: AgentDone;
+  GetPermissions?: GetPermissions;
+  Permissions?: Permissions;
+  ActivityRow?: ActivityRow;
+  ListActivity?: ListActivity;
+  ActivityList?: ActivityList;
+  UndoActivity?: UndoActivity;
+  SessionChat?: SessionChat;
   ApiError?: ApiError;
   AppEvent?: AppEvent;
   EventLog?: EventLog;
@@ -1347,6 +1621,329 @@ export interface PanelResults {
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "GuardRule".
+ */
+export interface GuardRule {
+  name: Name7;
+  kind: Kind1;
+  pattern: Pattern;
+  action?: Action;
+  enabled?: Enabled1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "GuardRules".
+ */
+export interface GuardRules {
+  rules: Rules1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "GetGuardRules".
+ */
+export interface GetGuardRules {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "TestGuardRules".
+ */
+export interface TestGuardRules {
+  rules: Rules2;
+  sample: Sample;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "GuardFinding".
+ */
+export interface GuardFinding {
+  rule: Rule1;
+  value: Value2;
+  action: Action1;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "GuardTestResult".
+ */
+export interface GuardTestResult {
+  masked: Masked;
+  findings: Findings;
+  errors: Errors;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "PromptLayerView".
+ */
+export interface PromptLayerView {
+  name: Name8;
+  real: Real;
+  masked: Masked1;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ModelCallView".
+ */
+export interface ModelCallView {
+  id: Id13;
+  time: Time;
+  session: Session;
+  agent: Agent;
+  provider: Provider;
+  model: Model;
+  input_tokens: InputTokens;
+  output_tokens: OutputTokens;
+  layers: Layers;
+  status: Status4;
+  error?: Error1;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "GetModelCall".
+ */
+export interface GetModelCall {
+  id?: Id14;
+  session?: Session1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "GetUsage".
+ */
+export interface GetUsage {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "UsageRow".
+ */
+export interface UsageRow {
+  agent: Agent1;
+  input_tokens: InputTokens1;
+  output_tokens: OutputTokens1;
+  calls: Calls;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "UsageView".
+ */
+export interface UsageView {
+  today: Today;
+  total_today: TotalToday;
+  daily_cap: DailyCap;
+  near_cap: NearCap;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SetDailyCap".
+ */
+export interface SetDailyCap {
+  daily_cap: DailyCap1;
+}
+/**
+ * Short facts only.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "AgentChanged".
+ */
+export interface AgentChanged {
+  kind: Kind2;
+  id?: Id15;
+  detail?: Detail;
+  [k: string]: unknown;
+}
+export interface Detail {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "CreateSession".
+ */
+export interface CreateSession {
+  title?: Title1;
+  context?: Context;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SessionRow".
+ */
+export interface SessionRow {
+  id: Id16;
+  title: Title2;
+  agent: Agent2;
+  status: Status5;
+  step: Step;
+  error: Error2;
+  untrusted: Untrusted;
+  input_tokens: InputTokens2;
+  output_tokens: OutputTokens2;
+  created: Created;
+  updated: Updated;
+  archived: Archived;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ListSessions".
+ */
+export interface ListSessions {
+  query?: Query3;
+  archived?: Archived1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SessionList".
+ */
+export interface SessionList {
+  sessions: Sessions;
+  running: Running;
+  limit: Limit4;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SessionAction".
+ */
+export interface SessionAction {
+  id: Id17;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "RenameSession".
+ */
+export interface RenameSession {
+  id: Id18;
+  title: Title3;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SessionView".
+ */
+export interface SessionView {
+  session: SessionRow;
+  messages: Messages2;
+  active: Active1;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ToolApproval".
+ */
+export interface ToolApproval {
+  id: Id19;
+  session: Session2;
+  session_title: SessionTitle;
+  tool_call_id: ToolCallId;
+  tool: Tool;
+  summary: Summary;
+  reason: Reason1;
+  detail: Detail1;
+  undoable: Undoable;
+  status: Status6;
+  time: Time1;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ListApprovals".
+ */
+export interface ListApprovals {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ApprovalList".
+ */
+export interface ApprovalList {
+  approvals: Approvals;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "DecideApproval".
+ */
+export interface DecideApproval {
+  id: Id20;
+  choice: Choice;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "AgentDone".
+ */
+export interface AgentDone {
+  ok?: Ok4;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "GetPermissions".
+ */
+export interface GetPermissions {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "Permissions".
+ */
+export interface Permissions {
+  read?: Read2;
+  write?: Write;
+  command?: Command;
+  folders?: Folders2;
+  full_computer_access?: FullComputerAccess;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ActivityRow".
+ */
+export interface ActivityRow {
+  id: Id21;
+  time: Time2;
+  session: Session3;
+  summary: Summary1;
+  undoable: Undoable1;
+  undone: Undone;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ListActivity".
+ */
+export interface ListActivity {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ActivityList".
+ */
+export interface ActivityList {
+  items: Items;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "UndoActivity".
+ */
+export interface UndoActivity {
+  id: Id22;
+}
+/**
+ * What the chat screen sends: which session, and what the person typed.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SessionChat".
+ */
+export interface SessionChat {
+  id: Id23;
+  text: Text2;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "ApiError".
  */
 export interface ApiError {
@@ -1362,11 +1959,11 @@ export interface ApiError {
  * via the `definition` "AppEvent".
  */
 export interface AppEvent {
-  id: Id13;
+  id: Id24;
   seq: Seq;
   type: Type1;
   version: Version;
-  time: Time;
+  time: Time3;
   source: Source4;
   trace_id: TraceId1;
   cause_id?: CauseId;
@@ -1394,8 +1991,8 @@ export interface FailedEvent {
   listener: Listener;
   event_seq: EventSeq;
   event_type: EventType;
-  error: Error1;
-  time: Time1;
+  error: Error3;
+  time: Time4;
   [k: string]: unknown;
 }
 /**
@@ -1458,8 +2055,8 @@ export interface UpdateSettings {
  * via the `definition` "AvailableModel".
  */
 export interface AvailableModel {
-  id: Id14;
-  name: Name7;
+  id: Id25;
+  name: Name9;
   [k: string]: unknown;
 }
 /**
@@ -1508,7 +2105,7 @@ export interface ModelLogin {
   state: State2;
   user_code?: UserCode;
   verification_url?: VerificationUrl;
-  error?: Error2;
+  error?: Error4;
   [k: string]: unknown;
 }
 /**
@@ -1516,8 +2113,8 @@ export interface ModelLogin {
  * via the `definition` "ModelReply".
  */
 export interface ModelReply {
-  model: Model;
-  text: Text2;
+  model: Model1;
+  text: Text3;
   [k: string]: unknown;
 }
 /**
@@ -1549,7 +2146,7 @@ export interface ModelStatus {
  * via the `definition` "SelectModel".
  */
 export interface SelectModel {
-  model: Model1;
+  model: Model2;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -1595,7 +2192,7 @@ export interface ChooseHome {
 export interface FolderListing {
   path: Path5;
   parent: Parent;
-  folders: Folders2;
+  folders: Folders3;
   files?: Files;
   [k: string]: unknown;
 }
@@ -1607,7 +2204,7 @@ export interface FolderListing {
  */
 export interface HomeCheck {
   path: Path6;
-  ok: Ok4;
+  ok: Ok5;
   problems: Problems;
   warnings: Warnings;
   free_bytes?: FreeBytes;
@@ -1644,7 +2241,7 @@ export interface GetOnboarding {
  * via the `definition` "OnboardingChanged".
  */
 export interface OnboardingChanged {
-  step?: Step;
+  step?: Step1;
   completed: Completed;
   [k: string]: unknown;
 }
@@ -1662,7 +2259,7 @@ export interface OnboardingState {
  * via the `definition` "SetOnboardingStep".
  */
 export interface SetOnboardingStep {
-  step: Step1;
+  step: Step2;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -1676,7 +2273,7 @@ export interface GetProfile {
  * via the `definition` "Profile".
  */
 export interface Profile {
-  name?: Name8;
+  name?: Name10;
   role?: Role;
   signature?: Signature;
   tone?: Tone;
@@ -1699,7 +2296,7 @@ export interface ProfileChanged {
  * via the `definition` "ListNotifications".
  */
 export interface ListNotifications {
-  kind?: Kind1;
+  kind?: Kind3;
 }
 /**
  * No id means all of them.
@@ -1708,20 +2305,20 @@ export interface ListNotifications {
  * via the `definition` "MarkNotificationsRead".
  */
 export interface MarkNotificationsRead {
-  id?: Id15;
+  id?: Id26;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "Notification".
  */
 export interface Notification {
-  id: Id16;
-  time: Time2;
-  kind: Kind2;
-  title: Title1;
-  detail: Detail;
+  id: Id27;
+  time: Time5;
+  kind: Kind4;
+  title: Title4;
+  detail: Detail2;
   link: Link;
-  read: Read2;
+  read: Read3;
   [k: string]: unknown;
 }
 /**
@@ -1729,7 +2326,7 @@ export interface Notification {
  * via the `definition` "NotificationList".
  */
 export interface NotificationList {
-  items: Items;
+  items: Items1;
   unread: Unread;
   kinds: Kinds;
   [k: string]: unknown;
@@ -1741,9 +2338,9 @@ export interface NotificationList {
  * via the `definition` "NotificationRequested".
  */
 export interface NotificationRequested {
-  kind: Kind3;
-  title: Title2;
-  detail?: Detail1;
+  kind: Kind5;
+  title: Title5;
+  detail?: Detail3;
   link?: Link1;
   [k: string]: unknown;
 }
@@ -1785,10 +2382,10 @@ export interface SidebarChanged {
  */
 export interface SidebarLayout {
   sections?: Sections;
-  items?: Items1;
+  items?: Items2;
   hidden?: Hidden;
 }
-export interface Items1 {
+export interface Items2 {
   [k: string]: string[];
 }
 /**
@@ -1842,10 +2439,10 @@ export interface LogLines {
  * via the `definition` "NetworkCheck".
  */
 export interface NetworkCheck {
-  name: Name9;
+  name: Name11;
   host: Host1;
-  ok: Ok5;
-  detail: Detail2;
+  ok: Ok6;
+  detail: Detail4;
   [k: string]: unknown;
 }
 /**
@@ -1862,7 +2459,7 @@ export interface NetworkChecks {
  */
 export interface SearchLogs {
   level?: Level;
-  text?: Text3;
+  text?: Text4;
 }
 /**
  * Everything that happened under one trace ID, oldest first.

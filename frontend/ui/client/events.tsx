@@ -23,6 +23,9 @@ const INVALIDATES: Record<string, readonly string[]> = {
   "document.indexed": ["documents", "search"],
   "pst.progress": ["pst", "mail-status"],
   "panels.changed": ["panels"],
+  "session.changed": ["sessions", "session"],
+  "approval.changed": ["approvals"],
+  "permissions.changed": ["permissions"],
   "notifications.changed": ["notifications"],
 };
 
