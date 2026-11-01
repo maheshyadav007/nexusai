@@ -1,4 +1,6 @@
 import type {
+  ReorderCategories,
+  UpdateCategory,
   DecideApprovals,
   AnswerSession,
   CategoryList,
@@ -218,6 +220,8 @@ interface Commands {
   "session.answer": [AnswerSession, AgentDone];
   "categories.save": [SaveCategory, CategorySaved];
   "categories.remove": [CategoryName, CategoryList];
+  "categories.update": [UpdateCategory, CategoryList];
+  "categories.reorder": [ReorderCategories, CategoryList];
   "categories.decide": [DecideCategory, CategoryList];
   "channel.respond": [RespondChannel, AgentDone];
   "channel.dismiss": [DismissChannel, AgentDone];

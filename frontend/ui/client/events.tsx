@@ -27,7 +27,6 @@ const INVALIDATES: Record<string, readonly string[]> = {
   "channel.posted": ["channel", "today"],
   "board.changed": ["board"],
   "tasks.changed": ["tasks"],
-  "categories.changed": ["categories", "threads"],
   "reminders.changed": ["reminders"],
   "schedule.changed": ["schedules"],
   "schedule.ran": ["schedules", "jobs"],
@@ -88,6 +87,11 @@ export function EventsProvider({ children }: { children: ReactNode }) {
       source.onerror = () => setConnected(false);
       source.onmessage = (message) => {
         const event = JSON.parse(message.data as string) as AppEvent;
+        // This event carries the new list and counts, so nothing has to go and ask.
+        if (event.type === "categories.changed" && event.payload.categories) {
+          void client.cancelQueries({ queryKey: ["categories"] });
+          client.setQueryData(["categories"], { categories: event.payload.categories });
+        }
         for (const key of INVALIDATES[event.type] ?? []) void refresh(client, { queryKey: [key] });
         for (const listener of listeners.current) listener(event);
       };

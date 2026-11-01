@@ -9,6 +9,7 @@ import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
+import { PageHeader } from "@/ui/primitives/PageHeader";
 import { Progress } from "@/ui/primitives/Progress";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { StatusDot } from "@/ui/primitives/StatusDot";
@@ -22,8 +23,8 @@ export function BackgroundScreen() {
   const rows = jobs.data?.jobs ?? [];
   const untriaged = estimate.data?.untriaged ?? 0;
   return (
-    <div className="mx-auto flex max-w-content flex-col gap-4 p-6">
-      <h1 className="font-serif text-display text-ink-primary">{t("nav.background")}</h1>
+    <div className="mx-auto flex max-w-reading flex-col gap-5 p-6">
+      <PageHeader title={t("nav.background")} />
       {mail.data && mail.data.state !== "off" ? (
         <p role="status" className="flex items-center gap-2 text-md text-ink-secondary">
           <StatusDot tone={mail.data.state === "live" ? "done" : mail.data.state === "failed" || mail.data.state === "offline" ? "failed" : "running"} />
@@ -61,8 +62,8 @@ export function ActivityScreen() {
   const format = useDateTime();
   const rows = activity.data?.items ?? [];
   return (
-    <div className="mx-auto flex max-w-content flex-col gap-4 p-6">
-      <h1 className="font-serif text-display text-ink-primary">{t("nav.activity")}</h1>
+    <div className="mx-auto flex max-w-reading flex-col gap-5 p-6">
+      <PageHeader title={t("nav.activity")} />
       {activity.isPending ? <Skeleton className="h-6 w-full" /> : null}
       {activity.isError ? <ErrorState title={t("activity.error")} onRetry={() => void activity.refetch()} /> : null}
       {activity.isSuccess && rows.length === 0 ? <EmptyState icon="activity" title={t("activity.empty")} /> : null}
@@ -88,11 +89,8 @@ export function AgentChannelScreen() {
   const rows = channel.data?.messages ?? [];
   const muted = channel.data?.muted ?? [];
   return (
-    <div className="mx-auto flex max-w-content flex-col gap-4 p-6">
-      <header>
-        <h1 className="font-serif text-display text-ink-primary">{t("nav.channel")}</h1>
-        <p className="mt-1 text-md text-ink-muted">{t("agentChannel.description")}</p>
-      </header>
+    <div className="mx-auto flex max-w-reading flex-col gap-5 p-6">
+      <PageHeader title={t("nav.channel")} summary={t("agentChannel.description")} />
       {channel.isPending ? <Skeleton className="h-6 w-full" /> : null}
       {channel.isError ? <ErrorState title={t("agentChannel.error")} onRetry={() => void channel.refetch()} /> : null}
       {channel.isSuccess && rows.length === 0 ? <EmptyState icon="channel" title={t("agentChannel.empty")} /> : null}

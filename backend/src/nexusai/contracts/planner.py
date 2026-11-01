@@ -15,6 +15,8 @@ class Task(BaseModel):
     source: Literal["user", "agent"]
     proposed: bool
     created: str
+    updated: str | None = None
+    completed: str | None = None
 
 
 class ListTasks(BaseModel):
@@ -55,6 +57,8 @@ class Reminder(BaseModel):
     source: Literal["user", "agent"]
     proposed: bool
     fired: bool
+    created: str | None = None
+    updated: str | None = None
 
 
 class ListReminders(BaseModel):

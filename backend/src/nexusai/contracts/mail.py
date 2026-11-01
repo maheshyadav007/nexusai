@@ -245,6 +245,8 @@ class MailCategory(BaseModel):
     subject: str | None = None
     count: int = 0
     unread: int = 0
+    created: str | None = None
+    updated: str | None = None
 
 
 class ListCategories(BaseModel):
@@ -267,6 +269,30 @@ class SaveCategory(BaseModel):
 
 class CategorySaved(CategoryList):
     filed: int = 0
+
+
+class UpdateCategory(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=64)
+    new_name: str | None = Field(default=None, min_length=1, max_length=64)
+    in_priority: bool | None = None
+    sender: str | None = Field(default=None, max_length=320)
+    subject: str | None = Field(default=None, max_length=500)
+    clear_rule: bool = False
+
+
+class MergeCategories(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    names: list[str] = Field(min_length=1, max_length=200)
+    into: str = Field(min_length=1, max_length=64)
+
+
+class ReorderCategories(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    names: list[str] = Field(max_length=500)
 
 
 class CategoryName(BaseModel):

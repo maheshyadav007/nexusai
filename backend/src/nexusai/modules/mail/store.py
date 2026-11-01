@@ -92,6 +92,13 @@ CREATE INDEX threads_date ON threads (account, last_date DESC, id DESC);
 CREATE INDEX threads_category ON threads (account, category, last_date DESC, id DESC);
 """,
     ),
+    Migration(
+        "mail_categories_order_001",
+        """
+ALTER TABLE mail_categories ADD COLUMN position INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE mail_categories ADD COLUMN updated TEXT;
+""",
+    ),
 ]
 THREAD_COLUMNS = {"inbox": "in_inbox", "sent": "in_sent", "drafts": "in_drafts", "trash": "in_trash", "archive": "in_archive", "other": "in_other"}  # fmt: skip
 FOLDER_FILTERS = {

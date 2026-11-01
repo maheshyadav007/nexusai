@@ -1,8 +1,12 @@
-import { Activity, AlarmClock, Archive, ArrowDown, ArrowUp, Bell, Bot, Brain, BrainCircuit, CalendarDays, Check, ChevronDown, ChevronRight, CircleAlert, Clock, Copy, CornerDownRight, File, FileText, Flag, Folder, FolderOpen, GripVertical, Inbox, LayoutPanelTop, ListChecks, Loader, MailOpen, Mails, Maximize2, MessageCircle, MessagesSquare, Minus, PanelLeftClose, PanelLeftOpen, Paperclip, PenLine, Pencil, Plus, Reply, ReplyAll, ScrollText, Search, Send, Settings, ShieldCheck, SlidersHorizontal, Square, SquarePen, Star, Sun, Tags, Terminal, Trash2, Upload, WifiOff, X } from "lucide-react";
+import { Activity, AlarmClock, Archive, ArrowDown, ArrowUp, Bell, Bot, Brain, BrainCircuit, CalendarDays, Check, ChevronDown, ChevronRight, CircleAlert, Clock, Copy, CornerDownRight, File, FileText, Flag, Folder, FolderOpen, GripVertical, Inbox, LayoutPanelTop, ListChecks, Loader, MailOpen, Mails, Maximize2, MessageCircle, MessagesSquare, Minus, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Paperclip, PenLine, Pencil, Plus, Repeat, Reply, ReplyAll, ScrollText, Search, Send, Settings, ShieldCheck, SlidersHorizontal, Square, SquarePen, Star, Sun, Tags, Terminal, Trash2, Upload, WifiOff, X } from "lucide-react";
 
 // Features name an icon by what it's for, so one change here updates every use.
 export const ICONS = {
   activity: Activity,
+  pin: PanelRightOpen,
+  unpin: PanelRightClose,
+  repeat: Repeat,
+  more: MoreHorizontal,
   thinking: Brain,
   copy: Copy,
   edit: Pencil,

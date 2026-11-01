@@ -13,9 +13,12 @@ interface Start {
 
 interface Assistant {
   open: boolean;
+  /** Attached to the right edge, with the page beside it instead of under it. */
+  pinned: boolean;
   session: string | null;
   starting: boolean;
   setOpen: (open: boolean) => void;
+  setPinned: (pinned: boolean) => void;
   openSession: (id: string) => void;
   newChat: () => void;
   start: (input: Start) => void;
@@ -30,16 +33,18 @@ export function useAssistant(): Assistant {
 }
 
 // Only remembers where the person left off in this browser. It's fine if it comes back empty.
-function remembered(): { open: boolean; session: string | null } {
+function remembered(): { open: boolean; pinned: boolean; session: string | null } {
+  const fresh = { open: false, pinned: false, session: null };
   try {
-    return { open: false, session: null, ...JSON.parse(localStorage.getItem(appConfig.storageKeys.assistant) ?? "{}") };
+    return { ...fresh, ...JSON.parse(localStorage.getItem(appConfig.storageKeys.assistant) ?? "{}") };
   } catch {
-    return { open: false, session: null };
+    return fresh;
   }
 }
 
 export function AssistantProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  const [pinned, setPinned] = useState(false);
   const [session, setSession] = useState<string | null>(null);
   const create = useCreateSession();
   const { mutate } = create;
@@ -49,17 +54,18 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const saved = remembered();
     setOpen(saved.open);
+    setPinned(saved.pinned);
     setSession(saved.session);
     setRestored(true);
   }, []);
   useEffect(() => {
     if (!restored) return;
     try {
-      localStorage.setItem(appConfig.storageKeys.assistant, JSON.stringify({ open, session }));
+      localStorage.setItem(appConfig.storageKeys.assistant, JSON.stringify({ open, pinned, session }));
     } catch {
       // A blocked store only means it opens fresh next time.
     }
-  }, [open, session, restored]);
+  }, [open, pinned, session, restored]);
 
   const start = useCallback(
     ({ text, context, title }: Start) => {
@@ -77,9 +83,11 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const value = useMemo<Assistant>(
     () => ({
       open,
+      pinned,
       session,
       starting: create.isPending,
       setOpen,
+      setPinned,
       openSession: (id) => {
         setSession(id);
         setOpen(true);
@@ -90,7 +98,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       },
       start,
     }),
-    [open, session, create.isPending, start],
+    [open, pinned, session, create.isPending, start],
   );
   return <AssistantContext value={value}>{children}</AssistantContext>;
 }

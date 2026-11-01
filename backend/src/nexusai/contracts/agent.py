@@ -567,6 +567,8 @@ class ScheduleRow(Schedule):
     next_run: str | None
     last_run: str | None
     last_session: str | None
+    created: str | None = None
+    updated: str | None = None
 
 
 class ListSchedules(BaseModel):

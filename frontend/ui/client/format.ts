@@ -4,6 +4,28 @@ import { useSettings } from "./settings";
 
 const DATE_ORDER: Readonly<Record<string, string>> = { "day-month": "en-GB", "month-day": "en-US", iso: "sv-SE" };
 
+const AGO_STEPS: readonly [Intl.RelativeTimeFormatUnit, number][] = [
+  ["minute", 60],
+  ["hour", 3600],
+  ["day", 86400],
+  ["week", 604800],
+];
+
+/** "2 hours ago", and after a month just the date. */
+export function useRelativeTime(): (value: string) => string {
+  const short = useShortDate();
+  const words = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  return (value) => {
+    const seconds = (new Date(value).getTime() - Date.now()) / 1000;
+    if (Number.isNaN(seconds)) return value;
+    if (Math.abs(seconds) < AGO_STEPS[0]![1]) return words.format(0, "minute");
+    const size = Math.abs(seconds);
+    if (size >= 4 * AGO_STEPS[3]![1]) return short(value);
+    const [unit, length] = [...AGO_STEPS].reverse().find(([, step]) => size >= step) ?? AGO_STEPS[0]!;
+    return words.format(Math.round(seconds / length), unit);
+  };
+}
+
 /** Today's mail shows its time, and older mail its date, like every mail app. */
 export function useShortDate(): (value: string) => string {
   const { data } = useSettings();

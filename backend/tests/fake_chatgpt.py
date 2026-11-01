@@ -136,9 +136,13 @@ def create_fake() -> FastAPI:
                     item={
                         "type": "function_call",
                         "call_id": "reminder-call",
-                        "name": "create_reminder",
+                        "name": "create_reminders",
                         "arguments": json.dumps(
-                            {"title": "Call the vendor", "when": "2031-05-01T09:00"}
+                            {
+                                "reminders": [
+                                    {"title": "Call the vendor", "when": "2031-05-01T09:00"}
+                                ]
+                            }
                         ),
                     },
                 )
@@ -149,8 +153,8 @@ def create_fake() -> FastAPI:
                         item={
                             "type": "function_call",
                             "call_id": f"task-{uuid.uuid4().hex}",
-                            "name": "create_task",
-                            "arguments": json.dumps({"title": title}),
+                            "name": "create_tasks",
+                            "arguments": json.dumps({"tasks": [{"title": title}]}),
                         },
                     )
             elif "ask me something" in said:

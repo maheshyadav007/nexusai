@@ -33,6 +33,7 @@ from nexusai.modules.mail import accounts, store
 from nexusai.modules.planner import module as planner
 
 log = structlog.get_logger()
+MAX_LISTED = 500
 MIGRATION = Migration(
     "agent_tools_001",
     """
@@ -354,6 +355,17 @@ class _Read(BaseModel):
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
+class _Folder(BaseModel):
+    path: str = Field(description="The folder. Relative paths start in your scratch folder.")
+    tool_call_id: Annotated[str, InjectedToolCallId]
+
+
+class _Move(BaseModel):
+    source: str = Field(description="The file now.")
+    destination: str = Field(description="Where it should be, including its name.")
+    tool_call_id: Annotated[str, InjectedToolCallId]
+
+
 class _Write(BaseModel):
     path: str = Field(description="File to write. Relative paths start in your scratch folder.")
     content: str = Field(description="The file's whole new content.")
@@ -508,6 +520,76 @@ def build_tools(ctx: Context, session: str, control: RunControl) -> list[Structu
             _diff(before, content, target.name),
             True,
             work,
+        )
+
+    def list_folder(path: str, tool_call_id: str) -> str:
+        target = _resolve(ctx, session, path)
+
+        def work() -> str:
+            if not target.is_dir():
+                return f"{target} isn't a folder."
+            entries = sorted(target.iterdir(), key=lambda item: item.name.lower())
+            return (
+                "\n".join(
+                    f"{entry.name}{'/' if entry.is_dir() else ''}" for entry in entries[:MAX_LISTED]
+                )
+                or "Empty."
+            )
+
+        return _guarded(
+            ctx,
+            session,
+            tool_call_id,
+            "list_folder",
+            "read",
+            target,
+            f"List {target}",
+            "",
+            False,
+            work,
+        )
+
+    def move_file(source: str, destination: str, tool_call_id: str) -> str:
+        origin = _resolve(ctx, session, source)
+        target = _resolve(ctx, session, destination)
+        summary = f"Move {origin} to {target}"
+
+        def work() -> str:
+            if not origin.exists():
+                return f"{origin} doesn't exist."
+            if target.exists():
+                return f"Not moved: {target} already exists."
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(origin), str(target))
+            return f"Moved to {target}."
+
+        # Both ends have to be allowed, so a file can't be walked out of where it may be written.
+        check = policy.decide(
+            "write",
+            path=origin,
+            home=ctx.config.home,
+            permissions=policy.for_tool(policy.load_permissions(ctx.bus.db), "move_file"),
+            untrusted=_is_untrusted(ctx, session),
+        )
+        if check.verdict == "deny":
+            return f"Not allowed: {check.reason}"
+        return _guarded(
+            ctx, session, tool_call_id, "move_file", "write", target, summary, "", False, work
+        )
+
+    def delete_file(path: str, tool_call_id: str) -> str:
+        target = _resolve(ctx, session, path)
+        summary = f"Delete {target}"
+
+        def work() -> str:
+            if not target.is_file():
+                return f"{target} isn't a file."
+            _snapshot(ctx, session, target, summary)
+            target.unlink()
+            return f"Deleted {target}."
+
+        return _guarded(
+            ctx, session, tool_call_id, "delete_file", "write", target, summary, "", True, work
         )
 
     def edit_file(path: str, old_text: str, new_text: str, tool_call_id: str) -> str:
@@ -835,8 +917,11 @@ def build_tools(ctx: Context, session: str, control: RunControl) -> list[Structu
         ),
         (search_documents, _SearchDocuments, "Search the person's documents."),
         (read_document, _ReadDocument, "Read a document's text."),
+        (list_folder, _Folder, "See what's in a folder."),
         (read_file, _Read, "Read a text file."),
         (write_file, _Write, "Create or replace a text file."),
+        (move_file, _Move, "Move or rename a file."),
+        (delete_file, _Read, "Delete a file."),
         (edit_file, _Edit, "Replace one exact piece of text in a file."),
         (run_command, _Command, "Run a shell command in your scratch folder."),
         (search_mail, _Search, "Search the person's mail and attachments."),

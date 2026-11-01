@@ -4,13 +4,15 @@ import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import light from "@/ui/theme/themes/nexus-light.json";
 import { useSessions } from "@/ui/client/sessions";
 import { useWaitingCount } from "@/ui/client/work";
 import { Icon } from "@/ui/icons";
 import { IconButton } from "@/ui/primitives/IconButton";
-import { PANEL, QUICK } from "@/ui/primitives/motion";
+import { QUICK, readSpace, SMOOTH } from "@/ui/primitives/motion";
 import { Select } from "@/ui/primitives/Select";
 import { StatusDot } from "@/ui/primitives/StatusDot";
+import { Tooltip } from "@/ui/primitives/Tooltip";
 import { t, tn } from "@/ui/strings";
 import { useAssistant } from "./AssistantProvider";
 import { Composer } from "./Composer";
@@ -47,28 +49,68 @@ function NewChat() {
 
 const TITLE_LENGTH = 60;
 
+const GAP = readSpace(light.space["4"]);
+const FLOATING_HEIGHT = readSpace(light.layout.dockHeight);
+const SMALL_SCREEN = readSpace(light.layout.page);
+
+function useWindowSize() {
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    const measure = () => setSize({ width: window.innerWidth, height: window.innerHeight });
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+  return size;
+}
+
 function Panel() {
   const assistant = useAssistant();
   const sessions = useSessions("");
+  const { width, height } = useWindowSize();
   const chats = (sessions.data?.sessions ?? []).filter((row) => row.agent !== SELF_RUNNING);
   const options = chats.map((row) => ({ value: row.id, label: row.status === "waiting" ? t("chat.waitingLabel", { title: row.title }) : row.title }));
+  // Only one panel ever exists, so pinning moves it instead of restarting the conversation.
+  const attached = assistant.pinned && width >= SMALL_SCREEN;
+  const place = attached ? { top: 0, right: 0, bottom: 0, borderRadius: 0 } : { top: Math.max(GAP, height - GAP - FLOATING_HEIGHT), right: GAP, bottom: GAP, borderRadius: GAP - 2 };
   return (
-    <motion.section {...PANEL} aria-label={t("chat.title")} data-testid="assistant-dock" className="fixed inset-2 z-40 flex origin-bottom-right flex-col overflow-hidden rounded-lg border border-line-subtle bg-surface-page shadow-overlay md:inset-auto md:bottom-4 md:right-4 md:h-dock-height md:max-h-full md:w-dock">
-      <header className="flex items-center gap-2 border-b border-line-subtle p-2">
+    <motion.section
+      initial={{ opacity: 0, x: attached ? 32 : 0, y: attached ? 0 : 12, ...place }}
+      animate={{ opacity: 1, x: 0, y: 0, ...place }}
+      exit={{ opacity: 0, x: attached ? 32 : 0, y: attached ? 0 : 12 }}
+      transition={SMOOTH}
+      aria-label={t("chat.title")}
+      data-testid="assistant-dock"
+      data-pinned={attached}
+      className={`fixed z-40 flex w-dock max-w-full flex-col overflow-hidden border border-line-subtle bg-surface-page ${attached ? "border-y-0 border-r-0" : "shadow-overlay"}`}
+    >
+      <header className="flex min-h-topbar items-center gap-1 border-b border-line-subtle px-2">
         <div className="min-w-0 flex-1">
-          {assistant.session && options.length ? <Select label={t("chat.switch")} value={assistant.session} options={options} onChange={assistant.openSession} /> : <p className="px-2 text-md font-medium text-ink-primary">{t("chat.title")}</p>}
+          {assistant.session && options.length ? <Select quiet label={t("chat.switch")} value={assistant.session} options={options} onChange={assistant.openSession} /> : <p className="px-2 text-md font-medium text-ink-primary">{t("chat.title")}</p>}
         </div>
         <IconButton icon="newChat" label={t("chat.new")} onClick={assistant.newChat} />
         {assistant.session ? (
-          <Link href={`/agent/sessions/${assistant.session}`} aria-label={t("chat.expand")} onClick={() => assistant.setOpen(false)} className="focus-ring inline-flex rounded-md p-2 text-ink-secondary transition-colors duration-fast hover:bg-surface-sunken hover:text-ink-primary">
-            <Icon name="openFull" />
-          </Link>
+          <Tooltip content={t("chat.expand")}>
+            <Link href={`/agent/sessions/${assistant.session}`} aria-label={t("chat.expand")} className="focus-ring inline-flex rounded-md p-2 text-ink-secondary transition-colors duration-fast hover:bg-surface-sunken hover:text-ink-primary">
+              <Icon name="openFull" />
+            </Link>
+          </Tooltip>
         ) : null}
+        <IconButton icon={assistant.pinned ? "unpin" : "pin"} label={t(assistant.pinned ? "chat.unpin" : "chat.pin")} aria-pressed={assistant.pinned} onClick={() => assistant.setPinned(!assistant.pinned)} />
         <IconButton icon="minimize" label={t("chat.minimize")} onClick={() => assistant.setOpen(false)} />
       </header>
       {assistant.session ? <SessionChat key={assistant.session} id={assistant.session} /> : <NewChat />}
     </motion.section>
   );
+}
+
+/** Makes room beside the page for the pinned chat, moving with it as it slides in. */
+export function AssistantRoom() {
+  const assistant = useAssistant();
+  const pathname = usePathname();
+  const { width } = useWindowSize();
+  const showing = assistant.open && assistant.pinned && width >= SMALL_SCREEN && !pathname.startsWith("/agent/sessions/");
+  return <motion.div aria-hidden initial={false} animate={{ width: showing ? readSpace(light.layout.dock) : 0 }} transition={SMOOTH} className="shrink-0" />;
 }
 
 /** The chat, from anywhere in the app. It tucks into a small pill when it isn't needed. */
@@ -79,15 +121,9 @@ export function AssistantDock() {
   const waiting = useWaitingCount();
   const running = sessions.data?.running ?? 0;
   // The session page already is this conversation, and two live views of one chat would fight.
-  const hidden = pathname.startsWith("/agent/sessions/");
-  const showing = assistant.open && !hidden;
-  useEffect(() => {
-    if (showing) document.documentElement.dataset.dock = "open";
-    else delete document.documentElement.dataset.dock;
-  }, [showing]);
-  if (hidden) return null;
+  if (pathname.startsWith("/agent/sessions/")) return null;
   return (
-    <AnimatePresence initial={false} mode="wait">
+    <AnimatePresence initial={false}>
       {assistant.open ? (
         <Panel key="panel" />
       ) : (

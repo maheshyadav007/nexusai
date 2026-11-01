@@ -9,6 +9,7 @@ import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Field } from "@/ui/primitives/Field";
 import { Input, Textarea } from "@/ui/primitives/Input";
+import { PageHeader } from "@/ui/primitives/PageHeader";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { Tabs } from "@/ui/primitives/Tabs";
 import { useToast } from "@/ui/primitives/Toast";
@@ -119,8 +120,8 @@ function MemoryBrowser() {
 
 export function MemoryScreen() {
   return (
-    <div className="mx-auto flex max-w-content flex-col gap-4 p-6">
-      <h1 className="font-serif text-display text-ink-primary">{t("nav.memory")}</h1>
+    <div className="mx-auto flex max-w-reading flex-col gap-5 p-6">
+      <PageHeader title={t("nav.memory")} />
       <Tabs label={t("nav.memory")} tabs={[{ value: "prompts", label: t("prompts.title"), content: <PromptsEditor /> }, { value: "memory", label: t("memory.title"), content: <MemoryBrowser /> }]} />
     </div>
   );

@@ -162,7 +162,7 @@ test("sending mail shows the mail itself, and nothing goes without a yes", async
 
 test("many requests at once are one decision, and one can be left out", async ({ page, request }) => {
   const current = await (await request.post("/api/queries/permissions.get", { data: {} })).json();
-  await request.post("/api/commands/permissions.save", { data: { ...current, tools: { ...current.tools, create_task: "ask" } } });
+  await request.post("/api/commands/permissions.save", { data: { ...current, tools: { ...current.tools, create_tasks: "ask" } } });
   await openFresh(page);
   await say(page, "add three tasks");
   const group = page.getByTestId("approval-group");
@@ -271,7 +271,65 @@ test("mail has folders, a reading pane, and categories people make", async ({ pa
   await page.goto("/mail/priority");
   await expect(page.getByTestId("thread-row").filter({ hasText: subject })).toBeVisible();
 
+  // Renaming in Settings carries the mail with it, and the sidebar follows from the event alone.
   await page.goto("/settings?section=categories");
-  await expect(page.getByTestId("category").filter({ hasText: "Invoices" })).toContainText("Made by you");
+  const category = page.getByTestId("category").filter({ hasText: "Invoices" });
+  await category.getByRole("button", { name: "Open Invoices" }).click();
+  await expect(category).toContainText("Made by you");
   await noViolations(page);
+  let asked = 0;
+  await page.route("**/api/queries/categories.list", (route) => {
+    asked += 1;
+    return route.continue();
+  });
+  await category.getByRole("textbox", { name: "Name" }).fill("Bills");
+  await category.getByRole("textbox", { name: "Name" }).blur();
+  const nav = page.getByRole("navigation", { name: "Main navigation" });
+  await expect(nav.getByRole("link", { name: "Bills" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Invoices" })).toHaveCount(0);
+  expect(asked).toBe(0);
+  await page.goto("/mail/category/Bills");
+  await expect(page.getByTestId("thread-row").filter({ hasText: subject })).toBeVisible();
+});
+
+test("counts in the sidebar change the moment mail moves, without asking the server", async ({ page, request }) => {
+  await request.post("/api/commands/categories.save", { data: { name: "Moved here" } });
+  await page.goto("/mail/all");
+  const nav = page.getByRole("navigation", { name: "Main navigation" });
+  await expect(nav.getByRole("link", { name: "Moved here" })).toBeVisible();
+  let asked = 0;
+  await page.route("**/api/queries/categories.list", (route) => {
+    asked += 1;
+    return route.continue();
+  });
+  const threads = (await (await request.post("/api/queries/threads.list", { data: { folder: "all" } })).json()) as { threads: { id: number; unread_count: number }[] };
+  const thread = threads.threads[0];
+  await request.post("/api/commands/thread.setRead", { data: { id: thread?.id, read: false } });
+  await request.post("/api/commands/thread.setCategory", { data: { id: thread?.id, category: "Moved here" } });
+  await expect(nav.getByRole("link", { name: "Moved here" })).toContainText("1");
+  expect(asked).toBe(0);
+});
+
+test("the chat can be attached to the right, slides in, and keeps the conversation", async ({ page }) => {
+  await page.goto("/today");
+  await page.getByTestId("assistant-pill").click();
+  const dock = page.getByTestId("assistant-dock");
+  await expect(dock).toHaveAttribute("data-pinned", "false");
+  const session = dock.getByRole("combobox", { name: "Switch conversation" });
+  const title = await session.textContent();
+  await dock.getByRole("button", { name: "Attach to the right" }).click();
+  await expect(dock).toHaveAttribute("data-pinned", "true");
+  await expect(session).toHaveText(title ?? "");
+  // The page moves over rather than sitting underneath.
+  await expect.poll(async () => {
+    const main = await page.locator("main").boundingBox();
+    const chat = await dock.boundingBox();
+    return main && chat ? main.x + main.width <= chat.x + 1 : false;
+  }).toBe(true);
+  await noViolations(page);
+  await page.reload();
+  await expect(page.getByTestId("assistant-dock")).toHaveAttribute("data-pinned", "true");
+  await page.getByRole("button", { name: "Float instead" }).click();
+  await expect(page.getByTestId("assistant-dock")).toHaveAttribute("data-pinned", "false");
+  await page.getByRole("button", { name: "Minimize" }).click();
 });

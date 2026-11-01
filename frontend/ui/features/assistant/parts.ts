@@ -10,7 +10,7 @@ export interface ToolPart {
 }
 
 /** A tool with its own card in the conversation. Everything else folds into the trace. */
-export const CARD_TOOLS = new Set(["ask_user", "send_mail", "create_reminder", "create_task", "create_category", "create_agent", "propose_task", "propose_reminder", "draft_reply"]);
+export const CARD_TOOLS = new Set(["ask_user", "send_mail", "create_reminders", "create_tasks", "create_categories", "create_agent", "propose_task", "propose_reminder", "draft_reply", "save_draft"]);
 
 export const toolName = (part: ToolPart) => part.type.slice("tool-".length);
 export const isFinished = (part: ToolPart) => part.state === "output-available" || part.state === "output-denied" || part.state === "output-error";

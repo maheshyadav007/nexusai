@@ -38,13 +38,6 @@ svg.lucide {
 }
 
 @layer components {
-  /* With room to spare, the open chat sits beside the page instead of covering it. */
-  @media (min-width: 1500px) {
-    :root[data-dock="open"] .dock-aware {
-      padding-right: calc(var(--layout-dock) + var(--space-4));
-    }
-  }
-
   /* A message box that grows with what's typed, up to a point. */
   .grow-field {
     field-sizing: content;

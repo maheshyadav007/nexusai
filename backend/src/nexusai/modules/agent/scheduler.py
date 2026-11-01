@@ -22,6 +22,13 @@ CREATE TABLE schedules (
 CREATE TABLE agent_defaults (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 """,
 )
+TIMES_MIGRATION = Migration(
+    "agent_schedule_times_001",
+    """
+ALTER TABLE schedules ADD COLUMN created TEXT;
+ALTER TABLE schedules ADD COLUMN updated TEXT;
+""",
+)
 # A closed laptop can skip any timer, so the wait is capped and the clock is re-read on waking.
 LONGEST_SLEEP_SECONDS = 300
 OVERDUE_NOTICE_KIND = "overdue"

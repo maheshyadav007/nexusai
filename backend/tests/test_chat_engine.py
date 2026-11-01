@@ -231,9 +231,13 @@ def test_a_reminder_asked_for_is_set_straight_away(client: TestClient, script: S
     result = use_tool(
         client,
         script,
-        ToolCall("c1", "create_reminder", {"title": "Call Sam", "when": "2031-05-01T09:00"}),
+        ToolCall(
+            "c1",
+            "create_reminders",
+            {"reminders": [{"title": "Call Sam", "when": "2031-05-01T09:00"}]},
+        ),
     )
-    assert "Reminder set" in result
+    assert "Reminders set" in result
     reminders = client.post("/api/queries/reminders.list").json()["reminders"]
     assert [(r["title"], r["proposed"]) for r in reminders] == [("Call Sam", False)]
 
@@ -250,12 +254,12 @@ def test_a_session_that_read_mail_asks_before_changing_anything(
     session = new_session(client)
     script.replies = [
         [ToolCall("c1", "read_thread", {"thread_id": thread["id"]})],
-        [ToolCall("c2", "create_task", {"title": "From the mail"})],
+        [ToolCall("c2", "create_tasks", {"tasks": [{"title": "From the mail"}]})],
         [TextChunk("Done.")],
     ]
     done = chat_in_background(client, session, "Read it, then act")
     approval = approve_when_asked(client)
-    assert approval["tool"] == "create_task"
+    assert approval["tool"] == "create_tasks"
     assert "read mail" in approval["reason"]
     wait(lambda: done, "finish")
     tasks = client.post("/api/queries/tasks.list", json={}).json()["tasks"]
@@ -264,21 +268,28 @@ def test_a_session_that_read_mail_asks_before_changing_anything(
 
 def test_a_tool_turned_off_is_refused_and_says_so(client: TestClient, script: Script) -> None:
     current = client.post("/api/queries/permissions.get").json()
-    client.post("/api/commands/permissions.save", json={**current, "tools": {"create_task": "off"}})
-    result = use_tool(client, script, ToolCall("c1", "create_task", {"title": "No"}))
+    client.post(
+        "/api/commands/permissions.save", json={**current, "tools": {"create_tasks": "off"}}
+    )
+    result = use_tool(client, script, ToolCall("c1", "create_tasks", {"tasks": [{"title": "No"}]}))
     assert result.startswith("Not allowed")
     assert client.post("/api/queries/tasks.list", json={}).json()["tasks"] == []
     catalog = client.post("/api/queries/tools.catalog").json()["tools"]
-    assert next(t for t in catalog if t["name"] == "create_task")["level"] == "off"
+    assert next(t for t in catalog if t["name"] == "create_tasks")["level"] == "off"
 
 
 def test_one_tool_can_ask_while_its_group_allows(client: TestClient, script: Script) -> None:
     current = client.post("/api/queries/permissions.get").json()
-    client.post("/api/commands/permissions.save", json={**current, "tools": {"create_task": "ask"}})
+    client.post(
+        "/api/commands/permissions.save", json={**current, "tools": {"create_tasks": "ask"}}
+    )
     session = new_session(client)
-    script.replies = [[ToolCall("c1", "create_task", {"title": "Maybe"})], [TextChunk("Ok.")]]
+    script.replies = [
+        [ToolCall("c1", "create_tasks", {"tasks": [{"title": "Maybe"}]})],
+        [TextChunk("Ok.")],
+    ]
     done = chat_in_background(client, session, "Add it")
-    assert approve_when_asked(client)["tool"] == "create_task"
+    assert approve_when_asked(client)["tool"] == "create_tasks"
     wait(lambda: done, "finish")
 
 
@@ -362,9 +373,7 @@ def mail_session(client: TestClient, script: Script, fake: FakeMail) -> tuple[st
 
 def file_calls(thread: int, count: int, start: int = 0) -> list[ToolCall]:
     return [
-        ToolCall(
-            f"f{start + n}", "set_thread_category", {"thread_id": thread, "category": "Finance"}
-        )
+        ToolCall(f"f{start + n}", "update_mail", {"thread_ids": [thread], "category": "Finance"})
         for n in range(count)
     ]
 
@@ -400,7 +409,7 @@ def test_a_session_allowance_holds_for_later_calls_even_after_reading_mail(
     script.replies = [file_calls(thread, 1, 10), [TextChunk("Two.")]]
     chat(client, session, "File it again")
     assert client.post("/api/queries/approvals.list").json()["approvals"] == []
-    assert last_tool_result(script) == "Filed under Finance."
+    assert last_tool_result(script) == "Updated 1 conversations."
 
 
 def test_allowing_one_tool_does_not_allow_another(
@@ -414,9 +423,12 @@ def test_allowing_one_tool_does_not_allow_another(
         json={"id": pending(client, 1)[0]["id"], "choice": "session"},
     )
     wait(lambda: done, "first")
-    script.replies = [[ToolCall("t1", "create_task", {"title": "Other"})], [TextChunk("Ok.")]]
+    script.replies = [
+        [ToolCall("t1", "create_tasks", {"tasks": [{"title": "Other"}]})],
+        [TextChunk("Ok.")],
+    ]
     done = chat_in_background(client, session, "Add a task")
-    assert pending(client, 1)[0]["tool"] == "create_task"
+    assert pending(client, 1)[0]["tool"] == "create_tasks"
     client.post(
         "/api/commands/approvals.decide",
         json={"id": pending(client, 1)[0]["id"], "choice": "deny"},
@@ -452,12 +464,16 @@ def test_many_can_be_decided_together_with_some_declined(
     client: TestClient, script: Script
 ) -> None:
     current = client.post("/api/queries/permissions.get").json()
-    client.post("/api/commands/permissions.save", json={**current, "tools": {"create_task": "ask"}})
+    client.post(
+        "/api/commands/permissions.save", json={**current, "tools": {"create_tasks": "ask"}}
+    )
     session = new_session(client)
-    calls = [ToolCall(f"t{n}", "create_task", {"title": f"Task {n}"}) for n in range(3)]
+    calls = [
+        ToolCall(f"t{n}", "create_tasks", {"tasks": [{"title": f"Task {n}"}]}) for n in range(3)
+    ]
     script.replies = [calls, [TextChunk("Done.")]]
     done = chat_in_background(client, session, "Add three")
-    by_title = {item["summary"][-6:]: item["id"] for item in pending(client, 3)}
+    by_title = {item["summary"].removeprefix("Add "): item["id"] for item in pending(client, 3)}
     client.post(
         "/api/commands/approvals.decideMany",
         json={"allow": [by_title["Task 0"], by_title["Task 2"]], "deny": [by_title["Task 1"]]},
@@ -473,12 +489,16 @@ def test_declining_one_while_remembering_the_rest_is_respected(
     client: TestClient, script: Script
 ) -> None:
     current = client.post("/api/queries/permissions.get").json()
-    client.post("/api/commands/permissions.save", json={**current, "tools": {"create_task": "ask"}})
+    client.post(
+        "/api/commands/permissions.save", json={**current, "tools": {"create_tasks": "ask"}}
+    )
     session = new_session(client)
-    calls = [ToolCall(f"t{n}", "create_task", {"title": f"Task {n}"}) for n in range(3)]
+    calls = [
+        ToolCall(f"t{n}", "create_tasks", {"tasks": [{"title": f"Task {n}"}]}) for n in range(3)
+    ]
     script.replies = [calls, [TextChunk("Done.")]]
     done = chat_in_background(client, session, "Add three")
-    by_title = {item["summary"][-6:]: item["id"] for item in pending(client, 3)}
+    by_title = {item["summary"].removeprefix("Add "): item["id"] for item in pending(client, 3)}
     client.post(
         "/api/commands/approvals.decideMany",
         json={

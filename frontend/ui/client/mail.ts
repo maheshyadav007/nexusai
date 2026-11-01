@@ -2,7 +2,7 @@
 
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { command, query } from "./api";
-import type { Draft, ListThreads, MailProfile, MoveThread, RuleSet, SaveCategory, SearchMail, SetThreadStatus } from "./contracts.generated";
+import type { Draft, ListThreads, MailProfile, MoveThread, RuleSet, SaveCategory, SearchMail, SetThreadStatus, UpdateCategory } from "./contracts.generated";
 import { useHomeReady } from "./home";
 
 export type FolderRole = NonNullable<ListThreads["folder"]>;
@@ -130,13 +130,16 @@ function useCategoryCommand<I, R>(run: (input: I) => Promise<R>) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: run,
-    onSuccess: () => {
-      void client.invalidateQueries({ queryKey: ["categories"] });
+    // The answer is the new list, and an event brings it to every other window too.
+    onSuccess: (result) => {
+      client.setQueryData(["categories"], { categories: (result as { categories: unknown }).categories });
       void client.invalidateQueries({ queryKey: ["threads"] });
     },
   });
 }
 
 export const useSaveCategory = () => useCategoryCommand((input: SaveCategory) => command("categories.save", input));
+export const useUpdateCategory = () => useCategoryCommand((input: UpdateCategory) => command("categories.update", input));
+export const useReorderCategories = () => useCategoryCommand((names: string[]) => command("categories.reorder", { names }));
 export const useRemoveCategory = () => useCategoryCommand((name: string) => command("categories.remove", { name }));
 export const useDecideCategory = () => useCategoryCommand((input: { name: string; accept: boolean }) => command("categories.decide", input));

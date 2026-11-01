@@ -1,6 +1,6 @@
 import json
 import threading
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from nexusai.contracts.agent import (
@@ -117,6 +117,7 @@ agent_module = Module(
         channel.QUESTIONS_MIGRATION,
         mail_agent.MIGRATION,
         scheduler.MIGRATION,
+        scheduler.TIMES_MIGRATION,
     ],
 )
 _runtime: runtime.SessionRuntime | None = None
@@ -562,16 +563,18 @@ def save_schedule(command: Schedule, ctx: Context) -> ScheduleList:
         command.token_limit,
         next_run,
     )
+    now = datetime.now(UTC).isoformat()
     with ctx.bus.unit_of_work() as work:
         if command.id is None:
             work.tx.execute(
-                "INSERT INTO schedules (title, prompt, kind, every, time, weekday, date, enabled, token_limit, next_run) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                values,
+                "INSERT INTO schedules (title, prompt, kind, every, time, weekday, date, enabled, token_limit, next_run, created, updated)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (*values, now, now),
             )
         else:
             work.tx.execute(
-                "UPDATE schedules SET title = ?, prompt = ?, kind = ?, every = ?, time = ?, weekday = ?, date = ?, enabled = ?, token_limit = ?, next_run = ? WHERE id = ?",
-                (*values, command.id),
+                "UPDATE schedules SET title = ?, prompt = ?, kind = ?, every = ?, time = ?, weekday = ?, date = ?, enabled = ?, token_limit = ?, next_run = ?, updated = ? WHERE id = ?",
+                (*values, now, command.id),
             )
         work.emit("schedule.changed", {}, source="agent", trace_id=ctx.trace_id)
     if _scheduler:

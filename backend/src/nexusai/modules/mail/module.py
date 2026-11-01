@@ -4,9 +4,11 @@ import threading
 from datetime import UTC, datetime
 from email.utils import parseaddr
 from pathlib import Path
+from typing import Any
 
 import structlog
 
+from nexusai.contracts.events import AppEvent
 from nexusai.contracts.mail import (
     AddPstImport,
     CategoryList,
@@ -35,6 +37,7 @@ from nexusai.contracts.mail import (
     MailRule,
     MailStatus,
     MailTestResult,
+    MergeCategories,
     MoveThread,
     PstImport,
     PstImportAction,
@@ -42,6 +45,7 @@ from nexusai.contracts.mail import (
     Recipient,
     RemoveDraft,
     RemoveMailAccount,
+    ReorderCategories,
     ReplyContext,
     ReplyDraft,
     RuleActions,
@@ -63,6 +67,7 @@ from nexusai.contracts.mail import (
     ThreadList,
     ThreadUpdated,
     ThreadView,
+    UpdateCategory,
 )
 from nexusai.kernel.module import CommandError, Context, Module
 from nexusai.modules.mail import accounts, pst, rules, send, store
@@ -402,6 +407,23 @@ def set_category(command: SetThreadCategory, ctx: Context) -> MailDone:
 # Rules
 
 
+def upsert_rule(ctx: Context, rule: MailRule) -> None:
+    def changed(existing: list[MailRule]) -> list[MailRule]:
+        return [*(item for item in existing if item.name != rule.name), rule]
+
+    rules.change_rules(ctx.config.home, changed)
+    with ctx.bus.unit_of_work() as work:
+        work.emit("rules.changed", {"count": 1}, source="mail", trace_id=ctx.trace_id)
+
+
+def delete_rules(ctx: Context, names: list[str]) -> None:
+    rules.change_rules(
+        ctx.config.home, lambda existing: [rule for rule in existing if rule.name not in names]
+    )
+    with ctx.bus.unit_of_work() as work:
+        work.emit("rules.changed", {"count": len(names)}, source="mail", trace_id=ctx.trace_id)
+
+
 @mail_module.query("rules.get")
 def get_rules(query: GetRules, ctx: Context) -> RuleSet:
     return RuleSet(rules=rules.load_rules(ctx.config.home))
@@ -420,7 +442,10 @@ def save_rules(command: RuleSet, ctx: Context) -> RuleSet:
 # Categories
 
 CATEGORY_RULE_PREFIX = "Category: "
+# What each Home last announced, so a count that didn't change doesn't send an event.
+_last_categories: dict[str, list[dict[str, Any]]] = {}
 SUGGESTED, DECLINED = 1, 2
+UNORDERED = 1_000_000
 
 
 def category_rows(ctx: Context) -> list[MailCategory]:
@@ -437,6 +462,7 @@ def category_rows(ctx: Context) -> list[MailCategory]:
     }
     found = []
     named = set()
+    positions: dict[str, int] = {}
     for row in db.fetch_all("SELECT * FROM mail_categories ORDER BY name"):
         named.add(row["name"])
         # One the person turned down stays recorded, so it isn't suggested again.
@@ -454,8 +480,11 @@ def category_rows(ctx: Context) -> list[MailCategory]:
                 subject=row["subject"],
                 count=count,
                 unread=unread or 0,
+                created=row["created"],
+                updated=row["updated"] or row["created"],
             )
         )
+        positions[row["name"]] = row["position"]
     # Rules can name a category nobody created, like Newsletters.
     for name, (count, unread) in sorted(counts.items()):
         if name not in named:
@@ -469,7 +498,14 @@ def category_rows(ctx: Context) -> list[MailCategory]:
                     unread=unread or 0,
                 )
             )
-    return sorted(found, key=lambda category: category.name.casefold())
+    # Those the person put in order come first, and new ones follow by name.
+    return sorted(
+        found,
+        key=lambda category: (
+            positions.get(category.name) or UNORDERED,
+            category.name.casefold(),
+        ),
+    )
 
 
 def _apply_category_rule(ctx: Context, name: str, sender: str | None, subject: str | None) -> int:
@@ -480,12 +516,16 @@ def _apply_category_rule(ctx: Context, name: str, sender: str | None, subject: s
     if subject:
         conditions.append(RuleCondition(field="subject", value=subject))
     rule_name = CATEGORY_RULE_PREFIX + name
-    kept = [rule for rule in rules.load_rules(ctx.config.home) if rule.name != rule_name]
-    if conditions:
-        kept.append(
-            MailRule(name=rule_name, conditions=conditions, actions=RuleActions(category=name))
-        )
-    rules.save_rules(ctx.config.home, RuleSet(rules=kept))
+
+    def changed(existing: list[MailRule]) -> list[MailRule]:
+        kept = [rule for rule in existing if rule.name != rule_name]
+        if conditions:
+            kept.append(
+                MailRule(name=rule_name, conditions=conditions, actions=RuleActions(category=name))
+            )
+        return kept
+
+    rules.change_rules(ctx.config.home, changed)
     if not conditions:
         return 0
     where = ["t.id = m.thread_id"]
@@ -508,13 +548,33 @@ def _apply_category_rule(ctx: Context, name: str, sender: str | None, subject: s
 
 def _categories_changed(ctx: Context) -> None:
     with ctx.bus.unit_of_work() as work:
-        work.emit("categories.changed", {}, source="mail", trace_id=ctx.trace_id)
+        _announce_categories(work, ctx)
         work.emit(
             "mail.changed",
             {"threads": 0, "reason": "categories"},
             source="mail",
             trace_id=ctx.trace_id,
         )
+
+
+def _announce_categories(work: Any, ctx: Context) -> None:
+    """The event carries the new list and counts, so every screen is right without asking."""
+    current = [row.model_dump(mode="json") for row in category_rows(ctx)]
+    _last_categories[str(ctx.config.home)] = current
+    work.emit("categories.changed", {"categories": current}, source="mail", trace_id=ctx.trace_id)
+
+
+@mail_module.on("thread.updated", "mail.category_counts_thread")
+@mail_module.on("mail.changed", "mail.category_counts_mail")
+@mail_module.on("mail.accountsChanged", "mail.category_counts_account")
+def recount_categories(event: AppEvent, ctx: Context) -> None:
+    """Anything that moves mail can change a count. Nothing goes out if none did."""
+    if _last_categories.get(str(ctx.config.home)) == [
+        row.model_dump(mode="json") for row in category_rows(ctx)
+    ]:
+        return
+    with ctx.bus.unit_of_work() as work:
+        _announce_categories(work, ctx)
 
 
 @mail_module.query("categories.list")
@@ -542,6 +602,98 @@ def save_category(command: SaveCategory, ctx: Context) -> CategorySaved:
     filed = _apply_category_rule(ctx, command.name, command.sender, command.subject)
     _categories_changed(ctx)
     return CategorySaved(categories=category_rows(ctx), filed=filed)
+
+
+@mail_module.command("categories.update")
+def update_category(command: UpdateCategory, ctx: Context) -> CategoryList:
+    db = ctx.bus.db
+    rows = db.fetch_all("SELECT * FROM mail_categories WHERE name = ?", (command.name,))
+    row = rows[0] if rows else None
+    in_use = db.fetch_all("SELECT 1 FROM threads WHERE category = ? LIMIT 1", (command.name,))
+    if row is None and not in_use:
+        raise CommandError("category.not_found", "That category no longer exists.", 404)
+    new_name = command.new_name or command.name
+    if new_name != command.name:
+        taken = db.fetch_all("SELECT 1 FROM mail_categories WHERE name = ?", (new_name,))
+        if taken:
+            raise CommandError(
+                "category.exists", f"There's already a category called {new_name}.", 409
+            )
+    sender = None if command.clear_rule else command.sender or (row["sender"] if row else None)
+    subject = None if command.clear_rule else command.subject or (row["subject"] if row else None)
+    in_priority = (
+        command.in_priority if command.in_priority is not None else bool(row and row["in_priority"])
+    )
+    now = datetime.now(UTC).isoformat()
+    with db.transaction() as tx:
+        if row is None:
+            tx.execute(
+                "INSERT INTO mail_categories (name, source, created) VALUES (?, 'user', ?)",
+                (command.name, now),
+            )
+        tx.execute(
+            "UPDATE mail_categories SET name = ?, in_priority = ?, sender = ?, subject = ?,"
+            " proposed = 0, updated = ? WHERE name = ?",
+            (new_name, int(in_priority), sender, subject, now, command.name),
+        )
+        tx.execute("UPDATE threads SET category = ? WHERE category = ?", (new_name, command.name))
+    if new_name != command.name:
+        # Rules the person wrote themselves may file into it too.
+        def renamed(existing: list[MailRule]) -> list[MailRule]:
+            return [
+                rule.model_copy(
+                    update={
+                        "actions": rule.actions.model_copy(update={"category": new_name}),
+                    }
+                )
+                if rule.actions.category == command.name
+                else rule
+                for rule in existing
+                if rule.name != CATEGORY_RULE_PREFIX + command.name
+            ]
+
+        rules.change_rules(ctx.config.home, renamed)
+    _apply_category_rule(ctx, new_name, sender, subject)
+    _categories_changed(ctx)
+    return CategoryList(categories=category_rows(ctx))
+
+
+@mail_module.command("categories.merge")
+def merge_categories(command: MergeCategories, ctx: Context) -> CategoryList:
+    db = ctx.bus.db
+    now = datetime.now(UTC).isoformat()
+    others = [name for name in command.names if name != command.into]
+    with db.transaction() as tx:
+        tx.execute(
+            "INSERT OR IGNORE INTO mail_categories (name, source, created) VALUES (?, 'user', ?)",
+            (command.into, now),
+        )
+        for name in others:
+            tx.execute("UPDATE threads SET category = ? WHERE category = ?", (command.into, name))
+            tx.execute("DELETE FROM mail_categories WHERE name = ?", (name,))
+
+    def renamed(existing: list[MailRule]) -> list[MailRule]:
+        return [
+            rule.model_copy(
+                update={"actions": rule.actions.model_copy(update={"category": command.into})}
+            )
+            if rule.actions.category in others
+            else rule
+            for rule in existing
+        ]
+
+    rules.change_rules(ctx.config.home, renamed)
+    _categories_changed(ctx)
+    return CategoryList(categories=category_rows(ctx))
+
+
+@mail_module.command("categories.reorder")
+def reorder_categories(command: ReorderCategories, ctx: Context) -> CategoryList:
+    with ctx.bus.db.transaction() as tx:
+        for position, name in enumerate(command.names, start=1):
+            tx.execute("UPDATE mail_categories SET position = ? WHERE name = ?", (position, name))
+    _categories_changed(ctx)
+    return CategoryList(categories=category_rows(ctx))
 
 
 @mail_module.command("categories.remove")

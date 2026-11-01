@@ -96,11 +96,13 @@ test("new mail is judged, and reaches Today, the thread and the channel", async 
 
 test("a proposed task is accepted, finished, and removed", async ({ page }) => {
   await page.goto("/planner/tasks");
+  await page.getByRole("radio", { name: /^Suggested/ }).click();
   const proposed = page.getByTestId("task").filter({ hasText: "Reply to this mail" }).first();
   await expect(proposed).toBeVisible();
   await noViolations(page);
   await proposed.getByRole("button", { name: "Accept" }).click();
   await expect(page.getByRole("button", { name: "Accept" })).toHaveCount(0);
+  await page.getByRole("radio", { name: /^To do/ }).click();
 
   const title = unique("Send the report");
   await page.getByRole("textbox", { name: "New task" }).fill(title);
@@ -110,12 +112,18 @@ test("a proposed task is accepted, finished, and removed", async ({ page }) => {
 
   await mine.getByRole("checkbox").click();
   await expect(mine).toHaveCount(0);
-  await page.getByRole("checkbox", { name: "Show finished tasks" }).click();
+  await page.getByRole("radio", { name: /^Done/ }).click();
   await expect(mine).toBeVisible();
+  await mine.getByRole("button", { name: `Open ${title}` }).click();
+  await expect(mine.getByTestId("task-times")).toContainText("Added");
+  await expect(mine.getByTestId("task-times")).toContainText("finished");
   await mine.getByRole("button", { name: `Remove ${title}` }).click();
   await expect(mine).toHaveCount(0);
 
-  await proposed.getByRole("button", { name: "Do it for me" }).click();
+  await page.getByRole("radio", { name: /^To do/ }).click();
+  const accepted = page.getByTestId("task").filter({ hasText: "Reply to this mail" }).first();
+  await accepted.getByRole("button", { name: "Open Reply to this mail" }).click();
+  await accepted.getByRole("button", { name: "Do it for me" }).click();
   await expect(page.getByTestId("assistant-dock")).toBeVisible();
   await expect(page.getByTestId("user-message")).toContainText("Please do this task for me.");
 });
@@ -124,14 +132,18 @@ test("a reminder is added and snoozed", async ({ page }) => {
   await page.goto("/planner/reminders");
   const title = unique("Call the vendor");
   await page.getByRole("textbox", { name: "Remind me to" }).fill(title);
+  await page.getByRole("button", { name: "Tomorrow morning" }).click();
   await page.getByLabel("When").fill("2031-05-01T09:00");
   await page.getByRole("button", { name: "Add reminder" }).click();
   const row = page.getByTestId("reminder").filter({ hasText: title });
   await expect(row).toBeVisible();
   await noViolations(page);
   const before = await row.textContent();
-  await row.getByRole("button", { name: "Snooze an hour" }).click();
+  await row.getByRole("button", { name: "Snooze" }).click();
+  await page.getByRole("menuitem", { name: "In an hour" }).click();
   await expect.poll(() => row.textContent()).not.toBe(before);
+  await row.getByRole("button", { name: `Open ${title}` }).click();
+  await expect(row.getByTestId("reminder-times")).toContainText("Added");
   await row.getByRole("button", { name: `Remove ${title}` }).click();
   await expect(row).toHaveCount(0);
 });
@@ -153,12 +165,11 @@ test("a schedule is created and runs on demand", async ({ page }) => {
 
   // Daily prep's time and its nightly limit are the person's to set.
   const prep = page.getByTestId("schedule").filter({ hasText: "Daily prep" });
-  await prep.getByRole("button", { name: "Edit", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Edit Daily prep" });
+  await prep.getByRole("button", { name: "Edit Daily prep" }).click();
   await noViolations(page);
-  await dialog.getByLabel("Time").fill("05:30");
-  await dialog.getByRole("spinbutton", { name: "Token limit for each run" }).fill("20000");
-  await dialog.getByRole("button", { name: "Save" }).click();
+  await prep.getByLabel("Time").fill("05:30");
+  await prep.getByRole("spinbutton", { name: "Token limit for each run" }).fill("20000");
+  await prep.getByRole("button", { name: "Save" }).click();
   await expect(prep).toContainText("Limit: 20,000 tokens");
   await expect(prep).toContainText("5:30");
 

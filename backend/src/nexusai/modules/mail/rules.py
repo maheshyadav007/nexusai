@@ -2,6 +2,9 @@
 
 import json
 import re
+import threading
+import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -21,6 +24,9 @@ class RuleMatch:
     @property
     def why(self) -> str:
         return f"Matched the rule “{self.name}”"
+
+
+_WRITING = threading.Lock()
 
 
 def _builtin(parsed: ParsedMessage) -> RuleMatch | None:
@@ -72,7 +78,19 @@ def load_rules(home: Path) -> list[MailRule]:
 
 
 def save_rules(home: Path, rules: RuleSet) -> None:
+    with _WRITING:
+        _write(home, rules)
+
+
+def _write(home: Path, rules: RuleSet) -> None:
     path = rules_path(home)
-    temporary = path.with_suffix(".tmp")
+    # Its own name each time, so two saves at once can't take each other's file away.
+    temporary = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
     temporary.write_text(rules.model_dump_json(indent=2))
     temporary.replace(path)
+
+
+def change_rules(home: Path, change: Callable[[list[MailRule]], list[MailRule]]) -> None:
+    """Reads and writes as one step, so tools running side by side can't lose each other's rule."""
+    with _WRITING:
+        _write(home, RuleSet(rules=change(load_rules(home))))

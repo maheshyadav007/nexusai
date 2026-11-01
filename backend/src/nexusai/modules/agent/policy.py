@@ -86,44 +86,81 @@ class ToolEntry:
     default: Literal["off", "ask", "allow"] | None = None
 
 
-FILES, COMMANDS, MAIL, PLANNER, DATA, AGENTS = (
+FILES, COMMANDS, MAIL, CATEGORIES, PLANNER, DATA, AGENTS = (
     "Files",
     "Commands",
     "Mail",
+    "Categories and rules",
     "Tasks and reminders",
     "Your data",
     "Agents",
 )
+ASK: Literal["ask"] = "ask"
 TOOL_ENTRIES = (
+    ToolEntry("list_folder", FILES, "See folders", "List what's in a folder.", "read"),
     ToolEntry("read_file", FILES, "Read files", "Open a file on this computer.", "read"),
     ToolEntry("write_file", FILES, "Write files", "Create or replace a file.", "write"),
     ToolEntry("edit_file", FILES, "Edit files", "Change part of a file.", "write"),
+    ToolEntry("move_file", FILES, "Move files", "Move or rename a file.", "write"),
+    ToolEntry("delete_file", FILES, "Delete files", "Remove a file.", "write", ASK),
     ToolEntry(
         "run_command", COMMANDS, "Run commands", "Run a command with your rights.", "command"
     ),
     ToolEntry("search_mail", MAIL, "Search mail", "Find mail and attachments.", "read"),
     ToolEntry("read_thread", MAIL, "Read mail", "Open a conversation.", "read"),
     ToolEntry("list_mail", MAIL, "List mail", "See what's in a folder or category.", "read"),
-    ToolEntry("list_categories", MAIL, "See categories", "See your mail categories.", "read"),
-    ToolEntry("create_category", MAIL, "Create categories", "Add a category and its rule.", "data"),
-    ToolEntry(
-        "set_thread_category", MAIL, "File mail", "Move a conversation to a category.", "data"
-    ),
-    ToolEntry("archive_thread", MAIL, "Archive mail", "Archive a conversation.", "data"),
+    ToolEntry("update_mail", MAIL, "Organize mail", "File, flag, mark and archive mail.", "data"),
+    ToolEntry("trash_mail", MAIL, "Delete mail", "Move mail to Trash.", "data", ASK),
+    ToolEntry("list_drafts", MAIL, "See drafts", "Read your saved drafts.", "read"),
+    ToolEntry("save_draft", MAIL, "Write drafts", "Create or change a draft.", "data"),
+    ToolEntry("delete_drafts", MAIL, "Delete drafts", "Remove saved drafts.", "data"),
     ToolEntry("send_mail", MAIL, "Send mail", "Sending always shows you the mail first.", "send"),
-    ToolEntry("create_task", PLANNER, "Add tasks", "Add a task when you ask.", "data"),
-    ToolEntry("complete_task", PLANNER, "Finish tasks", "Mark a task done.", "data"),
-    ToolEntry("list_tasks", PLANNER, "See tasks", "Read your task list.", "read"),
-    ToolEntry("create_reminder", PLANNER, "Set reminders", "Set a reminder when you ask.", "data"),
-    ToolEntry("list_reminders", PLANNER, "See reminders", "Read your reminders.", "read"),
-    ToolEntry("search_documents", DATA, "Search documents", "Find a document.", "read"),
-    ToolEntry("read_document", DATA, "Read documents", "Open a document's text.", "read"),
-    ToolEntry("read_database", DATA, "Look up data", "Answer questions from your data.", "read"),
+    ToolEntry("list_categories", CATEGORIES, "See categories", "See your mail categories.", "read"),
+    ToolEntry("create_categories", CATEGORIES, "Create categories", "Add categories.", "data"),
     ToolEntry(
-        "create_agent", AGENTS, "Create agents", "Make an agent that runs by itself.", "data", "ask"
+        "update_category", CATEGORIES, "Change categories", "Rename one, or set its rule.", "data"
     ),
+    ToolEntry(
+        "merge_categories", CATEGORIES, "Merge categories", "Fold categories into one.", "data"
+    ),
+    ToolEntry("reorder_categories", CATEGORIES, "Reorder categories", "Set their order.", "data"),
+    ToolEntry(
+        "delete_categories", CATEGORIES, "Remove categories", "Mail stays, unlabeled.", "data"
+    ),
+    ToolEntry("list_rules", CATEGORIES, "See rules", "Read your mail rules.", "read"),
+    ToolEntry("save_rule", CATEGORIES, "Write rules", "Create or change a mail rule.", "data"),
+    ToolEntry("delete_rules", CATEGORIES, "Remove rules", "Delete mail rules.", "data"),
+    ToolEntry("list_tasks", PLANNER, "See tasks", "Read your task list.", "read"),
+    ToolEntry("create_tasks", PLANNER, "Add tasks", "Add tasks when you ask.", "data"),
+    ToolEntry("update_tasks", PLANNER, "Change tasks", "Edit or finish tasks.", "data"),
+    ToolEntry("delete_tasks", PLANNER, "Remove tasks", "Delete tasks.", "data"),
+    ToolEntry("list_reminders", PLANNER, "See reminders", "Read your reminders.", "read"),
+    ToolEntry("create_reminders", PLANNER, "Set reminders", "Set reminders when you ask.", "data"),
+    ToolEntry("update_reminders", PLANNER, "Change reminders", "Reschedule or snooze.", "data"),
+    ToolEntry("delete_reminders", PLANNER, "Remove reminders", "Delete reminders.", "data"),
+    ToolEntry("search_documents", DATA, "Search documents", "Find a document.", "read"),
+    ToolEntry("list_documents", DATA, "List documents", "See documents and folders.", "read"),
+    ToolEntry("read_document", DATA, "Read documents", "Open a document's text.", "read"),
+    ToolEntry("update_documents", DATA, "Organize documents", "Move or tag documents.", "data"),
+    ToolEntry(
+        "delete_documents", DATA, "Remove documents", "Delete uploaded documents.", "data", ASK
+    ),
+    ToolEntry("read_database", DATA, "Look up data", "Answer questions from your data.", "read"),
+    ToolEntry("list_memory", DATA, "See memory", "Read what's remembered.", "read"),
+    ToolEntry("update_memory", DATA, "Change memory", "Edit something remembered.", "data"),
+    ToolEntry("forget_memory", DATA, "Forget", "Remove something remembered.", "data"),
+    ToolEntry("list_panels", DATA, "See panels", "Read your panels.", "read"),
+    ToolEntry("save_panel", DATA, "Write panels", "Create or change a panel.", "data"),
+    ToolEntry("remove_panels", DATA, "Remove panels", "Delete panels.", "data"),
     ToolEntry("list_agents", AGENTS, "See agents", "See your scheduled agents.", "read"),
-    ToolEntry("remove_agent", AGENTS, "Remove agents", "Delete a scheduled agent.", "data", "ask"),
+    ToolEntry(
+        "create_agent", AGENTS, "Create agents", "Make an agent that runs by itself.", "data", ASK
+    ),
+    ToolEntry(
+        "update_agent", AGENTS, "Change agents", "Edit, pause or resume an agent.", "data", ASK
+    ),
+    ToolEntry("run_agent", AGENTS, "Run agents", "Start an agent now.", "data"),
+    ToolEntry("remove_agents", AGENTS, "Remove agents", "Delete scheduled agents.", "data", ASK),
 )
 TOOLS_BY_NAME = {entry.name: entry for entry in TOOL_ENTRIES}
 

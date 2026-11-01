@@ -225,35 +225,44 @@ export function MailCard({ part, approval }: { part: ToolPart; approval?: ToolAp
 }
 
 const RESULT: Readonly<Record<string, { icon: IconName; href: string; open: Parameters<typeof t>[0] }>> = {
-  create_task: { icon: "tasks", href: "/planner/tasks", open: "chat.result.openTasks" },
+  create_tasks: { icon: "tasks", href: "/planner/tasks", open: "chat.result.openTasks" },
   propose_task: { icon: "tasks", href: "/planner/tasks", open: "chat.result.openTasks" },
-  create_reminder: { icon: "reminders", href: "/planner/reminders", open: "chat.result.openReminders" },
+  create_reminders: { icon: "reminders", href: "/planner/reminders", open: "chat.result.openReminders" },
   propose_reminder: { icon: "reminders", href: "/planner/reminders", open: "chat.result.openReminders" },
-  create_category: { icon: "categories", href: "/mail/priority", open: "chat.result.openMail" },
+  create_categories: { icon: "categories", href: "/settings?section=categories", open: "chat.result.openCategories" },
   create_agent: { icon: "schedules", href: "/agent/schedules", open: "chat.result.openAgents" },
   draft_reply: { icon: "drafts", href: "/mail/drafts", open: "chat.result.openDrafts" },
+  save_draft: { icon: "drafts", href: "/mail/drafts", open: "chat.result.openDrafts" },
 };
+
+/** Tools take a list or one item. Either way it's shown as the things that were made. */
+function itemsOf(part: ToolPart): Record<string, unknown>[] {
+  const input = part.input ?? {};
+  const list = input.tasks ?? input.reminders ?? input.categories;
+  return Array.isArray(list) ? (list as Record<string, unknown>[]) : [input];
+}
 
 /** What the agent made for the person, and where to find it. The same kind shares one card. */
 export function ResultCard({ parts }: { parts: readonly ToolPart[] }) {
   const format = useDateTime();
   const seen = new Set<string>();
-  const rows = parts.flatMap((part) => {
-    const name = toolName(part);
-    const input = part.input ?? {};
-    const title = String(input.title ?? input.name ?? input.subject ?? t(`tool.${name}` as Parameters<typeof t>[0]));
-    if (seen.has(title)) return [];
-    seen.add(title);
-    return [{ part, name, title, when: typeof input.when === "string" ? format(input.when) : typeof input.due === "string" ? input.due : null }];
-  });
+  const rows = parts.flatMap((part) =>
+    itemsOf(part).flatMap((input, index) => {
+      const name = toolName(part);
+      const title = String(input.title ?? input.name ?? input.subject ?? t(`tool.${name}` as Parameters<typeof t>[0]));
+      if (seen.has(title)) return [];
+      seen.add(title);
+      return [{ key: `${part.toolCallId}-${index}`, part, name, title, when: typeof input.when === "string" ? format(input.when) : typeof input.due === "string" ? input.due : null }];
+    }),
+  );
   const shown = RESULT[toolName(parts[0] as ToolPart)];
   const everyDone = parts.every(isFinished);
   return (
     <Shell testid="result-card">
-      {rows.map(({ part, name, title, when }) => {
+      {rows.map(({ key, part, name, title, when }) => {
         const refused = part.state === "output-denied" || (typeof part.output === "string" && part.output.startsWith("Not allowed"));
         return (
-          <div key={part.toolCallId} className="flex items-center gap-3">
+          <div key={key} className="flex items-center gap-3">
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-surface-sunken text-ink-secondary">
               <Icon name={RESULT[name]?.icon ?? "check"} />
             </span>

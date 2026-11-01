@@ -2,15 +2,16 @@
 
 import { useState } from "react";
 import type { Schedule, ScheduleRow } from "@/ui/client/contracts.generated";
-import { useDateTime } from "@/ui/client/format";
+import { useDateTime, useRelativeTime } from "@/ui/client/format";
 import { useRemoveSchedule, useRunSchedule, useSaveSchedule, useSchedules, useSetDefaults } from "@/ui/client/work";
 import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
-import { Dialog } from "@/ui/primitives/Dialog";
+import { ExpandRow } from "@/ui/primitives/ExpandRow";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Field } from "@/ui/primitives/Field";
 import { IconButton } from "@/ui/primitives/IconButton";
 import { Input, Textarea } from "@/ui/primitives/Input";
+import { PageHeader } from "@/ui/primitives/PageHeader";
 import { Select } from "@/ui/primitives/Select";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { Switch } from "@/ui/primitives/Switch";
@@ -86,25 +87,37 @@ function ScheduleItem({ row }: { row: ScheduleRow }) {
   const remove = useRemoveSchedule();
   const run = useRunSchedule();
   const format = useDateTime();
-  const [editing, setEditing] = useState(false);
+  const relative = useRelativeTime();
   return (
-    <li data-testid="schedule" className="flex flex-col gap-2 rounded-md border border-line-subtle p-3">
-      <div className="flex items-center justify-between gap-3">
-        <span className="min-w-0 truncate text-md font-medium text-ink-primary">{row.title}</span>
-        <IconButton icon="close" label={t("tasks.remove", { title: row.title })} onClick={() => row.id != null && remove.mutate(row.id)} />
-      </div>
-      <p className="text-sm tabular-nums text-ink-muted">
-        {row.next_run ? t("schedules.next", { when: format(row.next_run) }) : t("schedules.noNext")}
-        {row.token_limit ? ` · ${t("schedules.limit.value", { limit: row.token_limit.toLocaleString() })}` : ""}
-      </p>
-      <div className="flex flex-wrap items-center gap-3">
-        <Button loading={run.isPending} onClick={() => row.id != null && run.mutate(row.id)}>{t("schedules.runNow")}</Button>
-        <Dialog title={t("schedules.edit", { title: row.title })} open={editing} onOpenChange={setEditing} trigger={<Button>{t("schedules.editAction")}</Button>}>
-          <ScheduleForm initial={row} action={t("settings.save")} onSaved={() => setEditing(false)} />
-        </Dialog>
-        <Switch label={t("rules.enabled")} checked={row.enabled ?? true} onChange={(enabled) => save.mutate({ id: row.id ?? null, title: row.title, prompt: row.prompt ?? "", kind: row.kind ?? "prompt", every: row.every ?? "day", time: row.time ?? HOURS_NOT_SET, weekday: row.weekday ?? 0, date: row.date ?? null, enabled, token_limit: row.token_limit ?? 0 })} />
-        {row.last_session ? <TextLink className="text-sm" href={`/agent/sessions/${row.last_session}`}>{t("schedules.lastRun")}</TextLink> : null}
-      </div>
+    <li>
+      <ExpandRow
+        testid="schedule"
+        label={t("schedules.edit", { title: row.title })}
+        title={row.title}
+        meta={
+          <>
+            {row.next_run && row.enabled !== false ? t("schedules.next", { when: format(row.next_run) }) : t("schedules.noNext")}
+            {row.token_limit ? ` · ${t("schedules.limit.value", { limit: row.token_limit.toLocaleString() })}` : ""}
+          </>
+        }
+        aside={
+          <span className="flex shrink-0 items-center gap-2">
+            {row.last_session ? <TextLink className="text-sm" href={`/agent/sessions/${row.last_session}`}>{t("schedules.lastRun")}</TextLink> : null}
+            <Button variant="quiet" loading={run.isPending} onClick={() => row.id != null && run.mutate(row.id)}>{t("schedules.runNow")}</Button>
+            <Switch label={t("rules.enabled")} hideLabel checked={row.enabled ?? true} onChange={(enabled) => save.mutate({ id: row.id ?? null, title: row.title, prompt: row.prompt ?? "", kind: row.kind ?? "prompt", every: row.every ?? "day", time: row.time ?? HOURS_NOT_SET, weekday: row.weekday ?? 0, date: row.date ?? null, enabled, token_limit: row.token_limit ?? 0 })} />
+          </span>
+        }
+      >
+        <ScheduleForm initial={row} action={t("settings.save")} onSaved={() => undefined} />
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm tabular-nums text-ink-muted">
+            {row.created ? t("tasks.added", { when: relative(row.created) }) : ""}
+            {row.updated && row.updated !== row.created ? ` · ${t("tasks.changed", { when: relative(row.updated) })}` : ""}
+            {row.last_run ? ` · ${t("schedules.ranLast", { when: format(row.last_run) })}` : ""}
+          </p>
+          <IconButton icon="trash" label={t("tasks.remove", { title: row.title })} onClick={() => row.id != null && remove.mutate(row.id)} />
+        </div>
+      </ExpandRow>
     </li>
   );
 }
@@ -116,8 +129,8 @@ export function SchedulesScreen() {
   const rows = schedules.data?.schedules ?? [];
   const hasPrep = rows.some((row) => row.kind === "daily-prep");
   return (
-    <div className="mx-auto flex max-w-content flex-col gap-4 p-6">
-      <h1 className="font-serif text-display text-ink-primary">{t("nav.schedules")}</h1>
+    <div className="mx-auto flex max-w-reading flex-col gap-5 p-6">
+      <PageHeader title={t("nav.schedules")} />
       {schedules.isPending ? <Skeleton className="h-6 w-full" /> : null}
       {schedules.isError ? <ErrorState title={t("schedules.error")} onRetry={() => void schedules.refetch()} /> : null}
       <Card title={t("schedules.defaults")} description={t("schedules.defaults.description")}>

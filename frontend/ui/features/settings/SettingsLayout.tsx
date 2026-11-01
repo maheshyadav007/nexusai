@@ -1,5 +1,7 @@
 "use client";
 
+import { motion } from "motion/react";
+import { SMOOTH } from "@/ui/primitives/motion";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
@@ -62,9 +64,10 @@ export function SettingsLayout() {
                       <Link
                         href={`/settings?section=${section.id}`}
                         aria-current={section.id === current.id ? "page" : undefined}
-                        className={`focus-ring block rounded-md px-3 py-1 text-md transition-colors duration-fast ${section.id === current.id ? "bg-surface-sunken text-ink-primary" : "text-ink-secondary hover:bg-surface-sunken hover:text-ink-primary"}`}
+                        className={`focus-ring relative block rounded-md px-3 py-1 text-md transition-colors duration-fast ${section.id === current.id ? "text-ink-primary" : "text-ink-secondary hover:bg-surface-raised hover:text-ink-primary"}`}
                       >
-                        {t(section.label)}
+                        {section.id === current.id ? <motion.span layoutId="settings-active" transition={SMOOTH} className="absolute inset-0 rounded-md bg-surface-sunken" /> : null}
+                        <span className="relative">{t(section.label)}</span>
                       </Link>
                     </li>
                   ))}
@@ -74,7 +77,9 @@ export function SettingsLayout() {
           </div>
         </nav>
         <div className="min-w-0 flex-1">
-          <ErrorBoundary key={current.id}>{current.content()}</ErrorBoundary>
+          <ErrorBoundary key={current.id}>
+            <div className="animate-rise">{current.content()}</div>
+          </ErrorBoundary>
         </div>
       </div>
     </div>
