@@ -1,11 +1,11 @@
 "use client";
 
-import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { Icon, type IconName } from "@/ui/icons";
-import { QUICK, REVEAL } from "@/ui/primitives/motion";
 import { t, tn, type StringKey } from "@/ui/strings";
 import { isFinished, toolName, type ToolPart } from "./parts";
+import { Reveal, Swap, Turn } from "@/ui/primitives/Motion";
+import { Pressable } from "@/ui/primitives/Pressable";
 
 type Step = ToolPart | { type: "reasoning"; text: string };
 
@@ -85,24 +85,20 @@ function ToolRow({ part }: { part: ToolPart }) {
   const denied = part.state === "output-denied";
   return (
     <li data-testid="tool-call">
-      <button type="button" aria-expanded={open} onClick={() => setOpen((current) => !current)} className="focus-ring group flex w-full items-center gap-2 rounded-sm py-1 text-left text-md text-ink-secondary transition-colors duration-fast hover:text-ink-primary">
+      <Pressable aria-expanded={open} onClick={() => setOpen((current) => !current)} className="focus-ring group flex w-full items-center gap-2 rounded-sm py-1 text-left text-md text-ink-secondary transition-colors duration-fast hover:text-ink-primary">
         <Icon name={failed ? "error" : (shown?.icon ?? "customize")} className={`h-3 w-3 shrink-0 ${failed ? "text-status-danger" : "text-ink-muted"}`} />
         <span className="shrink-0">{stepLabel(part)}</span>
         {chip !== undefined && chip !== null && chip !== "" ? <span className="min-w-0 truncate rounded-sm bg-surface-sunken px-1 font-mono text-sm text-ink-muted">{chipText(chip)}</span> : null}
         {denied ? <span className="shrink-0 text-sm text-ink-muted">{t("tools.state.denied")}</span> : null}
         {!isFinished(part) ? <span className="h-1 w-1 shrink-0 animate-working rounded-full bg-agent-running motion-reduce:animate-none" /> : null}
-      </button>
-      <AnimatePresence initial={false}>
-        {open ? (
-          <motion.div {...REVEAL} className="overflow-hidden">
+      </Pressable>
+      <Reveal open={open}>
             <div className="mb-2 mt-1 flex flex-col gap-2">
               {part.input && Object.keys(part.input).length ? <pre className="max-h-popover overflow-auto whitespace-pre-wrap break-words rounded-md bg-surface-sunken p-2 font-mono text-sm text-ink-secondary">{asText(part.input)}</pre> : null}
               {part.output !== undefined ? <pre data-testid="tool-output" className="max-h-popover overflow-auto whitespace-pre-wrap break-words rounded-md bg-surface-sunken p-2 font-mono text-sm text-ink-secondary">{asText(part.output)}</pre> : null}
               {part.errorText ? <p className="text-sm text-status-danger">{part.errorText}</p> : null}
             </div>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+          </Reveal>
     </li>
   );
 }
@@ -122,17 +118,15 @@ export function ThinkingTrace({ steps, running }: { steps: readonly Step[]; runn
   const summary = seconds ? t("chat.thoughtFor", { seconds }) : t("chat.thought");
   return (
     <div data-testid="thinking">
-      <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} className="focus-ring flex items-center gap-2 rounded-sm py-1 text-md text-ink-muted transition-colors duration-fast hover:text-ink-primary">
+      <Pressable aria-expanded={open} onClick={() => setOpen((value) => !value)} className="focus-ring flex items-center gap-2 rounded-sm py-1 text-md text-ink-muted transition-colors duration-fast hover:text-ink-primary">
         <Icon name="thinking" className={`h-4 w-4 shrink-0 ${running ? "animate-working motion-reduce:animate-none" : ""}`} />
-        <span>{running ? (current ? stepLabel(current) : t("chat.thinking")) : summary}</span>
+        <Swap value={running ? (current ? stepLabel(current) : t("chat.thinking")) : summary}>{running ? (current ? stepLabel(current) : t("chat.thinking")) : summary}</Swap>
         {tools.length && !active ? <span className="text-sm tabular-nums text-ink-faint">{tn("chat.steps", tools.length)}</span> : null}
-        <motion.span animate={{ rotate: open ? 90 : 0 }} transition={QUICK} className="inline-flex">
+        <Turn open={open}>
           <Icon name="chevronRight" className="h-3 w-3" />
-        </motion.span>
-      </button>
-      <AnimatePresence initial={false}>
-        {open ? (
-          <motion.div {...REVEAL} className="overflow-hidden">
+        </Turn>
+      </Pressable>
+      <Reveal open={open}>
             <ul className="ml-2 mt-1 flex flex-col border-l border-line-subtle pl-3">
               {steps.map((step, index) =>
                 isTool(step) ? (
@@ -144,9 +138,7 @@ export function ThinkingTrace({ steps, running }: { steps: readonly Step[]; runn
                 ),
               )}
             </ul>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+          </Reveal>
     </div>
   );
 }

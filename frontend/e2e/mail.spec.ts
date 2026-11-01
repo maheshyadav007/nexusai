@@ -200,6 +200,8 @@ test("a document uploads, opens with its text, and can be filed, tagged and remo
   await expect(row).toBeVisible();
   await noViolations(page);
 
+  // The text is read in the background, and the row catches up by itself.
+  await expect(row.getByTestId("document-status")).toHaveCount(0);
   await page.getByRole("textbox", { name: "Search documents" }).fill("walrus");
   await expect(row).toBeVisible();
   await page.getByRole("textbox", { name: "Search documents" }).fill("giraffe-nothing");
@@ -217,6 +219,8 @@ test("a document uploads, opens with its text, and can be filed, tagged and remo
   await expect(page.getByRole("button", { name: "Remove tag urgent" })).toBeVisible();
   await page.getByRole("combobox", { name: "Folder" }).click();
   await page.getByRole("option", { name: "Legal" }).click();
+  // Until it has finished closing, Escape would go to the list rather than the drawer.
+  await expect(page.getByRole("listbox")).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(row).toContainText("Legal");
   await expect(row).toContainText("urgent");
@@ -279,4 +283,53 @@ test("panels show live results, and can be added, resized, reordered and reset",
 
   await page.getByRole("button", { name: "Reset panels" }).click();
   await expect(page.getByTestId("panel")).toHaveCount(4);
+});
+
+test("adding many files shows how each one went, and says why one can't be read", async ({ page }) => {
+  await page.goto("/documents/all");
+  const scan = `${unique("scan").replace(" ", "-")}.png`;
+  const same = `${unique("same").replace(" ", "-")}.txt`;
+  const again = `${unique("again").replace(" ", "-")}.txt`;
+  const text = Buffer.from(`the same content ${scan}`);
+  await page.getByTestId("file-input").setInputFiles([
+    { name: scan, mimeType: "image/png", buffer: Buffer.from("\x89PNG\r\n\x1a\n") },
+    { name: "setup.exe", mimeType: "application/octet-stream", buffer: Buffer.from("MZ") },
+    { name: "nothing.txt", mimeType: "text/plain", buffer: Buffer.alloc(0) },
+    { name: same, mimeType: "text/plain", buffer: text },
+  ]);
+
+  // The two refused stay on screen with their reason. The other two are kept.
+  const refused = page.getByTestId("upload-row");
+  await expect(refused.filter({ hasText: "setup.exe" }).getByRole("alert")).toContainText("can run programs");
+  await expect(refused.filter({ hasText: "nothing.txt" }).getByRole("alert")).toContainText("empty");
+  await noViolations(page);
+  await page.getByRole("button", { name: "Dismiss setup.exe" }).click();
+  await expect(refused.filter({ hasText: "setup.exe" })).toHaveCount(0);
+
+  // A picture can't be read yet, and it says so instead of quietly being unsearchable.
+  const row = page.getByTestId("document-row").filter({ hasText: scan });
+  await expect(row.getByTestId("document-status")).toHaveText("Picture, not read");
+  await row.click();
+  await expect(page.getByTestId("document-reason")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Read it again" })).toBeVisible();
+  await noViolations(page);
+  await page.keyboard.press("Escape");
+
+  // The same content twice stays one document, and the person is told.
+  await expect(page.getByTestId("document-row").filter({ hasText: same })).toBeVisible();
+  await page.getByTestId("file-input").setInputFiles({ name: again, mimeType: "text/plain", buffer: text });
+  await expect(page.getByText(`${same} is already here`, { exact: true })).toBeVisible();
+  await expect(page.getByTestId("document-row").filter({ hasText: again })).toHaveCount(0);
+});
+
+test("search says what it's doing about meaning, and words still work without the model", async ({ page }) => {
+  await page.goto("/search?q=budget");
+  await expect(page.getByTestId("meaning-notice")).toContainText("word matches");
+  await noViolations(page);
+  await page.goto("/settings?section=local-models");
+  await expect(page.getByRole("heading", { name: "Search by meaning" })).toBeVisible();
+  await expect(page.getByTestId("local-model").getByRole("alert")).toContainText(/mirror/);
+  // A failed download opens the other ways to get it, without being asked.
+  await expect(page.getByLabel("Use files you already have")).toBeVisible();
+  await noViolations(page);
 });

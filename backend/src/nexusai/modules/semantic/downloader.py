@@ -64,8 +64,8 @@ def bytes_present(home: Path, model: CatalogModel) -> int:
 def _plain(error: Exception) -> str:
     if isinstance(error, httpx.ConnectError | httpx.ConnectTimeout | httpx.ProxyError):
         return (
-            "Couldn't reach the download server. If your network blocks it, set a mirror"
-            " or import the files in Settings."
+            "Couldn't reach the download server. If your network blocks it, use a mirror"
+            " or files you already have."
         )
     if isinstance(error, httpx.HTTPStatusError):
         return f"The download server answered with an error ({error.response.status_code})."

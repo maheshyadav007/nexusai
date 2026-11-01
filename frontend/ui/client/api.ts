@@ -1,4 +1,12 @@
 import type {
+  DismissChecklist,
+  DownloadModel,
+  GetSemanticStatus,
+  ImportModel,
+  ModelName,
+  ReadDocumentAgain,
+  SaveSemanticSettings,
+  SemanticStatus,
   ReorderCategories,
   UpdateCategory,
   DecideApprovals,
@@ -205,6 +213,14 @@ interface Commands {
   "documents.update": [UpdateDocument, DocumentDone];
   "documents.saveFolders": [SaveFolders, DocumentDone];
   "documents.remove": [RemoveDocument, DocumentDone];
+  "documents.readAgain": [ReadDocumentAgain, DocumentDone];
+  "semantic.download": [DownloadModel, SemanticStatus];
+  "semantic.cancel": [ModelName, SemanticStatus];
+  "semantic.remove": [ModelName, SemanticStatus];
+  "semantic.setActive": [ModelName, SemanticStatus];
+  "semantic.saveSettings": [SaveSemanticSettings, SemanticStatus];
+  "semantic.importFiles": [ImportModel, SemanticStatus];
+  "onboarding.dismissChecklist": [DismissChecklist, OnboardingState];
   "pst.add": [AddPstImport, PstImports];
   "pst.pause": [PstImportAction, PstImports];
   "pst.resume": [PstImportAction, PstImports];
@@ -272,6 +288,7 @@ interface Queries {
   "drafts.list": [ListDrafts, DraftList];
   "mail.replyDraft": [ReplyContext, ReplyDraft];
   "search.run": [SearchMail, SearchResults];
+  "semantic.status": [GetSemanticStatus, SemanticStatus];
   "documents.list": [ListDocuments, DocumentLibrary];
   "documents.get": [GetDocument, DocumentPreview];
   "pst.imports": [GetPstImports, PstImports];

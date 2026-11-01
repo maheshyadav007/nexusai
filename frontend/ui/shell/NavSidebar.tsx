@@ -1,7 +1,5 @@
 "use client";
 
-import { motion } from "motion/react";
-import { SMOOTH } from "@/ui/primitives/motion";
 import { useSessions } from "@/ui/client/sessions";
 import { useWaitingCount } from "@/ui/client/work";
 import { CategoryNav } from "./CategoryNav";
@@ -12,6 +10,7 @@ import appConfig from "@/app.config.json";
 import { Icon } from "@/ui/icons";
 import { useSidebar } from "@/ui/client/settings";
 import { IconButton } from "@/ui/primitives/IconButton";
+import { ActiveMark, CountPop } from "@/ui/primitives/Motion";
 import { ScrollArea } from "@/ui/primitives/ScrollArea";
 import { Tooltip } from "@/ui/primitives/Tooltip";
 import { t } from "@/ui/strings";
@@ -29,13 +28,13 @@ function NavRow({ item, active, collapsed, count }: { item: NavItem; active: boo
       href={item.href}
       aria-current={active ? "page" : undefined}
       {...(collapsed ? { "aria-label": label } : {})}
-      className={`focus-ring relative flex items-center gap-2 rounded-md px-2 py-1 text-md transition-colors duration-fast ${collapsed ? "justify-center" : ""} ${active ? "text-ink-primary" : "text-ink-secondary hover:bg-surface-raised hover:text-ink-primary"}`}
+      className={`focus-ring press relative flex items-center gap-2 rounded-md px-2 py-1 text-md transition-colors duration-fast ${collapsed ? "justify-center" : ""} ${active ? "text-ink-primary" : "text-ink-secondary hover:bg-surface-raised hover:text-ink-primary"}`}
     >
-      {active ? <motion.span layoutId={ACTIVE_ROW} transition={SMOOTH} className="absolute inset-0 rounded-md bg-surface-sunken" /> : null}
+      {active ? <ActiveMark group={ACTIVE_ROW} /> : null}
       <span className="relative flex min-w-0 flex-1 items-center gap-2">
         <Icon name={item.icon} />
         {collapsed ? null : <span className="min-w-0 flex-1 truncate">{label}</span>}
-        {collapsed || !count ? null : <span className="text-sm tabular-nums text-accent-default">{count}</span>}
+        {collapsed || !count ? null : <CountPop value={count} className="text-sm text-accent-default" />}
       </span>
     </Link>
   );

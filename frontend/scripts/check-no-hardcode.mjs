@@ -38,9 +38,21 @@ function scanText(path, text, report) {
   });
 }
 
+// Only primitives touch these, so replacing a component means editing one file.
+const OUTSIDE_THE_DOOR = /^(?:ui\/(?:features|shell)|app)\//;
+const DOOR_LIBRARIES = /^(?:motion\/react|@radix-ui\/|lucide-react|@\/ui\/primitives\/motionValues$)/;
+const DOOR_ELEMENTS = new Set(["button", "input", "textarea", "select"]);
+
 function scanJsx(path, text, report) {
   const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const outside = OUTSIDE_THE_DOOR.test(path.replaceAll("\\", "/"));
   const visit = (node) => {
+    if (outside && ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && DOOR_LIBRARIES.test(node.moduleSpecifier.text)) {
+      report(path, lineOf(text, node.getStart()), `${node.moduleSpecifier.text} outside primitives; add what you need to ui/primitives`);
+    }
+    if (outside && (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && DOOR_ELEMENTS.has(node.tagName.getText())) {
+      report(path, lineOf(text, node.getStart()), `raw <${node.tagName.getText()}>; use Pressable, BareInput or another primitive`);
+    }
     if (ts.isJsxText(node) && /\p{L}/u.test(node.text)) {
       report(path, lineOf(text, node.getStart()), `text in JSX: "${node.text.trim()}"; use ui/strings`);
     }

@@ -402,6 +402,7 @@ export type Limit1 = number;
 export type MessageId1 = number;
 export type Excerpt = string;
 export type MatchedAttachment = boolean;
+export type MatchedBy = string;
 export type Hits = SearchHit[];
 export type Threads1 = number;
 export type Reason = string;
@@ -449,6 +450,9 @@ export type Folder4 = string | null;
 export type Tags = string[];
 export type ThreadId3 = number | null;
 export type Risky = boolean;
+export type Status3 = string;
+export type StatusReason = string | null;
+export type Duplicate = boolean;
 export type Documents = DocumentRow[];
 export type Folders = string[];
 export type Tags1 = string[];
@@ -465,11 +469,12 @@ export type Key3 = string;
  * @maxItems 500
  */
 export type Folders1 = string[];
+export type Key4 = string;
 export type Ok3 = boolean;
 export type Sender4 = string | null;
 export type Subject6 = string | null;
 export type Category5 = string | null;
-export type Status3 = string | null;
+export type Status4 = string | null;
 export type UnreadOnly = boolean;
 export type FlaggedOnly = boolean;
 export type Query2 = string | null;
@@ -517,7 +522,7 @@ export type Model = string;
 export type InputTokens = number;
 export type OutputTokens = number;
 export type Layers = PromptLayerView[];
-export type Status4 = string;
+export type Status5 = string;
 export type Error1 = string | null;
 export type Id14 = number | null;
 export type Session1 = string | null;
@@ -673,7 +678,7 @@ export type Agent2 = "session" | "interview";
 export type Id16 = string;
 export type Title2 = string;
 export type Agent3 = string;
-export type Status5 = "queued" | "running" | "waiting" | "done" | "failed" | "stopped";
+export type Status6 = "queued" | "running" | "waiting" | "done" | "failed" | "stopped";
 export type Step = string | null;
 export type Error2 = string | null;
 export type Untrusted = boolean;
@@ -703,7 +708,7 @@ export type Summary = string;
 export type Reason1 = string;
 export type Detail1 = string;
 export type Undoable = boolean;
-export type Status6 = "pending" | "approved" | "denied";
+export type Status7 = "pending" | "approved" | "denied";
 export type Time1 = string;
 export type ToolLabel = string;
 export type CanRemember = boolean;
@@ -777,6 +782,7 @@ export type Title4 = string;
 export type Kind3 = "personal" | "agent";
 export type Content2 = string;
 export type Base = string | null;
+export type Starter = string | null;
 export type Prompts = PromptFile[];
 export type Kind4 = "personal" | "agent";
 export type Name18 = string;
@@ -789,7 +795,7 @@ export type Thread = number | null;
 export type Text4 = string;
 export type Options = string[];
 export type Multiple = boolean;
-export type Status7 = "open" | "answered" | "dismissed";
+export type Status8 = "open" | "answered" | "dismissed";
 export type Answer1 = string | null;
 export type Time4 = string;
 export type Urgent = boolean;
@@ -822,7 +828,7 @@ export type Id32 = number;
 export type Message3 = number;
 export type Thread2 = number;
 export type Time6 = string;
-export type Status8 = "done" | "failed";
+export type Status9 = "done" | "failed";
 export type Summary2 = string | null;
 export type Reason2 = string | null;
 export type Facts = string[];
@@ -843,9 +849,9 @@ export type Covered = number;
 export type NewMessages = number;
 export type Updated4 = string | null;
 export type Id34 = string;
-export type Kind7 = "sync" | "pst" | "triage" | "session" | "schedule";
+export type Kind7 = "sync" | "pst" | "triage" | "session" | "schedule" | "model" | "index";
 export type Title6 = string;
-export type Status9 = string;
+export type Status10 = string;
 export type Progress = number | null;
 export type Total1 = number | null;
 export type Link = string | null;
@@ -1030,7 +1036,7 @@ export type Id40 = number;
 export type Subject7 = string;
 export type People = string[];
 export type Importance1 = string;
-export type Status10 = string;
+export type Status11 = string;
 export type Category6 = string | null;
 export type LastDate1 = string;
 export type Why3 = string | null;
@@ -1043,7 +1049,7 @@ export type PrepText = string | null;
 export type Id41 = number;
 export type Title9 = string;
 export type Notes = string;
-export type Status11 = "todo" | "in_progress" | "done";
+export type Status12 = "todo" | "in_progress" | "done";
 export type Due1 = string | null;
 export type Thread5 = number | null;
 export type Source8 = "user" | "agent";
@@ -1056,7 +1062,7 @@ export type Tasks = Task[];
 export type Id42 = number | null;
 export type Title10 = string;
 export type Notes1 = string;
-export type Status12 = "todo" | "in_progress" | "done";
+export type Status13 = "todo" | "in_progress" | "done";
 export type Due2 = string | null;
 export type Thread6 = number | null;
 export type Proposed2 = boolean;
@@ -1084,10 +1090,36 @@ export type Id46 = number;
 export type Minutes = number;
 export type Id47 = number;
 export type Ok5 = boolean;
+export type Id48 = string;
+export type Label3 = string;
+export type Description1 = string;
+export type SizeBytes = number;
+export type State2 = "missing" | "downloading" | "ready" | "failed";
+export type DownloadedBytes = number;
+export type Error4 = string | null;
+export type Active2 = boolean;
+export type Models = LocalModel[];
+export type Active3 = string;
+export type Ready = boolean;
+export type AutoDownload = boolean;
+export type Mirror = string | null;
+export type Indexed = number;
+export type Total2 = number;
+export type Indexing = boolean;
+export type Id49 = string | null;
+export type Id50 = string;
+export type AutoDownload1 = boolean | null;
+export type Mirror1 = string | null;
+export type Id51 = string;
+export type Folder7 = string;
+export type Kind10 = "mail" | "document";
+export type Ref1 = string;
+export type Score = number;
+export type Excerpt1 = string;
 export type Code = string;
 export type Message4 = string;
 export type TraceId = string | null;
-export type Id48 = string;
+export type Id52 = string;
 export type Seq = number;
 export type Type1 = string;
 export type Version = number;
@@ -1100,7 +1132,7 @@ export type Events = AppEvent[];
 export type Listener = string;
 export type EventSeq = number;
 export type EventType = string;
-export type Error4 = string;
+export type Error5 = string;
 export type Time10 = string;
 export type Failed1 = FailedEvent[];
 export type Since = number;
@@ -1118,9 +1150,9 @@ export type Accent1 = ("terracotta" | "cobalt" | "moss" | "plum") | null;
 export type DefaultScreen1 = ("today" | "inbox") | null;
 export type DateFormat1 = ("system" | "day-month" | "month-day" | "iso") | null;
 export type TimeFormat1 = ("system" | "12" | "24") | null;
-export type Id49 = string;
+export type Id53 = string;
 export type Name19 = string;
-export type Models = AvailableModel[];
+export type Models1 = AvailableModel[];
 export type BaseUrl = string;
 export type ApiKey = string | null;
 export type Provider1 = "chatgpt" | "litellm";
@@ -1133,10 +1165,10 @@ export type BaseUrl2 = string | null;
 export type ApiKey1 = string | null;
 export type Model2 = string | null;
 export type SupportsTools1 = boolean;
-export type State2 = "idle" | "waiting" | "failed";
+export type State3 = "idle" | "waiting" | "failed";
 export type UserCode = string | null;
 export type VerificationUrl = string | null;
-export type Error5 = string | null;
+export type Error6 = string | null;
 export type Model3 = string;
 export type Text7 = string;
 export type Change = "login_started" | "login_failed" | "login_cancelled" | "connected" | "disconnected" | "selected";
@@ -1169,7 +1201,7 @@ export type Backups = BackupRow[];
 export type Pending = string | null;
 export type Name21 = string;
 export type RecoveryKey = string;
-export type State3 = "ready" | "unset" | "missing" | "locked" | "damaged";
+export type State4 = "ready" | "unset" | "missing" | "locked" | "damaged";
 export type Path10 = string | null;
 export type DefaultPath = string;
 export type Message5 = string | null;
@@ -1177,6 +1209,7 @@ export type Step1 = string | null;
 export type Completed1 = boolean;
 export type Completed2 = boolean;
 export type CurrentStep = string | null;
+export type ChecklistDismissed = boolean;
 export type Step2 = string;
 export type Name22 = string;
 export type Role = string;
@@ -1185,11 +1218,11 @@ export type Tone = "formal" | "friendly" | "brief";
 export type Vips = string;
 export type About = string;
 export type Fields = string[];
-export type Kind10 = string | null;
-export type Id50 = number | null;
-export type Id51 = number;
+export type Kind11 = string | null;
+export type Id54 = number | null;
+export type Id55 = number;
 export type Time12 = string;
-export type Kind11 = string;
+export type Kind12 = string;
 export type Title13 = string;
 export type Detail2 = string;
 export type Link1 = string | null;
@@ -1197,7 +1230,7 @@ export type Read3 = boolean;
 export type Items3 = Notification[];
 export type Unread1 = number;
 export type Kinds = string[];
-export type Kind12 = string;
+export type Kind13 = string;
 export type Title14 = string;
 export type Detail3 = string;
 export type Link2 = string | null;
@@ -1314,6 +1347,7 @@ export interface Contracts {
   UpdateDocument?: UpdateDocument;
   RemoveDocument?: RemoveDocument;
   SaveFolders?: SaveFolders;
+  ReadDocumentAgain?: ReadDocumentAgain;
   DocumentDone?: DocumentDone;
   PanelFilters?: PanelFilters;
   Panel?: Panel;
@@ -1420,6 +1454,14 @@ export interface Contracts {
   SnoozeReminder?: SnoozeReminder;
   ReminderAction?: ReminderAction;
   PlannerDone?: PlannerDone;
+  LocalModel?: LocalModel;
+  SemanticStatus?: SemanticStatus;
+  GetSemanticStatus?: GetSemanticStatus;
+  DownloadModel?: DownloadModel;
+  ModelName?: ModelName;
+  SaveSemanticSettings?: SaveSemanticSettings;
+  ImportModel?: ImportModel;
+  SemanticHit?: SemanticHit;
   ApiError?: ApiError;
   AppEvent?: AppEvent;
   EventLog?: EventLog;
@@ -1461,6 +1503,7 @@ export interface Contracts {
   GetOnboarding?: GetOnboarding;
   OnboardingChanged?: OnboardingChanged;
   OnboardingState?: OnboardingState;
+  DismissChecklist?: DismissChecklist;
   SetOnboardingStep?: SetOnboardingStep;
   GetProfile?: GetProfile;
   Profile?: Profile;
@@ -1983,6 +2026,7 @@ export interface SearchHit {
   message_id: MessageId1;
   excerpt: Excerpt;
   matched_attachment: MatchedAttachment;
+  matched_by?: MatchedBy;
   [k: string]: unknown;
 }
 /**
@@ -2151,6 +2195,9 @@ export interface DocumentRow {
   tags: Tags;
   thread_id?: ThreadId3;
   risky?: Risky;
+  status?: Status3;
+  status_reason?: StatusReason;
+  duplicate?: Duplicate;
   [k: string]: unknown;
 }
 /**
@@ -2206,6 +2253,13 @@ export interface SaveFolders {
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ReadDocumentAgain".
+ */
+export interface ReadDocumentAgain {
+  key: Key4;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "DocumentDone".
  */
 export interface DocumentDone {
@@ -2220,7 +2274,7 @@ export interface PanelFilters {
   sender?: Sender4;
   subject?: Subject6;
   category?: Category5;
-  status?: Status3;
+  status?: Status4;
   unread_only?: UnreadOnly;
   flagged_only?: FlaggedOnly;
   query?: Query2;
@@ -2352,7 +2406,7 @@ export interface ModelCallView {
   input_tokens: InputTokens;
   output_tokens: OutputTokens;
   layers: Layers;
-  status: Status4;
+  status: Status5;
   error?: Error1;
   [k: string]: unknown;
 }
@@ -2432,7 +2486,7 @@ export interface SessionRow {
   id: Id16;
   title: Title2;
   agent: Agent3;
-  status: Status5;
+  status: Status6;
   step: Step;
   error: Error2;
   untrusted: Untrusted;
@@ -2500,7 +2554,7 @@ export interface ToolApproval {
   reason: Reason1;
   detail: Detail1;
   undoable: Undoable;
-  status: Status6;
+  status: Status7;
   time: Time1;
   tool_label?: ToolLabel;
   can_remember?: CanRemember;
@@ -2734,6 +2788,7 @@ export interface PromptFile {
   kind: Kind3;
   content: Content2;
   base?: Base;
+  starter?: Starter;
   [k: string]: unknown;
 }
 /**
@@ -2773,7 +2828,7 @@ export interface ChannelMessage {
   text: Text4;
   options: Options;
   multiple?: Multiple;
-  status: Status7;
+  status: Status8;
   answer: Answer1;
   time: Time4;
   urgent: Urgent;
@@ -2887,7 +2942,7 @@ export interface TriageRun {
   message: Message3;
   thread: Thread2;
   time: Time6;
-  status: Status8;
+  status: Status9;
   summary: Summary2;
   reason: Reason2;
   facts: Facts;
@@ -2958,7 +3013,7 @@ export interface Job {
   id: Id34;
   kind: Kind7;
   title: Title6;
-  status: Status9;
+  status: Status10;
   progress?: Progress;
   total?: Total1;
   link?: Link;
@@ -3108,7 +3163,7 @@ export interface TodayThread {
   subject: Subject7;
   people: People;
   importance: Importance1;
-  status: Status10;
+  status: Status11;
   category: Category6;
   last_date: LastDate1;
   why: Why3;
@@ -3142,7 +3197,7 @@ export interface Task {
   id: Id41;
   title: Title9;
   notes: Notes;
-  status: Status11;
+  status: Status12;
   due: Due1;
   thread: Thread5;
   source: Source8;
@@ -3175,7 +3230,7 @@ export interface SaveTask {
   id?: Id42;
   title: Title10;
   notes?: Notes1;
-  status?: Status12;
+  status?: Status13;
   due?: Due2;
   thread?: Thread6;
   proposed?: Proposed2;
@@ -3258,6 +3313,88 @@ export interface PlannerDone {
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "LocalModel".
+ */
+export interface LocalModel {
+  id: Id48;
+  label: Label3;
+  description: Description1;
+  size_bytes: SizeBytes;
+  state: State2;
+  downloaded_bytes?: DownloadedBytes;
+  error?: Error4;
+  active?: Active2;
+  [k: string]: unknown;
+}
+/**
+ * What's true right now. Events carry this whole, so screens update without asking.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SemanticStatus".
+ */
+export interface SemanticStatus {
+  models: Models;
+  active: Active3;
+  ready: Ready;
+  auto_download: AutoDownload;
+  mirror?: Mirror;
+  indexed?: Indexed;
+  total?: Total2;
+  indexing?: Indexing;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "GetSemanticStatus".
+ */
+export interface GetSemanticStatus {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "DownloadModel".
+ */
+export interface DownloadModel {
+  id?: Id49;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ModelName".
+ */
+export interface ModelName {
+  id: Id50;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SaveSemanticSettings".
+ */
+export interface SaveSemanticSettings {
+  auto_download?: AutoDownload1;
+  mirror?: Mirror1;
+}
+/**
+ * For networks that block downloads: files already copied to this computer.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ImportModel".
+ */
+export interface ImportModel {
+  id: Id51;
+  folder: Folder7;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SemanticHit".
+ */
+export interface SemanticHit {
+  kind: Kind10;
+  ref: Ref1;
+  score: Score;
+  excerpt: Excerpt1;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "ApiError".
  */
 export interface ApiError {
@@ -3273,7 +3410,7 @@ export interface ApiError {
  * via the `definition` "AppEvent".
  */
 export interface AppEvent {
-  id: Id48;
+  id: Id52;
   seq: Seq;
   type: Type1;
   version: Version;
@@ -3305,7 +3442,7 @@ export interface FailedEvent {
   listener: Listener;
   event_seq: EventSeq;
   event_type: EventType;
-  error: Error4;
+  error: Error5;
   time: Time10;
   [k: string]: unknown;
 }
@@ -3369,7 +3506,7 @@ export interface UpdateSettings {
  * via the `definition` "AvailableModel".
  */
 export interface AvailableModel {
-  id: Id49;
+  id: Id53;
   name: Name19;
   [k: string]: unknown;
 }
@@ -3378,7 +3515,7 @@ export interface AvailableModel {
  * via the `definition` "AvailableModels".
  */
 export interface AvailableModels {
-  models: Models;
+  models: Models1;
   [k: string]: unknown;
 }
 /**
@@ -3456,10 +3593,10 @@ export interface ListModels {
  * via the `definition` "ModelLogin".
  */
 export interface ModelLogin {
-  state: State2;
+  state: State3;
   user_code?: UserCode;
   verification_url?: VerificationUrl;
-  error?: Error5;
+  error?: Error6;
   [k: string]: unknown;
 }
 /**
@@ -3613,7 +3750,7 @@ export interface UnlockHome {
  * via the `definition` "HomeStatus".
  */
 export interface HomeStatus {
-  state: State3;
+  state: State4;
   path?: Path10;
   default_path: DefaultPath;
   message?: Message5;
@@ -3649,8 +3786,14 @@ export interface OnboardingChanged {
 export interface OnboardingState {
   completed: Completed2;
   current_step?: CurrentStep;
+  checklist_dismissed?: ChecklistDismissed;
   [k: string]: unknown;
 }
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "DismissChecklist".
+ */
+export interface DismissChecklist {}
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "SetOnboardingStep".
@@ -3693,7 +3836,7 @@ export interface ProfileChanged {
  * via the `definition` "ListNotifications".
  */
 export interface ListNotifications {
-  kind?: Kind10;
+  kind?: Kind11;
 }
 /**
  * No id means all of them.
@@ -3702,16 +3845,16 @@ export interface ListNotifications {
  * via the `definition` "MarkNotificationsRead".
  */
 export interface MarkNotificationsRead {
-  id?: Id50;
+  id?: Id54;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "Notification".
  */
 export interface Notification {
-  id: Id51;
+  id: Id55;
   time: Time12;
-  kind: Kind11;
+  kind: Kind12;
   title: Title13;
   detail: Detail2;
   link: Link1;
@@ -3735,7 +3878,7 @@ export interface NotificationList {
  * via the `definition` "NotificationRequested".
  */
 export interface NotificationRequested {
-  kind: Kind12;
+  kind: Kind13;
   title: Title14;
   detail?: Detail3;
   link?: Link2;

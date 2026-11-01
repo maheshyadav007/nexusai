@@ -14,7 +14,7 @@ export function useDocument(key: string | null) {
   return useQuery({ queryKey: ["document", key], queryFn: () => query("documents.get", { key: key ?? "" }), enabled: Boolean(key), staleTime: 0 });
 }
 
-function useDocumentCommand<T>(run: (input: T) => Promise<unknown>) {
+function useDocumentCommand<T, R>(run: (input: T) => Promise<R>) {
   const client = useQueryClient();
   return useMutation({ mutationFn: run, onSuccess: () => client.invalidateQueries({ queryKey: ["documents"] }) });
 }
@@ -29,6 +29,8 @@ export const useUpload = () =>
     if (!response.ok) throw new ApiRequestError((await response.json()) as ApiError);
     return (await response.json()) as DocumentRow;
   });
+
+export const useReadAgain = () => useDocumentCommand((key: string) => command("documents.readAgain", { key }));
 
 export const documentUrl = (key: string) => `/api/documents/file?key=${encodeURIComponent(key)}`;
 

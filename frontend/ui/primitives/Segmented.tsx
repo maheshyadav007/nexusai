@@ -1,9 +1,8 @@
 "use client";
 
 import * as RadioGroup from "@radix-ui/react-radio-group";
-import { motion } from "motion/react";
 import { useId } from "react";
-import { QUICK } from "./motion";
+import { ActiveMark } from "./Motion";
 
 export interface SegmentedOption<T extends string> {
   value: T;
@@ -27,7 +26,7 @@ export function Segmented<T extends string>({ label, hideLabel = false, value, o
             value={option.value}
             className="focus-ring relative rounded-sm px-3 py-1 text-sm text-ink-secondary transition-colors duration-fast hover:text-ink-primary data-[state=checked]:text-ink-primary"
           >
-            {value === option.value ? <motion.span layoutId={thumb} transition={QUICK} className="absolute inset-0 rounded-sm bg-surface-raised shadow-raised" /> : null}
+            {value === option.value ? <ActiveMark group={thumb} className="absolute inset-0 rounded-sm bg-surface-raised shadow-raised" /> : null}
             <span className="relative">{option.label}</span>
           </RadioGroup.Item>
         ))}

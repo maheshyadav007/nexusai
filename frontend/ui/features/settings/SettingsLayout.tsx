@@ -1,18 +1,18 @@
 "use client";
 
-import { motion } from "motion/react";
-import { SMOOTH } from "@/ui/primitives/motion";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { ErrorBoundary } from "@/ui/primitives/ErrorBoundary";
 import { Card } from "@/ui/primitives/Card";
+import { ActiveMark } from "@/ui/primitives/Motion";
 import { t, type StringKey } from "@/ui/strings";
 import { PstImportCard } from "@/ui/features/mail/PstImportCard";
 import { AccountSettings } from "./AccountSettings";
 import { CategorySettings } from "./CategorySettings";
 import { GuardSettings, NotificationSettings, PermissionsSettings, SendCheckSettingsCard, UsageSettings } from "./AgentSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
+import { LocalModelSettings } from "./LocalModelSettings";
 import { ModelSettings } from "./ModelSettings";
 import { PreferencesSettings } from "./PreferencesSettings";
 import { ProfileForm } from "./ProfileForm";
@@ -37,6 +37,7 @@ const SECTIONS: readonly { id: string; group: StringKey; label: StringKey; conte
   { id: "send-checks", group: "settings.group.mail", label: "checks.title", content: () => <SendCheckSettingsCard /> },
   { id: "archive", group: "settings.group.mail", label: "nav.archive", content: () => <PstImportCard /> },
   { id: "models", group: "settings.group.agents", label: "settings.models.title", content: () => <ModelSettings /> },
+  { id: "local-models", group: "settings.group.agents", label: "semantic.title", content: () => <LocalModelSettings /> },
   { id: "permissions", group: "settings.group.agents", label: "permissions.title", content: () => <PermissionsSettings /> },
   { id: "guard", group: "settings.group.agents", label: "guard.title", content: () => <GuardSettings /> },
   { id: "usage", group: "settings.group.agents", label: "usage.title", content: () => <UsageSettings /> },
@@ -66,7 +67,7 @@ export function SettingsLayout() {
                         aria-current={section.id === current.id ? "page" : undefined}
                         className={`focus-ring relative block rounded-md px-3 py-1 text-md transition-colors duration-fast ${section.id === current.id ? "text-ink-primary" : "text-ink-secondary hover:bg-surface-raised hover:text-ink-primary"}`}
                       >
-                        {section.id === current.id ? <motion.span layoutId="settings-active" transition={SMOOTH} className="absolute inset-0 rounded-md bg-surface-sunken" /> : null}
+                        {section.id === current.id ? <ActiveMark group="settings-active" /> : null}
                         <span className="relative">{t(section.label)}</span>
                       </Link>
                     </li>

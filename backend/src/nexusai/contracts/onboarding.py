@@ -8,6 +8,7 @@ class GetOnboarding(BaseModel):
 class OnboardingState(BaseModel):
     completed: bool
     current_step: str | None = None
+    checklist_dismissed: bool = False
 
 
 class SetOnboardingStep(BaseModel):
@@ -23,3 +24,7 @@ class FinishOnboarding(BaseModel):
 class OnboardingChanged(BaseModel):
     step: str | None = None
     completed: bool
+
+
+class DismissChecklist(BaseModel):
+    model_config = ConfigDict(extra="forbid")

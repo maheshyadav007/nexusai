@@ -1,6 +1,5 @@
 "use client";
 
-import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import type { Reminder } from "@/ui/client/contracts.generated";
 import { useRelativeTime, useShortDate, useTimeOnly } from "@/ui/client/format";
@@ -14,8 +13,9 @@ import { Field } from "@/ui/primitives/Field";
 import { IconButton } from "@/ui/primitives/IconButton";
 import { Input } from "@/ui/primitives/Input";
 import { Menu } from "@/ui/primitives/Menu";
-import { FADE_RISE } from "@/ui/primitives/motion";
+import { Presence, Rise } from "@/ui/primitives/Motion";
 import { PageHeader } from "@/ui/primitives/PageHeader";
+import { BareInput, Pressable } from "@/ui/primitives/Pressable";
 import { Select } from "@/ui/primitives/Select";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { TextLink } from "@/ui/primitives/TextLink";
@@ -78,7 +78,7 @@ function ReminderRow({ reminder }: { reminder: Reminder }) {
   const later = (target: Date) => snooze.mutate({ id: reminder.id, minutes: Math.max(1, Math.round((target.getTime() - Date.now()) / MINUTE)) });
   const sameDay = new Date(reminder.when).toDateString() === new Date().toDateString();
   return (
-    <motion.li layout="position" {...FADE_RISE}>
+    <Rise as="li" settle="position">
       <ExpandRow
         testid="reminder"
         label={t("reminders.details", { title: reminder.title })}
@@ -133,7 +133,7 @@ function ReminderRow({ reminder }: { reminder: Reminder }) {
           </div>
         </div>
       </ExpandRow>
-    </motion.li>
+    </Rise>
   );
 }
 
@@ -155,17 +155,17 @@ export function RemindersScreen() {
           save.mutate({ title: title.trim(), when, repeat }, { onSuccess: () => { setTitle(""); setWhen(""); setRepeat("none"); } });
         }}
       >
-        <input aria-label={t("reminders.what")} placeholder={t("reminders.what.placeholder")} value={title} onChange={(event) => setTitle(event.target.value)} className="bg-transparent px-1 py-1 text-md text-ink-primary outline-none placeholder:text-ink-muted" />
+        <BareInput aria-label={t("reminders.what")} placeholder={t("reminders.what.placeholder")} value={title} onChange={(event) => setTitle(event.target.value)} className="bg-transparent px-1 py-1 text-md text-ink-primary outline-none placeholder:text-ink-muted" />
         <div className="flex flex-wrap items-center gap-2">
           {QUICK_TIMES.map(({ key, when: pick }) => {
             const value = local(pick());
             return (
-              <button key={key} type="button" aria-pressed={when === value} onClick={() => setWhen(value)} className={`focus-ring rounded-full border px-3 py-1 text-sm transition-colors duration-fast ${when === value ? "border-accent-default text-accent-default" : "border-line-subtle text-ink-secondary hover:border-line-strong hover:text-ink-primary"}`}>
+              <Pressable key={key} type="button" aria-pressed={when === value} onClick={() => setWhen(value)} className={`focus-ring rounded-full border px-3 py-1 text-sm transition-colors duration-fast ${when === value ? "border-accent-default text-accent-default" : "border-line-subtle text-ink-secondary hover:border-line-strong hover:text-ink-primary"}`}>
                 {t(key)}
-              </button>
+              </Pressable>
             );
           })}
-          <input aria-label={t("reminders.when")} type="datetime-local" value={when} onChange={(event) => setWhen(event.target.value)} className="focus-ring rounded-md bg-transparent px-1 py-1 text-sm text-ink-secondary" />
+          <BareInput aria-label={t("reminders.when")} type="datetime-local" value={when} onChange={(event) => setWhen(event.target.value)} className="focus-ring rounded-md bg-transparent px-1 py-1 text-sm text-ink-secondary" />
           <div className="ml-auto flex items-center gap-2">
             <Select quiet label={t("reminders.repeat")} value={repeat} options={REPEATS} onChange={(value) => setRepeat(value as Repeat)} />
             <Button type="submit" variant="primary" loading={save.isPending} disabled={!title.trim() || !when}>
@@ -182,11 +182,11 @@ export function RemindersScreen() {
           <section key={group.key} aria-label={t(group.key)} className="flex flex-col gap-2">
             <h2 className={`text-sm ${group.key === "reminders.group.past" ? "text-accent-default" : "text-ink-muted"}`}>{t(group.key)}</h2>
             <ul aria-label={t(group.key)} className="flex flex-col gap-2">
-              <AnimatePresence initial={false}>
+              <Presence>
                 {group.rows.map((reminder) => (
                   <ReminderRow key={reminder.id} reminder={reminder} />
                 ))}
-              </AnimatePresence>
+              </Presence>
             </ul>
           </section>
         ))}

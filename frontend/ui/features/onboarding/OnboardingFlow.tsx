@@ -1,25 +1,24 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { useHomeStatus, useRecoveryKey } from "@/ui/client/home";
 import { PendingRecoveryKey } from "@/ui/features/home/RecoveryKey";
 import { useFinishOnboarding, useOnboarding, useSetStep } from "@/ui/client/onboarding";
-import { useCreateSession } from "@/ui/client/sessions";
+import { useDownloadModel, useSemantic } from "@/ui/client/semantic";
 import { useStarterPrompts } from "@/ui/client/work";
-import { PromptsEditor } from "@/ui/features/agent/MemoryScreen";
-import { ChatView } from "@/ui/features/assistant/ChatView";
-import { PermissionsSettings } from "@/ui/features/settings/AgentSettings";
+import { AgentPresets } from "@/ui/features/settings/AgentSettings";
 import { HomeChooser } from "@/ui/features/home/HomeChooser";
-import { PstImportCard } from "@/ui/features/mail/PstImportCard";
 import { AccountSettings } from "@/ui/features/settings/AccountSettings";
 import { AppearanceSettings } from "@/ui/features/settings/AppearanceSettings";
+import { LocalModelSettings } from "@/ui/features/settings/LocalModelSettings";
 import { ModelSettings } from "@/ui/features/settings/ModelSettings";
 import { ProfileForm } from "@/ui/features/settings/ProfileForm";
 import { Button } from "@/ui/primitives/Button";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Skeleton } from "@/ui/primitives/Skeleton";
-import { Stepper } from "@/ui/primitives/Stepper";
+import { Steps } from "@/ui/primitives/Motion";
+import { Stepper, StepRail } from "@/ui/primitives/Stepper";
 import { t, type StringKey } from "@/ui/strings";
 
 interface Step {
@@ -27,20 +26,17 @@ interface Step {
   label: StringKey;
   title: StringKey;
   description: StringKey;
-  optional?: boolean;
 }
 
+// Only what the app can't work without, or that's far easier now. The rest waits on Today.
 const STEPS: readonly Step[] = [
   { id: "home", label: "setup.home.label", title: "setup.home.title", description: "setup.home.description" },
-  { id: "recovery", label: "recovery.title", title: "setup.recovery.title", description: "setup.recovery.description" },
-  { id: "theme", label: "setup.theme.label", title: "setup.theme.title", description: "setup.theme.description" },
-  { id: "profile", label: "setup.profile.label", title: "setup.profile.title", description: "setup.profile.description" },
-  { id: "mail", label: "setup.mail.label", title: "setup.mail.title", description: "setup.mail.description", optional: true },
-  { id: "model", label: "setup.model.label", title: "setup.model.title", description: "setup.model.description", optional: true },
-  { id: "interview", label: "setup.interview.label", title: "setup.interview.title", description: "setup.interview.description", optional: true },
-  { id: "priorities", label: "setup.priorities.label", title: "setup.priorities.title", description: "setup.priorities.description", optional: true },
-  { id: "pst", label: "setup.pst.label", title: "setup.pst.title", description: "setup.pst.description", optional: true },
-  { id: "permissions", label: "permissions.title", title: "setup.permissions.title", description: "setup.permissions.description" },
+  { id: "recovery", label: "setup.recovery.label", title: "setup.recovery.title", description: "setup.recovery.description" },
+  { id: "profile", label: "setup.you.label", title: "setup.profile.title", description: "setup.profile.description" },
+  { id: "mail", label: "setup.mail.label", title: "setup.mail.title", description: "setup.mail.description" },
+  { id: "model", label: "setup.model.label", title: "setup.model.title", description: "setup.model.description" },
+  { id: "search", label: "setup.search.label", title: "setup.search.title", description: "setup.search.description" },
+  { id: "permissions", label: "setup.agent.label", title: "setup.permissions.title", description: "setup.permissions.description" },
 ];
 
 const NEEDS_RECOVERY = new Set(["missing", "locked", "damaged"]);
@@ -74,50 +70,51 @@ function RecoveryStep({ step, index, back, onDone }: { step: Step; index: number
   );
 }
 
-/** Optional: the agent asks about the person, then writes prompts they can edit. */
-function InterviewStep() {
-  const create = useCreateSession();
-  const [session, setSession] = useState<string | null>(null);
-  if (!session) {
-    return (
-      <div>
-        <Button loading={create.isPending} onClick={() => create.mutate({ title: t("setup.interview.label"), agent: "interview" }, { onSuccess: (row) => setSession(row.id) })}>
-          {t("setup.interview.start")}
-        </Button>
-        {create.isError ? <ErrorState title={t("sessions.error")} description={create.error.message} /> : null}
-      </div>
-    );
-  }
-  return (
-    <div className="flex h-drawer flex-col">
-      <ChatView id={session} initial={[]} active={false} />
-    </div>
-  );
-}
-
-function PrioritiesStep() {
-  const starters = useStarterPrompts();
-  const { mutate } = starters;
-  useEffect(() => mutate(undefined), [mutate]);
-  return <PromptsEditor only={["importance", "categories"]} />;
+/** Arriving here is the decision to get it, and it never holds up the next step. */
+function SearchStep() {
+  const semantic = useSemantic();
+  const { mutate: fetch } = useDownloadModel();
+  const model = semantic.data?.models.find((row) => row.active);
+  const missing = model?.state === "missing";
+  const id = model?.id;
+  useEffect(() => {
+    if (missing && id) fetch(id);
+  }, [missing, id, fetch]);
+  return <LocalModelSettings brief />;
 }
 
 function Frame({ step, index, actions, children }: { step: Step; index: number; actions?: ReactNode; children: ReactNode }) {
+  const seen = useRef(index);
+  const forward = index >= seen.current;
+  useEffect(() => {
+    seen.current = index;
+  }, [index]);
   return (
-    <main className="mx-auto flex min-h-screen max-w-content flex-col gap-6 p-6 text-ink-primary">
-      <header className="flex flex-col gap-4">
+    <div className="flex min-h-screen bg-surface-page text-ink-primary">
+      <aside className="sticky top-0 hidden h-screen w-sidebar shrink-0 flex-col gap-6 border-r border-line-subtle p-5 lg:flex">
         <span className="text-lg font-medium">{t("app.name")}</span>
-        <Stepper label={t("setup.progress")} steps={STEPS.map((item) => t(item.label))} current={index} />
-      </header>
-      <section className="flex flex-col gap-5">
-        <div>
-          <h1 className="font-serif text-display">{t(step.title)}</h1>
-          <p className="mt-2 max-w-popover text-md text-ink-secondary">{t(step.description)}</p>
+        <StepRail label={t("setup.progress")} steps={STEPS.map((item) => t(item.label))} current={index} />
+        <p className="mt-auto text-sm text-ink-muted">{t("setup.time")}</p>
+      </aside>
+      <main className="flex min-w-0 flex-1 flex-col gap-6 p-6">
+        <header className="flex flex-col gap-4 lg:hidden">
+          <span className="text-lg font-medium">{t("app.name")}</span>
+          <Stepper label={t("setup.progress")} steps={STEPS.map((item) => t(item.label))} current={index} />
+        </header>
+        <div className="mx-auto w-full max-w-reading py-5">
+          <Steps step={step.id} forward={forward}>
+            <section className="flex flex-col gap-5">
+              <div>
+                <h1 className="font-serif text-display">{t(step.title)}</h1>
+                <p className="mt-2 text-md text-ink-secondary">{t(step.description)}</p>
+              </div>
+              {children}
+              {actions ? <footer className="flex items-center gap-3">{actions}</footer> : null}
+            </section>
+          </Steps>
         </div>
-        {children}
-      </section>
-      {actions ? <footer className="flex items-center gap-3">{actions}</footer> : null}
-    </main>
+      </main>
+    </div>
   );
 }
 
@@ -127,6 +124,7 @@ export function OnboardingFlow() {
   const onboarding = useOnboarding();
   const setStep = useSetStep();
   const finish = useFinishOnboarding();
+  const starters = useStarterPrompts();
 
   const done = onboarding.data?.completed;
   useEffect(() => {
@@ -161,7 +159,11 @@ export function OnboardingFlow() {
   const goNext = () => {
     const next = STEPS[index + 1];
     if (next) setStep.mutate(next.id);
-    else finish.mutate(undefined, { onSuccess: () => router.replace("/today") });
+    else {
+      // So the mail agent has something sensible to judge by, even if the person never edits it.
+      starters.mutate(undefined);
+      finish.mutate(undefined, { onSuccess: () => router.replace("/today") });
+    }
   };
   const back =
     index > 1 ? (
@@ -176,6 +178,7 @@ export function OnboardingFlow() {
   if (step.id === "profile") {
     return (
       <Frame step={step} index={index} actions={back}>
+        <AppearanceSettings brief />
         <ProfileForm action={t("setup.next")} onSaved={goNext} />
       </Frame>
     );
@@ -193,13 +196,10 @@ export function OnboardingFlow() {
         </>
       }
     >
-      {step.id === "theme" ? <AppearanceSettings /> : null}
       {step.id === "mail" ? <AccountSettings /> : null}
       {step.id === "model" ? <ModelSettings /> : null}
-      {step.id === "interview" ? <InterviewStep /> : null}
-      {step.id === "priorities" ? <PrioritiesStep /> : null}
-      {step.id === "pst" ? <PstImportCard /> : null}
-      {step.id === "permissions" ? <PermissionsSettings /> : null}
+      {step.id === "search" ? <SearchStep /> : null}
+      {step.id === "permissions" ? <AgentPresets /> : null}
     </Frame>
   );
 }

@@ -15,7 +15,7 @@ export function IconButton({ icon, label, tooltip = true, className = "", ...pro
     <button
       type="button"
       aria-label={label}
-      className={`focus-ring inline-flex items-center justify-center rounded-md p-2 text-ink-secondary transition-colors duration-fast hover:bg-surface-sunken hover:text-ink-primary disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
+      className={`focus-ring press inline-flex items-center justify-center rounded-md p-2 text-ink-secondary hover:bg-surface-sunken hover:text-ink-primary disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
       {...props}
     >
       <Icon name={icon} />

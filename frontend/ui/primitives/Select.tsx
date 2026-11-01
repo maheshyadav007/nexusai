@@ -19,7 +19,7 @@ export function Select({ id, label, value, options, placeholder, invalid = false
         </RadixSelect.Icon>
       </RadixSelect.Trigger>
       <RadixSelect.Portal>
-        <RadixSelect.Content position="popper" sideOffset={4} className="z-50 w-popover max-w-full animate-rise rounded-md border border-line-subtle bg-surface-raised p-1 text-ink-primary shadow-overlay">
+        <RadixSelect.Content position="popper" sideOffset={4} className="from-trigger z-50 w-popover max-w-full animate-pop-in rounded-md data-[state=closed]:animate-pop-out border border-line-subtle bg-surface-raised p-1 text-ink-primary shadow-overlay">
           <RadixSelect.Viewport>
             {options.map((option) => (
               <RadixSelect.Item key={option.value} value={option.value} className="flex cursor-default items-center justify-between gap-2 rounded-sm px-2 py-1 text-md outline-none data-[highlighted]:bg-surface-sunken">

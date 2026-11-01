@@ -24,7 +24,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <RadixToast.Provider label={t("common.notification")}>
         {children}
         {toasts.map((toast) => (
-          <RadixToast.Root key={toast.id} onOpenChange={(open) => (open ? null : setToasts((current) => current.filter((item) => item.id !== toast.id)))} className="flex animate-rise items-start justify-between gap-3 rounded-md border border-line-subtle bg-surface-raised p-3 text-ink-primary shadow-overlay">
+          <RadixToast.Root key={toast.id} onOpenChange={(open) => (open ? null : setToasts((current) => current.filter((item) => item.id !== toast.id)))} className="flex animate-rise data-[state=closed]:animate-sink-out items-start justify-between gap-3 rounded-md border border-line-subtle bg-surface-raised p-3 text-ink-primary shadow-overlay">
             <div>
               <RadixToast.Title className={`text-md font-medium ${toast.tone === "danger" ? "text-status-danger" : ""}`}>{toast.title}</RadixToast.Title>
               {toast.description ? <RadixToast.Description className="mt-1 text-sm text-ink-muted">{toast.description}</RadixToast.Description> : null}

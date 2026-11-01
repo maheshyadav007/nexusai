@@ -7,6 +7,7 @@ import { Icon } from "@/ui/icons";
 import { Button } from "@/ui/primitives/Button";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { Popover } from "@/ui/primitives/Popover";
+import { Pressable } from "@/ui/primitives/Pressable";
 import { t, tn } from "@/ui/strings";
 
 /** The decision itself: what would happen, why it's asking, and how to answer. */
@@ -68,10 +69,10 @@ export function ApprovalQueue() {
     <Popover
       label={t("approvals.title")}
       trigger={
-        <button type="button" aria-label={label} className="focus-ring inline-flex items-center gap-1 rounded-md p-2 text-ink-secondary transition-colors duration-fast hover:bg-surface-sunken hover:text-ink-primary">
+        <Pressable aria-label={label} className="inline-flex items-center gap-1 rounded-md p-2 text-ink-secondary transition-colors duration-fast hover:bg-surface-sunken hover:text-ink-primary">
           <Icon name="approvals" />
           {items.length ? <span className="text-sm tabular-nums text-accent-default">{items.length}</span> : null}
-        </button>
+        </Pressable>
       }
     >
       {items.length === 0 ? (

@@ -7,6 +7,7 @@ import { Badge } from "@/ui/primitives/Badge";
 import { Dialog } from "@/ui/primitives/Dialog";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
+import { Pressable } from "@/ui/primitives/Pressable";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { t } from "@/ui/strings";
 import { Composer } from "./Composer";
@@ -35,11 +36,11 @@ export function DraftsScreen() {
       <ul className="flex flex-col gap-1">
         {items.map((draft) => (
           <li key={draft.id}>
-            <button type="button" data-testid="draft-row" onClick={() => setEditing(draft)} className="focus-ring flex w-full items-baseline gap-3 rounded-md px-3 py-2 text-left transition-colors duration-fast hover:bg-surface-sunken">
+            <Pressable data-testid="draft-row" onClick={() => setEditing(draft)} className="focus-ring flex w-full items-baseline gap-3 rounded-md px-3 py-2 text-left transition-colors duration-fast hover:bg-surface-sunken">
               <span className="min-w-0 flex-1 truncate text-md text-ink-primary">{draft.subject || t("mail.noSubject")}</span>
               <span className="min-w-0 truncate text-sm text-ink-muted">{(draft.to ?? []).map((person) => person.address).join(", ")}</span>
               {draft.source === "agent" ? <Badge tone="accent">{t("mail.draft.agent")}</Badge> : null}
-            </button>
+            </Pressable>
           </li>
         ))}
       </ul>

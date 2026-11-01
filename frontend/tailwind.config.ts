@@ -18,7 +18,7 @@ const colors = Object.fromEntries(
 );
 
 // The easing curve is one value, not a duration.
-const { easing: _easing, ...durations } = light.motion;
+const { easing: _easing, press: _press, ...durations } = light.motion;
 
 const config: Config = {
   content: ["./app/**/*.{ts,tsx}", "./ui/**/*.{ts,tsx}"],
@@ -40,11 +40,28 @@ const config: Config = {
       keyframes: {
         fade: { from: { opacity: "0" } },
         rise: { from: { opacity: "0", transform: "translateY(var(--space-2))" } },
+        "fade-out": { to: { opacity: "0" } },
+        "sink-out": { to: { opacity: "0", transform: "translateY(var(--space-2))" } },
+        // Grows out of whatever opened it, and shrinks back into it.
+        "pop-in": { from: { opacity: "0", transform: "scale(0.96)" } },
+        "pop-out": { to: { opacity: "0", transform: "scale(0.96)" } },
+        "dialog-in": { from: { opacity: "0", transform: "translateY(var(--space-2)) scale(0.97)" } },
+        "dialog-out": { to: { opacity: "0", transform: "translateY(var(--space-1)) scale(0.97)" } },
+        "drawer-in": { from: { transform: "translateX(100%)" } },
+        "drawer-out": { to: { transform: "translateX(100%)" } },
         working: { "0%, 100%": { opacity: "1" }, "50%": { opacity: "0.45" } },
       },
       animation: {
         fade: "fade var(--motion-normal) var(--motion-easing)",
         rise: "rise var(--motion-normal) var(--motion-easing)",
+        "fade-out": "fade-out var(--motion-fast) var(--motion-easing) forwards",
+        "sink-out": "sink-out var(--motion-fast) var(--motion-easing) forwards",
+        "pop-in": "pop-in var(--motion-fast) var(--motion-easing)",
+        "pop-out": "pop-out var(--motion-fast) var(--motion-easing) forwards",
+        "dialog-in": "dialog-in var(--motion-normal) var(--motion-easing)",
+        "dialog-out": "dialog-out var(--motion-fast) var(--motion-easing) forwards",
+        "drawer-in": "drawer-in var(--motion-slow) var(--motion-easing)",
+        "drawer-out": "drawer-out var(--motion-normal) var(--motion-easing) forwards",
         // Only for something that's really running right now.
         working: "working 1600ms var(--motion-easing) infinite",
       },

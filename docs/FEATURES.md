@@ -83,7 +83,7 @@ A screen inside the app, following the v9 look and the chosen theme. The flow: *
 | ID | Feature | Pri |
 |---|---|---|
 | ONB-1 | Landing screen on first launch: what NexusAI does, data stays on this device, "Get started"; returning users go straight to Today | MVP |
-| ONB-2 | Guided setup with progress, back, skip for optional steps and resume if closed midway; live checks of mail login, model and folder, with errors in plain language | MVP |
+| ONB-2 | Short guided setup with progress, back and resume if closed midway: data, you, mail, model, search model, how much the agent may do. Live checks of mail login, model and folder, with errors in plain language. The interview, priorities and old mail wait in a dismissible checklist on Today | MVP |
 | ONB-4 | Sync and PST import continue in the background so the user enters the app right away | MVP |
 | ONB-6 | Short dismissible tour of the app on first entry | Next |
 

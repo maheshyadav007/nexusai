@@ -56,6 +56,7 @@ from nexusai.contracts.notifications import (
     NotificationsChanged,
 )
 from nexusai.contracts.onboarding import (
+    DismissChecklist,
     FinishOnboarding,
     GetOnboarding,
     OnboardingChanged,
@@ -143,6 +144,7 @@ MODELS: list[type[BaseModel]] = [
     GetOnboarding,
     OnboardingChanged,
     OnboardingState,
+    DismissChecklist,
     SetOnboardingStep,
     GetProfile,
     Profile,

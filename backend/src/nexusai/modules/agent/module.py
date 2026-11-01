@@ -94,6 +94,7 @@ from nexusai.modules.agent import (
 from nexusai.modules.mail import accounts
 from nexusai.modules.semantic import module as semantic
 
+STARTER_PROMPTS = ("importance", "categories")
 PERSONAL_PROMPTS = (
     ("about-me", "About me"),
     ("importance", "What's important"),
@@ -353,7 +354,15 @@ def _personal_files(ctx: Context) -> list[PromptFile]:
         return path.read_text("utf-8") if path.exists() else ""
 
     return [
-        PromptFile(name=name, title=title, kind="personal", content=read(name))
+        PromptFile(
+            name=name,
+            title=title,
+            kind="personal",
+            content=read(name),
+            starter=prompts_builder.packaged(f"starter-{name}.md")
+            if name in STARTER_PROMPTS
+            else None,
+        )
         for name, title in PERSONAL_PROMPTS
     ]
 
@@ -391,7 +400,7 @@ def use_starter_prompts(command: ListPrompts, ctx: Context) -> AgentDone:
     """Fills empty priorities with a starter set for the person to edit. Nothing is overwritten."""
     folder = ctx.config.home / "prompts" / "personal"
     folder.mkdir(parents=True, exist_ok=True)
-    for name in ("importance", "categories"):
+    for name in STARTER_PROMPTS:
         path = folder / f"{name}.md"
         if not path.exists():
             path.write_text(prompts_builder.packaged(f"starter-{name}.md"), "utf-8")

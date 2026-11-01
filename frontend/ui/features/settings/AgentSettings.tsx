@@ -16,6 +16,7 @@ import { SettingRow } from "@/ui/primitives/SettingRow";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { Switch } from "@/ui/primitives/Switch";
 import { useToast } from "@/ui/primitives/Toast";
+import { ChoiceCards } from "@/ui/primitives/TileGroup";
 import { t, tn } from "@/ui/strings";
 
 type Level = NonNullable<Permissions["command"]>;
@@ -27,6 +28,40 @@ const LEVEL_OPTIONS = [
   { value: "off", label: t("permissions.off") },
 ];
 const ALWAYS_ASKS = LEVEL_OPTIONS.filter((option) => option.value !== "allow");
+
+// Starting points. Sending always asks, and mail or a document can never talk its way past that.
+const PRESETS = {
+  careful: { read: "allow", write: "ask", data: "ask", command: "off" },
+  balanced: { read: "allow", write: "allow", data: "allow", command: "ask" },
+  "hands-on": { read: "allow", write: "allow", data: "allow", command: "allow" },
+} as const;
+type Preset = keyof typeof PRESETS;
+
+const presetOf = (value: Permissions): Preset | undefined =>
+  (Object.keys(PRESETS) as Preset[]).find((name) => {
+    const preset = PRESETS[name];
+    return !Object.keys(value.tools ?? {}).length && value.read === preset.read && value.write === preset.write && value.data === preset.data && value.command === preset.command;
+  });
+
+/** Most people want to pick a sentence, not set fifty switches. */
+export function AgentPresets() {
+  const permissions = usePermissions();
+  const save = useSavePermissions();
+  if (permissions.isPending) return <Skeleton className="h-6 w-full" />;
+  if (permissions.isError) return <ErrorState title={t("permissions.error")} onRetry={() => void permissions.refetch()} />;
+  return (
+    <ChoiceCards
+      label={t("presets.label")}
+      value={presetOf(permissions.data)}
+      onChange={(name) => save.mutate({ ...permissions.data, ...PRESETS[name], tools: {} })}
+      choices={[
+        { value: "careful", label: t("presets.careful"), description: t("presets.careful.note") },
+        { value: "balanced", label: t("presets.balanced"), description: t("presets.balanced.note") },
+        { value: "hands-on", label: t("presets.handsOn"), description: t("presets.handsOn.note") },
+      ]}
+    />
+  );
+}
 
 export function PermissionsSettings() {
   const permissions = usePermissions();
@@ -41,6 +76,9 @@ export function PermissionsSettings() {
   const groups = [...new Set(catalog.data.tools.map((tool) => tool.group))];
   return (
     <div className="flex flex-col gap-5">
+      <Card title={t("presets.label")} description={t("presets.note")}>
+        <AgentPresets />
+      </Card>
       <Card title={t("permissions.title")} description={t("permissions.description")}>
         <div className="flex flex-col gap-5">
           {groups.map((group) => (

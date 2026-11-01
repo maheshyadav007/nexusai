@@ -15,6 +15,7 @@ import { Dialog } from "@/ui/primitives/Dialog";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { IconButton } from "@/ui/primitives/IconButton";
+import { Pressable } from "@/ui/primitives/Pressable";
 import { Select } from "@/ui/primitives/Select";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { TextLink } from "@/ui/primitives/TextLink";
@@ -136,7 +137,7 @@ function MessageCard({ message, open: startsOpen, onReply, threadWhy }: { messag
   const sender = message.from_name || message.from_addr;
   return (
     <article data-testid="message" className="border-b border-line-subtle last:border-b-0">
-      <button type="button" aria-expanded={open} onClick={() => setOpen((current) => !current)} className="focus-ring flex w-full items-center gap-2 rounded-md py-3 text-left">
+      <Pressable aria-expanded={open} onClick={() => setOpen((current) => !current)} className="focus-ring flex w-full items-center gap-2 rounded-md py-3 text-left">
         <Avatar name={sender} />
         <span className="flex min-w-0 flex-1 flex-col">
           <span className={`truncate text-md ${message.read ? "text-ink-primary" : "font-medium text-ink-primary"}`}>{sender}</span>
@@ -150,7 +151,7 @@ function MessageCard({ message, open: startsOpen, onReply, threadWhy }: { messag
           )}
         </span>
         <span className="shrink-0 text-sm tabular-nums text-ink-muted">{format(message.date)}</span>
-      </button>
+      </Pressable>
       {open ? (
         <div className="flex flex-col gap-3 pb-4 pl-6">
           {message.added.length > 0 ? <p className="text-sm text-ink-secondary">{t("mail.people.added", { people: message.added.join(", ") })}</p> : null}

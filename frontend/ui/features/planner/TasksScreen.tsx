@@ -1,13 +1,12 @@
 "use client";
 
-import * as RadixCheckbox from "@radix-ui/react-checkbox";
-import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import type { Task } from "@/ui/client/contracts.generated";
 import { useDateOnly, useRelativeTime } from "@/ui/client/format";
 import { useRemoveTask, useSaveTask, useTasks } from "@/ui/client/work";
 import { AskAgent } from "@/ui/features/agent/AskAgent";
 import { Icon } from "@/ui/icons";
+import { RoundCheck } from "@/ui/primitives/Checkbox";
 import { Button } from "@/ui/primitives/Button";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
@@ -15,8 +14,9 @@ import { ExpandRow } from "@/ui/primitives/ExpandRow";
 import { Field } from "@/ui/primitives/Field";
 import { IconButton } from "@/ui/primitives/IconButton";
 import { Input, Textarea } from "@/ui/primitives/Input";
-import { FADE_RISE, QUICK } from "@/ui/primitives/motion";
+import { Presence, Rise } from "@/ui/primitives/Motion";
 import { PageHeader } from "@/ui/primitives/PageHeader";
+import { BareInput } from "@/ui/primitives/Pressable";
 import { Segmented } from "@/ui/primitives/Segmented";
 import { Select } from "@/ui/primitives/Select";
 import { Skeleton } from "@/ui/primitives/Skeleton";
@@ -47,15 +47,7 @@ const ORDER: readonly StringKey[] = ["tasks.group.overdue", "tasks.group.today",
 
 function Check({ task, onChange }: { task: Task; onChange: (done: boolean) => void }) {
   const done = task.status === "done";
-  return (
-    <RadixCheckbox.Root aria-label={task.title} checked={done} onCheckedChange={(next) => onChange(next === true)} className={`focus-ring flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors duration-fast ${done ? "border-status-success bg-status-success text-surface-raised" : "border-line-strong hover:border-ink-muted"}`}>
-      <RadixCheckbox.Indicator asChild>
-        <motion.span initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={QUICK} className="inline-flex">
-          <Icon name="check" className="h-3 w-3" />
-        </motion.span>
-      </RadixCheckbox.Indicator>
-    </RadixCheckbox.Root>
-  );
+  return <RoundCheck label={task.title} checked={done} onChange={onChange} />;
 }
 
 function TaskRow({ task }: { task: Task }) {
@@ -71,7 +63,7 @@ function TaskRow({ task }: { task: Task }) {
   const update = (changes: Partial<ReturnType<typeof fields>>) => save.mutate({ ...fields(task), ...changes });
   const done = task.status === "done";
   return (
-    <motion.li layout="position" {...FADE_RISE}>
+    <Rise as="li" settle="position">
       <ExpandRow
         testid="task"
         label={t("tasks.details", { title: task.title })}
@@ -120,7 +112,7 @@ function TaskRow({ task }: { task: Task }) {
           </div>
         </div>
       </ExpandRow>
-    </motion.li>
+    </Rise>
   );
 }
 
@@ -150,8 +142,8 @@ export function TasksScreen() {
           add();
         }}
       >
-        <input aria-label={t("tasks.new")} placeholder={t("tasks.new.placeholder")} value={title} onChange={(event) => setTitle(event.target.value)} className="min-w-0 flex-1 bg-transparent px-2 py-1 text-md text-ink-primary outline-none placeholder:text-ink-muted" />
-        <input aria-label={t("tasks.due")} type="date" value={due} onChange={(event) => setDue(event.target.value)} className="focus-ring rounded-md bg-transparent px-2 py-1 text-sm text-ink-secondary" />
+        <BareInput aria-label={t("tasks.new")} placeholder={t("tasks.new.placeholder")} value={title} onChange={(event) => setTitle(event.target.value)} className="min-w-0 flex-1 bg-transparent px-2 py-1 text-md text-ink-primary outline-none placeholder:text-ink-muted" />
+        <BareInput aria-label={t("tasks.due")} type="date" value={due} onChange={(event) => setDue(event.target.value)} className="focus-ring rounded-md bg-transparent px-2 py-1 text-sm text-ink-secondary" />
         <Button type="submit" variant="primary" loading={save.isPending} disabled={!title.trim()}>
           {t("tasks.add")}
         </Button>
@@ -175,11 +167,11 @@ export function TasksScreen() {
           <section key={group.key ?? "all"} {...(group.key ? { "aria-label": t(group.key) } : {})} className="flex flex-col gap-2">
             {group.key ? <h2 className={`text-sm ${group.key === "tasks.group.overdue" ? "text-accent-default" : "text-ink-muted"}`}>{t(group.key)}</h2> : null}
             <ul aria-label={group.key ? t(group.key) : t("nav.tasks")} className="flex flex-col gap-2">
-              <AnimatePresence initial={false}>
+              <Presence>
                 {group.rows.map((task) => (
                   <TaskRow key={task.id} task={task} />
                 ))}
-              </AnimatePresence>
+              </Presence>
             </ul>
           </section>
         ))}

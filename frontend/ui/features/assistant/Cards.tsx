@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "motion/react";
 import { useState, type ReactNode } from "react";
 import { ApiRequestError } from "@/ui/client/api";
 import type { ToolApproval } from "@/ui/client/contracts.generated";
@@ -10,15 +9,16 @@ import { useDecideApproval, useDecideApprovals } from "@/ui/client/sessions";
 import { Icon, type IconName } from "@/ui/icons";
 import { Button } from "@/ui/primitives/Button";
 import { Checkbox } from "@/ui/primitives/Checkbox";
-import { FADE_RISE } from "@/ui/primitives/motion";
+import { Rise } from "@/ui/primitives/Motion";
+import { BareInput, Pressable } from "@/ui/primitives/Pressable";
 import { t, tn } from "@/ui/strings";
 import { isFinished, toolName, type ToolPart } from "./parts";
 
 function Shell({ children, testid }: { children: ReactNode; testid?: string }) {
   return (
-    <motion.section {...FADE_RISE} data-testid={testid} className="flex flex-col gap-3 rounded-lg border border-line-subtle bg-surface-raised p-4">
+    <Rise as="section" data-testid={testid} className="flex flex-col gap-3 rounded-lg border border-line-subtle bg-surface-raised p-4">
       {children}
-    </motion.section>
+    </Rise>
   );
 }
 
@@ -54,15 +54,15 @@ export function QuestionCard({ question, options, multiple, onAnswer, onSkip, pe
             {options.map((option) => {
               const on = picked.includes(option);
               return (
-                <button key={option} type="button" role={multiple ? "checkbox" : "radio"} aria-checked={on} disabled={pending} onClick={() => choose(option)} className="focus-ring flex w-full items-center gap-2 rounded-md p-2 text-left text-md text-ink-primary transition-colors duration-fast hover:bg-surface-sunken disabled:opacity-60">
+                <Pressable key={option} type="button" role={multiple ? "checkbox" : "radio"} aria-checked={on} disabled={pending} onClick={() => choose(option)} className="focus-ring flex w-full items-center gap-2 rounded-md p-2 text-left text-md text-ink-primary transition-colors duration-fast hover:bg-surface-sunken disabled:opacity-60">
                   <span className={`flex h-4 w-4 shrink-0 items-center justify-center border transition-colors duration-fast ${multiple ? "rounded-sm" : "rounded-full"} ${on ? "border-accent-default bg-accent-default text-accent-on" : "border-line-strong"}`}>{on ? <Icon name="check" className="h-3 w-3" /> : null}</span>
                   {option}
-                </button>
+                </Pressable>
               );
             })}
           </div>
         ) : null}
-        <input
+        <BareInput
           aria-label={t(options.length ? "chat.question.other" : "chat.question.answer")}
           placeholder={t(options.length ? "chat.question.other" : "chat.question.answer")}
           value={other}

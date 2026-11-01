@@ -19,8 +19,8 @@ const INVALIDATES: Record<string, readonly string[]> = {
   "thread.updated": ["threads", "thread"],
   "drafts.changed": ["drafts"],
   "rules.changed": ["rules"],
-  "documents.changed": ["documents", "panel-results"],
-  "document.indexed": ["documents", "search"],
+  "documents.changed": ["documents", "document", "panel-results"],
+  "document.indexed": ["documents", "document", "search"],
   "pst.progress": ["pst", "mail-status", "jobs"],
   "panels.changed": ["panels"],
   "session.changed": ["sessions", "session", "jobs", "usage"],
@@ -88,6 +88,11 @@ export function EventsProvider({ children }: { children: ReactNode }) {
       source.onmessage = (message) => {
         const event = JSON.parse(message.data as string) as AppEvent;
         // This event carries the new list and counts, so nothing has to go and ask.
+        if (event.type === "semantic.changed") {
+          void client.cancelQueries({ queryKey: ["semantic"] });
+          client.setQueryData(["semantic"], event.payload);
+          void refresh(client, { queryKey: ["jobs"] });
+        }
         if (event.type === "categories.changed" && event.payload.categories) {
           void client.cancelQueries({ queryKey: ["categories"] });
           client.setQueryData(["categories"], { categories: event.payload.categories });

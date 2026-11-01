@@ -9,6 +9,7 @@ import { Button } from "@/ui/primitives/Button";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Popover } from "@/ui/primitives/Popover";
+import { Pressable } from "@/ui/primitives/Pressable";
 import { Select } from "@/ui/primitives/Select";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { StatusDot } from "@/ui/primitives/StatusDot";
@@ -29,10 +30,10 @@ export function NotificationCenter() {
     <Popover
       label={t("notifications.title")}
       trigger={
-        <button type="button" aria-label={label} className="focus-ring inline-flex items-center gap-1 rounded-md p-2 text-ink-secondary transition-colors duration-fast hover:bg-surface-sunken hover:text-ink-primary">
+        <Pressable aria-label={label} className="inline-flex items-center gap-1 rounded-md p-2 text-ink-secondary transition-colors duration-fast hover:bg-surface-sunken hover:text-ink-primary">
           <Icon name="notifications" />
           {unread ? <span className="text-sm tabular-nums text-accent-default">{unread}</span> : null}
-        </button>
+        </Pressable>
       }
     >
       <div className="flex flex-col gap-3">
@@ -53,9 +54,7 @@ export function NotificationCenter() {
         <ul className="flex max-h-popover flex-col gap-1 overflow-y-auto">
           {items.map((item) => (
             <li key={item.id}>
-              <button
-                type="button"
-                className="focus-ring flex w-full items-start gap-2 rounded-sm p-2 text-left transition-colors duration-fast hover:bg-surface-sunken"
+              <Pressable className="flex w-full items-start gap-2 rounded-sm p-2 text-left transition-colors duration-fast hover:bg-surface-sunken"
                 onClick={() => {
                   if (!item.read) markRead.mutate(item.id);
                   if (item.link) router.push(item.link);
@@ -67,7 +66,7 @@ export function NotificationCenter() {
                   {item.detail ? <span className="block text-sm text-ink-muted">{item.detail}</span> : null}
                   <span className="block text-sm tabular-nums text-ink-muted">{format(item.time)}</span>
                 </span>
-              </button>
+              </Pressable>
             </li>
           ))}
         </ul>

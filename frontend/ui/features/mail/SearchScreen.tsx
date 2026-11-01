@@ -3,6 +3,8 @@
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { useSearch } from "@/ui/client/mail";
+import { MeaningNotice } from "@/ui/features/settings/LocalModelSettings";
+import { Badge } from "@/ui/primitives/Badge";
 import { Checkbox } from "@/ui/primitives/Checkbox";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
@@ -35,12 +37,13 @@ export function SearchScreen() {
     <div className="mx-auto flex max-w-content flex-col gap-4 p-6">
       <h1 className="font-serif text-display text-ink-primary">{t("search.title")}</h1>
       <div className="grid gap-3 md:grid-cols-2">
-        <Field label={t("search.words")}>{({ invalid, ...control }) => <Input invalid={invalid} value={text} onChange={(event) => setText(event.target.value)} {...control} />}</Field>
+        <Field label={t("search.words")} hint={t("search.words.hint")}>{({ invalid, ...control }) => <Input invalid={invalid} value={text} onChange={(event) => setText(event.target.value)} {...control} />}</Field>
         <Field label={t("search.sender")}>{({ invalid, ...control }) => <Input invalid={invalid} value={sender} onChange={(event) => setSender(event.target.value)} {...control} />}</Field>
         <Field label={t("search.from")}>{({ invalid, ...control }) => <Input type="date" invalid={invalid} value={from} onChange={(event) => setFrom(event.target.value)} {...control} />}</Field>
         <Field label={t("search.until")}>{({ invalid, ...control }) => <Input type="date" invalid={invalid} value={to} onChange={(event) => setTo(event.target.value)} {...control} />}</Field>
       </div>
       <Checkbox label={t("search.attachments")} checked={attachments} onChange={setAttachments} />
+      {active ? <MeaningNotice /> : null}
       {!active ? <EmptyState icon="search" title={t("search.prompt")} /> : null}
       {active && search.isPending ? <Skeleton className="h-6 w-full" /> : null}
       {search.isError ? <ErrorState title={t("search.error")} onRetry={() => void search.refetch()} /> : null}
@@ -49,6 +52,11 @@ export function SearchScreen() {
         {hits.map((hit) => (
           <li key={hit.thread.id} data-testid="search-hit">
             <ThreadRowView thread={hit.thread} excerpt={hit.excerpt} />
+            {hit.matched_by === "meaning" ? (
+              <div className="px-3 pb-1">
+                <Badge>{t("search.byMeaning")}</Badge>
+              </div>
+            ) : null}
           </li>
         ))}
       </ul>

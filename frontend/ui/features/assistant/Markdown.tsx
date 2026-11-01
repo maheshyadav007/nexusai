@@ -5,6 +5,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Icon } from "@/ui/icons";
 import { t } from "@/ui/strings";
+import { Pressable } from "@/ui/primitives/Pressable";
 
 function CodeBlock({ language, children }: { language: string; children: string }) {
   const [copied, setCopied] = useState(false);
@@ -17,10 +18,10 @@ function CodeBlock({ language, children }: { language: string; children: string 
     <div className="my-3 overflow-hidden rounded-md border border-line-subtle bg-surface-raised">
       <div className="flex items-center justify-between border-b border-line-subtle px-3 py-1 text-sm text-ink-muted">
         <span className="font-mono">{language}</span>
-        <button type="button" onClick={copy} className="focus-ring inline-flex items-center gap-1 rounded-sm p-1 transition-colors duration-fast hover:text-ink-primary">
+        <Pressable onClick={copy} className="inline-flex items-center gap-1 rounded-sm p-1 transition-colors duration-fast hover:text-ink-primary">
           <Icon name={copied ? "check" : "copy"} className="h-3 w-3" />
           {t(copied ? "chat.copied" : "chat.copy")}
-        </button>
+        </Pressable>
       </div>
       <pre className="overflow-x-auto p-3 font-mono text-sm text-ink-primary">{children}</pre>
     </div>

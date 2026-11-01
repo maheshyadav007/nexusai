@@ -31,7 +31,8 @@ export function themeToCss(theme: Theme, isDefault: boolean): string {
   const accents = Object.entries(theme.accents).map(([name, values]) => {
     const scoped = selector.split(", ").map((s) => `${s}[data-accent="${name}"]`).join(", ");
     const body = Object.entries(values).map(([key, value]) => `  --color-accent-${key}: ${channels(value)};`).join("\n");
-    return `${scoped} {\n${body}\n}`;
+    // What's running shows in the accent, so it follows the person's choice.
+    return `${scoped} {\n${body}\n  --color-agent-running: ${channels(values.default)};\n}`;
   });
   return `${selector} {\n  --density-scale: 1;\n  --text-scale: 1;\n${body}\n}\n${scales.join("\n")}\n${accents.join("\n")}\n`;
 }

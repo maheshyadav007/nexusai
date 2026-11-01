@@ -195,6 +195,19 @@ test("follow system matches the system, and an accent recolors the app", async (
   const before = await accent();
   await page.getByRole("radio", { name: "Cobalt" }).click();
   await expect.poll(accent).not.toBe(before);
+  // Everything in the accent follows, including previews and what's running.
+  const chosen = await accent();
+  const terracotta = await page.evaluate(() => {
+    const dot = document.createElement("span");
+    dot.className = "bg-agent-running";
+    document.body.append(dot);
+    const running = getComputedStyle(dot).backgroundColor;
+    dot.remove();
+    const previews = [...document.querySelectorAll("[data-theme][data-accent]")].filter((node) => node !== document.documentElement && (node as HTMLElement).dataset.accent !== document.documentElement.dataset.accent && !(node as HTMLElement).className.includes("h-5"));
+    return { running, previews: previews.length };
+  });
+  expect(terracotta.previews).toBe(0);
+  expect(terracotta.running).toBe(`rgb(${chosen.trim().split(" ").join(", ")})`);
   await page.getByRole("radio", { name: "Terracotta" }).click();
   await page.getByRole("radio", { name: "Nexus Light" }).click();
 });

@@ -1,6 +1,5 @@
 "use client";
 
-import { AnimatePresence, motion } from "motion/react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useEvents } from "@/ui/client/events";
@@ -8,7 +7,8 @@ import { groupApprovals, useApprovals, useSessions } from "@/ui/client/sessions"
 import { useChannel } from "@/ui/client/work";
 import { Icon, type IconName } from "@/ui/icons";
 import { Button } from "@/ui/primitives/Button";
-import { FADE_RISE } from "@/ui/primitives/motion";
+import { Presence, Rise } from "@/ui/primitives/Motion";
+import { Pressable } from "@/ui/primitives/Pressable";
 import { t, tn } from "@/ui/strings";
 import { useAssistant } from "./AssistantProvider";
 
@@ -98,9 +98,9 @@ export function AgentToasts() {
   const dismiss = (key: string) => setNotes((current) => current.filter((item) => item.key !== key));
   return (
     <div role="region" aria-label={t("toast.region")} className={`pointer-events-none fixed z-50 flex w-popover max-w-full flex-col gap-2 ${assistant.open ? "bottom-4 right-dock" : "bottom-7 right-4 pb-3"}`}>
-      <AnimatePresence initial={false}>
+      <Presence>
         {notes.map((note) => (
-          <motion.div key={note.key} layout {...FADE_RISE} data-testid="agent-toast" className="pointer-events-auto mr-4 flex items-start gap-3 rounded-lg border border-line-subtle bg-surface-raised p-3 shadow-overlay">
+          <Rise key={note.key} settle data-testid="agent-toast" className="pointer-events-auto mr-4 flex items-start gap-3 rounded-lg border border-line-subtle bg-surface-raised p-3 shadow-overlay">
             <Icon name={note.icon} className="mt-px h-4 w-4 shrink-0 text-ink-secondary" />
             <div className="flex min-w-0 flex-1 flex-col gap-1">
               <p className="truncate text-md font-medium text-ink-primary">{note.title}</p>
@@ -118,12 +118,12 @@ export function AgentToasts() {
                 </div>
               ) : null}
             </div>
-            <button type="button" aria-label={t("toast.dismiss")} onClick={() => dismiss(note.key)} className="focus-ring rounded-sm p-px text-ink-muted transition-colors duration-fast hover:text-ink-primary">
+            <Pressable aria-label={t("toast.dismiss")} onClick={() => dismiss(note.key)} className="focus-ring rounded-sm p-px text-ink-muted transition-colors duration-fast hover:text-ink-primary">
               <Icon name="close" className="h-3 w-3" />
-            </button>
-          </motion.div>
+            </Pressable>
+          </Rise>
         ))}
-      </AnimatePresence>
+      </Presence>
     </div>
   );
 }

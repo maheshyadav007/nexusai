@@ -1,6 +1,7 @@
 "use client";
 
 import { Popover } from "@/ui/primitives/Popover";
+import { Pressable } from "@/ui/primitives/Pressable";
 import { StageBar } from "@/ui/primitives/StageBar";
 import { StatusDot } from "@/ui/primitives/StatusDot";
 import { t } from "@/ui/strings";
@@ -27,11 +28,11 @@ export function ActivityIsland({ activities = [] }: { activities?: readonly Acti
     <Popover
       label={t("activity.title")}
       trigger={
-        <button type="button" className="focus-ring flex min-w-0 items-center gap-3 rounded-full bg-surface-inverse px-4 py-1 text-md text-ink-inverse transition-opacity duration-fast hover:opacity-90">
+        <Pressable className="flex min-w-0 items-center gap-3 rounded-full bg-surface-inverse px-4 py-1 text-md text-ink-inverse transition-opacity duration-fast hover:opacity-90">
           <StatusDot tone="running" />
           <span className="truncate">{first.title}</span>
           <span className="shrink-0 text-sm tabular-nums">{activities.length}</span>
-        </button>
+        </Pressable>
       }
     >
       <h2 className="mb-3 text-md font-medium">{t("activity.title")}</h2>

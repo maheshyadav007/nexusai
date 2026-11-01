@@ -1,6 +1,5 @@
 "use client";
 
-import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useState } from "react";
 import type { ChannelMessage, MailCategory, TodayThread } from "@/ui/client/contracts.generated";
@@ -15,10 +14,12 @@ import { Icon, type IconName } from "@/ui/icons";
 import { Button } from "@/ui/primitives/Button";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
-import { FADE_RISE } from "@/ui/primitives/motion";
+import { Presence, Rise } from "@/ui/primitives/Motion";
+import { Pressable } from "@/ui/primitives/Pressable";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { TextLink } from "@/ui/primitives/TextLink";
 import { t, tn } from "@/ui/strings";
+import { FinishSetup } from "./FinishSetup";
 
 const TITLE_LENGTH = 60;
 
@@ -58,9 +59,9 @@ function AskRow({ message }: { message: ChannelMessage }) {
     <div className="flex flex-col gap-1">
       <p className="flex items-center gap-2 text-sm text-ink-muted">
         {message.session && message.session !== "mail-agent" ? (
-          <button type="button" onClick={() => assistant.openSession(message.session as string)} className="focus-ring min-w-0 truncate rounded-sm underline underline-offset-2 transition-colors duration-fast hover:text-ink-primary">
+          <Pressable onClick={() => assistant.openSession(message.session as string)} className="focus-ring min-w-0 truncate rounded-sm underline underline-offset-2 transition-colors duration-fast hover:text-ink-primary">
             {title ?? message.agent}
-          </button>
+          </Pressable>
         ) : (
           message.agent
         )}
@@ -73,7 +74,7 @@ function AskRow({ message }: { message: ChannelMessage }) {
 
 function ProposalRow({ icon, title, meta, why, onAccept, onDecline, accept = t("tasks.accept") }: { icon: IconName; title: string; meta: string; why?: string | null | undefined; onAccept: () => void; onDecline: () => void; accept?: string }) {
   return (
-    <motion.li {...FADE_RISE} data-testid="proposal" className="flex items-start gap-3 rounded-lg border border-line-subtle bg-surface-raised p-4">
+    <Rise as="li" data-testid="proposal" className="flex items-start gap-3 rounded-lg border border-line-subtle bg-surface-raised p-4">
       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-surface-sunken text-ink-secondary">
         <Icon name={icon} />
       </span>
@@ -90,7 +91,7 @@ function ProposalRow({ icon, title, meta, why, onAccept, onDecline, accept = t("
           {accept}
         </Button>
       </div>
-    </motion.li>
+    </Rise>
   );
 }
 
@@ -126,19 +127,19 @@ function WaitingOnYou() {
       </h2>
       {channel.isPending ? <Skeleton className="h-6 w-full" /> : null}
       {channel.isSuccess && count === 0 ? <p className="text-md text-ink-muted">{t("today.nothingWaiting")}</p> : null}
-      <AnimatePresence initial={false}>
+      <Presence>
         {groupApprovals(pending).map((group) => (
-          <motion.div key={`approval-${group[0]?.session}-${group[0]?.tool}`} layout {...FADE_RISE} className="flex flex-col gap-1">
+          <Rise key={`approval-${group[0]?.session}-${group[0]?.tool}`} settle className="flex flex-col gap-1">
             <p className="text-sm text-ink-muted">{group[0]?.session_title}</p>
             <ApprovalGroupCard approvals={group} />
-          </motion.div>
+          </Rise>
         ))}
         {asks.map((message) => (
-          <motion.div key={`ask-${message.id}`} layout {...FADE_RISE} data-testid="channel-message">
+          <Rise key={`ask-${message.id}`} settle data-testid="channel-message">
             <AskRow message={message} />
-          </motion.div>
+          </Rise>
         ))}
-      </AnimatePresence>
+      </Presence>
       <ul className="flex flex-col gap-3">
         {proposedTasks.map((task) => (
           <ProposalRow key={`task-${task.id}`} icon="tasks" title={task.title} meta={task.due ? t("today.proposal.taskDue", { when: formatDay(task.due) }) : t("today.proposal.task")} onDecline={() => removeTask.mutate(task.id)} onAccept={() => saveTask.mutate({ id: task.id, title: task.title, notes: task.notes, status: task.status, due: task.due ?? null, thread: task.thread ?? null, proposed: false })} />
@@ -195,10 +196,10 @@ function WorkingNow() {
     <ul aria-label={t("today.working")} className="flex flex-wrap gap-2">
       {rows.map((row) => (
         <li key={row.id}>
-          <button type="button" onClick={() => assistant.openSession(row.id)} className="focus-ring flex max-w-popover items-center gap-2 rounded-full border border-line-subtle bg-surface-raised px-3 py-1 text-sm text-ink-secondary transition-colors duration-fast hover:text-ink-primary">
+          <Pressable onClick={() => assistant.openSession(row.id)} className="focus-ring flex max-w-popover items-center gap-2 rounded-full border border-line-subtle bg-surface-raised px-3 py-1 text-sm text-ink-secondary transition-colors duration-fast hover:text-ink-primary">
             <Icon name="thinking" className="h-3 w-3 shrink-0 animate-working motion-reduce:animate-none" />
             <span className="truncate">{row.title}</span>
-          </button>
+          </Pressable>
         </li>
       ))}
     </ul>
@@ -225,6 +226,7 @@ export function TodayScreen() {
         {today.data ? <p data-testid="today-brief" className="text-md tabular-nums text-ink-secondary">{today.data.brief}</p> : null}
       </header>
       <Composer value={text} onChange={setText} onSubmit={send} busy={assistant.starting} placeholder={t("today.ask")} label={t("today.ask")} />
+      <FinishSetup />
       <WorkingNow />
       {today.isError ? <ErrorState title={t("today.error")} onRetry={() => void today.refetch()} /> : null}
       <WaitingOnYou />
@@ -233,9 +235,9 @@ export function TodayScreen() {
           <h2 className="text-md font-medium text-ink-primary">{t("today.prep")}</h2>
           <p data-testid="today-prep" className="whitespace-pre-wrap text-md text-ink-primary">{today.data.prep_text}</p>
           {today.data.prep_session ? (
-            <button type="button" onClick={() => assistant.openSession(today.data?.prep_session as string)} className="focus-ring self-start rounded-sm text-sm text-ink-secondary underline underline-offset-2 hover:text-ink-primary">
+            <Pressable onClick={() => assistant.openSession(today.data?.prep_session as string)} className="focus-ring self-start rounded-sm text-sm text-ink-secondary underline underline-offset-2 hover:text-ink-primary">
               {t("channel.openSession")}
-            </button>
+            </Pressable>
           ) : null}
         </section>
       ) : null}

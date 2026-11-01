@@ -1,7 +1,8 @@
 "use client";
 
 import * as RadixTabs from "@radix-ui/react-tabs";
-import type { ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
+import { ActiveMark } from "./Motion";
 
 export interface TabItem {
   value: string;
@@ -10,12 +11,15 @@ export interface TabItem {
 }
 
 export function Tabs({ label, tabs, defaultValue }: { label: string; tabs: readonly TabItem[]; defaultValue?: string }) {
+  const [current, setCurrent] = useState(defaultValue ?? tabs[0]?.value ?? "");
+  const group = useId();
   return (
-    <RadixTabs.Root defaultValue={defaultValue ?? tabs[0]?.value ?? ""}>
+    <RadixTabs.Root value={current} onValueChange={setCurrent}>
       <RadixTabs.List aria-label={label} className="flex gap-1 border-b border-line-subtle">
         {tabs.map((tab) => (
-          <RadixTabs.Trigger key={tab.value} value={tab.value} className="focus-ring -mb-px rounded-t-sm border-b-2 border-transparent px-3 py-2 text-md text-ink-secondary transition-colors duration-fast hover:text-ink-primary data-[state=active]:border-accent-default data-[state=active]:text-ink-primary">
+          <RadixTabs.Trigger key={tab.value} value={tab.value} className="focus-ring relative rounded-t-sm px-3 py-2 text-md text-ink-secondary transition-colors duration-fast hover:text-ink-primary data-[state=active]:text-ink-primary">
             {tab.label}
+            {current === tab.value ? <ActiveMark group={group} className="absolute inset-x-0 bottom-0 h-px bg-accent-default" /> : null}
           </RadixTabs.Trigger>
         ))}
       </RadixTabs.List>

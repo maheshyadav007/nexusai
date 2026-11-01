@@ -17,9 +17,23 @@ body {
   }
   .nx-progress::-webkit-progress-value {
     @apply bg-accent-default;
+    transition: inline-size var(--motion-slow) var(--motion-easing);
   }
   .nx-progress::-moz-progress-bar {
     @apply bg-accent-default;
+  }
+  /* Anything clickable gives a little under the pointer. */
+  .press {
+    transition-property: transform, color, background-color, border-color, opacity;
+    transition-duration: var(--motion-fast);
+    transition-timing-function: var(--motion-easing);
+  }
+  .press:active:not(:disabled) {
+    transform: scale(var(--motion-press));
+  }
+  /* Overlays grow from the control that opened them. */
+  .from-trigger {
+    transform-origin: var(--radix-dropdown-menu-content-transform-origin, var(--radix-popover-content-transform-origin, var(--radix-select-content-transform-origin, var(--radix-tooltip-content-transform-origin))));
   }
   .focus-ring {
     @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-default;

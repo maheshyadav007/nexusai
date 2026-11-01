@@ -6,6 +6,7 @@ import { Icon } from "@/ui/icons";
 import { Button } from "@/ui/primitives/Button";
 import { Dialog } from "@/ui/primitives/Dialog";
 import { ErrorState } from "@/ui/primitives/ErrorState";
+import { Pressable } from "@/ui/primitives/Pressable";
 import { ScrollArea } from "@/ui/primitives/ScrollArea";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { t } from "@/ui/strings";
@@ -36,25 +37,23 @@ export function FolderPicker({ start, trigger, extension, onPick }: { start: str
           <ul className="flex flex-col gap-px p-1">
             {listing.parent ? (
               <li>
-                <button type="button" onClick={() => setPath(listing.parent ?? null)} className="focus-ring flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-md text-ink-secondary transition-colors duration-fast hover:bg-surface-sunken">
+                <Pressable onClick={() => setPath(listing.parent ?? null)} className="focus-ring flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-md text-ink-secondary transition-colors duration-fast hover:bg-surface-sunken">
                   <Icon name="collapse" />
                   {t("home.picker.up")}
-                </button>
+                </Pressable>
               </li>
             ) : null}
             {listing.folders.map((name) => (
               <li key={name}>
-                <button type="button" onClick={() => setPath(`${listing.path}/${name}`)} className="focus-ring flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-md text-ink-primary transition-colors duration-fast hover:bg-surface-sunken">
+                <Pressable onClick={() => setPath(`${listing.path}/${name}`)} className="focus-ring flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-md text-ink-primary transition-colors duration-fast hover:bg-surface-sunken">
                   <Icon name="all" />
                   <span className="truncate">{name}</span>
-                </button>
+                </Pressable>
               </li>
             ))}
             {(listing.files ?? []).map((name) => (
               <li key={name}>
-                <button
-                  type="button"
-                  onClick={() => {
+                <Pressable onClick={() => {
                     onPick(`${listing.path}/${name}`);
                     setOpen(false);
                   }}
@@ -62,7 +61,7 @@ export function FolderPicker({ start, trigger, extension, onPick }: { start: str
                 >
                   <Icon name="documents" />
                   <span className="truncate">{name}</span>
-                </button>
+                </Pressable>
               </li>
             ))}
             {listing.folders.length === 0 && !listing.files?.length ? <li className="px-2 py-1 text-md text-ink-muted">{t("home.picker.empty")}</li> : null}

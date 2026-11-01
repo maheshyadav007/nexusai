@@ -350,6 +350,8 @@ class PromptFile(BaseModel):
     kind: Literal["personal", "agent"]
     content: str
     base: str | None = None
+    # What it was filled with to begin with, so an edit can be told from an untouched starter.
+    starter: str | None = None
 
 
 class ListPrompts(BaseModel):

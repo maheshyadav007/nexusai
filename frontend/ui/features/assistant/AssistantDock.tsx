@@ -1,6 +1,5 @@
 "use client";
 
-import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -9,7 +8,8 @@ import { useSessions } from "@/ui/client/sessions";
 import { useWaitingCount } from "@/ui/client/work";
 import { Icon } from "@/ui/icons";
 import { IconButton } from "@/ui/primitives/IconButton";
-import { QUICK, readSpace, SMOOTH } from "@/ui/primitives/motion";
+import { Presence, readSpace, RiseButton, Room, SlidePanel, Swap } from "@/ui/primitives/Motion";
+import { Pressable } from "@/ui/primitives/Pressable";
 import { Select } from "@/ui/primitives/Select";
 import { StatusDot } from "@/ui/primitives/StatusDot";
 import { Tooltip } from "@/ui/primitives/Tooltip";
@@ -34,10 +34,10 @@ function NewChat() {
         <ul className="flex flex-col border-t border-line-subtle">
           {STARTERS.map((key) => (
             <li key={key} className="border-b border-line-subtle">
-              <button type="button" onClick={() => send(t(key))} className="focus-ring flex w-full items-center gap-2 py-2 text-left text-md text-ink-secondary transition-colors duration-fast hover:text-ink-primary">
+              <Pressable onClick={() => send(t(key))} className="focus-ring flex w-full items-center gap-2 py-2 text-left text-md text-ink-secondary transition-colors duration-fast hover:text-ink-primary">
                 <Icon name="followUp" className="h-3 w-3 shrink-0 text-ink-muted" />
                 {t(key)}
-              </button>
+              </Pressable>
             </li>
           ))}
         </ul>
@@ -74,11 +74,9 @@ function Panel() {
   const attached = assistant.pinned && width >= SMALL_SCREEN;
   const place = attached ? { top: 0, right: 0, bottom: 0, borderRadius: 0 } : { top: Math.max(GAP, height - GAP - FLOATING_HEIGHT), right: GAP, bottom: GAP, borderRadius: GAP - 2 };
   return (
-    <motion.section
-      initial={{ opacity: 0, x: attached ? 32 : 0, y: attached ? 0 : 12, ...place }}
-      animate={{ opacity: 1, x: 0, y: 0, ...place }}
-      exit={{ opacity: 0, x: attached ? 32 : 0, y: attached ? 0 : 12 }}
-      transition={SMOOTH}
+    <SlidePanel
+      attached={attached}
+      place={place}
       aria-label={t("chat.title")}
       data-testid="assistant-dock"
       data-pinned={attached}
@@ -100,7 +98,7 @@ function Panel() {
         <IconButton icon="minimize" label={t("chat.minimize")} onClick={() => assistant.setOpen(false)} />
       </header>
       {assistant.session ? <SessionChat key={assistant.session} id={assistant.session} /> : <NewChat />}
-    </motion.section>
+    </SlidePanel>
   );
 }
 
@@ -110,7 +108,7 @@ export function AssistantRoom() {
   const pathname = usePathname();
   const { width } = useWindowSize();
   const showing = assistant.open && assistant.pinned && width >= SMALL_SCREEN && !pathname.startsWith("/agent/sessions/");
-  return <motion.div aria-hidden initial={false} animate={{ width: showing ? readSpace(light.layout.dock) : 0 }} transition={SMOOTH} className="shrink-0" />;
+  return <Room width={showing ? light.layout.dock : null} />;
 }
 
 /** The chat, from anywhere in the app. It tucks into a small pill when it isn't needed. */
@@ -123,23 +121,23 @@ export function AssistantDock() {
   // The session page already is this conversation, and two live views of one chat would fight.
   if (pathname.startsWith("/agent/sessions/")) return null;
   return (
-    <AnimatePresence initial={false}>
+    <Presence>
       {assistant.open ? (
         <Panel key="panel" />
       ) : (
-        <motion.button key="pill" type="button" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} transition={QUICK} onClick={() => assistant.setOpen(true)} data-testid="assistant-pill" className="focus-ring fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full border border-line-subtle bg-surface-raised px-4 py-2 text-md font-medium text-ink-primary shadow-overlay transition-colors duration-fast hover:bg-surface-sunken">
+        <RiseButton key="pill" onClick={() => assistant.setOpen(true)} data-testid="assistant-pill" className="focus-ring fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full border border-line-subtle bg-surface-raised px-4 py-2 text-md font-medium text-ink-primary shadow-overlay transition-colors duration-fast hover:bg-surface-sunken">
           <Icon name="chat" />
           {t("chat.pill")}
           {waiting ? (
             <span className="flex items-center gap-1 text-sm tabular-nums text-accent-default">
               <StatusDot tone="waiting" />
-              {tn("chat.waitingCount", waiting)}
+              <Swap value={waiting}>{tn("chat.waitingCount", waiting)}</Swap>
             </span>
           ) : running ? (
             <StatusDot tone="running" />
           ) : null}
-        </motion.button>
+        </RiseButton>
       )}
-    </AnimatePresence>
+    </Presence>
   );
 }

@@ -2,7 +2,6 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiRequestError } from "@/ui/client/api";
 import { useTimeOnly } from "@/ui/client/format";
@@ -12,7 +11,8 @@ import { Icon } from "@/ui/icons";
 import { Button } from "@/ui/primitives/Button";
 import { Dialog } from "@/ui/primitives/Dialog";
 import { ErrorState } from "@/ui/primitives/ErrorState";
-import { FADE_RISE, QUICK } from "@/ui/primitives/motion";
+import { Presence, Rise, RiseButton, Swap } from "@/ui/primitives/Motion";
+import { BareTextarea, Pressable } from "@/ui/primitives/Pressable";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { Tooltip } from "@/ui/primitives/Tooltip";
 import { t } from "@/ui/strings";
@@ -30,9 +30,9 @@ const ANSWER_PREFIX = "They answered: ";
 function ActionButton({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
   return (
     <Tooltip content={label}>
-      <button type="button" aria-label={label} onClick={onClick} className="focus-ring inline-flex h-5 w-5 items-center justify-center rounded-sm text-ink-muted transition-colors duration-fast hover:bg-surface-sunken hover:text-ink-primary">
+      <Pressable aria-label={label} onClick={onClick} className="inline-flex h-5 w-5 items-center justify-center rounded-sm text-ink-muted transition-colors duration-fast hover:bg-surface-sunken hover:text-ink-primary">
         {children}
-      </button>
+      </Pressable>
     </Tooltip>
   );
 }
@@ -49,7 +49,9 @@ function CopyAction({ text, label }: { text: string; label: string }) {
         })
       }
     >
-      <Icon name={copied ? "check" : "copy"} className="h-3 w-3" />
+      <Swap value={copied}>
+        <Icon name={copied ? "check" : "copy"} className="h-3 w-3" />
+      </Swap>
     </ActionButton>
   );
 }
@@ -74,7 +76,7 @@ function UserMessage({ message, canEdit, onEdit }: { message: UIMessage; canEdit
           if (draft.trim() && draft !== text) onEdit(draft.trim());
         }}
       >
-        <textarea aria-label={t("chat.edit")} autoFocus value={draft} onChange={(event) => setDraft(event.target.value)} className="grow-field focus-ring w-full resize-none bg-transparent text-md text-ink-primary" />
+        <BareTextarea aria-label={t("chat.edit")} autoFocus value={draft} onChange={(event) => setDraft(event.target.value)} className="grow-field focus-ring w-full resize-none bg-transparent text-md text-ink-primary" />
         <p className="text-sm text-ink-muted">{t("chat.edit.note")}</p>
         <div className="flex justify-end gap-2">
           <Button variant="quiet" onClick={() => setEditing(false)}>
@@ -88,7 +90,7 @@ function UserMessage({ message, canEdit, onEdit }: { message: UIMessage; canEdit
     );
   }
   return (
-    <motion.article {...FADE_RISE} data-testid="user-message" className="group flex flex-col items-end gap-1">
+    <Rise as="article" data-testid="user-message" className="group flex flex-col items-end gap-1">
       <div className="max-w-full whitespace-pre-wrap break-words rounded-lg bg-surface-sunken px-3 py-2 text-md text-ink-primary">{text}</div>
       <div className="flex items-center gap-1 opacity-0 transition-opacity duration-fast focus-within:opacity-100 group-hover:opacity-100">
         <MessageTime value={timeOf(message)} />
@@ -105,7 +107,7 @@ function UserMessage({ message, canEdit, onEdit }: { message: UIMessage; canEdit
           </ActionButton>
         ) : null}
       </div>
-    </motion.article>
+    </Rise>
   );
 }
 
@@ -172,10 +174,10 @@ function AssistantMessage({ message, session, running, isLast, onFollowUp, showF
         <ul aria-label={t("chat.followUps")} className="flex flex-col border-t border-line-subtle">
           {followUps.map((question) => (
             <li key={question} className="border-b border-line-subtle">
-              <button type="button" onClick={() => onFollowUp(question)} className="focus-ring flex w-full items-center gap-2 py-2 text-left text-md text-ink-secondary transition-colors duration-fast hover:text-ink-primary">
+              <Pressable onClick={() => onFollowUp(question)} className="focus-ring flex w-full items-center gap-2 py-2 text-left text-md text-ink-secondary transition-colors duration-fast hover:text-ink-primary">
                 <Icon name="followUp" className="h-3 w-3 shrink-0 text-ink-muted" />
                 {question}
-              </button>
+              </Pressable>
             </li>
           ))}
         </ul>
@@ -194,9 +196,9 @@ function ContextChips({ id }: { id: string }) {
       {items.map((item) => (
         <li key={item.ref} data-testid="context-chip" className="flex max-w-full items-center gap-1 rounded-md border border-line-subtle bg-surface-raised py-px pl-2 pr-1 text-sm text-ink-secondary">
           <span className="min-w-0 truncate">{item.label}</span>
-          <button type="button" aria-label={t("sessions.context.remove", { label: item.label })} onClick={() => setContext.mutate({ id, context: items.filter((other) => other.ref !== item.ref).map((other) => other.ref) })} className="focus-ring rounded-sm p-px text-ink-muted transition-colors duration-fast hover:text-ink-primary">
+          <Pressable aria-label={t("sessions.context.remove", { label: item.label })} onClick={() => setContext.mutate({ id, context: items.filter((other) => other.ref !== item.ref).map((other) => other.ref) })} className="focus-ring rounded-sm p-px text-ink-muted transition-colors duration-fast hover:text-ink-primary">
             <Icon name="close" className="h-3 w-3" />
-          </button>
+          </Pressable>
         </li>
       ))}
     </ul>
@@ -323,12 +325,9 @@ export function ChatView({ id, initial, active, readOnly = false, footer }: { id
             </p>
           ) : null}
         </div>
-        <AnimatePresence>
+        <Presence>
           {away ? (
-            <motion.button
-              type="button"
-              {...FADE_RISE}
-              transition={QUICK}
+            <RiseButton
               aria-label={t("chat.toLatest")}
               onClick={() => {
                 following.current = true;
@@ -338,9 +337,9 @@ export function ChatView({ id, initial, active, readOnly = false, footer }: { id
               className="focus-ring absolute bottom-2 left-1/2 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full border border-line-subtle bg-surface-raised text-ink-secondary shadow-raised"
             >
               <Icon name="moveDown" className="h-3 w-3" />
-            </motion.button>
+            </RiseButton>
           ) : null}
-        </AnimatePresence>
+        </Presence>
       </div>
       {readOnly ? (
         <p className="border-t border-line-subtle p-4 text-sm text-ink-muted">{t("sessions.selfRunning")}</p>
