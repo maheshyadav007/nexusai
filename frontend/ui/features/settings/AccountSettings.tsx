@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { ApiRequestError } from "@/ui/client/api";
 import type { MailProfile } from "@/ui/client/contracts.generated";
-import { useMailAccounts, useMailPresets, useMailStatus, useProbeServer, useRemoveAccount, useSaveAccount, useSetPullLimit, useTestAccount } from "@/ui/client/mail";
-import { usePausePipeline } from "@/ui/client/work";
+import { useMailAccounts, useMailPresets, useMailStatus, useProbeServer, useRemoveAccount, useSaveAccount, useSetNeverDelete, useTestAccount } from "@/ui/client/mail";
+import { usePipelines } from "@/ui/client/work";
+import { PipelineRow } from "@/ui/features/cockpit/Pipelines";
 import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
 import { ErrorState } from "@/ui/primitives/ErrorState";
@@ -17,7 +18,8 @@ import { Switch } from "@/ui/primitives/Switch";
 import { t, type StringKey } from "@/ui/strings";
 
 const MAIL_PIPELINE = "mail-sync";
-const FOLDER_NAMES: Readonly<Record<string, StringKey>> = { inbox: "accounts.folder.inbox", sent: "accounts.folder.sent", drafts: "accounts.folder.drafts" };
+// A few are enough to show what's there. Gmail can have dozens of labels.
+const FOLDERS_SHOWN = 4;
 const BLANK = { imapHost: "", imapPort: "993", smtpHost: "", smtpPort: "465", secure: true };
 // A company's own server is listed under this, for logins with no @ in them.
 const ANY_LOGIN = "*";
@@ -51,36 +53,17 @@ function MailDownload() {
   );
 }
 
-/** Stop or resume, and how much history to keep coming. Settings and the Connectors page share this. */
+/** The same controls as the Schedules page and the Cockpit, plus the promise about the server. */
 function MailSyncControls() {
+  const pipelines = usePipelines();
   const status = useMailStatus();
-  const pause = usePausePipeline();
-  const setLimit = useSetPullLimit();
-  const saved = status.data?.pull_limit == null ? "" : String(status.data.pull_limit);
-  const [limit, setValue] = useState(saved);
-  useEffect(() => setValue(saved), [saved]);
-  const paused = status.data?.state === "paused";
-  const total = status.data?.server_total ?? 0;
-  const pulled = status.data?.pulled ?? 0;
-  const valid = limit === "" || Number(limit) >= 1;
+  const neverDelete = useSetNeverDelete();
+  const row = pipelines.data?.pipelines.find((item) => item.id === MAIL_PIPELINE);
   return (
     <div className="flex w-full flex-col gap-3">
-      {total ? <p data-testid="mail-counts" className="text-sm tabular-nums text-ink-muted">{t("accounts.state.counts", { pulled: pulled.toLocaleString(), total: total.toLocaleString() })}</p> : null}
-      <form
-        className="flex flex-wrap items-end gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          setLimit.mutate(limit === "" ? null : Number(limit));
-        }}
-      >
-        <div className="w-48">
-          <Field label={t("accounts.limit")} hint={t("accounts.limit.hint")}>{({ invalid, ...control }) => <Input type="number" min={1} placeholder={t("accounts.limit.all")} invalid={invalid} value={limit} onChange={(event) => setValue(event.target.value)} {...control} />}</Field>
-        </div>
-        <Button type="submit" loading={setLimit.isPending} disabled={!valid || limit === saved}>{t("accounts.limit.save")}</Button>
-      </form>
-      <div>
-        <Button loading={pause.isPending} onClick={() => pause.mutate({ id: MAIL_PIPELINE, paused: !paused })}>{t(paused ? "pipelines.resume" : "pipelines.stop")}</Button>
-      </div>
+      {row ? <ul><PipelineRow row={row} /></ul> : null}
+      <Switch label={t("accounts.neverDelete")} checked={status.data?.never_delete ?? true} onChange={(value) => neverDelete.mutate(value)} />
+      <p className="text-sm text-ink-muted">{t("accounts.neverDelete.hint")}</p>
     </div>
   );
 }
@@ -140,7 +123,8 @@ export function AccountSettings() {
   // What the server holds has to be known before anyone can choose how much of it to download.
   const reached = test.data?.results.find((result) => result.service === "imap")?.ok === true;
   const counts = reached ? (test.data?.counts ?? []) : [];
-  const onServer = counts.reduce((sum, row) => sum + row.messages, 0);
+  const onServer = reached ? (test.data?.total ?? 0) : 0;
+  const biggest = counts.filter((row) => row.messages > 0).sort((a, b) => b.messages - a.messages).slice(0, FOLDERS_SHOWN);
   const wanted = Number(pull);
   const canStart = onServer === 0 || (Number.isInteger(wanted) && wanted >= 1);
   const { reset: forgetTest } = test;
@@ -217,7 +201,7 @@ export function AccountSettings() {
               <div data-testid="pull-chooser" className="flex flex-col gap-3">
                 <div>
                   <p className="text-md tabular-nums text-ink-primary">{t("accounts.onServer", { total: onServer.toLocaleString() })}</p>
-                  <p className="text-sm tabular-nums text-ink-muted">{t("accounts.onServer.folders", { folders: counts.map((row) => `${FOLDER_NAMES[row.role] ? t(FOLDER_NAMES[row.role] as StringKey) : row.role} ${row.messages.toLocaleString()}`).join(", ") })}</p>
+                  <p className="text-sm tabular-nums text-ink-muted">{t("accounts.onServer.folders", { count: counts.length, folders: biggest.map((row) => `${row.role === "inbox" ? t("nav.inbox") : (row.name.split("/").pop() ?? row.name)} ${row.messages.toLocaleString()}`).join(", ") })}</p>
                 </div>
                 <div className="flex flex-wrap items-end gap-2">
                   <div className="w-48">

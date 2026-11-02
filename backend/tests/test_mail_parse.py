@@ -107,6 +107,47 @@ def part(**changes: object) -> Part:
         ({"size": 5000}, 1, "signature"),
         ({"size": 500_000}, 1, "inline"),
         ({"size": 500_000}, 5, "signature"),
+        # However it's labelled, because logos often come marked as attachments.
+        ({"size": 5000, "disposition": "attachment", "content_id": None}, 1, "signature"),
+        ({"size": 188_000, "disposition": "attachment", "content_id": None}, 5, "signature"),
+        ({"size": 90_000, "filename": "image001.png"}, 1, "signature"),
+        (
+            {"size": 90_000, "filename": "Logo-blue.png", "disposition": "attachment"},
+            1,
+            "signature",
+        ),
+        (
+            {"filename": "attachment", "content_type": "text/x-amp-html", "size": 90_000},
+            1,
+            "signature",
+        ),
+        ({"filename": "attachment", "content_type": "multipart/mixed", "size": 2}, 1, "signature"),
+        (
+            {"filename": "notes.txt", "content_type": "text/plain", "disposition": "attachment"},
+            1,
+            "attachment",
+        ),
+        # A real picture someone meant to send stays a document.
+        (
+            {
+                "size": 900_000,
+                "filename": "site-photo.jpg",
+                "disposition": "attachment",
+                "content_id": None,
+            },
+            1,
+            "attachment",
+        ),
+        (
+            {
+                "size": 900_000,
+                "filename": "image001.png",
+                "disposition": "attachment",
+                "content_id": None,
+            },
+            1,
+            "attachment",
+        ),
         (
             {
                 "content_id": None,
@@ -137,12 +178,19 @@ def test_attachment_kinds(changes: dict[str, object], seen: int, kind: str) -> N
 @pytest.mark.parametrize(
     ("headers", "sender", "category"),
     [
-        ({"Auto-Submitted": "auto-generated"}, "a@x.com", "Automated"),
-        ({"List-Id": "<dev.lists.x>"}, "a@x.com", "Newsletters"),
-        ({"List-Unsubscribe": "<mailto:u@x>"}, "a@x.com", "Newsletters"),
-        ({"Precedence": "bulk"}, "a@x.com", "Newsletters"),
-        ({}, "no-reply@x.com", "Automated"),
-        ({}, "notifications@x.com", "Automated"),
+        ({"Auto-Submitted": "auto-generated"}, "a@example.org", "Updates"),
+        ({"List-Id": "<dev.lists.x>"}, "a@example.org", "Forums"),
+        ({"Precedence": "list"}, "a@example.org", "Forums"),
+        ({"List-Unsubscribe": "<mailto:u@x>"}, "a@example.org", "Promotions"),
+        ({"Precedence": "bulk"}, "a@example.org", "Promotions"),
+        ({}, "no-reply@example.org", "Updates"),
+        ({}, "notifications@example.org", "Updates"),
+        (
+            {"X-GitHub-Reason": "mention", "List-Unsubscribe": "<mailto:u@x>"},
+            "a@example.org",
+            "Updates",
+        ),
+        ({}, "someone@facebookmail.com", "Social"),
     ],
 )
 def test_builtin_rules_catch_routine_mail(
@@ -226,3 +274,40 @@ def test_cid_images_are_embedded() -> None:
 
 def test_html_to_text_handles_entities_and_blocks() -> None:
     assert html_to_text("<div>a&amp;b</div><div>c</div>") == "a&b\n\nc"
+
+
+def test_styling_stays_but_cant_fetch_anything() -> None:
+    clean = sanitize(
+        "<html><head><title>Hidden title</title><style>@import url(http://evil/a.css);"
+        ".big{font-size:30px;background:url(http://evil/b.png)}</style></head>"
+        '<body bgcolor="#eeeeee" style="color:navy"><p class="big">Hi</p></body></html>',
+        [],
+    )
+    assert ".big{font-size:30px" in clean
+    assert "evil" not in clean
+    assert "@import" not in clean
+    assert "Hidden title" not in clean
+    assert 'bgcolor="#eeeeee"' in clean
+    assert "color:navy" in clean
+    assert 'class="big"' in clean
+
+
+@pytest.mark.parametrize(
+    "image",
+    [
+        '<img src="https://x.example/a.gif" width="1" height="1">',
+        '<img src="https://x.example/a.gif" style="width:0px;height:0px;">',
+        '<img src="https://x.example/a.gif" style="display:none">',
+        '<img src="https://tracker.example/a.png">',
+        '<img src="https://mail.example/track/open?id=9">',
+        '<img src="https://x.example/pixel.png">',
+    ],
+)
+def test_trackers_are_removed_whatever_the_setting(image: str) -> None:
+    assert "<img" not in sanitize(f"<p>Hi</p>{image}", [])
+
+
+def test_real_images_stay_for_the_setting_to_decide() -> None:
+    clean = sanitize('<img src="https://cdn.example/banner.jpg" width="600" alt="Sale">', [])
+    assert 'data-blocked-src="https://cdn.example/banner.jpg"' in clean
+    assert 'alt="Sale"' in clean

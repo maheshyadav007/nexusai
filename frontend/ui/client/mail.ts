@@ -24,20 +24,41 @@ export const useTestAccount = () =>
 export function useSaveAccount() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: { name: string; profile: MailProfile; password?: string | null; pull_limit: number | null }) => command("mail.accounts.save", input),
+    mutationFn: (input: { name: string; profile: MailProfile; password?: string | null; pull_limit?: number | null }) => command("mail.accounts.save", input),
     onSuccess: (accounts) => client.setQueryData(["mail-accounts"], accounts),
   });
 }
 
-export function useSetPullLimit() {
+export function useSetNeverDelete() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (pull_limit: number | null) => command("mail.sync.limit", { pull_limit }),
+    mutationFn: (value: boolean) => command("mail.sync.neverDelete", { value }),
+    onSuccess: (status) => client.setQueryData(["mail-status"], status),
+  });
+}
+
+export function useGetMoreFromFolder() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { folder: string; count?: number | null }) => command("mail.history.more", input),
     onSuccess: (status) => {
       client.setQueryData(["mail-status"], status);
       void client.invalidateQueries({ queryKey: ["pipelines"] });
     },
   });
+}
+
+export function useSetSenderImages() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { address: string; allow: boolean }) => command("mail.images.sender", input),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["thread"] }),
+  });
+}
+
+export function useMailFolders() {
+  const ready = useHomeReady();
+  return useQuery({ queryKey: ["mail-folders"], queryFn: () => query("mail.folders", {}), enabled: ready });
 }
 
 export function useRemoveAccount() {
@@ -50,11 +71,11 @@ export function useRemoveAccount() {
 
 const PAGE_SIZE = 100;
 
-export function useThreads(folder: FolderRole, category: string | null) {
+export function useThreads(folder: FolderRole, category: string | null, location: string | null = null) {
   const ready = useHomeReady();
   return useInfiniteQuery({
-    queryKey: ["threads", folder, category],
-    queryFn: ({ pageParam }) => query("threads.list", { folder, category, before: pageParam, limit: PAGE_SIZE }),
+    queryKey: ["threads", folder, category, location],
+    queryFn: ({ pageParam }) => query("threads.list", { folder, category, location, before: pageParam, limit: PAGE_SIZE }),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.next_before ?? null,
     enabled: ready,
@@ -78,6 +99,10 @@ function useThreadCommand<T>(run: (input: T) => Promise<unknown>) {
 
 export const useSetRead = () => useThreadCommand((input: { id: number; read: boolean }) => command("thread.setRead", input));
 export const useSetFlag = () => useThreadCommand((input: { id: number; flagged: boolean }) => command("thread.setFlag", input));
+export const useAddToFolder = () => useThreadCommand((input: { id: number; folder: string }) => command("thread.addToFolder", input));
+export const useRemoveFromFolder = () => useThreadCommand((input: { id: number; folder: string }) => command("thread.removeFromFolder", input));
+export const useAddCategory = () => useThreadCommand((input: { id: number; name: string }) => command("thread.addCategory", input));
+export const useRemoveThreadCategory = () => useThreadCommand((input: { id: number; name: string }) => command("thread.removeCategory", input));
 export const useMoveThread = () => useThreadCommand((input: MoveThread) => command("thread.move", input));
 export const useSetStatus = () => useThreadCommand((input: { id: number; status: ThreadStatus }) => command("thread.setStatus", input));
 export const useSetCategory = () => useThreadCommand((input: { id: number; category: string | null }) => command("thread.setCategory", input));

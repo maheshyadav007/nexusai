@@ -3,12 +3,13 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useParams, usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useMailAccounts, useThreads, type FolderRole } from "@/ui/client/mail";
+import { useGetMoreFromFolder, useMailAccounts, useMailFolders, useSearch, useThreads, type FolderRole } from "@/ui/client/mail";
 import type { IconName } from "@/ui/icons";
 import { Button } from "@/ui/primitives/Button";
 import { Dialog } from "@/ui/primitives/Dialog";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
+import { Input } from "@/ui/primitives/Input";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { t, type StringKey } from "@/ui/strings";
 import { Composer } from "./Composer";
@@ -42,8 +43,28 @@ export function NothingOpen() {
   );
 }
 
-function ThreadList({ title, role, category, base, icon, empty }: { title: string; role: FolderRole; category: string | null; base: string; icon: IconName; empty: StringKey }) {
-  const threads = useThreads(role, category);
+/** A quick search inside the folder on screen, in place of its list. */
+function FilteredList({ text, role, category, location, base, title }: { text: string; role: FolderRole; category: string | null; location: string | null; base: string; title: string }) {
+  const pathname = usePathname();
+  const search = useSearch({ query: text, ...(category ? { category } : {}), ...(location ? { location } : role === "all" || role === "priority" ? {} : { folder: role }) }, true);
+  const hits = search.data?.hits ?? [];
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      {search.isPending ? <div className="p-3"><Skeleton className="h-6 w-full" /></div> : null}
+      {search.isSuccess && !hits.length ? <div className="p-3"><EmptyState icon="search" title={t("search.none")} /></div> : null}
+      <ul aria-label={title}>
+        {hits.map((hit) => (
+          <li key={hit.thread.id} data-testid="thread-row" className="border-b border-line-subtle">
+            <ThreadRowView thread={hit.thread} excerpt={hit.excerpt} highlight={text} href={`${base}/${hit.thread.id}`} active={pathname === `${base}/${hit.thread.id}`} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ThreadList({ title, role, category, location, base, icon, empty }: { title: string; role: FolderRole; category: string | null; location: string | null; base: string; icon: IconName; empty: StringKey }) {
+  const threads = useThreads(role, category, location);
   const scroller = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   const rows = threads.data?.pages.flatMap((page) => page.threads) ?? [];
@@ -86,13 +107,29 @@ function ThreadList({ title, role, category, base, icon, empty }: { title: strin
 }
 
 /** A folder or a category: its conversations on the left, the open one on the right. */
-export function MailWorkspace({ folder, category = null, children }: { folder: string; category?: string | null; children: ReactNode }) {
+/** A folder on the server that's only partly here says so, and can fetch the rest. */
+function FolderProgress({ name }: { name: string }) {
+  const folders = useMailFolders();
+  const more = useGetMoreFromFolder();
+  const row = folders.data?.folders.find((item) => item.name === name);
+  const left = (row?.on_server ?? 0) - (row?.here ?? 0);
+  if (!row || left <= 0) return null;
+  return (
+    <div data-testid="folder-progress" className="flex flex-wrap items-center justify-between gap-2 border-b border-line-subtle px-4 py-2 text-sm text-ink-secondary">
+      <span className="tabular-nums">{t("mail.folder.here", { here: (row.here ?? 0).toLocaleString(), total: (row.on_server ?? 0).toLocaleString() })}</span>
+      <Button variant="quiet" className="py-px" loading={more.isPending} onClick={() => more.mutate({ folder: name })}>{t("mail.folder.getRest")}</Button>
+    </div>
+  );
+}
+
+export function MailWorkspace({ folder, category = null, location = null, children }: { folder: string; category?: string | null; location?: string | null; children: ReactNode }) {
   const accounts = useMailAccounts();
   const params = useParams();
   const shown = FOLDERS[folder] ?? (FOLDERS.all as NonNullable<(typeof FOLDERS)[string]>);
-  const title = category ?? t(shown.title);
-  const base = category ? `/mail/category/${encodeURIComponent(category)}` : `/mail/${folder}`;
+  const title = category ?? location?.split("/").pop() ?? t(shown.title);
+  const base = location ? `/mail/folder/${encodeURIComponent(location)}` : category ? `/mail/category/${encodeURIComponent(category)}` : `/mail/${folder}`;
   const reading = Boolean(params.thread);
+  const [filter, setFilter] = useState("");
   if (accounts.data && !accounts.data.active) {
     return (
       <div className="mx-auto max-w-content p-6">
@@ -111,7 +148,15 @@ export function MailWorkspace({ folder, category = null, children }: { folder: s
           </div>
           <NewMessage />
         </header>
-        <ThreadList title={title} role={shown.role} category={category} base={base} icon={shown.icon} empty={category ? "mail.empty.category" : shown.empty} />
+        {location ? <FolderProgress name={location} /> : null}
+        <div className="shrink-0 border-b border-line-subtle p-2">
+          <Input type="search" aria-label={t("mail.filter")} placeholder={t("mail.filter")} value={filter} onChange={(event) => setFilter(event.target.value)} />
+        </div>
+        {filter.trim() ? (
+          <FilteredList text={filter.trim()} role={shown.role} category={category} location={location} base={base} title={title} />
+        ) : (
+          <ThreadList title={title} role={shown.role} category={category} location={location} base={base} icon={shown.icon} empty={category || location ? "mail.empty.category" : shown.empty} />
+        )}
       </section>
       <div className={`min-h-0 min-w-0 flex-1 overflow-y-auto ${reading ? "" : "hidden md:block"}`}>{children}</div>
     </div>

@@ -441,7 +441,7 @@ def test_pst_rules_run_and_bad_files_say_so(
     thread = client.post("/api/queries/threads.list", json={"folder": "archive"}).json()["threads"][
         0
     ]
-    assert thread["category"] == "Newsletters"
+    assert thread["category"] == "Forums"
 
 
 def test_pst_input_is_checked(client: TestClient, tmp_path: Path, fake_worker: None) -> None:

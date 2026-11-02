@@ -73,6 +73,11 @@ max_thread_chars = 20000
 memory_max_chars = 4000
 # One run of the Mail agent. It stops there, and what it finished is kept.
 triage_token_limit = 30000
+# How many past emails the rule engine didn't catch the Mail agent reads to learn about the person,
+# before it goes live. Each takes about one model call.
+learn_emails = 400
+# Older mail it reads can't become important on Home or start anything.
+learn_recent_days = 7
 command_timeout_seconds = 120
 max_tool_output_chars = 20000
 max_agent_messages_per_run = 20
@@ -116,6 +121,11 @@ accent = "terracotta"
 default_screen = "today"
 date_format = "system"
 time_format = "system"
+# Whether mail's outside images load by themselves. They can tell a sender it was opened, and from
+# what address, so a company may prefer "block". Trackers are removed either way.
+remote_images = "load"
+sound_muted = false
+sound_off = []
 
 [semantic]
 # Where models come from, unless the person sets a mirror.

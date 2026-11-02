@@ -3,7 +3,7 @@
 import json
 import re
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from importlib import resources
 from typing import Any, Literal
 
@@ -67,7 +67,7 @@ def enabled(ctx: Context) -> bool:
 
 def mode(ctx: Context) -> MailMode:
     rows = ctx.bus.db.fetch_all("SELECT value FROM agent_defaults WHERE key = 'mail_mode'")
-    return "each" if not rows else rows[0]["value"]
+    return "both" if not rows else rows[0]["value"]
 
 
 def enqueue(
@@ -80,6 +80,129 @@ def enqueue(
             " VALUES (?, ?, ?, 'pending', ?, ?, ?)",
             (MAIL_TRIGGER, event or uuid.uuid4().hex, _now(), message, thread, answer),
         )
+
+
+# Reading past mail to learn about the person: nothing yet, reading, wrapping up, done.
+LEARN_PREFIX = "learn-"
+LEARNING_STATE = "mail_learning"
+LEARNING_TURN = "mail_learning_turn"
+LEARNING_TOTAL = "mail_learning_total"
+LEARN_COUNT = "mail_learn_emails"
+LEARNING_ORIGIN = "mail-learn"
+NOT_FROM_RULES = (
+    "m.account = ? AND m.folder_role = 'inbox' AND m.rule IS NULL AND NOT EXISTS"
+    " (SELECT 1 FROM triage_runs r WHERE r.message = m.id)"
+)
+
+
+def _setting(ctx: Context, key: str) -> str | None:
+    rows = ctx.bus.db.fetch_all("SELECT value FROM agent_defaults WHERE key = ?", (key,))
+    return str(rows[0]["value"]) if rows else None
+
+
+def _set(ctx: Context, key: str, value: str) -> None:
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO agent_defaults (key, value) VALUES (?, ?)"
+            " ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )
+
+
+def learn_count(ctx: Context) -> int:
+    return int(_setting(ctx, LEARN_COUNT) or ctx.config.agent.learn_emails)
+
+
+def set_learn_count(ctx: Context, count: int) -> None:
+    _set(ctx, LEARN_COUNT, str(count))
+
+
+def learning_state(ctx: Context) -> str:
+    return _setting(ctx, LEARNING_STATE) or ""
+
+
+def set_learning_state(ctx: Context, state: str) -> None:
+    _set(ctx, LEARNING_STATE, state)
+
+
+def learning_turn(ctx: Context) -> int | None:
+    found = _setting(ctx, LEARNING_TURN)
+    return int(found) if found else None
+
+
+def set_learning_turn(ctx: Context, turn: int) -> None:
+    _set(ctx, LEARNING_TURN, str(turn))
+
+
+def unjudged_count(ctx: Context) -> int:
+    account = accounts.current_account(ctx.config)
+    return int(
+        ctx.bus.db.fetch_all(
+            f"SELECT COUNT(*) AS n FROM messages m WHERE {NOT_FROM_RULES}",  # noqa: S608
+            (account,),
+        )[0]["n"]
+    )
+
+
+def queue_learning(ctx: Context) -> int:
+    """The newest emails rules didn't catch, handed over oldest first so what's learned builds up."""
+    account = accounts.current_account(ctx.config)
+    rows = ctx.bus.db.fetch_all(
+        f"SELECT m.id, m.thread_id FROM messages m WHERE {NOT_FROM_RULES}"  # noqa: S608
+        " ORDER BY m.date DESC, m.id DESC LIMIT ?",
+        (account, learn_count(ctx)),
+    )
+    for row in reversed(rows):
+        enqueue(ctx, row["id"], row["thread_id"], event=f"{LEARN_PREFIX}{row['id']}")
+    _set(ctx, LEARNING_TOTAL, str(len(rows)))
+    set_learning_state(ctx, "reading")
+    return len(rows)
+
+
+def learning_progress(ctx: Context) -> tuple[int, int]:
+    """How many of the past emails it's been through, and how many it set out to read."""
+    total = int(_setting(ctx, LEARNING_TOTAL) or 0)
+    left = ctx.bus.db.fetch_all(
+        "SELECT COUNT(*) AS n FROM trigger_runs WHERE trigger = ? AND event LIKE ?"
+        " AND status IN ('pending', 'running')",
+        (MAIL_TRIGGER, f"{LEARN_PREFIX}%"),
+    )[0]["n"]
+    return max(0, total - left), total
+
+
+def has_learning_waiting(ctx: Context) -> bool:
+    return bool(
+        ctx.bus.db.fetch_all(
+            "SELECT 1 FROM trigger_runs WHERE trigger = ? AND event LIKE ? AND status = 'pending'"
+            " LIMIT 1",
+            (MAIL_TRIGGER, f"{LEARN_PREFIX}%"),
+        )
+    )
+
+
+def wrap_up_turn(ctx: Context) -> TurnRequest:
+    """Turns the running notes into something the person, and the Interview, can read."""
+    notes = memory.learned(ctx.config.home)
+    task = f"<untrusted>\n{notes or 'No notes.'}\n</untrusted>"
+    return TurnRequest(
+        SESSION_ID,
+        _template("mail-learned"),
+        LEARNING_ORIGIN,
+        _template("mail-learned-model"),
+        task,
+    )
+
+
+def interview_turn(ctx: Context, session: str) -> TurnRequest:
+    notes = memory.learned(ctx.config.home)
+    task = f"<untrusted>\n{notes}\n</untrusted>" if notes else ""
+    return TurnRequest(
+        session,
+        _template("interview-start"),
+        "setup",
+        _template("interview-start-model"),
+        task,
+    )
 
 
 def ensure_session(ctx: Context) -> None:
@@ -139,15 +262,17 @@ def next_turn(
     db = ctx.bus.db
     config = ctx.config.agent
     while True:
+        # New mail goes ahead of past mail, so catching up never holds it back.
         first = db.fetch_all(
-            "SELECT thread FROM trigger_runs WHERE trigger = ? AND status = 'pending' ORDER BY id LIMIT 1",
-            (MAIL_TRIGGER,),
+            "SELECT thread FROM trigger_runs WHERE trigger = ? AND status = 'pending'"
+            " ORDER BY event LIKE ?, id LIMIT 1",
+            (MAIL_TRIGGER, f"{LEARN_PREFIX}%"),
         )
         if not first:
             return None
         thread = first[0]["thread"]
         rows = db.fetch_all(
-            "SELECT id, message, answer FROM trigger_runs WHERE trigger = ? AND status = 'pending' AND thread = ?"
+            "SELECT id, message, answer, event FROM trigger_runs WHERE trigger = ? AND status = 'pending' AND thread = ?"
             " ORDER BY id LIMIT ?",
             (MAIL_TRIGGER, thread, config.triage_batch),
         )
@@ -160,7 +285,15 @@ def next_turn(
         settle(ctx, [row["id"] for row in rows], "skipped")
     answers = [row["answer"] for row in rows if row["answer"]]
     shown_subject = subject or "no subject"
-    if answers:
+    learning = all(str(row["event"]).startswith(LEARN_PREFIX) for row in rows)
+    if learning:
+        done, total = learning_progress(ctx)
+        shown = _template(
+            "mail-learn", done=done + 1, total=total, sender=sender, subject=shown_subject
+        )
+        told = _template("mail-learn-model")
+        origin = LEARNING_ORIGIN
+    elif answers:
         shown = _template("mail-answer", subject=shown_subject, answer=" ".join(answers))
         told = _template("mail-answer-model")
     elif len(rows) > 1:
@@ -177,15 +310,20 @@ def next_turn(
     if board:
         lines = "\n".join(f"- {r['kind']}: {r['title']} (due {r['due']})" for r in board)
         task += f"\n\nAlready on the work board for this conversation:\n<untrusted>\n{lines}\n</untrusted>"
-    known = db.fetch_all("SELECT name FROM mail_categories WHERE proposed = 0 ORDER BY name")
+    # Including what rules file into, which has no entry of its own until someone edits it.
+    known = db.fetch_all(
+        "SELECT name FROM mail_categories WHERE proposed = 0 UNION"
+        " SELECT DISTINCT category FROM threads WHERE category IS NOT NULL ORDER BY 1"
+    )
     if known:
-        task += "\n\nCategories that exist: " + ", ".join(row["name"] for row in known)
+        task += "\n\nCategories that exist: " + ", ".join(row[0] for row in known)
     if answers:
         task += "\n\nThe person answered your earlier question: " + " ".join(answers)
     target = {
         "thread": thread,
         "subject": subject,
         "messages": [{"message": r["message"], "answer": r["answer"]} for r in rows],
+        "learning": learning,
     }
     request = TurnRequest(SESSION_ID, shown, origin, told, task, target, own)
     return request, [row["id"] for row in rows]
@@ -244,7 +382,14 @@ def record(ctx: Context, session: str, fields: dict[str, Any]) -> str:
     turn = rows[0]["id"]
     if ctx.bus.db.fetch_all("SELECT 1 FROM triage_runs WHERE turn = ? LIMIT 1", (turn,)):
         return "This email is already judged."
-    Triage(ctx)._apply(target["thread"], target["messages"], target["subject"], fields, turn)
+    Triage(ctx)._apply(
+        target["thread"],
+        target["messages"],
+        target["subject"],
+        fields,
+        turn,
+        learning=bool(target.get("learning")),
+    )
     return f"Filed as {fields.get('category') or 'uncategorized'}, {fields.get('importance', 'normal')} importance."
 
 
@@ -280,8 +425,21 @@ class Triage:
                 trace_id=self.ctx.trace_id,
             )
 
+    def _is_old(self, thread: int) -> bool:
+        rows = self.ctx.bus.db.fetch_all("SELECT last_date FROM threads WHERE id = ?", (thread,))
+        days = self.ctx.config.agent.learn_recent_days
+        since = (datetime.now(UTC) - timedelta(days=days)).isoformat()
+        return not rows or str(rows[0]["last_date"]) < since
+
     def _apply(
-        self, thread: int, rows: list[Any], subject: str, parsed: dict[str, Any], turn: int
+        self,
+        thread: int,
+        rows: list[Any],
+        subject: str,
+        parsed: dict[str, Any],
+        turn: int,
+        *,
+        learning: bool = False,
     ) -> None:
         ctx = self.ctx
         calls = ctx.bus.db.fetch_all(
@@ -304,6 +462,13 @@ class Triage:
         provisional = bool(question)
         why = f"{reason} (a best guess until you answer)" if provisional else reason
         latest = max(row["message"] for row in rows)
+        # Past mail is read to learn from. It can't ask, notify or add work, however it reads.
+        if learning:
+            question = None
+            provisional = False
+            why = reason
+            if self._is_old(thread):
+                importance, status = "normal", "fyi"
         with ctx.bus.unit_of_work() as work:
             for row in rows:
                 work.tx.execute(
@@ -344,7 +509,7 @@ class Triage:
                 source="agent",
                 trace_id=ctx.trace_id,
             )
-            if importance == "high":
+            if importance == "high" and not learning:
                 channel.notify(
                     ctx,
                     work,
@@ -359,6 +524,9 @@ class Triage:
                 )
         self._note_category(category)
         self._suggest_category(parsed.get("suggest_category"))
+        memory.add_learned(ctx.config.home, _strings(parsed.get("learned")))
+        if learning:
+            return
         self._proposals(thread, parsed, subject)
         if question:
             channel.post(

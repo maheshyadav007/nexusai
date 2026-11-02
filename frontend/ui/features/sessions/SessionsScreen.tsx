@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useDateTime } from "@/ui/client/format";
-import { useCreateSession, useSessions } from "@/ui/client/sessions";
+import { useArchiveSession, useCreateSession, useSessions } from "@/ui/client/sessions";
 import { Button } from "@/ui/primitives/Button";
+import { ContextMenu } from "@/ui/primitives/ContextMenu";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Input } from "@/ui/primitives/Input";
@@ -25,6 +26,8 @@ export const SESSION_STATES: Readonly<Record<string, { label: StringKey; tone: "
 
 function SessionGroup({ title, rows }: { title: string; rows: readonly SessionRow[] }) {
   const format = useDateTime();
+  const router = useRouter();
+  const archive = useArchiveSession();
   return (
     <section aria-label={title || t("nav.sessions")} className="flex flex-col gap-1">
       {title ? <h2 className="text-sm text-ink-muted">{title}</h2> : null}
@@ -34,12 +37,14 @@ function SessionGroup({ title, rows }: { title: string; rows: readonly SessionRo
           const waiting = session.status === "waiting";
           return (
             <li key={session.id} className="border-b border-line-subtle">
+              <ContextMenu items={[{ id: "open", label: t("menu.open"), onSelect: () => router.push(`/agent/sessions/${session.id}`) }, { id: "archive", label: t("menu.archive"), icon: "archive", onSelect: () => archive.mutate(session.id) }]}>
               <Link href={`/agent/sessions/${session.id}`} data-testid="session-row" className="focus-ring flex items-center gap-3 px-2 py-2 transition-colors duration-fast hover:bg-surface-raised">
                 <StatusDot tone={state.tone} />
                 <span className="min-w-0 flex-1 truncate text-md text-ink-primary">{session.title}</span>
                 <span className={`shrink-0 text-sm ${waiting ? "font-medium text-accent-default" : "text-ink-muted"}`}>{t(state.label)}</span>
                 <span className="shrink-0 text-sm tabular-nums text-ink-muted">{format(session.updated)}</span>
               </Link>
+              </ContextMenu>
             </li>
           );
         })}

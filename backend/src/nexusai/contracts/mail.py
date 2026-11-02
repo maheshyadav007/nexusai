@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 ThreadStatus = Literal["none", "waiting_on_you", "waiting_on_others", "resolved", "fyi"]
 Importance = Literal["low", "normal", "high"]
-FolderRole = Literal["inbox", "sent", "drafts", "trash", "archive", "other"]
+FolderRole = Literal["inbox", "sent", "drafts", "trash", "archive", "other", "junk"]
 SyncState = Literal[
     "off", "paused", "connecting", "syncing", "backfilling", "live", "offline", "failed"
 ]
@@ -59,8 +59,8 @@ class SaveMailAccount(BaseModel):
     profile: MailProfile
     password: str | None = Field(default=None, max_length=1024)
     make_active: bool = True
-    # The newest this many come down, and new mail always does. Empty means all of it.
-    pull_limit: int | None = Field(default=None, ge=1)
+    # How many older emails to bring down. New mail always comes. Empty means all of them.
+    pull_limit: int | None = Field(default=None, ge=0)
 
 
 class TestMailAccount(BaseModel):
@@ -77,6 +77,7 @@ class ConnectionResult(BaseModel):
 
 
 class MailFolderCount(BaseModel):
+    name: str
     role: str
     messages: int
 
@@ -84,15 +85,78 @@ class MailFolderCount(BaseModel):
 class MailTestResult(BaseModel):
     ok: bool
     results: list[ConnectionResult]
-    # What's in the folders that get downloaded, so the person can choose how much to pull.
+    # What's on the server, so the person can choose how much to pull.
     counts: list[MailFolderCount] = Field(default_factory=list)
+    # How many different emails that is. On Gmail one email can be in many folders.
+    total: int = 0
     suggested_pull: int = 0
 
 
-class SetPullLimit(BaseModel):
+class GetMoreMail(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    pull_limit: int | None = Field(default=None, ge=1)
+    # Empty means everything still on the server.
+    count: int | None = Field(default=None, ge=1)
+    # Just from this folder, or from all of them in turn.
+    folder: str | None = Field(default=None, max_length=500)
+
+
+class SetSenderImages(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    address: str = Field(min_length=1, max_length=320)
+    allow: bool
+
+
+class StopHistory(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class SetNeverDelete(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    value: bool
+
+
+class ChangeThreadFolder(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    folder: str = Field(min_length=1, max_length=500)
+
+
+class ChangeThreadCategory(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    name: str = Field(min_length=1, max_length=64)
+
+
+class ListMailFolders(BaseModel):
+    pass
+
+
+class MailFolder(BaseModel):
+    name: str
+    # The last part of its path, and where it sits, for showing nested folders.
+    label: str
+    parent: str | None = None
+    role: str
+    on_server: int = 0
+    here: int = 0
+    unread: int = 0
+
+
+class MailFolders(BaseModel):
+    folders: list[MailFolder]
+    # Unread conversations in the fixed folders, like priority and all.
+    counts: dict[str, int] = Field(default_factory=dict)
+
+
+class MailHistoryFinished(BaseModel):
+    pulled: int
+    total: int
+    reason: Literal["enough", "everything"]
 
 
 class MailPulled(BaseModel):
@@ -119,8 +183,11 @@ class MailStatus(BaseModel):
     # How much of what's wanted from the server has come down so far.
     total: int = 0
     done: int = 0
-    pull_limit: int | None = None
-    # Everything in the downloaded folders, whether wanted or not, and how much of it is here.
+    # Older emails still allowed to come down. Empty means all of them.
+    history_budget: int | None = None
+    history_finished: bool = False
+    never_delete: bool = True
+    # Every different email on the server, whether wanted or not, and how many are here.
     server_total: int = 0
     pulled: int = 0
     check_every_seconds: int = 0
@@ -168,6 +235,8 @@ class ListThreads(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     folder: FolderRole | Literal["priority", "all"] = "inbox"
+    # One folder on the server, by its full name. This takes the place of folder.
+    location: str | None = Field(default=None, max_length=500)
     category: str | None = Field(default=None, max_length=64)
     before: str | None = Field(default=None, max_length=64, description="Paging cursor")
     limit: int = Field(default=100, ge=1, le=500)
@@ -187,6 +256,7 @@ class ThreadRow(BaseModel):
     has_attachments: bool
     category: str | None
     category_source: str | None
+    extra_categories: list[str] = Field(default_factory=list)
     why: str | None
     status: ThreadStatus
     importance: Importance
@@ -212,7 +282,16 @@ class AttachmentView(BaseModel):
     kind: Literal["signature", "inline", "attachment", "calendar", "risky"]
 
 
+class MailFolderRef(BaseModel):
+    name: str
+    role: str
+
+
 class MessageView(BaseModel):
+    # Every folder this one email is in.
+    folders: list[MailFolderRef] = Field(default_factory=list)
+    # Whether its outside images load without asking.
+    show_images: bool = True
     id: int
     subject: str
     from_name: str
@@ -456,6 +535,8 @@ class SearchMail(BaseModel):
     category: str | None = Field(default=None, max_length=64)
     has_attachment: bool | None = None
     folder: FolderRole | None = None
+    # One folder on the server, by its full name.
+    location: str | None = Field(default=None, max_length=500)
     limit: int = Field(default=100, ge=1, le=500)
 
 

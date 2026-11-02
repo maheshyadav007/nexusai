@@ -2,13 +2,18 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiRequestError, query } from "@/ui/client/api";
 import { useEvents } from "@/ui/client/events";
 import { useTimeOnly } from "@/ui/client/format";
 import { groupApprovals, takeFirstMessage, useAnswerSession, useApprovals, useChooseVersion, useModelCall, useRateMessage, useSession, useSetSessionModel, useStopSession } from "@/ui/client/sessions";
 import { useChannel, useCompactSession, useDismissChannel, useSessionContext, useSetContext } from "@/ui/client/work";
 import { Icon } from "@/ui/icons";
+import { useDateTime } from "@/ui/client/format";
+import { MessageSources, useOpenSource } from "./MessageSources";
+import { ContextMenu } from "@/ui/primitives/ContextMenu";
+import { WavyDivider } from "@/ui/primitives/WavyDivider";
+import type { MenuItem } from "@/ui/primitives/Menu";
 import { Button } from "@/ui/primitives/Button";
 import { Dialog } from "@/ui/primitives/Dialog";
 import { ErrorState } from "@/ui/primitives/ErrorState";
@@ -23,7 +28,7 @@ import { AnsweredQuestion, ApprovalGroupCard, MailCard, QuestionCard, ResultCard
 import { AttachedChips, AttachMenu, ModelPicker, useAttachedReading, type Attached } from "./ChatControls";
 import { Composer } from "./Composer";
 import { Markdown } from "./Markdown";
-import { factsOf, failureOf, followUpsOf, isFinished, mergeResults, textOf, timeOf, toBlocks, toolName, type ToolPart, type Versions } from "./parts";
+import { factsOf, failureOf, followUpsOf, sourcesOf, isFinished, mergeResults, textOf, timeOf, toBlocks, toolName, type ToolPart, type Versions } from "./parts";
 import { ThinkingTrace } from "./ThinkingTrace";
 
 const COPIED_MS = 1500;
@@ -31,9 +36,13 @@ const COPIED_MS = 1500;
 const FOLLOW_WITHIN_PX = 96;
 const ANSWER_PREFIX = "They answered: ";
 // Written the way the person would say it, with a small line saying what really sent it.
+const tokensOf = (count: number) => (count >= 1000 ? `${Math.round(count / 1000)}K` : String(count));
+
 const ORIGIN_LABEL: Readonly<Record<string, StringKey>> = {
   mail: "chat.origin.mail",
   "mail-hourly": "chat.origin.hourly",
+  "mail-learn": "chat.origin.learn",
+  setup: "chat.origin.setup",
   schedule: "chat.origin.schedule",
   event: "chat.origin.event",
 };
@@ -168,12 +177,19 @@ function AssistantMessage({ message, session, running, isLast, onFollowUp, showF
   const text = textOf(message);
   const failure = failureOf(message);
   const followUps = followUpsOf(message);
+  const sources = sourcesOf(message);
+  const openSource = useOpenSource();
   const settled = !running || !isLast;
   const { turn, feedback, versions, thread } = factsOf(message);
+  const menu: MenuItem[] = [
+    ...(text ? [{ id: "copy", label: t("menu.copy"), onSelect: () => void navigator.clipboard.writeText(text) }] : []),
+    ...(canRetry ? [{ id: "retry", label: t("menu.retry"), icon: "retry" as const, onSelect: onRetry }] : []),
+  ];
   return (
+    <ContextMenu items={settled ? menu : []}>
     <article data-testid="agent-message" className="group flex flex-col gap-3">
       {merged.map((block) => {
-        if (block.kind === "text") return <Markdown key={block.key} text={block.text} />;
+        if (block.kind === "text") return <Markdown key={block.key} text={block.text} sources={sources} onOpenSource={openSource} />;
         if (block.kind === "trace") return <ThinkingTrace key={block.key} steps={block.steps} running={running && isLast && block.key === blocks[blocks.length - 1]?.key} />;
         if (block.kind === "results") return <ResultCard key={block.key} parts={block.parts} />;
         const { part } = block;
@@ -187,6 +203,9 @@ function AssistantMessage({ message, session, running, isLast, onFollowUp, showF
       })}
       {failure ? <ErrorState title={t("sessions.failed")} description={failure} /> : null}
       {settled && !pending.size && merged.length + (failure ? 1 : 0) > 0 ? (
+        <div className="flex flex-wrap items-center gap-2">
+        {/* It stays in view, because the rest of the bar only shows on hover. */}
+        <MessageSources sources={sources} />
         <div className="flex items-center gap-1 opacity-0 transition-opacity duration-fast focus-within:opacity-100 group-hover:opacity-100">
           {text ? <CopyAction text={text} label={t("chat.copy")} /> : null}
           {turn !== undefined ? <Rating turn={turn} initial={feedback} /> : null}
@@ -198,11 +217,12 @@ function AssistantMessage({ message, session, running, isLast, onFollowUp, showF
           {versions && isLast ? <VersionSwitcher versions={versions} disabled={!canRetry} onChoose={onChooseVersion} /> : null}
           <MessageTime value={timeOf(message)} />
         </div>
+        </div>
       ) : null}
       {showFollowUps && settled && followUps.length ? (
-        <ul aria-label={t("chat.followUps")} className="flex flex-col border-t border-line-subtle">
+        <ul aria-label={t("chat.followUps")} className="flex flex-col">
           {followUps.map((question) => (
-            <li key={question} className="border-b border-line-subtle">
+            <li key={question}>
               <Pressable onClick={() => onFollowUp(question)} className="focus-ring flex w-full items-center gap-2 py-2 text-left text-md text-ink-secondary transition-colors duration-fast hover:text-ink-primary">
                 <Icon name="followUp" className="h-3 w-3 shrink-0 text-ink-muted" />
                 {question}
@@ -212,6 +232,7 @@ function AssistantMessage({ message, session, running, isLast, onFollowUp, showF
         </ul>
       ) : null}
     </article>
+    </ContextMenu>
   );
 }
 
@@ -270,6 +291,7 @@ export function ChatView({ id, initial, active, footer }: { id: string; initial:
   const { sendMessage, setMessages, regenerate, resumeStream, messages, status } = chat;
   const stop = useStopSession();
   const session = useSession(id);
+  const format = useDateTime();
   const setModel = useSetSessionModel();
   const chooseVersion = useChooseVersion();
   const context = useSessionContext(id);
@@ -375,7 +397,12 @@ export function ChatView({ id, initial, active, footer }: { id: string; initial:
             message.role === "user" ? (
               <UserMessage key={message.id} message={message} onEdit={edit} />
             ) : (
-              <AssistantMessage key={message.id} message={message} session={id} running={working && !waiting} isLast={index === messages.length - 1} showFollowUps={index === lastAssistant && !working} onFollowUp={say} canRetry={index === lastAssistant && !working} onRetry={() => void regenerate()} onChooseVersion={(turn) => chooseVersion.mutate({ id, turn }, { onSuccess: (view) => setMessages(view.messages as unknown as UIMessage[]) })} />
+              <Fragment key={message.id}>
+              <AssistantMessage message={message} session={id} running={working && !waiting} isLast={index === messages.length - 1} showFollowUps={index === lastAssistant && !working} onFollowUp={say} canRetry={index === lastAssistant && !working} onRetry={() => void regenerate()} onChooseVersion={(turn) => chooseVersion.mutate({ id, turn }, { onSuccess: (view) => setMessages(view.messages as unknown as UIMessage[]) })} />
+                {(session.data?.compactions ?? []).filter((entry) => entry.after_turn === factsOf(message).turn).map((entry) => (
+                  <WavyDivider key={entry.time}>{t("chat.compacted", { when: format(entry.time), before: tokensOf(entry.before_tokens), after: tokensOf(entry.after_tokens) })}</WavyDivider>
+                ))}
+              </Fragment>
             ),
           )}
           {status === "submitted" && messages[messages.length - 1]?.role === "user" ? (

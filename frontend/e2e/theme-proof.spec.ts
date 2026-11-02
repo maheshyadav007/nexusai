@@ -244,10 +244,10 @@ test("the sidebar can be reordered, hidden and reset, by keyboard and buttons", 
   await nav.getByRole("button", { name: "Customize sidebar" }).click();
   const editor = page.getByRole("dialog");
   await editor.getByRole("button", { name: "Move Mail down" }).click();
-  await expect.poll(firstSection).toBe("Agent");
+  await expect.poll(firstSection).toBe("Documents");
 
   // The keyboard route on the drag handle.
-  await editor.getByRole("button", { name: "Drag Agent", exact: true }).focus();
+  await editor.getByRole("button", { name: "Drag Documents", exact: true }).first().focus();
   // At a person's pace: the drag library measures positions between key presses.
   await page.keyboard.press("Space");
   await page.waitForTimeout(200);

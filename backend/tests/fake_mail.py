@@ -6,6 +6,7 @@ import re
 import socketserver
 import threading
 import time
+import zlib
 from dataclasses import dataclass, field
 from email.message import EmailMessage
 from email.utils import formatdate, make_msgid
@@ -80,6 +81,8 @@ class ImapState:
         }
         self.idlers: list[Any] = []
         self.logins = 0
+        self.gmail = False
+        self.fetched_bodies = 0
 
     def deliver(self, raw: bytes, box: str = "INBOX", flags: set[str] | None = None) -> int:
         with self.lock:
@@ -158,7 +161,10 @@ class _ImapHandler(socketserver.StreamRequestHandler):
         ok = lambda message="done": self.push(f"{tag} OK {message}\r\n")  # noqa: E731
         with self.state.lock:
             if command == "CAPABILITY":
-                self.push("* CAPABILITY IMAP4rev1 IDLE MOVE UIDPLUS SPECIAL-USE AUTH=PLAIN\r\n")
+                extra = " X-GM-EXT-1" if self.state.gmail else ""
+                self.push(
+                    f"* CAPABILITY IMAP4rev1 IDLE MOVE UIDPLUS SPECIAL-USE AUTH=PLAIN{extra}\r\n"
+                )
                 ok()
             elif command == "NOOP":
                 ok()
@@ -183,6 +189,16 @@ class _ImapHandler(socketserver.StreamRequestHandler):
                 for name, box in self.state.boxes.items():
                     self.push(f'* LIST ({box.attrs}) "/" "{name}"\r\n')
                 ok()
+            elif command == "STATUS":
+                name = re.match(r'"([^"]+)"|(\S+)', args)
+                assert name
+                box = self.state.boxes[name.group(1) or name.group(2)]
+                unseen = sum(1 for m in box.mails if "\\Seen" not in m.flags)
+                self.push(
+                    f'* STATUS "{name.group(1) or name.group(2)}" (MESSAGES {len(box.mails)}'
+                    f" UNSEEN {unseen} UIDNEXT {box.next_uid} UIDVALIDITY {box.validity})\r\n"
+                )
+                ok("STATUS completed")
             elif command in {"SELECT", "EXAMINE"}:
                 name = args.strip().strip('"')
                 box = self.state.boxes.get(name)
@@ -247,6 +263,8 @@ class _ImapHandler(socketserver.StreamRequestHandler):
         if upper.startswith("UID "):
             wanted = _uid_set(args.split()[1], biggest)
             found = [m.uid for m in box.mails if m.uid in wanted]
+        elif upper.startswith("X-GM-MSGID "):
+            found = [m.uid for m in box.mails if zlib.crc32(m.raw) == int(args.split()[1])]
         elif upper.startswith("HEADER "):
             parts = re.findall(r'"([^"]*)"|(\S+)', args)
             header, value = [a or b for a, b in parts][1:3]
@@ -276,7 +294,21 @@ class _ImapHandler(socketserver.StreamRequestHandler):
                 if mail.uid not in uids:
                     continue
                 flags = " ".join(sorted(mail.flags))
-                if "BODY" in spec.upper():
+                if "X-GM-MSGID" in spec.upper():
+                    self.push(
+                        f"* {position} FETCH (UID {mail.uid} X-GM-MSGID {zlib.crc32(mail.raw)})\r\n"
+                    )
+                elif "HEADER.FIELDS" in spec.upper():
+                    found = re.search(rb"(?im)^message-id:[^\r\n]*\r?\n", mail.raw)
+                    header = (found.group(0) if found else b"") + b"\r\n"
+                    head = (
+                        f"* {position} FETCH (UID {mail.uid} BODY[HEADER.FIELDS (MESSAGE-ID)]"
+                        f" {{{len(header)}}}\r\n"
+                    )
+                    with self.write_lock:
+                        self.wfile.write(head.encode() + header + b")\r\n")
+                elif "BODY" in spec.upper():
+                    self.state.fetched_bodies += 1
                     head = f"* {position} FETCH (UID {mail.uid} FLAGS ({flags}) BODY[] {{{len(mail.raw)}}}\r\n"
                     with self.write_lock:
                         self.wfile.write(head.encode() + mail.raw + b")\r\n")
@@ -286,6 +318,16 @@ class _ImapHandler(socketserver.StreamRequestHandler):
             self.push(f"{tag} OK FETCH completed\r\n")
         elif verb == "STORE":
             action, _, flag_text = spec.partition(" ")
+            if "X-GM-LABELS" in action.upper():
+                # Like Gmail, this does nothing to the label of the folder it's asked from.
+                raws = [m.raw for m in box.mails if m.uid in uids]
+                for label in re.findall(r'"?(\\?[\w-]+)"?', flag_text):
+                    name = "INBOX" if label == "\\Inbox" else label
+                    target = self.state.boxes.get(name)
+                    if target is not None and name != self.selected:
+                        target.mails = [m for m in target.mails if m.raw not in raws]
+                self.push(f"{tag} OK STORE completed\r\n")
+                return
             flags = set(re.findall(r"\\\w+", flag_text))
             for mail in box.mails:
                 if mail.uid in uids:
@@ -294,6 +336,11 @@ class _ImapHandler(socketserver.StreamRequestHandler):
                     elif action.upper().startswith("-"):
                         mail.flags -= flags
             self.push(f"{tag} OK STORE completed\r\n")
+        elif verb == "COPY":
+            target = spec.strip().strip('"')
+            for mail in [m for m in box.mails if m.uid in uids]:
+                self.state.deliver(mail.raw, target, set(mail.flags))
+            self.push(f"{tag} OK COPY completed\r\n")
         elif verb == "MOVE":
             target = spec.strip().strip('"')
             moving = [m for m in box.mails if m.uid in uids]

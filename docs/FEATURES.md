@@ -176,9 +176,13 @@ Every data source is a connector: an MCP server with its own tools, skills and r
 |---|---|---|
 | ACC-1 | Mail accounts in one encrypted file, `mail-accounts.enc` (corporate, Gmail test). Only a server name, username and password are needed, and the rest is worked out, with details to override it. Connecting tries the login first | MVP |
 | ACC-3 | IMAP sync: newest N first, then backfill in the background; live new mail via IDLE; reconnects after sleep or network change, and resumes after restart | MVP |
-| ACC-3a | Connecting tries the login, shows how many emails are in the Inbox, Sent and Drafts, and asks how many of the newest to download (suggestion in `mail.suggested_pull`). The limit can change later: raising it carries on, lowering it keeps what's here, and new mail always comes down | MVP |
-| ACC-3b | Mail sync can be stopped and resumed from the account, the Schedules page and the Cockpit, and stays stopped across restarts. While stopped nothing downloads, and read, flag and move changes wait | MVP |
+| ACC-3a | Connecting tries the login, shows how many different emails are on the server across every folder, and asks how many of the newest to download (suggestion in `mail.suggested_pull`). That sets a budget. New mail always comes down, and an email already here never uses any | MVP |
+| ACC-3b | **Pause** holds everything, including new mail. **Stop** ends older mail while new mail keeps coming. **Get more** brings N more, from all folders in turn or from one. Available from the account, the Schedules page and the Cockpit, and they survive restarts | MVP |
 | ACC-3c | Each check runs at most `mail.check_every_seconds` apart (a minute), and sooner when the server announces new mail. The Schedules page and Cockpit show what's on the server, what's here, the last and next check, and what the last check found and pulled. Checks that find nothing add nothing to the event log | MVP |
+| ACC-3d | One email, many folders. Every server folder syncs, including Gmail labels. An email is stored once, with a location per folder, so read and flag state are shared. Mail already here is filed under its other folders without downloading. Add to a folder and remove from one work both ways, and a conversation can be in several categories | MVP |
+| ACC-3e | Never delete on the server: on by default, per account. `ImapSession` refuses every delete, expunge and move to Trash, Trash here stays on this computer, and drafts aren't copied to the server | MVP |
+| ACC-3f | Spam and Trash stay apart: visible in their own folders, never judged by an agent, searched, indexed or listed in Documents | MVP |
+| ACC-3g | Kinds of mail by header, with no model: Promotions, Updates, Forums, and Social on public mail services. Mail from the person's own company domain is never Promotions | MVP |
 | ACC-6 | Send, reply and forward via SMTP, only after approval; Sent and Drafts folders, including agent drafts awaiting approval | MVP |
 | ACC-8 | Two-way mail state: read, flag, move, delete and drafts sync with the server | MVP |
 | NAV-2 | Mail categories: built-in (Needs you, FYI, Newsletters, Automated) and user-created; set by rules or the agent | MVP |
@@ -459,6 +463,15 @@ The main focus space on Today is a two-way channel between the agents and the us
 | NTF-3 | Today: greeting and one-line brief, Needs you, Due, Important mail, Waiting on others, Since you last looked, and one status line linking to the Cockpit | MVP |
 | NTF-7 | Cockpit: what's running, health of each part, what's coming up, and a filterable feed of what happened | MVP |
 | NTF-7a | Work on a timer with no agent is listed once (`modules/agent/pipelines.py`), and shows on the Schedules page and in the Cockpit with Stop and Run now. Mail sync is the only one today | MVP |
+| AGN-L1 | Once enough mail is here, or no more is coming, the Mail agent reads the newest K emails rules didn't catch (`agent.learn_emails`, 400), oldest first. Each is judged, but can't notify, ask or add work. It keeps notes in `memory/agents/mail/learned.md`, which only it reads, always as untrusted data, and the person can edit. It then tells the person what it learned and goes live on new mail and the hourly check | MVP |
+| AGN-L2 | The Interview starts once by itself after that, using those notes as guesses to confirm. Anything it changes asks first, since the notes come from mail | MVP |
+| CHT-S1 | Answers cite what the turn read, as superscript numbers, with a sources pill in the action bar listing what was cited and what else was read. A citation of anything unread is dropped, titles come from the database, and clicking opens the email or document over the chat | MVP |
+| CHT-S2 | Approvals show a compact line built from the tool's actual arguments, with the full content formatted one click away. Only a single quoted file write reads as "Create file"; anything else is labelled a command | MVP |
+| CHT-S3 | A wavy divider marks each compaction, with its time and approximate tokens before and after. It stays where it happened | MVP |
+| NTF-S1 | A short generated sound for important mail, things needing the person, finished chats and reminders. Master mute, per-type switches and a quick mute. Quiet hours apply | MVP |
+| UI-G1 | Frosted glass on Settings, document preview, search and menus, solid when transparency is reduced. Settings opens over the page, and a direct link shows the full page | MVP |
+| UI-G2 | Right-click menus share their list with toolbars. Opening an email or document tucks an unpinned chat to an edge aura, which brings it back on hover | MVP |
+| SRC-1 | Search palette on Cmd or Ctrl K with instant mail and document results, a full page with filter chips and typed from:, and a filter inside each folder. Documents open straight away in a large preview with arrow keys between them | MVP |
 | CHN-1 | User channel with Ask, Suggest and Tell from all agents and sessions, each linked to its source; reply in place, or "Open session" to continue in full | MVP |
 | CHN-3 | Asks don't hold up other work: the Mail agent uses its best guess, marks the result provisional, and updates it when answered; a session can pause until answered | MVP |
 | CHN-5 | Noise control: similar messages grouped, daily limit, respects quiet hours; only urgent asks raise a notification | MVP |

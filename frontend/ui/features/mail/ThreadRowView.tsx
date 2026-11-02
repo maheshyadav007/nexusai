@@ -4,7 +4,10 @@ import Link from "next/link";
 import type { ThreadRow } from "@/ui/client/contracts.generated";
 import { useShortDate } from "@/ui/client/format";
 import { useMailAccounts } from "@/ui/client/mail";
+import { useThreadActions } from "@/ui/features/mail/threadActions";
+import { Highlight } from "@/ui/features/search/SearchFilters";
 import { Icon } from "@/ui/icons";
+import { ContextMenu } from "@/ui/primitives/ContextMenu";
 import { t, type StringKey } from "@/ui/strings";
 
 const STATUS_LABELS: Readonly<Record<string, StringKey>> = {
@@ -27,13 +30,15 @@ function useOtherPeople(thread: ThreadRow): string {
   return shown.join(", ");
 }
 
-export function ThreadRowView({ thread, excerpt, href, active = false }: { thread: ThreadRow; excerpt?: string; href?: string; active?: boolean }) {
+export function ThreadRowView({ thread, excerpt, href, active = false, highlight }: { thread: ThreadRow; excerpt?: string; href?: string; highlight?: string; active?: boolean }) {
   const others = useOtherPeople(thread);
   const people = thread.sender_name || others;
   const format = useShortDate();
   const unread = thread.unread_count > 0;
   const status = statusLabel(thread.status);
+  const actions = useThreadActions(thread, href);
   return (
+    <ContextMenu items={actions}>
     <Link href={href ?? `/mail/all/${thread.id}`} aria-current={active ? "page" : undefined} className={`focus-ring flex items-start gap-2 border-b border-line-subtle px-3 py-3 transition-colors duration-fast ${active ? "bg-surface-sunken" : "hover:bg-surface-raised"}`}>
       <span aria-hidden className={`mt-1 h-2 w-2 shrink-0 rounded-full ${unread ? "bg-accent-default" : ""}`} />
       <span className="flex min-w-0 flex-1 flex-col gap-px">
@@ -45,7 +50,7 @@ export function ThreadRowView({ thread, excerpt, href, active = false }: { threa
           <span className="shrink-0 text-sm tabular-nums text-ink-muted">{format(thread.last_date)}</span>
         </span>
         <span className={`block truncate text-md ${unread ? "text-ink-primary" : "text-ink-secondary"}`}>{thread.subject || t("mail.noSubject")}</span>
-        <span className="block truncate text-sm text-ink-muted">{excerpt ?? thread.snippet}</span>
+        <span className="block truncate text-sm text-ink-muted">{highlight ? <Highlight text={excerpt ?? thread.snippet} words={highlight} /> : (excerpt ?? thread.snippet)}</span>
         {status || thread.category || thread.has_attachments || thread.flagged ? (
           <span className="mt-1 flex items-center gap-2 text-sm text-ink-muted">
             {thread.flagged ? (
@@ -64,5 +69,6 @@ export function ThreadRowView({ thread, excerpt, href, active = false }: { threa
         ) : null}
       </span>
     </Link>
+    </ContextMenu>
   );
 }

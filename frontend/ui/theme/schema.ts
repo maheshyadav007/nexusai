@@ -29,7 +29,8 @@ export const themeSchema = z
     radius: z.strictObject({ sm: size, md: size, lg: size, full: size }),
     shadow: z.strictObject({ raised: z.string(), overlay: z.string() }),
     motion: z.strictObject({ fast: z.string(), normal: z.string(), slow: z.string(), press: z.string(), easing: z.string() }),
-    layout: z.strictObject({ content: size, page: size, sidebar: size, rail: size, railWide: size, dock: size, dockHeight: size, reading: size, mailList: size, topbar: size, popover: size, drawer: size, dialog: size }),
+    layout: z.strictObject({ content: size, page: size, sidebar: size, rail: size, railWide: size, dock: size, dockHeight: size, reading: size, mailList: size, topbar: size, popover: size, drawer: size, dialog: size, modal: size, modalHeight: size, aura: size }),
+    glass: z.strictObject({ opacity: z.string(), blur: size }),
     icon: z.strictObject({ stroke: z.string() }),
     scale: z.strictObject({
       density: z.strictObject({ compact: scale, comfortable: scale, spacious: scale }),

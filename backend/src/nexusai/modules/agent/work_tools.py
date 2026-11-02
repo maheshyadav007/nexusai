@@ -45,7 +45,7 @@ from nexusai.contracts.mail import RemoveDraft as RemoveDraftCommand
 from nexusai.contracts.panels import GetPanelBoard, Panel, PanelBoard, PanelFilters
 from nexusai.kernel.database import connect_raw
 from nexusai.kernel.module import CommandError, Context
-from nexusai.modules.agent import memory
+from nexusai.modules.agent import citations, memory
 from nexusai.modules.documents import module as documents_module
 from nexusai.modules.mail import module as mail
 from nexusai.modules.mail import rules as mail_rules
@@ -390,7 +390,9 @@ def _lines(items: Iterable[str]) -> str:
     return "\n".join(f"- {item}" for item in items)
 
 
-def specs(ctx: Context, guard: Guard, wrap_untrusted: Callable[[str], str]) -> list[Spec]:
+def specs(
+    ctx: Context, guard: Guard, wrap_untrusted: Callable[[str], str], session: str
+) -> list[Spec]:
     db = ctx.bus.db
     documents = ctx.config.home / "documents"
 
@@ -908,8 +910,11 @@ def specs(ctx: Context, guard: Guard, wrap_untrusted: Callable[[str], str]) -> l
                     name = (
                         f"[thread {rows[0]['thread_id']}] {rows[0]['subject']}" if rows else hit.ref
                     )
+                    if rows:
+                        citations.note(db, session, citations.MAIL, str(rows[0]["thread_id"]))
                 else:
                     name = f"[document {hit.ref}{', ' + hit.place if hit.place else ''}]"
+                    citations.note(db, session, citations.DOCUMENT, hit.ref)
                 lines.append(f"{name} ({hit.score:.2f}): {hit.excerpt}")
             if not hits:
                 lines.append("Nothing close in meaning was found.")

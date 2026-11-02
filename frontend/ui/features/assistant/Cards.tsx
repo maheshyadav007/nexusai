@@ -12,6 +12,7 @@ import { Checkbox } from "@/ui/primitives/Checkbox";
 import { Rise } from "@/ui/primitives/Motion";
 import { BareInput, Pressable } from "@/ui/primitives/Pressable";
 import { t, tn } from "@/ui/strings";
+import { ApprovalPreviewView } from "@/ui/shell/ApprovalPreviewView";
 import { isFinished, toolName, type ToolPart } from "./parts";
 
 function Shell({ children, testid }: { children: ReactNode; testid?: string }) {
@@ -126,11 +127,7 @@ function Decisions({ approval, allow, deny }: { approval: ToolApproval; allow: s
 export function ApprovalCard({ approval }: { approval: ToolApproval }) {
   return (
     <Shell testid="approval">
-      <div className="flex flex-col gap-1">
-        <p className="break-words text-md font-medium text-ink-primary">{approval.summary}</p>
-        <p className="text-sm text-ink-muted">{approval.reason}</p>
-      </div>
-      {approval.detail ? <pre className="max-h-popover overflow-auto whitespace-pre-wrap break-words rounded-md bg-surface-sunken p-2 font-mono text-sm text-ink-secondary">{approval.detail}</pre> : null}
+      <ApprovalPreviewView approval={approval} />
       <Decisions approval={approval} allow={t("approvals.once")} deny={t("approvals.deny")} />
     </Shell>
   );

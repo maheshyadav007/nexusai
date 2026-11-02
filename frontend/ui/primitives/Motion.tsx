@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ComponentProps, type HTMLAttributes, type ReactNode } from "react";
+import type { Ref } from "react";
 import { QUICK, readSpace, SMOOTH, SLOW } from "./motionValues";
 
 export { readSpace } from "./motionValues";
@@ -158,7 +159,7 @@ export function Room({ width }: { width: string | null }) {
 }
 
 /** The one panel that either floats or sits against the edge, and moves between the two. */
-export function SlidePanel({ attached, place, ...props }: { attached: boolean; place: { top: number; right: number; bottom: number; borderRadius: number } } & HTMLAttributes<HTMLElement>) {
+export function SlidePanel({ attached, place, ...props }: { attached: boolean; place: { top: number; right: number; bottom: number; borderRadius: number } } & HTMLAttributes<HTMLElement> & { ref?: Ref<HTMLElement> }) {
   const feel = useFeel();
   const away = { opacity: 0, x: attached ? 32 : 0, y: attached ? 0 : 12 };
   return <motion.section initial={{ ...away, ...place }} animate={{ opacity: 1, x: 0, y: 0, ...place }} exit={away} transition={feel.slow} {...(props as ComponentProps<typeof motion.section>)} />;

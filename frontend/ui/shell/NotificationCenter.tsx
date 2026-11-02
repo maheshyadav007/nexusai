@@ -5,7 +5,9 @@ import { useState } from "react";
 import { useDateTime } from "@/ui/client/format";
 import { useMarkRead, useNotifications } from "@/ui/client/notifications";
 import { Icon } from "@/ui/icons";
+import { useSettings, useUpdateSettings } from "@/ui/client/settings";
 import { Button } from "@/ui/primitives/Button";
+import { IconButton } from "@/ui/primitives/IconButton";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Popover } from "@/ui/primitives/Popover";
@@ -23,6 +25,9 @@ export function NotificationCenter() {
   const list = useNotifications(kind === ALL ? null : kind);
   const markRead = useMarkRead();
   const format = useDateTime();
+  const settings = useSettings();
+  const update = useUpdateSettings();
+  const muted = settings.data?.sound_muted ?? false;
   const unread = list.data?.unread ?? 0;
   const items = list.data?.items ?? [];
   const label = unread ? t("notifications.unread", { count: unread }) : t("notifications.title");
@@ -39,6 +44,8 @@ export function NotificationCenter() {
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-md font-medium">{t("notifications.title")}</h2>
+          <span className="flex-1" />
+          <IconButton icon={muted ? "soundOff" : "soundOn"} label={t(muted ? "sound.unmute" : "sound.mute")} aria-pressed={muted} onClick={() => update.mutate({ sound_muted: !muted })} />
           {unread ? (
             <Button variant="quiet" onClick={() => markRead.mutate(null)}>
               {t("notifications.markAll")}

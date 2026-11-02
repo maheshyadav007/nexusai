@@ -8,6 +8,7 @@ import { Button } from "@/ui/primitives/Button";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { Popover } from "@/ui/primitives/Popover";
 import { Pressable } from "@/ui/primitives/Pressable";
+import { ApprovalPreviewView } from "./ApprovalPreviewView";
 import { t, tn } from "@/ui/strings";
 
 /** The decision itself: what would happen, why it's asking, and how to answer. */
@@ -15,9 +16,7 @@ export function ApprovalDetails({ approval }: { approval: ToolApproval }) {
   const decide = useDecideApproval();
   return (
     <div data-testid="approval" className="flex flex-col gap-2">
-      <p className="break-words text-md font-medium text-ink-primary">{approval.summary}</p>
-      <p className="text-sm text-ink-secondary">{approval.reason}</p>
-      {approval.detail ? <pre className="max-h-popover overflow-auto whitespace-pre-wrap break-words rounded-md bg-surface-sunken p-2 font-mono text-sm text-ink-secondary">{approval.detail}</pre> : null}
+      <ApprovalPreviewView approval={approval} />
       <p className="text-sm text-ink-muted">{t(approval.undoable ? "approvals.undoable" : "approvals.notUndoable")}</p>
       <div className="flex flex-wrap gap-2">
         <Button variant="primary" loading={decide.isPending} onClick={() => decide.mutate({ id: approval.id, choice: "once" })}>

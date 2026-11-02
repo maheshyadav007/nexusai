@@ -5,6 +5,8 @@ import { ApiRequestError } from "@/ui/client/api";
 import type { GuardRule, Permissions, QuietHours, SendCheckSettings } from "@/ui/client/contracts.generated";
 import { usePermissions, useSavePermissions } from "@/ui/client/sessions";
 import { useGuardRules, useQuietHours, useSaveGuardRules, useSaveQuietHours, useSaveSendChecks, useSendChecks, useSetCap, useTestGuard, useToolCatalog, useUsage } from "@/ui/client/work";
+import { useSettings, useUpdateSettings } from "@/ui/client/settings";
+import { playChime } from "@/ui/client/sound";
 import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
 import { ErrorState } from "@/ui/primitives/ErrorState";
@@ -245,6 +247,37 @@ export function UsageSettings() {
   );
 }
 
+const SOUND_KINDS = [
+  { id: "urgent-mail", label: "sound.kind.urgent" },
+  { id: "needs-you", label: "sound.kind.needsYou" },
+  { id: "agent-finished", label: "sound.kind.finished" },
+  { id: "reminder", label: "sound.kind.reminder" },
+] as const;
+
+function SoundSettings() {
+  const settings = useSettings();
+  const update = useUpdateSettings();
+  const muted = settings.data?.sound_muted ?? false;
+  const off = settings.data?.sound_off ?? [];
+  return (
+    <>
+      <SettingRow label={t("sound.play")} description={t("sound.play.description")}>
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="quiet" className="py-px" onClick={playChime}>{t("sound.try")}</Button>
+          <Switch label={t("sound.play")} hideLabel checked={!muted} onChange={(on) => update.mutate({ sound_muted: !on })} />
+        </div>
+      </SettingRow>
+      {SOUND_KINDS.map((kind) => (
+        <SettingRow key={kind.id} label={t(kind.label)}>
+          <div className="flex justify-end">
+            <Switch label={t(kind.label)} hideLabel disabled={muted} checked={!off.includes(kind.id)} onChange={(on) => update.mutate({ sound_off: on ? off.filter((item) => item !== kind.id) : [...off, kind.id] })} />
+          </div>
+        </SettingRow>
+      ))}
+    </>
+  );
+}
+
 export function NotificationSettings() {
   const quiet = useQuietHours();
   const save = useSaveQuietHours();
@@ -267,6 +300,7 @@ export function NotificationSettings() {
       <SettingRow label={t("quiet.limit")}>
         <Input className="py-1" aria-label={t("quiet.limit")} type="number" min={0} value={value.channel_daily_limit ?? 20} onChange={(event) => update({ channel_daily_limit: Number(event.target.value) })} />
       </SettingRow>
+      <SoundSettings />
       <SettingRow label={t("notifications.browser")} description={t("notifications.browser.description")}>
         <div className="flex justify-end"><Button onClick={allow}>{t("notifications.allow")}</Button></div>
       </SettingRow>

@@ -22,6 +22,7 @@ import { TextLink } from "@/ui/primitives/TextLink";
 import { t, tn } from "@/ui/strings";
 import { Composer } from "./Composer";
 import { SafeMailFrame } from "./SafeMailFrame";
+import { ThreadFiling } from "./ThreadFiling";
 
 const STATUSES = [
   { value: "none", label: t("mail.status.none") },
@@ -67,7 +68,7 @@ function Attachments({ message }: { message: MessageView }) {
 function Body({ message }: { message: MessageView }) {
   const [showAll, setShowAll] = useState(false);
   if (message.encrypted) return <p className="rounded-md bg-surface-sunken p-3 text-md text-ink-secondary">{t(message.encrypted === "smime" ? "mail.encrypted.smime" : "mail.encrypted.pgp")}</p>;
-  if (message.html) return <SafeMailFrame html={message.html} title={message.subject || t("mail.noSubject")} />;
+  if (message.html) return <SafeMailFrame html={message.html} title={message.subject || t("mail.noSubject")} showImages={message.show_images ?? true} sender={message.from_addr} />;
   const hasQuoted = message.text.trim() !== message.own_text.trim();
   return (
     <div className="flex flex-col items-start gap-2">
@@ -177,7 +178,7 @@ function MessageCard({ message, open: startsOpen, onReply, threadWhy }: { messag
 
 const NO_CATEGORY = "none";
 
-export function ThreadScreen({ id }: { id: number }) {
+export function ThreadScreen({ id, onLeave }: { id: number; onLeave?: () => void }) {
   const router = useRouter();
   const pathname = usePathname();
   const folder = pathname.slice(0, pathname.lastIndexOf("/"));
@@ -214,7 +215,7 @@ export function ThreadScreen({ id }: { id: number }) {
   const reply = (message: MessageView, replyAll: boolean) => replyDraft.mutate({ message_id: message.id, reply_all: replyAll }, { onSuccess: (result) => setComposing({ draft: result.draft, dropped: result.dropped }) });
   const names = (categories.data?.categories ?? []).filter((item) => !item.proposed).map((item) => item.name);
   const categoryOptions = [{ value: NO_CATEGORY, label: t("mail.category.none") }, ...[...new Set([...names, ...(row.category ? [row.category] : [])])].map((name) => ({ value: name, label: name }))];
-  const leave = { onSuccess: () => router.push(folder) };
+  const leave = { onSuccess: () => (onLeave ? onLeave() : router.push(folder)) };
   return (
     <div className="mx-auto flex max-w-reading animate-fade flex-col gap-4 p-6">
       <header className="flex flex-col gap-3">
@@ -233,6 +234,7 @@ export function ThreadScreen({ id }: { id: number }) {
           <Select quiet label={t("mail.status.label")} value={row.status} options={STATUSES} onChange={(status) => setStatus.mutate({ id, status: status as ThreadStatus })} />
           <Select quiet label={t("mail.category")} value={row.category ?? NO_CATEGORY} options={categoryOptions} onChange={(category) => setCategory.mutate({ id, category: category === NO_CATEGORY ? null : category })} />
         </div>
+        <ThreadFiling thread={row} messages={messages} />
         {row.why ? <WhyHere thread={id} reason={row.why} /> : null}
         <SummaryBlock id={id} />
       </header>

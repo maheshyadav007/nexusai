@@ -12,7 +12,7 @@ from nexusai.contracts.agent import SaveTrigger, Trigger, TriggerChoice, Trigger
 from nexusai.contracts.events import AppEvent
 from nexusai.kernel.database import Migration
 from nexusai.kernel.module import CommandError, Context
-from nexusai.modules.agent import gateway, mail_agent, providers, scheduler
+from nexusai.modules.agent import channel, gateway, mail_agent, memory, providers, scheduler
 from nexusai.modules.agent.context import TurnRequest
 
 log = structlog.get_logger()
@@ -42,6 +42,11 @@ HOURLY_KIND = "mail-hourly"
 SCHEDULE_AGENTS = {"daily-prep": "daily-prep", "prompt": "scheduled"}
 SCHEDULE_ORIGIN = "schedule"
 LAST_DIGEST = "last_digest"
+
+
+INTERVIEW_STARTED = "interview_started"
+INTERVIEW_TITLE = "Interview"
+INTERVIEW_AGENT = "interview"
 
 
 class Triggers:
@@ -140,6 +145,75 @@ class Triggers:
             self._start_schedules()
             self._start_custom()
             self._start_mail()
+            self._start_wrap_up()
+            self._start_interview()
+
+    def consider_learning(self, history_finished: bool = False) -> None:
+        """Starts reading past mail once there's enough, or once no more is coming."""
+        with self.lock:
+            if mail_agent.learning_state(self.ctx) or not mail_agent.enabled(self.ctx):
+                return
+            count = mail_agent.learn_count(self.ctx)
+            # Zero turns it off altogether: no reading past mail and no automatic Interview.
+            if not count:
+                return
+            enough = mail_agent.unjudged_count(self.ctx) >= count
+            if not enough and not history_finished:
+                return
+            mail_agent.queue_learning(self.ctx)
+        self.wake.set()
+
+    def _start_wrap_up(self) -> None:
+        """Past mail is read, so the notes get tidied and the person is told what was learned."""
+        ctx = self.ctx
+        if mail_agent.learning_state(ctx) != "reading":
+            return
+        if mail_agent.learning_progress(ctx)[0] < mail_agent.learning_progress(ctx)[1]:
+            return
+        if self.runtime.active_turn(mail_agent.SESSION_ID) is not None or not self._model_ready():
+            return
+        if not memory.learned(ctx.config.home):
+            mail_agent.set_learning_state(ctx, "done")
+            return
+        own = self._mail_trigger()
+        request = mail_agent.wrap_up_turn(ctx)
+        limit = own["token_limit"] or self.config.triage_token_limit
+        gateway.set_run_limit(ctx.bus.db, request.session, limit)
+        try:
+            turn = self.runtime.dispatch(request)
+        except CommandError:
+            return
+        mail_agent.set_learning_turn(ctx, turn)
+        mail_agent.set_learning_state(ctx, "wrapping")
+
+    def _start_interview(self) -> None:
+        """Once, after reading past mail, so its questions can be about this person's actual mail."""
+        ctx = self.ctx
+        if mail_agent.learning_state(ctx) != "done" or mail_agent._setting(ctx, INTERVIEW_STARTED):
+            return
+        if not self._model_ready():
+            return
+        session = str(self.runtime.create(INTERVIEW_TITLE, [], INTERVIEW_AGENT).id)
+        mail_agent._set(ctx, INTERVIEW_STARTED, session)
+        request = mail_agent.interview_turn(ctx, session)
+        # Its notes come from mail, so anything it changes asks first.
+        if request.task:
+            with ctx.bus.db.transaction() as tx:
+                tx.execute("UPDATE agent_sessions SET untrusted = 1 WHERE id = ?", (session,))
+        try:
+            self.runtime.dispatch(request)
+        except CommandError:
+            return
+        with ctx.bus.unit_of_work() as work:
+            channel.notify(
+                ctx,
+                work,
+                "Let the agent get to know you",
+                "A few questions about your role and priorities.",
+                f"/agent/sessions/{session}",
+                "interview",
+                False,
+            )
 
     def _model_ready(self) -> bool:
         if self.waiting_for_model and time.monotonic() < self.retry_at:
@@ -170,7 +244,12 @@ class Triggers:
         if not mail_agent.enabled(self.ctx):
             return
         chosen = mail_agent.mode(self.ctx)
-        if chosen == "hourly" and not self.release_mail:
+        # Reading past mail doesn't wait for the hour.
+        if (
+            chosen == "hourly"
+            and not self.release_mail
+            and not mail_agent.has_learning_waiting(self.ctx)
+        ):
             return
         if self.runtime.active_turn(mail_agent.SESSION_ID) is not None:
             return
@@ -180,6 +259,7 @@ class Triggers:
         if not self._model_ready():
             return
         origin = "mail-hourly" if chosen == "hourly" else "mail"
+        # next_turn says when it's past mail instead, so its message reads the right way.
         own = self._mail_trigger()
         settings = {"mode": own["context_mode"], "keep_messages": own["keep_messages"]}
         prepared = mail_agent.next_turn(self.ctx, origin, settings)
@@ -359,6 +439,8 @@ class Triggers:
         mail = [run for run in runs if run["trigger"] == mail_agent.MAIL_TRIGGER]
         if mail:
             mail_agent.after_turn(self.ctx, turn, mail, error)
+        if turn == mail_agent.learning_turn(self.ctx):
+            mail_agent.set_learning_state(self.ctx, "done")
         others = [run["id"] for run in runs if run["trigger"] != mail_agent.MAIL_TRIGGER]
         mail_agent.settle(self.ctx, others, "failed" if error else "done", error)
         self.wake.set()

@@ -21,7 +21,7 @@ MAIL_STATES: dict[str, Any] = {
     "offline": "problem",
 }
 MAIL_MESSAGES = {
-    "paused": "Stopped. Nothing is downloaded, and changes made here wait, until you resume.",
+    "paused": "Paused. Nothing is downloaded, and changes made here wait, until you resume.",
     "off": "Connect a mail account to start.",
     "syncing": "Downloading mail.",
     "backfilling": "Downloading older mail.",
@@ -39,13 +39,16 @@ def _every(seconds: int) -> str:
 
 def _mail_view(ctx: Context) -> Pipeline:
     status = cast(MailStatus, mail.get_status(GetMailStatus(), ctx))
+    if status.history_finished or status.history_budget == 0:
+        history = "Finished"
+    elif status.history_budget is None:
+        history = "All of it coming"
+    else:
+        history = f"{status.history_budget:,} more coming"
     facts = [
         PipelineFact(label="On the server", value=f"{status.server_total:,}"),
         PipelineFact(label="On this computer", value=f"{status.pulled:,}"),
-        PipelineFact(
-            label="Download limit",
-            value=f"Newest {status.pull_limit:,}" if status.pull_limit else "All of it",
-        ),
+        PipelineFact(label="Older mail", value=history),
     ]
     if status.last_found_at:
         words = f"Found {status.last_found:,}, pulled {status.last_pulled:,}"
@@ -60,6 +63,8 @@ def _mail_view(ctx: Context) -> Pipeline:
         last_run=status.last_check,
         next_run=status.next_check,
         available=status.account is not None,
+        history_open=status.state != "off" and not status.history_finished,
+        left=max(0, status.server_total - status.pulled),
         link="/connectors",
     )
 
@@ -69,10 +74,18 @@ class Entry:
     view: Callable[[Context], Pipeline]
     pause: Callable[[Context, bool], None]
     run: Callable[[Context], None]
+    stop: Callable[[Context], None] | None = None
+    more: Callable[[Context, int | None], None] | None = None
 
 
 PIPELINES = {
-    "mail-sync": Entry(_mail_view, mail.pause_sync, lambda ctx: mail.check_now()),
+    "mail-sync": Entry(
+        _mail_view,
+        mail.pause_sync,
+        lambda ctx: mail.check_now(),
+        mail.stop_history,
+        mail.get_more,
+    ),
 }
 
 

@@ -1,4 +1,5 @@
 import type {
+  SetSenderImages,
   DismissChecklist,
   DownloadModel,
   GetSemanticStatus,
@@ -223,7 +224,7 @@ import type {
   StartModelLogin,
   TestModel,
   TraceView,
-  UpdateSettings, ListPipelines, PausePipeline, PipelineList, RunPipeline, SetPullLimit } from "./contracts.generated";
+  UpdateSettings, ListPipelines, PausePipeline, PipelineList, RunPipeline, StopHistory, GetMoreMail, SetNeverDelete, ChangeThreadFolder, ChangeThreadCategory, PipelineMore, ListMailFolders, MailFolders } from "./contracts.generated";
 
 interface Commands {
   "settings.update": [UpdateSettings, Settings];
@@ -240,7 +241,16 @@ interface Commands {
   "notifications.markRead": [MarkNotificationsRead, NotificationsChanged];
   "network.check": [CheckNetwork, NetworkChecks];
   "mail.accounts.test": [TestMailAccount, MailTestResult];
-  "mail.sync.limit": [SetPullLimit, MailStatus];
+  "mail.history.stop": [StopHistory, MailStatus];
+  "mail.history.more": [GetMoreMail, MailStatus];
+  "mail.sync.neverDelete": [SetNeverDelete, MailStatus];
+  "mail.images.sender": [SetSenderImages, MailDone];
+  "thread.addToFolder": [ChangeThreadFolder, MailDone];
+  "thread.removeFromFolder": [ChangeThreadFolder, MailDone];
+  "thread.addCategory": [ChangeThreadCategory, MailDone];
+  "thread.removeCategory": [ChangeThreadCategory, MailDone];
+  "pipelines.stop": [RunPipeline, PipelineList];
+  "pipelines.more": [PipelineMore, PipelineList];
   "pipelines.pause": [PausePipeline, PipelineList];
   "pipelines.run": [RunPipeline, PipelineList];
   "mail.accounts.save": [SaveMailAccount, MailAccounts];
@@ -369,6 +379,7 @@ interface Queries {
   "pst.search": [GetPstSearch, PstSearchStatus];
   "cockpit.view": [GetCockpit, Cockpit];
   "pipelines.list": [ListPipelines, PipelineList];
+  "mail.folders": [ListMailFolders, MailFolders];
   "cockpit.events": [GetCockpitEvents, CockpitEvents];
   "mailAgent.get": [GetMailAgentSettings, MailAgentSettings];
   "context.get": [GetContextSettings, ContextSettings];

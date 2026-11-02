@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { ErrorBoundary } from "@/ui/primitives/ErrorBoundary";
 import { Card } from "@/ui/primitives/Card";
+import { Dialog } from "@/ui/primitives/Dialog";
 import { ActiveMark } from "@/ui/primitives/Motion";
 import { t, type StringKey } from "@/ui/strings";
 import { ConnectorsContent } from "@/ui/features/connectors/ConnectorsScreen";
@@ -49,14 +50,12 @@ const SECTIONS: readonly { id: string; group: StringKey; label: StringKey; conte
   { id: "about", group: "settings.group.system", label: "settings.section.about", content: () => <AboutSettings /> },
 ];
 
-export function SettingsLayout() {
+function SettingsBody({ overPage = false }: { overPage?: boolean }) {
   const requested = useSearchParams().get("section");
   const current = SECTIONS.find((section) => section.id === requested) ?? (SECTIONS[0] as (typeof SECTIONS)[number]);
   return (
-    <div className="mx-auto flex max-w-page flex-col gap-5 p-6">
-      <h1 className="font-serif text-display text-ink-primary">{t("settings.title")}</h1>
-      <div className="flex items-start gap-6">
-        <nav aria-label={t("settings.title")} className="sticky top-0 w-rail-wide shrink-0">
+      <div className={`flex items-start gap-6 ${overPage ? "min-h-0 flex-1" : ""}`}>
+        <nav aria-label={t("settings.title")} className={`w-rail-wide shrink-0 ${overPage ? "h-full overflow-y-auto" : "sticky top-0"}`}>
           <div className="flex flex-col gap-4">
             {[...new Set(SECTIONS.map((section) => section.group))].map((group) => (
               <div key={group}>
@@ -66,6 +65,8 @@ export function SettingsLayout() {
                     <li key={section.id}>
                       <Link
                         href={`/settings?section=${section.id}`}
+                        replace={overPage}
+                        scroll={!overPage}
                         aria-current={section.id === current.id ? "page" : undefined}
                         className={`focus-ring relative block rounded-md px-3 py-1 text-md transition-colors duration-fast ${section.id === current.id ? "text-ink-primary" : "text-ink-secondary hover:bg-surface-raised hover:text-ink-primary"}`}
                       >
@@ -79,12 +80,30 @@ export function SettingsLayout() {
             ))}
           </div>
         </nav>
-        <div className="min-w-0 flex-1">
+        <div className={`min-w-0 flex-1 ${overPage ? "h-full overflow-y-auto" : ""}`}>
           <ErrorBoundary key={current.id}>
             <div className="animate-rise">{current.content()}</div>
           </ErrorBoundary>
         </div>
       </div>
+  );
+}
+
+export function SettingsLayout() {
+  return (
+    <div className="mx-auto flex max-w-page flex-col gap-5 p-6">
+      <h1 className="font-serif text-display text-ink-primary">{t("settings.title")}</h1>
+      <SettingsBody />
     </div>
+  );
+}
+
+/** Settings as a frosted panel over whatever you were doing. Closing goes back to it. */
+export function SettingsModal() {
+  const router = useRouter();
+  return (
+    <Dialog title={t("settings.title")} shape="glass" open onOpenChange={(open) => (open ? null : router.back())}>
+      <SettingsBody overPage />
+    </Dialog>
   );
 }

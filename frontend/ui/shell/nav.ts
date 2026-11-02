@@ -12,6 +12,8 @@ export interface NavItem {
 export interface NavSection {
   id: string;
   label: StringKey;
+  /** Some read better as a plain run of rows, like mail. */
+  heading: boolean;
   items: NavItem[];
 }
 
@@ -28,6 +30,7 @@ export const NAV_TOP: NavItem[] = nav.top.map((raw) => item(raw));
 export const NAV_SECTIONS: NavSection[] = nav.sections.map((section) => ({
   id: section.id,
   label: section.labelKey as StringKey,
+  heading: section.heading,
   items: section.items.map((raw) => item(raw)),
 }));
 export const NAV_BOTTOM: NavItem[] = nav.bottom.map((raw) => item(raw));

@@ -5,9 +5,9 @@ import { ApiRequestError, command, query } from "./api";
 import type { ApiError, DocumentRow, ListDocuments, Panel, PanelBoard, PstSearchStatus, PstUploadStatus, ReadDocument, UpdateDocument } from "./contracts.generated";
 import { useHomeReady } from "./home";
 
-export function useDocuments(input: ListDocuments) {
+export function useDocuments(input: ListDocuments, enabled = true) {
   const ready = useHomeReady();
-  return useQuery({ queryKey: ["documents", input], queryFn: () => query("documents.list", input), enabled: ready });
+  return useQuery({ queryKey: ["documents", input], queryFn: () => query("documents.list", input), enabled: ready && enabled });
 }
 
 export function useDocument(key: string | null) {

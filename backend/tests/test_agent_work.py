@@ -155,7 +155,7 @@ def test_rule_matched_mail_never_reaches_the_model(
 ) -> None:
     connect(client, fake)
     fake.state.deliver(make_mail(subject="Build passed", sender="no-reply@ci.example"))
-    assert thread_named(client, "Build passed")["category"] == "Automated"
+    assert thread_named(client, "Build passed")["category"] == "Updates"
     time.sleep(0.3)
     assert script.requests == []
 

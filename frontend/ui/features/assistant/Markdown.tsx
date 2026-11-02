@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { createContext, use, useState, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Icon } from "@/ui/icons";
 import { t } from "@/ui/strings";
+import { CitationMark } from "@/ui/primitives/Citation";
 import { Pressable } from "@/ui/primitives/Pressable";
+import type { MessageSource } from "./parts";
 
 function CodeBlock({ language, children }: { language: string; children: string }) {
   const [copied, setCopied] = useState(false);
@@ -32,6 +34,15 @@ const COPIED_MS = 1500;
 
 const textOf = (node: ReactNode): string => (Array.isArray(node) ? node.map(textOf).join("") : typeof node === "string" ? node : "");
 
+const CITE = "#cite-";
+const CitedSources = createContext<{ sources: readonly MessageSource[]; open: (source: MessageSource) => void } | null>(null);
+
+function Cited({ number }: { number: string }) {
+  const known = use(CitedSources);
+  const source = known?.sources.find((item) => String(item.n) === number);
+  return <CitationMark number={number} title={source?.title} label={t("chat.citation", { number })} onOpen={source && known ? () => known.open(source) : undefined} />;
+}
+
 const COMPONENTS: Components = {
   p: ({ children }) => <p className="my-2 first:mt-0 last:mb-0">{children}</p>,
   h1: ({ children }) => <h3 className="mb-2 mt-4 text-lg font-medium first:mt-0">{children}</h3>,
@@ -44,11 +55,11 @@ const COMPONENTS: Components = {
   strong: ({ children }) => <strong className="font-medium">{children}</strong>,
   blockquote: ({ children }) => <blockquote className="my-2 border-l-2 border-line-strong pl-3 text-ink-secondary">{children}</blockquote>,
   hr: () => <hr className="my-4 border-line-subtle" />,
-  a: ({ href, children }) => (
+  a: ({ href, children }) => (href?.startsWith(CITE) ? <Cited number={href.slice(CITE.length)} /> : (
     <a href={href} target="_blank" rel="noreferrer noopener" className="focus-ring rounded-sm text-accent-default underline underline-offset-2">
       {children}
     </a>
-  ),
+  )),
   // A picture would load from wherever the model points, which could carry data out. It stays a link.
   img: ({ src, alt }) => (
     <a href={typeof src === "string" ? src : undefined} target="_blank" rel="noreferrer noopener" className="focus-ring rounded-sm text-accent-default underline underline-offset-2">
@@ -72,12 +83,14 @@ const COMPONENTS: Components = {
 };
 
 /** The model's words. Raw HTML in them is shown as text, never run. */
-export function Markdown({ text }: { text: string }) {
+export function Markdown({ text, sources = [], onOpenSource }: { text: string; sources?: readonly MessageSource[]; onOpenSource?: (source: MessageSource) => void }) {
   return (
-    <div className="break-words text-md text-ink-primary">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>
-        {text}
-      </ReactMarkdown>
-    </div>
+    <CitedSources value={{ sources, open: onOpenSource ?? (() => undefined) }}>
+      <div className="break-words text-md text-ink-primary">
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>
+          {text}
+        </ReactMarkdown>
+      </div>
+    </CitedSources>
   );
 }

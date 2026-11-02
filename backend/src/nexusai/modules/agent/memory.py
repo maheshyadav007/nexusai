@@ -17,6 +17,11 @@ CREATE TABLE memory_proposals (
 """,
 )
 WORD = re.compile(r"[\w@.-]{3,}", re.UNICODE)
+# What the Mail agent has picked up from mail. Only it reads this, always marked as from mail, so
+# a planted email can't reach other agents or give it instructions. The person can edit it.
+LEARNED_PATH = "agents/mail/learned.md"
+LEARNED_MAX_CHARS = 40_000
+LEARNED_NOTE_CHARS = 300
 
 
 def _root(home: Path) -> Path:
@@ -67,6 +72,29 @@ def save_file(
     return relative
 
 
+def learned(home: Path) -> str:
+    path = _safe(home, LEARNED_PATH)
+    return path.read_text("utf-8", errors="replace") if path.exists() else ""
+
+
+def add_learned(home: Path, notes: list[str]) -> None:
+    """One line each, with no repeats. The oldest go first if it ever grows too long."""
+    current = learned(home)
+    lines = current.splitlines()
+    for note in notes:
+        line = f"- {' '.join(note.split())[:LEARNED_NOTE_CHARS]}"
+        if len(line) > len("- ") and line not in lines:
+            lines.append(line)
+    while len("\n".join(lines)) > LEARNED_MAX_CHARS:
+        lines.pop(0)
+    if lines != current.splitlines():
+        save_file(home, LEARNED_PATH, "", "agent", "mail", "\n".join(lines) + "\n")
+
+
+def replace_learned(home: Path, content: str) -> None:
+    save_file(home, LEARNED_PATH, "", "agent", "mail", content[:LEARNED_MAX_CHARS].strip() + "\n")
+
+
 def remove_file(home: Path, relative: str) -> None:
     _safe(home, relative).unlink(missing_ok=True)
 
@@ -79,7 +107,11 @@ def relevant(home: Path, agent: str, task_text: str, limit: int) -> str:
         if file.level == "agent" and file.agent != agent:
             continue
         overlap = len(words & {word.lower() for word in WORD.findall(file.content)})
-        if overlap or not words:
+        if file.path == LEARNED_PATH:
+            # It's about the person, so it's always relevant, and it's only ever data.
+            recent = file.content.strip()[-limit // 2 :]
+            scored.append((1 << 30, file.name, f"<untrusted>\n{recent}\n</untrusted>"))
+        elif overlap or not words:
             scored.append((overlap, file.name, file.content.strip()))
     scored.sort(key=lambda item: (-item[0], item[1]))
     chosen: list[str] = []

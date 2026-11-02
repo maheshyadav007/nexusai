@@ -2,17 +2,49 @@
 
 import type { Pipeline } from "@/ui/client/contracts.generated";
 import { useDateTime } from "@/ui/client/format";
-import { usePausePipeline, usePipelines, useRunPipeline } from "@/ui/client/work";
+import { useState } from "react";
+import { usePausePipeline, usePipelineMore, usePipelines, useRunPipeline, useStopPipeline } from "@/ui/client/work";
 import { Button } from "@/ui/primitives/Button";
+import { Dialog } from "@/ui/primitives/Dialog";
 import { ErrorState } from "@/ui/primitives/ErrorState";
+import { Field } from "@/ui/primitives/Field";
+import { Input } from "@/ui/primitives/Input";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { StatusDot } from "@/ui/primitives/StatusDot";
 import { t } from "@/ui/strings";
 
 const TONES = { running: "running", waiting: "done", stopped: "idle", problem: "failed" } as const;
 
-function PipelineRow({ row }: { row: Pipeline }) {
+const SUGGESTED_MORE = "1000";
+
+function GetMore({ row }: { row: Pipeline }) {
+  const more = usePipelineMore();
+  const [open, setOpen] = useState(false);
+  const [count, setCount] = useState(SUGGESTED_MORE);
+  const left = row.left ?? 0;
+  const close = { onSuccess: () => setOpen(false) };
+  return (
+    <Dialog title={t("pipelines.more.title")} description={t("pipelines.more.description", { left: left.toLocaleString() })} open={open} onOpenChange={setOpen} trigger={<Button variant="quiet" className="py-px">{t("pipelines.more")}</Button>}>
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          more.mutate({ id: row.id, count: Number(count) }, close);
+        }}
+      >
+        <Field label={t("pipelines.more.count")} hint={t("pipelines.more.hint")}>{({ invalid, ...control }) => <Input type="number" min={1} invalid={invalid} value={count} onChange={(event) => setCount(event.target.value)} {...control} />}</Field>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button loading={more.isPending} onClick={() => more.mutate({ id: row.id, count: null }, close)}>{t("pipelines.more.all", { left: left.toLocaleString() })}</Button>
+          <Button type="submit" variant="primary" loading={more.isPending} disabled={!(Number(count) >= 1)}>{t("pipelines.more.get")}</Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+export function PipelineRow({ row }: { row: Pipeline }) {
   const pause = usePausePipeline();
+  const stop = useStopPipeline();
   const run = useRunPipeline();
   const format = useDateTime();
   const stopped = row.state === "stopped";
@@ -26,7 +58,9 @@ function PipelineRow({ row }: { row: Pipeline }) {
         {row.available ? (
           <span className="flex shrink-0 items-center gap-2">
             {stopped ? null : <Button variant="quiet" className="py-px" loading={run.isPending} onClick={() => run.mutate(row.id)}>{t("pipelines.run")}</Button>}
-            <Button variant="quiet" className="py-px" loading={pause.isPending} onClick={() => pause.mutate({ id: row.id, paused: !stopped })}>{t(stopped ? "pipelines.resume" : "pipelines.stop")}</Button>
+            {row.history_open && !stopped ? <Button variant="quiet" className="py-px" loading={stop.isPending} onClick={() => stop.mutate(row.id)}>{t("pipelines.stop")}</Button> : null}
+            {row.history_open || !row.left ? null : <GetMore row={row} />}
+            <Button variant="quiet" className="py-px" loading={pause.isPending} onClick={() => pause.mutate({ id: row.id, paused: !stopped })}>{t(stopped ? "pipelines.resume" : "pipelines.pause")}</Button>
           </span>
         ) : null}
       </div>

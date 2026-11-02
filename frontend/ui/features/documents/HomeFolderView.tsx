@@ -1,6 +1,9 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { ContextMenu } from "@/ui/primitives/ContextMenu";
+import { usePreview } from "./DocumentPreview";
+import { sizeOf } from "./sizes";
 import { useState } from "react";
 import { ApiRequestError } from "@/ui/client/api";
 import { useDateTime } from "@/ui/client/format";
@@ -12,7 +15,6 @@ import { Pressable, RowButton } from "@/ui/primitives/Pressable";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { t } from "@/ui/strings";
 
-const sizeOf = (bytes: number) => new Intl.NumberFormat(undefined, { style: "unit", unit: bytes < 1024 ** 2 ? "kilobyte" : "megabyte", maximumFractionDigits: 1 }).format(bytes < 1024 ** 2 ? bytes / 1024 : bytes / 1024 ** 2);
 
 /** Everything the agents and the person keep in Home. NexusAI's own system folder stays hidden. */
 export function HomeFolderView() {
@@ -20,6 +22,9 @@ export function HomeFolderView() {
   const folder = useHomeFolder(path);
   const format = useDateTime();
   const entries = folder.data?.entries ?? [];
+  const preview = usePreview();
+  const router = useRouter();
+  const files = entries.filter((entry) => !entry.is_folder).map((entry) => ({ path: entry.path }));
   const steps = path ? path.split("/") : [];
   return (
     <section aria-label={t("documents.view.home")} className="flex flex-col gap-3">
@@ -44,12 +49,14 @@ export function HomeFolderView() {
                 <span className="min-w-0 flex-1 truncate text-md text-ink-primary">{entry.label}</span>
               </RowButton>
             ) : (
-              <Link href={`/documents/view?path=${encodeURIComponent(entry.path)}`} className="focus-ring flex w-full items-center gap-3 rounded-md px-3 py-2 transition-colors duration-fast hover:bg-surface-sunken">
+              <ContextMenu items={[{ id: "open", label: t("menu.open"), onSelect: () => preview.show({ path: entry.path }, files) }, { id: "full", label: t("documents.openFull"), onSelect: () => router.push(`/documents/view?path=${encodeURIComponent(entry.path)}`) }]}>
+              <RowButton onClick={() => preview.show({ path: entry.path }, files)}>
                 <Icon name="file" className="h-4 w-4 shrink-0 text-ink-muted" />
                 <span className="min-w-0 flex-1 truncate text-md text-ink-primary">{entry.label}</span>
                 <span className="shrink-0 text-sm tabular-nums text-ink-muted">{sizeOf(entry.size ?? 0)}</span>
                 {entry.modified ? <span className="shrink-0 text-sm tabular-nums text-ink-muted">{format(entry.modified)}</span> : null}
-              </Link>
+              </RowButton>
+              </ContextMenu>
             )}
           </li>
         ))}

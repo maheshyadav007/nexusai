@@ -5,11 +5,13 @@ import threading
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import structlog
 
 from nexusai.contracts.mail import (
     MailChanged,
+    MailHistoryFinished,
     MailProfile,
     MailPulled,
     MailReceived,
@@ -22,32 +24,31 @@ from nexusai.modules.mail import store
 from nexusai.modules.mail.imap import (
     READ,
     ConnectionFailed,
+    DeleteRefused,
     Folder,
+    FolderStatus,
     ImapSession,
     SignInFailed,
+    distinct_total,
     synced_folders,
 )
 from nexusai.modules.mail.parse import parse_message
-from nexusai.modules.mail.rules import evaluate, load_rules
+from nexusai.modules.mail.rules import evaluate, load_rules, own_domain_of
 
 log = structlog.get_logger()
 DRAFT_HEADER = "x-nexusai-draft"
 PROGRESS_NOTICE_SECONDS = 1.0
 
 
-def shares_of(limit: int | None, totals: dict[str, int]) -> dict[str, int]:
-    """How many of the newest emails each folder gets, in proportion to its size."""
-    everything = sum(totals.values())
-    if limit is None or limit >= everything:
-        return dict(totals)
-    shares = {name: limit * total // everything for name, total in totals.items()}
-    spare = limit - sum(shares.values())
-    # In the order the folders were given, so the inbox gets what rounding left over.
-    for name, total in totals.items():
-        extra = min(spare, total - shares[name])
-        shares[name] += extra
-        spare -= extra
-    return shares
+GMAIL_SYSTEM_LABELS = {"inbox": "\\Inbox", "sent": "\\Sent", "drafts": "\\Draft"}
+# Folders where mail already here is often filed too, like Gmail's labels. All Mail holds nearly
+# everything, so walking it would say nothing useful.
+FILED_ROLES = {"other", "sent", "drafts", "archive"}
+COPY_BATCHES_PER_PASS = 10
+# Looked at on every check. The rest are only opened when their status says something changed.
+ALWAYS_CHECKED = {"inbox", "sent"}
+# Who takes turns bringing down older mail, then who waits until they've all finished.
+HISTORY_TIERS = (("inbox", "sent", "drafts", "other", "archive"), ("all",), ("trash", "junk"))
 
 
 @dataclass
@@ -67,37 +68,23 @@ class SyncStatus:
 
 
 class MailSync:
-    def __init__(
-        self,
-        ctx: Context,
-        account: str,
-        profile: MailProfile,
-        password: str,
-        limit: int | None = None,
-    ) -> None:
+    def __init__(self, ctx: Context, account: str, profile: MailProfile, password: str) -> None:
         self.ctx = ctx
         self.account = account
         self.profile = profile
         self.password = password
-        self.limit = limit
         self.config = ctx.config.mail
+        self._own_domain = own_domain_of(profile.address or profile.auth.user)
         self.status = SyncStatus()
         self._stop = threading.Event()
         self._wake = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True, name=f"mail-{account}")
-        # For each folder still coming down: how many are on the server, and how many are left.
-        self._coming: dict[str, tuple[int, int]] = {}
-        self._shares: dict[str, int] = {}
-        # Folders that have all the limit allows, so a quiet check needn't list every UID again.
-        self._filled: set[str] = set()
-        rows = store.sync_settings(ctx.bus.db, account)
-        if rows:
-            self.status.server_total = rows["server_total"]
-            self.status.last_check = rows["last_check"]
-            self.status.last_found = rows["last_found"]
-            self.status.last_pulled = rows["last_pulled"]
-            self.status.last_found_at = rows["last_found_at"]
         self._last_notice = 0.0
+        self._statuses: dict[str, FolderStatus] = {}
+        # Older UIDs still to come for each folder, so a large one isn't listed for every batch.
+        self._older: dict[str, list[int]] = {}
+        self._copies: dict[str, list[int]] = {}
+        self._turn = 0
 
     def start(self) -> None:
         self._thread.start()
@@ -123,13 +110,26 @@ class MailSync:
                     trace_id=self.ctx.trace_id,
                 )
 
-    def _note_progress(self, folder: str, total: int, left: int) -> None:
-        if left:
-            self._coming[folder] = (total, left)
-        else:
-            self._coming.pop(folder, None)
-        self.status.total = sum(pair[0] for pair in self._coming.values())
-        self.status.done = self.status.total - sum(pair[1] for pair in self._coming.values())
+    def _settings(self) -> Any:
+        return store.sync_settings(self.ctx.bus.db, self.account)
+
+    def _pulled(self) -> int:
+        return int(
+            self.ctx.bus.db.fetch_all(
+                "SELECT COUNT(DISTINCT message) AS n FROM message_locations"
+                " WHERE account = ? AND folder NOT LIKE 'pst:%'",
+                (self.account,),
+            )[0]["n"]
+        )
+
+    def _note_progress(self) -> None:
+        """How much of what's wanted is here, counting each email once."""
+        settings = self._settings()
+        budget = settings["history_budget"] if settings else None
+        pulled = self._pulled()
+        wanted = self.status.server_total if budget is None else pulled + budget
+        self.status.total = max(min(wanted, self.status.server_total), pulled)
+        self.status.done = pulled
         now = time.monotonic()
         if now - self._last_notice < PROGRESS_NOTICE_SECONDS:
             return
@@ -148,8 +148,13 @@ class MailSync:
             session: ImapSession | None = None
             try:
                 self._set_state("connecting")
+                settings = self._settings()
                 session = ImapSession(
-                    self.profile, self.password, self.config.connect_timeout_seconds
+                    self.profile,
+                    self.password,
+                    self.config.connect_timeout_seconds,
+                    # Refusing is the default, so only a person's clear choice turns it off.
+                    never_delete=bool(settings["never_delete"]) if settings else True,
                 )
                 delay = self.config.reconnect_min_seconds
                 self._session(session)
@@ -157,7 +162,12 @@ class MailSync:
                 self._set_state("failed", "The mail server refused the username or password.")
                 return
             except ConnectionFailed as error:
-                log.info("mail_connection_lost", account=self.account, error=type(error).__name__)
+                log.info(
+                    "mail_connection_lost",
+                    account=self.account,
+                    error=type(error).__name__,
+                    detail=str(error)[:200],
+                )
                 self._set_state("offline", "Can't reach the mail server. Retrying.")
                 self._stop.wait(delay)
                 delay = min(delay * 2, self.config.reconnect_max_seconds)
@@ -172,9 +182,12 @@ class MailSync:
         self.status.state = "off"
 
     def _discover(self, session: ImapSession) -> list[Folder]:
-        folders = session.folders()
-        wanted = synced_folders(folders)
-        self.status.folders = {f.role: f.name for f in folders}
+        """Every folder on the server, as it is right now. A label can appear or go at any time."""
+        found = session.folders()
+        wanted = synced_folders(found)
+        self.status.folders = {}
+        for folder in reversed(wanted):
+            self.status.folders[folder.role] = folder.name
         with self.ctx.bus.db.transaction() as tx:
             for folder in wanted:
                 tx.execute(
@@ -182,43 +195,152 @@ class MailSync:
                     " ON CONFLICT (account, name) DO UPDATE SET role = excluded.role",
                     (self.account, folder.name, folder.role),
                 )
+            names = {folder.name for folder in wanted}
+            for row in tx.execute(
+                "SELECT name FROM mail_folders WHERE account = ?", (self.account,)
+            ).fetchall():
+                if row["name"] not in names:
+                    self._forget_folder(tx, row["name"])
         return wanted
 
+    def _forget_folder(self, tx: Any, name: str) -> None:
+        for row in tx.execute(
+            "SELECT uid FROM message_locations WHERE account = ? AND folder = ?",
+            (self.account, name),
+        ).fetchall():
+            store.remove_location(tx, self.account, name, row["uid"])
+        tx.execute("DELETE FROM mail_folders WHERE account = ? AND name = ?", (self.account, name))
+
     def _session(self, session: ImapSession) -> None:
-        folders = self._discover(session)
-        inbox = next((f for f in folders if f.role == "inbox"), None)
+        self._older = {}
+        self._copies = {}
+        self._statuses = {}
+        folders: list[Folder] = []
+        measured = 0.0
         while not self._stop.is_set():
+            woken = self._wake.is_set()
             self._wake.clear()
+            # Asking every folder takes seconds, so a large download only does it now and then.
+            due = time.monotonic() - measured >= self.config.check_every_seconds
+            if not folders or woken or due:
+                folders = self._discover(session)
+            inbox = next((f for f in folders if f.role == "inbox"), None)
             self._drain_outbox(session)
-            self._measure(session, folders)
+            changed: set[str] = set()
+            if not measured or woken or due:
+                changed = self._measure(session, folders)
+                measured = time.monotonic()
+            looking = [f for f in folders if f.role in ALWAYS_CHECKED or f.name in changed]
             found = pulled = 0
-            for folder in folders:
+            for folder in looking:
                 if self._stop.is_set():
                     return
                 came = self._fetch_new(session, folder)
                 found += came[0]
                 pulled += came[1]
-            self._sync_flags(session, folders)
+            self._sync_flags(session, looking)
             remaining = self._backfill(session, folders)
             self.status.backfill_remaining = remaining
             self._checked(found, pulled, waiting=not remaining)
             if remaining:
                 self._set_state("backfilling")
                 continue
+            self.status.total = self.status.done = 0
+            self._history_done()
             self._set_state("live")
+            if self._file_copies(session, folders):
+                continue
             if inbox:
                 session.select(inbox.name)
-                session.wait_for_change(
+                announced = session.wait_for_change(
                     self.config.check_every_seconds,
                     lambda: self._stop.is_set() or self._wake.is_set(),
                 )
+                if announced:
+                    self._wake.set()
             else:
                 self._wake.wait(self.config.check_every_seconds)
 
-    def _measure(self, session: ImapSession, folders: list[Folder]) -> None:
-        totals = {folder.name: session.select(folder.name)[1] for folder in folders}
-        self.status.server_total = sum(totals.values())
-        self._shares = shares_of(self.limit, totals)
+    def _file_copies(self, session: ImapSession, folders: list[Folder]) -> bool:
+        """Files mail that's already here under the other folders it's in, downloading nothing.
+
+        True while there's more to look through, so the check doesn't wait before carrying on.
+        """
+        rows = self.ctx.bus.db.fetch_all(
+            "SELECT name, copies_below FROM mail_folders"
+            " WHERE account = ? AND copies_below IS NOT NULL ORDER BY name",
+            (self.account,),
+        )
+        if not rows:
+            return False
+        by_name = {folder.name: folder for folder in folders}
+        name, below = rows[0]["name"], rows[0]["copies_below"]
+        folder = by_name.get(name)
+        batch = self.config.backfill_batch
+        left: list[int] = []
+        if folder is not None:
+            session.select(name)
+            left = self._copies.get(name) or [uid for uid in session.all_uids() if uid < below]
+            for _ in range(COPY_BATCHES_PER_PASS):
+                if not left or self._stop.is_set():
+                    break
+                self._note_copies(session, folder, left[-batch:])
+                left = left[:-batch]
+            self._copies[name] = left
+        with self.ctx.bus.db.transaction() as tx:
+            tx.execute(
+                "UPDATE mail_folders SET copies_below = ? WHERE account = ? AND name = ?",
+                ((left[-1] + 1) if left else None, self.account, name),
+            )
+        return True
+
+    def _measure(self, session: ImapSession, folders: list[Folder]) -> set[str]:
+        """What each folder holds, and which ones changed since the last look."""
+        changed: set[str] = set()
+        counts: dict[Folder, int] = {}
+        with self.ctx.bus.db.transaction() as tx:
+            for folder in folders:
+                status = session.status(folder.name)
+                counts[folder] = status.messages
+                if self._statuses.get(folder.name) != status:
+                    changed.add(folder.name)
+                    self._statuses[folder.name] = status
+                    tx.execute(
+                        "UPDATE mail_folders SET server_count = ?, server_unseen = ?, uid_next = ?"
+                        " WHERE account = ? AND name = ?",
+                        (
+                            status.messages,
+                            status.unseen,
+                            status.uid_next,
+                            self.account,
+                            folder.name,
+                        ),
+                    )
+        self.status.server_total = distinct_total(counts)
+        return changed
+
+    def _history_done(self) -> None:
+        """Says once that older mail has stopped coming, by choice or because it's all here."""
+        settings = self._settings()
+        if settings is None or settings["history_finished"]:
+            return
+        budget = settings["history_budget"]
+        pulled = self._pulled()
+        with self.ctx.bus.unit_of_work() as work:
+            work.tx.execute(
+                "UPDATE mail_sync_settings SET history_finished = ? WHERE account = ?",
+                (datetime.now(UTC).isoformat(), self.account),
+            )
+            work.emit(
+                "mail.historyFinished",
+                MailHistoryFinished(
+                    pulled=pulled,
+                    total=max(self.status.server_total, pulled),
+                    reason="enough" if budget == 0 else "everything",
+                ).model_dump(),
+                source="mail",
+                trace_id=self.ctx.trace_id,
+            )
 
     def _checked(self, found: int, pulled: int, *, waiting: bool) -> None:
         """One check is done: note what it found, so the Cockpit can say whether we're in step."""
@@ -263,15 +385,76 @@ class MailSync:
         """The server renumbered this folder, so what we hold no longer lines up."""
         with self.ctx.bus.db.transaction() as tx:
             rows = tx.execute(
-                "SELECT id FROM messages WHERE account = ? AND folder = ?", (self.account, name)
+                "SELECT uid FROM message_locations WHERE account = ? AND folder = ?",
+                (self.account, name),
             ).fetchall()
             for row in rows:
-                store.remove_message(tx, row["id"])
+                store.remove_location(tx, self.account, name, row["uid"])
             tx.execute(
                 "UPDATE mail_folders SET uidvalidity = ?, last_uid = 0, backfill_below = NULL"
                 " WHERE account = ? AND name = ?",
                 (validity, self.account, name),
             )
+        self._older.pop(name, None)
+
+    def _spend(self, tx: Any, stored: int) -> None:
+        tx.execute(
+            "UPDATE mail_sync_settings SET history_budget = MAX(0, history_budget - ?)"
+            " WHERE account = ? AND history_budget IS NOT NULL",
+            (stored, self.account),
+        )
+
+    def _first_look(self, session: ImapSession, folder: Folder, validity: int) -> None:
+        """Older mail comes as the budget allows. Whatever arrives after this moment is new."""
+        settings = self._settings()
+        budget = settings["history_budget"] if settings else None
+        allowance = (
+            self.config.initial_batch if budget is None else min(self.config.initial_batch, budget)
+        )
+        if folder.role not in HISTORY_TIERS[0]:
+            allowance = 0
+        if allowance <= 0:
+            status = self._statuses.get(folder.name)
+            if status and status.uid_next:
+                top, below = status.uid_next - 1, status.uid_next if status.messages else None
+            else:
+                uids = session.all_uids()
+                top, below = (uids[-1], uids[-1] + 1) if uids else (0, None)
+            with self.ctx.bus.db.transaction() as tx:
+                tx.execute(
+                    "UPDATE mail_folders SET uidvalidity = ?, backfill_below = ?, last_uid = ?,"
+                    " copies_below = ? WHERE account = ? AND name = ?",
+                    (
+                        validity,
+                        below,
+                        top,
+                        below if folder.role in FILED_ROLES else None,
+                        self.account,
+                        folder.name,
+                    ),
+                )
+            return
+        uids = session.all_uids()
+        newest = uids[-allowance:]
+        below = newest[0] if len(uids) > len(newest) else None
+        self._set_state("syncing")
+        with self.ctx.bus.db.transaction() as tx:
+            tx.execute(
+                "UPDATE mail_folders SET uidvalidity = ?, backfill_below = ?, last_uid = ?,"
+                " copies_below = ? WHERE account = ? AND name = ?",
+                (
+                    validity,
+                    below,
+                    uids[-1] if uids else 0,
+                    below if folder.role in FILED_ROLES else None,
+                    self.account,
+                    folder.name,
+                ),
+            )
+        stored = self._ingest(session, folder, newest, live=False, advance=True)
+        with self.ctx.bus.db.transaction() as tx:
+            self._spend(tx, stored)
+        self._note_progress()
 
     def _fetch_new(self, session: ImapSession, folder: Folder) -> tuple[int, int]:
         """How many new emails this check found in the folder, and how many came down."""
@@ -281,23 +464,8 @@ class MailSync:
             self._reset_folder(folder.name, validity)
             known, last_uid = None, 0
         # Not last_uid == 0: a mailbox that started empty has been synced, so its first mail is new.
-        first_sync = known is None
-        if first_sync:
-            uids = session.all_uids()
-            share = min(self._shares.get(folder.name, len(uids)), len(uids))
-            take = min(self.config.initial_batch, share)
-            newest = uids[-take:] if take else []
-            # Past the newest kept here, whatever the limit left behind can still come later.
-            below = (newest[0] if newest else uids[-1] + 1) if len(uids) > len(newest) else None
-            self._set_state("syncing")
-            with self.ctx.bus.db.transaction() as tx:
-                tx.execute(
-                    "UPDATE mail_folders SET uidvalidity = ?, backfill_below = ?, last_uid = ?"
-                    " WHERE account = ? AND name = ?",
-                    (validity, below, uids[-1] if uids else 0, self.account, folder.name),
-                )
-            self._ingest(session, folder, newest, live=False, advance=True)
-            self._note_progress(folder.name, share, share - len(newest))
+        if known is None:
+            self._first_look(session, folder, validity)
             return 0, 0
         uids = session.uids_after(last_uid)
         pulled = 0
@@ -311,42 +479,104 @@ class MailSync:
             self._ingest(session, folder, batch, live=True, advance=True)
             pulled += len(batch)
             if len(uids) > len(batch):
-                self._note_progress(folder.name, len(uids), len(uids) - pulled)
+                self._note_progress()
         return len(uids), pulled
+
+    def _next_history(self, folders: list[Folder]) -> tuple[Folder, int, bool] | None:
+        """Whose turn it is, how many it may bring, and whether it was asked for itself."""
+        rows = self.ctx.bus.db.fetch_all(
+            "SELECT name, history_more FROM mail_folders"
+            " WHERE account = ? AND backfill_below IS NOT NULL",
+            (self.account,),
+        )
+        waiting = {row["name"]: row["history_more"] for row in rows}
+        batch = self.config.backfill_batch
+        for folder in folders:
+            if waiting.get(folder.name, 0) > 0:
+                return folder, min(batch, waiting[folder.name]), True
+        settings = self._settings()
+        budget = settings["history_budget"] if settings else None
+        if budget == 0:
+            return None
+        allowance = batch if budget is None else min(batch, budget)
+        for tier in HISTORY_TIERS:
+            turns = [f for f in folders if f.role in tier and f.name in waiting]
+            if turns:
+                self._turn += 1
+                return turns[self._turn % len(turns)], allowance, False
+        return None
 
     def _backfill(self, session: ImapSession, folders: list[Folder]) -> bool:
         """One batch of history per pass, so new mail is never kept waiting by a large mailbox."""
-        for folder in folders:
-            _, _, below = self._folder_row(folder.name)
-            if not below or folder.name in self._filled:
-                continue
-            session.select(folder.name)
-            uids = session.all_uids()
-            share = min(self._shares.get(folder.name, len(uids)), len(uids))
-            older = [uid for uid in (uids[-share:] if share else []) if uid < below]
-            if not older:
-                # Kept below stays set, so raising the limit later carries on from here.
-                self._filled.add(folder.name)
-                self._note_progress(folder.name, share, 0)
-                continue
-            batch = older[-self.config.backfill_batch :]
-            next_below = batch[0] if uids[0] < batch[0] else None
-            self._ingest(session, folder, batch, live=False, advance=False)
-            with self.ctx.bus.db.transaction() as tx:
+        chosen = self._next_history(folders)
+        if chosen is None:
+            return False
+        folder, allowance, for_itself = chosen
+        _, _, below = self._folder_row(folder.name)
+        session.select(folder.name)
+        older = self._older.get(folder.name)
+        if older is None:
+            older = [uid for uid in session.all_uids() if uid < (below or 0)]
+        batch, rest = older[-allowance:], older[:-allowance]
+        self._older[folder.name] = rest
+        stored = self._ingest(session, folder, batch, live=False, advance=False)
+        with self.ctx.bus.db.transaction() as tx:
+            tx.execute(
+                "UPDATE mail_folders SET backfill_below = ?, history_more = CASE WHEN ? THEN"
+                " MAX(0, history_more - ?) ELSE history_more END WHERE account = ? AND name = ?",
+                (
+                    batch[0] if rest and batch else None,
+                    int(for_itself),
+                    stored,
+                    self.account,
+                    folder.name,
+                ),
+            )
+            if not rest:
                 tx.execute(
-                    "UPDATE mail_folders SET backfill_below = ? WHERE account = ? AND name = ?",
-                    (next_below, self.account, folder.name),
+                    "UPDATE mail_folders SET history_more = 0 WHERE account = ? AND name = ?",
+                    (self.account, folder.name),
                 )
-            self._note_progress(folder.name, share, len(older) - len(batch))
-            return True
-        return False
+            if not for_itself:
+                self._spend(tx, stored)
+        self._note_progress()
+        return True
+
+    def _note_copies(self, session: ImapSession, folder: Folder, uids: list[int]) -> list[int]:
+        """Files what's already held under this folder too, and returns what needs downloading."""
+        ids = session.message_ids(uids)
+        if not ids:
+            return uids
+        marks = ",".join("?" * len(ids))
+        rows = self.ctx.bus.db.fetch_all(
+            f"SELECT message_id, MIN(id) AS id FROM messages WHERE account = ?"  # noqa: S608
+            f" AND message_id IN ({marks}) GROUP BY message_id",
+            (self.account, *ids.values()),
+        )
+        held = {row["message_id"]: row["id"] for row in rows}
+        copies = {uid: held[identity] for uid, identity in ids.items() if identity in held}
+        if copies:
+            with self.ctx.bus.unit_of_work() as work:
+                for uid, message in copies.items():
+                    store.add_location(
+                        work.tx, message, self.account, folder.name, folder.role, uid
+                    )
+                work.emit(
+                    "mail.changed",
+                    MailChanged(threads=len(copies), reason=folder.role).model_dump(),
+                    source="mail",
+                    trace_id=self.ctx.trace_id,
+                )
+        return [uid for uid in uids if uid not in copies]
 
     def _ingest(
         self, session: ImapSession, folder: Folder, uids: list[int], *, live: bool, advance: bool
-    ) -> None:
+    ) -> int:
+        """How many emails were new to this computer. One already here just gains this folder."""
         if not uids:
-            return
-        fetched = session.fetch(uids)
+            return 0
+        wanted = self._note_copies(session, folder, uids)
+        fetched = session.fetch(wanted)
         rules = load_rules(self.ctx.config.home)
         prepared = []
         for item in fetched:
@@ -354,7 +584,7 @@ class MailSync:
             # NexusAI's own saved drafts are shown from the drafts list, not as mail.
             if DRAFT_HEADER in parsed.headers:
                 continue
-            prepared.append((item, parsed, evaluate(parsed, rules)))
+            prepared.append((item, parsed, evaluate(parsed, rules, self._own_domain)))
         with self.ctx.bus.unit_of_work() as work:
             stored = []
             for item, parsed, match in prepared:
@@ -433,14 +663,15 @@ class MailSync:
                             source="mail",
                             trace_id=self.ctx.trace_id,
                         )
+        return len(stored)
 
     def _sync_flags(self, session: ImapSession, folders: list[Folder]) -> None:
         """Changes made elsewhere: read, flagged, and mail moved or deleted on the server."""
         for folder in folders:
             rows = self.ctx.bus.db.fetch_all(
-                "SELECT id, uid, read, flagged, thread_id FROM messages"
-                " WHERE account = ? AND folder = ?"
-                " ORDER BY uid DESC LIMIT ?",
+                "SELECT l.uid, l.message, m.read, m.flagged, m.thread_id, m.folder AS speaks_from"
+                " FROM message_locations l JOIN messages m ON m.id = l.message"
+                " WHERE l.account = ? AND l.folder = ? ORDER BY l.uid DESC LIMIT ?",
                 (self.account, folder.name, self.config.flag_window),
             )
             if not rows:
@@ -457,17 +688,20 @@ class MailSync:
                     )
                 }
                 for row in rows:
-                    if row["id"] in pending:
+                    if row["message"] in pending:
                         continue
                     if row["uid"] not in current:
-                        store.remove_message(work.tx, row["id"])
+                        store.remove_location(work.tx, self.account, folder.name, row["uid"])
                         changed.add(row["thread_id"])
+                        continue
+                    # An email in many folders takes its flags from one, so they can't flip-flop.
+                    if row["speaks_from"] != folder.name:
                         continue
                     read, flagged = current[row["uid"]]
                     if read != bool(row["read"]) or flagged != bool(row["flagged"]):
                         work.tx.execute(
                             "UPDATE messages SET read = ?, flagged = ? WHERE id = ?",
-                            (int(read), int(flagged), row["id"]),
+                            (int(read), int(flagged), row["message"]),
                         )
                         store.refresh_thread(work.tx, row["thread_id"])
                         changed.add(row["thread_id"])
@@ -489,6 +723,11 @@ class MailSync:
             payload = json.loads(row["payload"])
             try:
                 self._apply(session, row["op"], payload)
+            except DeleteRefused:
+                # It stays on the server, and isn't retried if the switch changes later.
+                log.info("mail_delete_refused", op=row["op"])
+                self._finish_op(row["id"])
+                continue
             except ConnectionFailed as error:
                 if not isinstance(error, OSError) and row["attempts"] + 1 >= 3:
                     log.warning("mail_op_dropped", op=row["op"], error=type(error).__name__)
@@ -504,6 +743,13 @@ class MailSync:
     def _finish_op(self, op_id: int) -> None:
         with self.ctx.bus.db.transaction() as tx:
             tx.execute("DELETE FROM mail_outbox WHERE id = ?", (op_id,))
+
+    def _take_label_off(self, session: ImapSession, uid: int, role: str, folder: str) -> None:
+        all_mail = self.status.folders.get("all")
+        if all_mail is None:
+            log.warning("mail_no_all_mail_folder", folder=folder)
+            return
+        session.remove_label(uid, GMAIL_SYSTEM_LABELS.get(role, folder), all_mail)
 
     def _apply(self, session: ImapSession, op: str, payload: dict[str, object]) -> None:
         if op == "append":
@@ -531,7 +777,18 @@ class MailSync:
             session.set_flagged(uid, bool(payload["value"]))
         elif op == "delete":
             session.delete(uid)
+        elif op == "copy":
+            session.copy(uid, str(payload["target"]))
+        elif op == "remove_from":
+            if session.is_gmail:
+                self._take_label_off(session, uid, str(payload["role"]), folder_name)
+            else:
+                session.delete(uid)
         elif op == "move":
-            target = self.status.folders.get(str(payload["role"]))
+            role = str(payload["role"])
+            target = self.status.folders.get(role)
             if target:
                 session.move(uid, target)
+            elif role == "archive" and session.is_gmail:
+                # Gmail has no Archive folder: archiving is taking the Inbox label off.
+                self._take_label_off(session, uid, "inbox", folder_name)

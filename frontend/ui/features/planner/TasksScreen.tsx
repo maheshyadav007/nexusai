@@ -8,6 +8,7 @@ import { AskAgent } from "@/ui/features/agent/AskAgent";
 import { Icon } from "@/ui/icons";
 import { RoundCheck } from "@/ui/primitives/Checkbox";
 import { Button } from "@/ui/primitives/Button";
+import { ContextMenu } from "@/ui/primitives/ContextMenu";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { ExpandRow } from "@/ui/primitives/ExpandRow";
@@ -64,6 +65,8 @@ function TaskRow({ task }: { task: Task }) {
   const done = task.status === "done";
   return (
     <Rise as="li" settle="position">
+      <ContextMenu items={[{ id: "done", label: t(done ? "menu.markOpen" : "menu.markDone"), onSelect: () => update({ status: done ? "todo" : "done" }) }, { id: "remove", label: t("menu.remove"), icon: "trash", danger: true, onSelect: () => remove.mutate(task.id) }]}>
+      <div>
       <ExpandRow
         testid="task"
         label={t("tasks.details", { title: task.title })}
@@ -112,6 +115,8 @@ function TaskRow({ task }: { task: Task }) {
           </div>
         </div>
       </ExpandRow>
+      </div>
+      </ContextMenu>
     </Rise>
   );
 }

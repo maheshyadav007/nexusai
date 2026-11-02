@@ -8,9 +8,10 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from fake_mail import PASSWORD, USER, FakeMail, make_mail, start_fake_mail
+from fake_mail import PASSWORD, USER, Box, FakeMail, make_mail, start_fake_mail
 from nexusai.api.app import create_app
 from nexusai.kernel.config import Config
+from nexusai.modules.mail.imap import DeleteRefused, ImapSession
 
 SECONDS = 8
 
@@ -162,7 +163,7 @@ def test_rule_matched_mail_skips_triage_and_says_why(client: TestClient, fake: F
     connect(client, fake)
     fake.state.deliver(make_mail(subject="Build passed", sender="no-reply@ci.example"))
     thread = thread_with(client, "Build passed")
-    assert thread["category"] == "Automated"
+    assert thread["category"] == "Updates"
     assert thread["why"] == "Matched the rule “Sent from a no-reply address”"
     assert events(client, "mail.needsTriage") == []
 
@@ -547,6 +548,7 @@ def test_failed_send_keeps_the_draft_and_explains(client: TestClient, fake: Fake
 
 def test_drafts_keep_one_copy_on_the_server(client: TestClient, fake: FakeMail) -> None:
     connect(client, fake)
+    client.post("/api/commands/mail.sync.neverDelete", json={"value": False})
     first = client.post("/api/commands/drafts.save", json={"subject": "V1"}).json()
     wait(lambda: len(fake.state.boxes["Drafts"].mails) == 1, "first copy")
     client.post("/api/commands/drafts.save", json={**first, "subject": "V2"})
@@ -691,10 +693,11 @@ def test_the_connection_test_counts_what_is_on_the_server(
     ).json()
     assert {row["role"]: row["messages"] for row in result["counts"]}["inbox"] == 3
     assert {row["role"]: row["messages"] for row in result["counts"]}["sent"] == 2
+    assert result["total"] == 5
     assert result["suggested_pull"] == 5
 
 
-def test_only_the_newest_come_down_and_raising_the_limit_carries_on(
+def test_only_the_newest_come_down_and_get_more_carries_on(
     client: TestClient, fake: FakeMail
 ) -> None:
     fill(fake, 12)
@@ -702,59 +705,72 @@ def test_only_the_newest_come_down_and_raising_the_limit_carries_on(
     wait(lambda: status(client)["state"] == "live", "sync to go live")
     assert status(client)["pulled"] == 5
     assert status(client)["server_total"] == 12
+    assert status(client)["history_finished"] is True
     subjects = {row["subject"] for row in threads(client)}
     assert subjects == {f"INBOX {number}" for number in range(7, 12)}
+    finished = events(client, "mail.historyFinished")
+    assert [row["payload"]["pulled"] for row in finished] == [5]
 
-    # New mail always comes, whatever the limit says.
+    # New mail always comes, whatever's left of the budget.
     fake.state.deliver(make_mail(subject="Just arrived"))
     thread_with(client, "Just arrived")
     assert events(client, "mail.received")
 
-    client.post("/api/commands/mail.sync.limit", json={"pull_limit": 9})
-    wait(lambda: status(client)["pulled"] == 9, "the raised limit to fill")
-    client.post("/api/commands/mail.sync.limit", json={"pull_limit": None})
+    client.post("/api/commands/mail.history.more", json={"count": 3})
+    wait(lambda: status(client)["pulled"] == 9, "exactly three more")
+    wait(lambda: status(client)["history_finished"], "that to finish")
+    client.post("/api/commands/mail.history.more", json={})
     wait(lambda: status(client)["pulled"] == 13, "the rest to come down")
     # None of that history looked like new mail, so no agent ran on it.
     assert len(events(client, "mail.received")) == 1
 
 
-def test_lowering_the_limit_keeps_what_is_here(client: TestClient, fake: FakeMail) -> None:
-    fill(fake, 6)
+def test_stop_ends_history_but_new_mail_keeps_coming(client: TestClient, fake: FakeMail) -> None:
+    fill(fake, 3)
     connect(client, fake)
-    assert status(client)["pulled"] == 6
-    client.post("/api/commands/mail.sync.limit", json={"pull_limit": 2})
-    wait(lambda: status(client)["state"] == "live", "sync to go live again")
-    assert status(client)["pulled"] == 6
+    fill(fake, 2, "Sent")
+    stopped = client.post("/api/commands/pipelines.stop", json={"id": "mail-sync"})
+    assert stopped.status_code == 200, stopped.text
+    wait(lambda: status(client)["history_finished"], "history to finish")
+    assert status(client)["state"] == "live"
+    fake.state.deliver(make_mail(subject="Still arriving"))
+    thread_with(client, "Still arriving")
+    facts = {fact["label"]: fact["value"] for fact in pipeline(client)["facts"]}
+    assert facts["Older mail"] == "Finished"
 
 
-def test_a_limit_too_small_for_a_folder_still_treats_its_old_mail_as_old(
+def test_a_budget_is_only_used_by_mail_new_to_this_computer(
     client: TestClient, fake: FakeMail
 ) -> None:
-    fill(fake, 9)
-    fill(fake, 1, "Sent")
-    save(client, fake, pull_limit=2)
+    for number in range(4):
+        raw = make_mail(subject=f"Filed {number}")
+        fake.state.deliver(raw)
+        fake.state.deliver(raw, "Archive")
+    save(client, fake, pull_limit=4)
     wait(lambda: status(client)["state"] == "live", "sync to go live")
-    time.sleep(1.2)
-    assert status(client)["pulled"] == 2
-    assert not events(client, "mail.received")
+    assert status(client)["pulled"] == 4
+    assert fake.state.fetched_bodies == 4
 
 
-def test_stopping_stays_stopped_after_a_restart(config: Config, fake: FakeMail) -> None:
+def test_stopping_and_pausing_stay_as_they_were_after_a_restart(
+    config: Config, fake: FakeMail
+) -> None:
     mail = replace(
         config.mail, connect_timeout_seconds=3, reconnect_min_seconds=0.1, check_every_seconds=1
     )
     settings = replace(config, mail=mail)
     with TestClient(create_app(settings), base_url="http://127.0.0.1:8765") as first:
         connect(first, fake)
-        first.post("/api/commands/mail.sync.limit", json={"pull_limit": 7})
+        first.post("/api/commands/mail.history.stop", json={})
         first.post("/api/commands/pipelines.pause", json={"id": "mail-sync", "paused": True})
     logins = fake.state.logins
     with TestClient(create_app(settings), base_url="http://127.0.0.1:8765") as second:
         assert status(second)["state"] == "paused"
-        assert status(second)["pull_limit"] == 7
+        assert status(second)["history_budget"] == 0
         assert fake.state.logins == logins
         # Connecting the account again is asking for mail, so that starts it.
         connect(second, fake)
+        assert status(second)["history_budget"] == 0
 
 
 def test_stopping_holds_new_mail_until_resumed(client: TestClient, fake: FakeMail) -> None:
@@ -810,3 +826,296 @@ def test_with_no_account_the_mail_schedule_says_so(client: TestClient) -> None:
     assert row["state"] == "stopped"
     refused = client.post("/api/commands/pipelines.pause", json={"id": "mail-sync", "paused": True})
     assert refused.status_code == 409
+
+
+def folders(client: TestClient) -> dict[str, dict[str, Any]]:
+    rows = client.post("/api/queries/mail.folders").json()["folders"]
+    return {row["name"]: row for row in rows}
+
+
+def in_location(client: TestClient, name: str) -> list[str]:
+    return [row["subject"] for row in threads(client, location=name)]
+
+
+def add_box(fake: FakeMail, name: str, attrs: str = "") -> None:
+    fake.state.boxes[name] = Box(attrs)
+
+
+def test_every_folder_syncs_and_a_new_one_appears_by_itself(
+    client: TestClient, fake: FakeMail
+) -> None:
+    add_box(fake, "Projects/Alpha")
+    fake.state.deliver(make_mail(subject="Alpha plan"), "Projects/Alpha")
+    connect(client, fake)
+    found = folders(client)
+    assert {"INBOX", "Sent", "Drafts", "Trash", "Archive", "Projects/Alpha"} <= set(found)
+    assert found["Projects/Alpha"]["label"] == "Alpha"
+    assert found["Projects/Alpha"]["on_server"] == 1
+    assert in_location(client, "Projects/Alpha") == ["Alpha plan"]
+
+    add_box(fake, "Later")
+    fake.state.deliver(make_mail(subject="In a new folder"), "Later")
+    wait(lambda: "In a new folder" in in_location(client, "Later"), "the new folder to sync")
+
+
+def test_one_email_in_three_folders_is_one_email(client: TestClient, fake: FakeMail) -> None:
+    add_box(fake, "Work")
+    add_box(fake, "Urgent")
+    raw = make_mail(subject="Everywhere", message_id="<everywhere@example.com>")
+    for box in ("INBOX", "Work", "Urgent"):
+        fake.state.deliver(raw, box)
+    connect(client, fake)
+    assert fake.state.fetched_bodies == 1
+    assert status(client)["pulled"] == 1
+    for box in ("INBOX", "Work", "Urgent"):
+        assert in_location(client, box) == ["Everywhere"]
+    thread = thread_with(client, "Everywhere", folder="inbox")
+    view = client.post("/api/queries/thread.get", json={"id": thread["id"]}).json()
+    assert len(view["messages"]) == 1
+    assert {row["name"] for row in view["messages"][0]["folders"]} == {"INBOX", "Work", "Urgent"}
+    assert folders(client)["Work"]["unread"] == 1
+
+    # Reading it here reads it in every folder on the server too.
+    client.post("/api/commands/thread.setRead", json={"id": thread["id"], "read": True})
+    assert folders(client)["Urgent"]["unread"] == 0
+    wait(
+        lambda: all(
+            "\\Seen" in fake.state.boxes[box].mails[0].flags for box in ("INBOX", "Work", "Urgent")
+        ),
+        "every copy to be read",
+    )
+    hits = client.post("/api/queries/search.run", json={"query": "Everywhere"}).json()["hits"]
+    assert len(hits) == 1
+
+
+def test_a_copy_arriving_later_needs_no_second_download(client: TestClient, fake: FakeMail) -> None:
+    add_box(fake, "Work")
+    connect(client, fake)
+    raw = make_mail(subject="Filed later")
+    fake.state.deliver(raw)
+    thread_with(client, "Filed later")
+    downloads = fake.state.fetched_bodies
+    fake.state.deliver(raw, "Work")
+    wait(lambda: in_location(client, "Work") == ["Filed later"], "the copy to be noticed")
+    assert fake.state.fetched_bodies == downloads
+    # Only the first arrival counts as new mail, so one email starts the agent once.
+    assert len(events(client, "mail.received")) == 1
+
+
+def test_removing_a_copy_on_the_server_keeps_the_others(client: TestClient, fake: FakeMail) -> None:
+    add_box(fake, "Work")
+    raw = make_mail(subject="Two places")
+    uid = fake.state.deliver(raw)
+    fake.state.deliver(raw, "Work")
+    connect(client, fake)
+    fake.state.remove(uid)
+    wait(lambda: in_location(client, "INBOX") == [], "it to leave the inbox")
+    assert in_location(client, "Work") == ["Two places"]
+
+
+def test_adding_to_a_folder_copies_on_the_server(client: TestClient, fake: FakeMail) -> None:
+    add_box(fake, "Work")
+    fake.state.deliver(make_mail(subject="File me"))
+    connect(client, fake)
+    thread = thread_with(client, "File me")
+    client.post("/api/commands/thread.addToFolder", json={"id": thread["id"], "folder": "Work"})
+    wait(lambda: in_location(client, "Work") == ["File me"], "the copy to show")
+    assert len(fake.state.boxes["Work"].mails) == 1
+    assert len(fake.state.boxes["INBOX"].mails) == 1
+    assert status(client)["pulled"] == 1
+
+
+def test_gmail_removing_a_label_keeps_the_mail_and_deletes_nothing(
+    client: TestClient, fake: FakeMail
+) -> None:
+    fake.state.gmail = True
+    add_box(fake, "All Mail", "\\All")
+    add_box(fake, "Work")
+    raw = make_mail(subject="Labelled")
+    fake.state.deliver(raw)
+    fake.state.deliver(raw, "All Mail")
+    fake.state.deliver(raw, "Work")
+    connect(client, fake)
+    thread = thread_with(client, "Labelled")
+    done = client.post(
+        "/api/commands/thread.removeFromFolder", json={"id": thread["id"], "folder": "Work"}
+    )
+    assert done.status_code == 200, done.text
+    wait(lambda: not fake.state.boxes["Work"].mails, "the label to come off")
+    assert in_location(client, "INBOX") == ["Labelled"]
+    assert len(fake.state.boxes["INBOX"].mails) == 1
+
+
+def test_gmail_total_counts_each_email_once(client: TestClient, fake: FakeMail) -> None:
+    fake.state.gmail = True
+    add_box(fake, "All Mail", "\\All")
+    add_box(fake, "Spam", "\\Junk")
+    for number in range(3):
+        raw = make_mail(subject=f"Mail {number}")
+        fake.state.deliver(raw)
+        fake.state.deliver(raw, "All Mail")
+    fake.state.deliver(make_mail(subject="Archived"), "All Mail")
+    fake.state.deliver(make_mail(subject="Buy now"), "Spam")
+    tested = client.post(
+        "/api/commands/mail.accounts.test", json={"profile": fake.profile(), "password": PASSWORD}
+    ).json()
+    assert tested["total"] == 5
+    connect(client, fake)
+    wait(lambda: status(client)["pulled"] == 5, "every different email")
+    assert status(client)["server_total"] == 5
+    # Mail found only in All Mail is what the person archived.
+    wait(
+        lambda: "Archived" in [row["subject"] for row in threads(client, folder="archive")],
+        "archived mail",
+    )
+
+
+def test_spam_stays_in_its_own_folder(client: TestClient, fake: FakeMail) -> None:
+    add_box(fake, "Spam", "\\Junk")
+    connect(client, fake)
+    fake.state.deliver(make_mail(subject="Winner winner", body="Claim your prize"), "Spam")
+    wait(lambda: in_location(client, "Spam") == ["Winner winner"], "spam to sync")
+    assert not events(client, "mail.received")
+    assert not events(client, "mail.needsTriage")
+    assert client.post("/api/queries/search.run", json={"query": "prize"}).json()["hits"] == []
+    assert [row["subject"] for row in threads(client, folder="junk")] == ["Winner winner"]
+
+
+def test_nothing_is_ever_deleted_on_the_server_unless_turned_off(
+    client: TestClient, fake: FakeMail
+) -> None:
+    fake.state.deliver(make_mail(subject="Keep on server"))
+    connect(client, fake)
+    assert status(client)["never_delete"] is True
+    thread = thread_with(client, "Keep on server")
+
+    client.post("/api/commands/thread.move", json={"id": thread["id"], "to": "trash"})
+    # It's in Trash here straight away, and stays exactly where it was on the server.
+    wait(
+        lambda: [row["subject"] for row in threads(client, folder="trash")] == ["Keep on server"],
+        "it to show in Trash",
+    )
+    time.sleep(1.5)
+    assert len(fake.state.boxes["INBOX"].mails) == 1
+    assert not fake.state.boxes["Trash"].mails
+
+    # Saving a draft never leaves a copy to clean up either.
+    client.post("/api/commands/drafts.save", json={"subject": "Draft"})
+    time.sleep(1.2)
+    assert not fake.state.boxes["Drafts"].mails
+
+
+def test_the_session_itself_refuses_to_delete_or_trash() -> None:
+    session = ImapSession.__new__(ImapSession)
+    session.never_delete = True
+    session.deleting_folders = {"Trash", "Spam"}
+    session.client = None  # type: ignore[assignment]
+    with pytest.raises(DeleteRefused):
+        session.delete(1)
+    with pytest.raises(DeleteRefused):
+        session.move(1, "Trash")
+
+
+def test_moving_to_archive_with_nothing_else_downloaded_keeps_it_here(
+    client: TestClient, fake: FakeMail
+) -> None:
+    fake.state.gmail = True
+    del fake.state.boxes["Archive"]
+    add_box(fake, "All Mail", "\\All")
+    raw = make_mail(subject="Archive me")
+    fake.state.deliver(raw)
+    fake.state.deliver(raw, "All Mail")
+    save(client, fake, pull_limit=1)
+    thread = thread_with(client, "Archive me")
+    client.post("/api/commands/thread.move", json={"id": thread["id"], "to": "archive"})
+    wait(lambda: not fake.state.boxes["INBOX"].mails, "the Inbox label to come off")
+    assert [row["subject"] for row in threads(client, folder="archive")] == ["Archive me"]
+
+
+def test_a_conversation_can_be_in_several_categories(client: TestClient, fake: FakeMail) -> None:
+    fake.state.deliver(make_mail(subject="Both"))
+    connect(client, fake)
+    thread = thread_with(client, "Both")
+    for name in ("Finance", "Travel"):
+        client.post("/api/commands/thread.addCategory", json={"id": thread["id"], "name": name})
+    assert [row["subject"] for row in threads(client, folder="all", category="Finance")] == ["Both"]
+    assert [row["subject"] for row in threads(client, folder="all", category="Travel")] == ["Both"]
+    listed = threads(client, folder="all")[0]
+    assert (listed["category"], listed["extra_categories"]) == ("Finance", ["Travel"])
+    counted = client.post("/api/queries/categories.list").json()["categories"]
+    assert {row["name"]: row["count"] for row in counted}["Travel"] == 1
+    client.post("/api/commands/thread.removeCategory", json={"id": thread["id"], "name": "Finance"})
+    listed = threads(client, folder="all")[0]
+    assert (listed["category"], listed["extra_categories"]) == ("Travel", [])
+
+
+def test_mail_already_here_is_filed_under_its_other_folders_without_any_budget(
+    client: TestClient, fake: FakeMail
+) -> None:
+    raw = make_mail(subject="Labelled long ago")
+    fake.state.deliver(raw)
+    connect(client, fake)
+    client.post("/api/commands/mail.history.stop", json={})
+    downloads = fake.state.fetched_bodies
+    # A label that shows up later, holding both mail we have and mail we don't.
+    add_box(fake, "Work")
+    fake.state.deliver(raw, "Work")
+    fake.state.deliver(make_mail(subject="Not downloaded"), "Work")
+    wait(lambda: "Work" in folders(client), "the label to appear")
+    wait(lambda: folders(client)["Work"]["here"] >= 1, "the mail already here to be filed")
+    assert fake.state.fetched_bodies <= downloads + 1
+    assert "Labelled long ago" in in_location(client, "Work")
+
+
+def test_images_follow_the_setting_and_each_senders_exception(
+    client: TestClient, fake: FakeMail
+) -> None:
+    fake.state.deliver(make_mail(subject="Pictures", html='<img src="https://cdn.example/a.jpg">'))
+    connect(client, fake)
+    thread = thread_with(client, "Pictures")
+
+    def shown() -> bool:
+        view = client.post("/api/queries/thread.get", json={"id": thread["id"]}).json()
+        return view["messages"][0]["show_images"]
+
+    assert shown() is True
+    client.post("/api/commands/settings.update", json={"remote_images": "block"})
+    assert shown() is False
+    sender = client.post("/api/queries/thread.get", json={"id": thread["id"]}).json()["messages"][0]
+    client.post(
+        "/api/commands/mail.images.sender",
+        json={"address": sender["from_addr"].upper(), "allow": True},
+    )
+    assert shown() is True
+
+
+def test_a_logo_seen_often_enough_leaves_documents_including_earlier_copies(
+    client: TestClient, fake: FakeMail
+) -> None:
+    connect(client, fake)
+    logo = ("company-banner-final.png", "image/png", b"x" * 90_000)
+    for number in range(2):
+        fake.state.deliver(make_mail(subject=f"Footer {number}", attachments=[logo]))
+    report = ("report.pdf", "application/pdf", b"%PDF-1.4 real report")
+    fake.state.deliver(make_mail(subject="Has a report", attachments=[report]))
+    thread_with(client, "Has a report")
+
+    def names() -> list[str]:
+        rows = client.post("/api/queries/documents.list", json={"source": "email"}).json()
+        return [row["name"] for row in rows["documents"]]
+
+    wait(lambda: names().count("company-banner-final.png") == 2, "the first two copies")
+    fake.state.deliver(make_mail(subject="Footer 2", attachments=[logo]))
+    thread_with(client, "Footer 2")
+    wait(lambda: "company-banner-final.png" not in names(), "the logo to leave Documents")
+    assert "report.pdf" in names()
+    assert not thread_with(client, "Footer 0")["has_attachments"]
+
+
+def test_sound_settings_save_and_come_back(client: TestClient) -> None:
+    saved = client.post(
+        "/api/commands/settings.update", json={"sound_muted": True, "sound_off": ["reminder"]}
+    )
+    assert saved.status_code == 200, saved.text
+    read = client.post("/api/queries/settings.get").json()
+    assert (read["sound_muted"], read["sound_off"]) == (True, ["reminder"])

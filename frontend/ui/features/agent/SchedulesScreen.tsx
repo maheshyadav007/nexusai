@@ -6,6 +6,7 @@ import { useDateTime, useRelativeTime } from "@/ui/client/format";
 import { useRemoveSchedule, useRunSchedule, useSaveSchedule, useSchedules, useSetDefaults } from "@/ui/client/work";
 import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
+import { ContextMenu } from "@/ui/primitives/ContextMenu";
 import { ExpandRow } from "@/ui/primitives/ExpandRow";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Field } from "@/ui/primitives/Field";
@@ -107,6 +108,8 @@ function ScheduleItem({ row }: { row: ScheduleRow }) {
   const relative = useRelativeTime();
   return (
     <li>
+      <ContextMenu items={[{ id: "run", label: t("menu.runNow"), onSelect: () => row.id != null && run.mutate(row.id) }, { id: "remove", label: t("menu.remove"), icon: "trash", danger: true, onSelect: () => row.id != null && remove.mutate(row.id) }]}>
+      <div>
       <ExpandRow
         testid="schedule"
         label={t("schedules.edit", { title: row.title })}
@@ -135,6 +138,8 @@ function ScheduleItem({ row }: { row: ScheduleRow }) {
           <IconButton icon="trash" label={t("tasks.remove", { title: row.title })} onClick={() => row.id != null && remove.mutate(row.id)} />
         </div>
       </ExpandRow>
+      </div>
+      </ContextMenu>
     </li>
   );
 }

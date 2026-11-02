@@ -69,16 +69,20 @@ test("a mail account can be tested, and a wrong password says so", async ({ page
   await expect(page.getByTestId("mail-state")).toContainText("Up to date", { timeout: 20_000 });
   await expect(page.getByText(USER)).toBeVisible();
   await expect(page.getByLabel("Password")).toHaveCount(0);
-  await expect(page.getByTestId("mail-counts")).toContainText("2 of 3 on this computer");
-  await expect(page.getByRole("spinbutton", { name: "Download the newest" })).toHaveValue("2");
+  const sync = page.getByTestId("pipeline").filter({ hasText: "Mail sync" });
+  await expect(sync).toContainText("Finished");
+  await expect(page.getByRole("switch", { name: "Never delete anything on the server" })).toBeChecked();
 
-  // Asking for all of it fetches what the limit left behind.
-  await page.getByRole("spinbutton", { name: "Download the newest" }).fill("");
-  await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByTestId("mail-counts")).toContainText("3 of 3 on this computer", { timeout: 20_000 });
+  // Getting more fetches what the first choice left behind.
+  await sync.getByRole("button", { name: "Get more" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("1 older emails");
+  await noViolations(page);
+  await dialog.getByRole("button", { name: "All 1" }).click();
+  await expect(sync.getByRole("button", { name: "Get more" })).toHaveCount(0, { timeout: 20_000 });
 });
 
-test("mail sync shows on the Schedules page and the Cockpit, and can be stopped from each", async ({ page }) => {
+test("mail sync shows on the Schedules page and the Cockpit, and can be paused from each", async ({ page }) => {
   await page.goto("/agent/schedules");
   const row = page.getByTestId("pipeline").filter({ hasText: "Mail sync" });
   await expect(row).toContainText("Every minute");
@@ -86,19 +90,19 @@ test("mail sync shows on the Schedules page and the Cockpit, and can be stopped 
   await expect(row).toContainText("Last checked");
   await noViolations(page);
 
-  const subject = unique("Held while stopped");
-  await row.getByRole("button", { name: "Stop" }).click();
-  await expect(row).toContainText("Stopped.");
+  const subject = unique("Held while paused");
+  await row.getByRole("button", { name: "Pause" }).click();
+  await expect(row).toContainText("Paused.");
   await deliver(page, { subject });
 
   await page.goto("/cockpit");
   const again = page.getByTestId("pipeline").filter({ hasText: "Mail sync" });
-  await expect(again).toContainText("Stopped.");
-  await expect(page.getByTestId("health-mail")).toContainText("Stopped");
+  await expect(again).toContainText("Paused.");
+  await expect(page.getByTestId("health-mail")).toContainText("Paused");
   await noViolations(page);
 
   await page.goto("/connectors");
-  await expect(page.getByTestId("mail-state")).toContainText("Stopped");
+  await expect(page.getByTestId("mail-state")).toContainText("Paused");
   await page.getByRole("button", { name: "Resume" }).click();
   await expect(page.getByTestId("mail-state")).toContainText("Up to date", { timeout: 20_000 });
 
@@ -130,12 +134,155 @@ test("new mail appears by itself, opens safely, and reads as read", async ({ pag
   const frame = page.frameLocator("iframe");
   await expect(frame.locator("p")).toHaveText("Please review the contract.");
   expect(await page.title()).not.toBe("HACKED");
+  // A tracking pixel never loads, whatever the setting, and leaves nothing to ask about.
   expect(tracker).toEqual([]);
-  await expect(page.getByText("Remote images are blocked")).toBeVisible();
   await noViolations(page);
 
   await page.goto("/mail/all");
   await expect(page.getByTestId("thread-row").filter({ hasText: subject }).locator("span.bg-accent-default")).toHaveCount(0);
+});
+
+test("mail keeps its styling, its images load, and either can be turned off", async ({ page, request }) => {
+  await page.goto("/mail/all");
+  const subject = unique("Styled mail");
+  const loaded: string[] = [];
+  await page.route("https://cdn.example/**", async (route) => {
+    loaded.push(route.request().url());
+    await route.fulfill({ status: 200, contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIApD5fRAAAAABJRU5ErkJggg==", "base64") });
+  });
+  await deliver(page, { subject, body: "Sale", html: '<html><head><title>Hidden</title><style>.big{font-size:40px}</style></head><body bgcolor="#eeeeee"><p class="big">Big text</p><img src="https://cdn.example/banner.png" width="300" height="100" alt="Banner"></body></html>' });
+  const row = page.getByTestId("thread-row").filter({ hasText: subject });
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await row.getByRole("link").click();
+  const frame = page.frameLocator("iframe");
+  await expect(frame.locator("p.big")).toHaveCSS("font-size", "40px");
+  await expect(frame.getByText("Hidden")).toHaveCount(0);
+  await expect.poll(() => loaded.length).toBeGreaterThan(0);
+
+  // Blocking is a setting, and a blocked image is a quiet tile with no broken icon.
+  await request.post("/api/commands/settings.update", { data: { remote_images: "block" } });
+  await page.reload();
+  await expect(page.getByText("Images are off for this sender")).toBeVisible();
+  const image = page.frameLocator("iframe").locator("img");
+  await expect(image).toHaveAttribute("src", /^data:image\/gif/);
+  await expect(image).toHaveAttribute("data-blocked-src", "https://cdn.example/banner.png");
+  await noViolations(page);
+  await page.getByRole("button", { name: "Show images" }).click();
+  await expect(page.frameLocator("iframe").locator("img")).toHaveAttribute("src", "https://cdn.example/banner.png");
+  await request.post("/api/commands/settings.update", { data: { remote_images: "load" } });
+});
+
+test("the sidebar runs from mail to planner, and every folder shows what's unread", async ({ page }) => {
+  await page.goto("/mail/all");
+  const nav = page.getByRole("navigation", { name: "Main navigation" });
+  await expect(nav.getByRole("link", { name: "Today" })).toBeVisible();
+  const labels = await nav.getByRole("link").allInnerTexts();
+  const first = (name: string) => labels.findIndex((label) => label.startsWith(name));
+  expect(first("Today")).toBe(0);
+  expect(first("All mail")).toBeLessThan(first("Archive"));
+  expect(first("Archive")).toBeLessThan(first("Trash"));
+  expect(first("Trash")).toBeLessThan(first("Documents"));
+  expect(first("Documents")).toBeLessThan(first("Sessions"));
+  expect(first("Tasks")).toBeLessThan(first("Schedules"));
+  expect(first("Schedules")).toBeLessThan(first("Settings"));
+  await expect(nav.getByRole("heading", { name: "Mail" })).toHaveCount(0);
+  await noViolations(page);
+});
+
+test("Settings opens frosted over the page, and a direct link gets the full page", async ({ page }) => {
+  await page.goto("/mail/all");
+  await page.getByRole("link", { name: "Settings" }).click();
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await expect(dialog).toBeVisible();
+  await expect(page.getByTestId("thread-row").first()).toBeAttached();
+  // The build once kept only the -webkit- version, which Chrome ignores, so this guards the real thing.
+  const blur = await dialog.evaluate((node) => getComputedStyle(node.parentElement as Element).backdropFilter);
+  expect(blur).toContain("blur");
+  await expect(page).toHaveURL(/\/settings/);
+  await noViolations(page);
+  await dialog.getByRole("link", { name: "Preferences" }).click();
+  await expect(dialog.getByText("Images in mail")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(page).toHaveURL(/\/mail\/all$/);
+
+  await page.goto("/settings?section=preferences");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+});
+
+test("sounds can be muted altogether or kind by kind", async ({ page }) => {
+  await page.goto("/settings?section=notifications");
+  const all = page.getByRole("switch", { name: "Play sounds" });
+  await expect(all).toBeChecked();
+  const reminders = page.getByRole("switch", { name: "Reminders" });
+  await reminders.click();
+  await expect(reminders).not.toBeChecked();
+  await noViolations(page);
+  await page.reload();
+  await expect(page.getByRole("switch", { name: "Reminders" })).not.toBeChecked();
+  await page.getByRole("switch", { name: "Reminders" }).click();
+  await page.getByRole("button", { name: /^1?\s*Notifications|Notifications/ }).first().click();
+  await page.getByRole("button", { name: "Mute sounds" }).click();
+  await expect(page.getByRole("button", { name: "Turn sounds on" })).toBeVisible();
+  await page.getByRole("button", { name: "Turn sounds on" }).click();
+  await page.keyboard.press("Escape");
+});
+
+test("right-clicking a conversation offers what can be done to it", async ({ page }) => {
+  await page.goto("/mail/all");
+  const subject = unique("Right click me");
+  await deliver(page, { subject });
+  const row = page.getByTestId("thread-row").filter({ hasText: subject });
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await row.getByRole("link").click({ button: "right" });
+  const menu = page.getByRole("menu");
+  await expect(menu.getByRole("menuitem", { name: "Open" })).toBeVisible();
+  // A menu floats outside the page's landmarks by nature, so it's checked on its own.
+  const { violations } = await new AxeBuilder({ page }).include('[role="menu"]').analyze();
+  expect(violations.map((v) => v.id)).toEqual([]);
+  await menu.getByRole("menuitem", { name: "Mark read" }).click();
+  await expect(menu).toHaveCount(0);
+  await expect(row.locator("span.bg-accent-default")).toHaveCount(0);
+  await row.getByRole("link").click({ button: "right" });
+  await expect(page.getByRole("menuitem", { name: "Mark unread" })).toBeVisible();
+  await page.keyboard.press("Escape");
+});
+
+test("the chat tucks to the edge while reading, comes out on hover, and returns afterwards", async ({ page }) => {
+  await page.goto("/mail/all");
+  const subject = unique("Needs the room");
+  await deliver(page, { subject });
+  const row = page.getByTestId("thread-row").filter({ hasText: subject });
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await page.getByTestId("assistant-pill").click();
+  const dock = page.getByTestId("assistant-dock");
+  await expect(dock).toBeVisible();
+
+  await row.getByRole("link").click();
+  await expect(page.getByRole("heading", { name: subject })).toBeVisible();
+  await expect(dock).toHaveCount(0);
+  const aura = page.getByTestId("assistant-aura");
+  await expect(aura).toBeVisible();
+  await noViolations(page);
+
+  await aura.hover();
+  await expect(dock).toBeVisible();
+  await page.mouse.move(10, 400);
+  await expect(dock).toHaveCount(0);
+
+  // Leaving brings it back as it was, because tucking away never changed that.
+  await page.goBack();
+  await expect(page).toHaveURL(/\/mail\/all$/);
+  await expect(dock).toBeVisible();
+
+  // Pinned, it stays, because the person said so.
+  await dock.getByRole("button", { name: "Attach to the right" }).click();
+  await row.getByRole("link").click();
+  await expect(page.getByRole("heading", { name: subject })).toBeVisible();
+  await expect(dock).toBeVisible();
+  await expect(aura).toHaveCount(0);
+  await dock.getByRole("button", { name: "Float instead" }).click();
 });
 
 test("replying goes out with the right people and joins the conversation", async ({ page }) => {
@@ -190,13 +337,37 @@ test("search finds mail from the top bar and filters narrow it", async ({ page }
   await deliver(page, { subject: `About ${word}`, body: `The ${word} report.` });
   await expect(page.getByTestId("thread-row").filter({ hasText: word })).toBeVisible({ timeout: 15_000 });
 
+  // Instant results over the page, from the keyboard.
+  await page.keyboard.press("ControlOrMeta+k");
+  const palette = page.getByRole("dialog", { name: "Search" });
   await page.getByRole("searchbox").fill(word);
+  await expect(palette.getByTestId("palette-result").filter({ hasText: word })).toBeVisible();
+  await noViolations(page);
   await page.getByRole("searchbox").press("Enter");
   await expect(page).toHaveURL(/\/search\?q=/);
   await expect(page.getByTestId("search-hit")).toHaveCount(1);
+  await expect(page.getByTestId("search-hit").locator("mark").first()).toContainText(word);
   await noViolations(page);
+
+  // Filters are chips, and from: can be typed straight in.
+  await page.getByRole("button", { name: "From", exact: true }).click();
   await page.getByRole("textbox", { name: "From" }).fill("nobody-matches");
+  await page.getByRole("button", { name: "Apply" }).click();
   await expect(page.getByText("Nothing found")).toBeVisible();
+  await page.getByRole("button", { name: "Clear From" }).click();
+  await expect(page.getByTestId("search-hit")).toHaveCount(1);
+  await page.getByRole("searchbox").fill(`${word} from:nobody-matches`);
+  await expect(page.getByText("Nothing found")).toBeVisible();
+  await page.getByRole("searchbox").fill(word);
+
+  // The same box looks through documents, and there's a filter inside any folder.
+  await page.getByRole("radio", { name: "Documents" }).click();
+  await expect(page).toHaveURL(/in=documents/);
+  await expect(page.getByRole("button", { name: "Type", exact: true })).toBeVisible();
+  await noViolations(page);
+  await page.goto("/mail/all");
+  await page.getByRole("searchbox", { name: "Filter this folder" }).fill(word);
+  await expect(page.getByTestId("thread-row")).toHaveCount(1);
 });
 
 test("a rule files new mail, and the reason is shown", async ({ page }) => {
@@ -233,7 +404,8 @@ test("status and flag are kept, and archive removes it from the inbox", async ({
 
   await page.getByRole("button", { name: "Archive" }).click();
   await expect(page).toHaveURL(/\/mail\/all$/);
-  await expect(page.getByTestId("thread-row").filter({ hasText: subject })).toHaveCount(0);
+  await page.goto("/mail/archive");
+  await expect(page.getByTestId("thread-row").filter({ hasText: subject })).toBeVisible();
 });
 
 test("the inbox stays fast and scrollable with many threads", async ({ page, request }) => {
@@ -266,7 +438,12 @@ test("a document uploads, opens with its text, and can be filed, tagged and remo
   await page.getByRole("textbox", { name: "New folder" }).press("Enter");
   await expect(page.getByRole("navigation", { name: "Folders" }).getByRole("button", { name: "Legal", exact: true })).toBeVisible();
 
+  // One click shows the file itself, with its details one step further.
   await row.click();
+  const preview = page.getByTestId("document-preview");
+  await expect(preview).toContainText("The walrus budget is approved.");
+  await noViolations(page);
+  await preview.getByRole("button", { name: "Info" }).click();
   await expect(page.getByTestId("document-text")).toHaveText("The walrus budget is approved.");
   await page.getByRole("textbox", { name: "Add a tag" }).fill("urgent");
   await page.getByRole("textbox", { name: "Add a tag" }).press("Enter");
@@ -398,6 +575,7 @@ test("adding many files shows how each one went, and says why one can't be read"
   const row = page.getByTestId("document-row").filter({ hasText: scan });
   await expect(row.getByTestId("document-status")).toHaveText("Picture, not read");
   await row.click();
+  await page.getByTestId("document-preview").getByRole("button", { name: "Info" }).click();
   await expect(page.getByTestId("document-reason")).toBeVisible();
   await expect(page.getByRole("button", { name: "Read it again" })).toBeVisible();
   await noViolations(page);
@@ -420,6 +598,35 @@ test("Documents filters by where things came from, and shows the Home folder", a
   await noViolations(page);
   await page.getByRole("radio", { name: "Email attachments" }).click();
   await expect(page).toHaveURL(/\/documents\/from-email$/);
+});
+
+test("a file opens straight away, arrows move between files, and right-click has the same actions", async ({ page }) => {
+  const first = `${unique("first").replace(" ", "-")}.txt`;
+  const second = `${unique("second").replace(" ", "-")}.txt`;
+  await page.goto("/documents/all");
+  await page.getByTestId("file-input").setInputFiles({ name: first, mimeType: "text/plain", buffer: Buffer.from("First file text.") });
+  await expect(page.getByTestId("document-row").filter({ hasText: first })).toBeVisible();
+  await page.getByTestId("file-input").setInputFiles({ name: second, mimeType: "text/plain", buffer: Buffer.from("Second file text.") });
+  const newest = page.getByTestId("document-row").filter({ hasText: second });
+  await expect(newest).toBeVisible();
+
+  await newest.click();
+  const preview = page.getByTestId("document-preview");
+  await expect(preview).toContainText("Second file text.");
+  await expect(page.getByTestId("assistant-pill")).toHaveCount(0);
+  await page.getByRole("button", { name: "Next file" }).click();
+  await expect(preview).toContainText("First file text.");
+  await page.keyboard.press("ArrowLeft");
+  await expect(preview).toContainText("Second file text.");
+  await page.keyboard.press("Escape");
+  await expect(preview).toHaveCount(0);
+
+  await newest.click({ button: "right" });
+  const menu = page.getByRole("menu");
+  for (const name of ["Open", "Download", "Ask the agent about this"]) await expect(menu.getByRole("menuitem", { name })).toBeVisible();
+  await menu.getByRole("menuitem", { name: "Open" }).click();
+  await expect(preview).toContainText("Second file text.");
+  await page.keyboard.press("Escape");
 });
 
 test("each kind of file opens the way it reads best", async ({ page }) => {

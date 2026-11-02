@@ -6,9 +6,17 @@ DocumentSource = Literal["upload", "email", "home"]
 ReaderKind = Literal["pdf", "image", "markdown", "code", "table", "html", "document", "other"]
 
 
+FileType = Literal["pdf", "word", "sheet", "slides", "image", "other"]
+
+
 class ListDocuments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    file_type: FileType | None = None
+    # Who it came from, for attachments.
+    sender: str | None = Field(default=None, max_length=320)
+    date_from: str | None = Field(default=None, max_length=32)
+    date_to: str | None = Field(default=None, max_length=32)
     source: DocumentSource | None = None
     folder: str | None = Field(default=None, max_length=200)
     tag: str | None = Field(default=None, max_length=64)
@@ -17,6 +25,7 @@ class ListDocuments(BaseModel):
 
 
 class DocumentRow(BaseModel):
+    sender: str | None = None
     key: str
     name: str
     content_type: str

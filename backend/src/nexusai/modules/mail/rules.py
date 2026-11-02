@@ -16,6 +16,38 @@ NO_REPLY = re.compile(
 )
 
 
+# Systems say so in their own headers, and they aren't marketing even with an unsubscribe link.
+SYSTEM_NOTICE_HEADERS = (
+    "x-github-reason",
+    "x-gitlab-project",
+    "x-jira-fingerprint",
+    "x-atlassian-mail-type",
+    "x-bitbucket-eventtype",
+    "x-jenkins-job",
+)
+SOCIAL_DOMAINS = (
+    "facebookmail.com",
+    "linkedin.com",
+    "twitter.com",
+    "instagram.com",
+    "reddit.com",
+    "pinterest.com",
+    "quora.com",
+)
+PUBLIC_MAIL_DOMAINS = frozenset(
+    {
+        "gmail.com",
+        "googlemail.com",
+        "outlook.com",
+        "hotmail.com",
+        "live.com",
+        "yahoo.com",
+        "icloud.com",
+        "proton.me",
+    }
+)
+
+
 @dataclass(frozen=True)
 class RuleMatch:
     name: str
@@ -29,19 +61,33 @@ class RuleMatch:
 _WRITING = threading.Lock()
 
 
-def _builtin(parsed: ParsedMessage) -> RuleMatch | None:
+def _builtin(parsed: ParsedMessage, own_domain: str | None = None) -> RuleMatch | None:
+    """Mail headers say what kind of mail this is, with no model and no tokens, on any server."""
     headers = parsed.headers
-    automated = RuleActions(category="Automated", skip_agent=True)
+    updates = RuleActions(category="Updates", skip_agent=True)
+    promotions = RuleActions(category="Promotions", skip_agent=True)
+    forums = RuleActions(category="Forums", skip_agent=True)
+    sender_domain = parsed.from_addr.rpartition("@")[2].lower()
+    internal = bool(own_domain) and sender_domain == own_domain
+    if any(header in headers for header in SYSTEM_NOTICE_HEADERS):
+        return RuleMatch("Notification from a system", updates)
     auto_submitted = headers.get("auto-submitted", "no").lower()
     if not auto_submitted.startswith("no") or "x-auto-response-suppress" in headers:
-        return RuleMatch("Automatically generated mail", automated)
-    if "list-id" in headers or "list-unsubscribe" in headers:
-        newsletter = RuleActions(category="Newsletters", skip_agent=True)
-        return RuleMatch("Mailing list or newsletter", newsletter)
-    if headers.get("precedence", "").lower() in {"bulk", "list", "junk"}:
-        return RuleMatch("Bulk mail", RuleActions(category="Newsletters", skip_agent=True))
+        return RuleMatch("Automatically generated mail", updates)
+    # A company's own server has no social mail to speak of, and nor is its own mail a promotion.
+    if not own_domain and any(
+        sender_domain == domain or sender_domain.endswith(f".{domain}") for domain in SOCIAL_DOMAINS
+    ):
+        return RuleMatch("From a social network", RuleActions(category="Social", skip_agent=True))
+    precedence = headers.get("precedence", "").lower()
+    if "list-unsubscribe" in headers or precedence in {"bulk", "junk"}:
+        if internal:
+            return RuleMatch("Company bulk mail", updates)
+        return RuleMatch("Marketing or bulk mail", promotions)
+    if "list-id" in headers or precedence == "list":
+        return RuleMatch("Mailing list", forums)
     if NO_REPLY.search(parsed.from_addr):
-        return RuleMatch("Sent from a no-reply address", automated)
+        return RuleMatch("Sent from a no-reply address", updates)
     return None
 
 
@@ -58,12 +104,20 @@ def _condition_matches(condition: RuleCondition, parsed: ParsedMessage) -> bool:
     return any(part.disposition == "attachment" for part in parsed.parts)
 
 
-def evaluate(parsed: ParsedMessage, rules: list[MailRule]) -> RuleMatch | None:
+def own_domain_of(address: str) -> str | None:
+    """The company's domain. Mail services like Gmail have no such thing."""
+    domain = address.rpartition("@")[2].lower()
+    return None if not domain or domain in PUBLIC_MAIL_DOMAINS else domain
+
+
+def evaluate(
+    parsed: ParsedMessage, rules: list[MailRule], own_domain: str | None = None
+) -> RuleMatch | None:
     """The person's own rules come first, because they know their mail best."""
     for rule in rules:
         if rule.enabled and all(_condition_matches(c, parsed) for c in rule.conditions):
             return RuleMatch(rule.name, rule.actions)
-    return _builtin(parsed)
+    return _builtin(parsed, own_domain)
 
 
 def rules_path(home: Path) -> Path:

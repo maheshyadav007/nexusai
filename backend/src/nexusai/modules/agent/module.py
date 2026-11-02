@@ -62,6 +62,7 @@ from nexusai.contracts.agent import (
     PausePipeline,
     Permissions,
     PipelineList,
+    PipelineMore,
     PromptFile,
     PromptList,
     QuietHours,
@@ -112,6 +113,7 @@ from nexusai.kernel import backups
 from nexusai.kernel.module import CommandError, Context, Module
 from nexusai.modules.agent import (
     channel,
+    citations,
     cockpit,
     context,
     gateway,
@@ -154,6 +156,8 @@ agent_module = Module(
         runtime.MIGRATION,
         runtime.EDIT_MIGRATION,
         runtime.RETRY_MIGRATION,
+        runtime.COMPACTIONS_MIGRATION,
+        citations.MIGRATION,
         runtime.TRIGGER_MIGRATION,
         memory.MIGRATION,
         channel.MIGRATION,
@@ -180,8 +184,14 @@ def _startup(ctx: Context) -> None:
         _runtime.resume_after_restart()
         _triggers = triggers.Triggers(ctx, _runtime)
         _triggers.start()
+        # By default it runs on each email and on the hour. Choosing otherwise is remembered.
+        if mail_agent.mode(ctx) != "each":
+            scheduler.set_hourly(ctx, True)
         _scheduler = scheduler.Scheduler(ctx)
         _scheduler.start()
+        # Mail may have finished coming down while this wasn't running, or before it existed.
+        synced = cast(MailStatus, mail.get_status(GetMailStatus(), ctx))
+        _triggers.consider_learning(history_finished=synced.history_finished)
 
 
 def _shutdown() -> None:
@@ -206,6 +216,18 @@ def needs_triage(event: AppEvent, ctx: Context) -> None:
         )
         if _triggers:
             _triggers.wake.set()
+
+
+@agent_module.on("mail.changed", "agent.learn_when_enough_mail")
+def learn_when_enough_mail(event: AppEvent, ctx: Context) -> None:
+    if _triggers:
+        _triggers.consider_learning()
+
+
+@agent_module.on("mail.historyFinished", "agent.learn_when_history_finished")
+def learn_when_history_finished(event: AppEvent, ctx: Context) -> None:
+    if _triggers:
+        _triggers.consider_learning(history_finished=True)
 
 
 @agent_module.on("mail.*", "agent.custom_triggers")
@@ -697,13 +719,23 @@ def run_schedule_now(command: RunSchedule, ctx: Context) -> AgentDone:
 
 @agent_module.query("mailAgent.get")
 def get_mail_agent(query: GetMailAgentSettings, ctx: Context) -> MailAgentSettings:
-    return MailAgentSettings(mode=mail_agent.mode(ctx))
+    done, total = mail_agent.learning_progress(ctx)
+    return MailAgentSettings(
+        mode=mail_agent.mode(ctx),
+        learn_emails=mail_agent.learn_count(ctx),
+        learning_state=mail_agent.learning_state(ctx),
+        learning_done=done,
+        learning_total=total,
+        tokens_per_email=mail_agent.APPROX_TOKENS_PER_MESSAGE,
+    )
 
 
 @agent_module.command("mailAgent.save")
 def save_mail_agent(command: MailAgentSettings, ctx: Context) -> MailAgentSettings:
     scheduler.set_default(ctx, "mail_mode", command.mode)
     scheduler.set_hourly(ctx, command.mode != "each")
+    if command.learn_emails is not None:
+        mail_agent.set_learn_count(ctx, command.learn_emails)
     with ctx.bus.unit_of_work() as work:
         work.emit("mailAgent.changed", {}, source="agent", trace_id=ctx.trace_id)
     if _scheduler:
@@ -796,7 +828,7 @@ def _health(ctx: Context) -> list[HealthItem]:
     mail_states: dict[str, tuple[Any, str]] = {
         "live": ("ok", f"Up to date, {status.messages} messages"),
         "off": ("off", "Not connected"),
-        "paused": ("off", "Stopped"),
+        "paused": ("off", "Paused"),
         "failed": ("problem", status.message or "It couldn't sign in"),
         "offline": ("problem", status.message or "It can't reach the server"),
     }
@@ -876,6 +908,24 @@ def pause_pipeline(command: PausePipeline, ctx: Context) -> PipelineList:
     return PipelineList(pipelines=pipelines.views(ctx))
 
 
+@agent_module.command("pipelines.stop")
+def stop_pipeline(command: RunPipeline, ctx: Context) -> PipelineList:
+    entry = pipelines.entry(command.id)
+    if entry.stop is None:
+        raise CommandError("pipelines.cant_stop", "This one has nothing to stop.", 409)
+    entry.stop(ctx)
+    return PipelineList(pipelines=pipelines.views(ctx))
+
+
+@agent_module.command("pipelines.more")
+def more_pipeline(command: PipelineMore, ctx: Context) -> PipelineList:
+    entry = pipelines.entry(command.id)
+    if entry.more is None:
+        raise CommandError("pipelines.cant_stop", "This one has no more to fetch.", 409)
+    entry.more(ctx, command.count)
+    return PipelineList(pipelines=pipelines.views(ctx))
+
+
 @agent_module.command("pipelines.run")
 def run_pipeline(command: RunPipeline, ctx: Context) -> PipelineList:
     pipelines.entry(command.id).run(ctx)
@@ -891,8 +941,21 @@ def cockpit_events(query: GetCockpitEvents, ctx: Context) -> CockpitEvents:
 def list_jobs(query: ListJobs, ctx: Context) -> JobList:
     db = ctx.bus.db
     jobs: list[Job] = []
+    reading, read_total = mail_agent.learning_progress(ctx)
+    if mail_agent.learning_state(ctx) == "reading" and read_total:
+        jobs.append(
+            Job(
+                id="mail-learning",
+                kind="trigger",
+                title="Mail agent reading your past mail",
+                status="running",
+                progress=reading,
+                total=read_total,
+                link=f"/agent/sessions/{mail_agent.SESSION_ID}",
+            )
+        )
     syncing = cast(MailStatus, mail.get_status(GetMailStatus(), ctx))
-    if syncing.state in {"connecting", "syncing", "backfilling"}:
+    if syncing.state in {"syncing", "backfilling"}:
         jobs.append(
             Job(
                 id="mail-sync",

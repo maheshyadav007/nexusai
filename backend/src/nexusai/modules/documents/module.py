@@ -81,8 +81,16 @@ CREATE TABLE home_files (
         ),
     ],
 )
-EMAIL_KINDS = ("attachment", "calendar", "inline", "risky")
+# Pictures inside a mail are part of it. They're seen there, and aren't documents.
+EMAIL_KINDS = ("attachment", "calendar", "risky")
 READER_IDLE_SECONDS = 30.0
+FILE_TYPES = {
+    "pdf": {"pdf"},
+    "word": {"doc", "docx", "docm", "odt", "rtf", "hwp", "hwpx"},
+    "sheet": {"xls", "xlsx", "xlsm", "ods", "csv", "tsv"},
+    "slides": {"ppt", "pptx", "pptm", "odp"},
+    "image": {"png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "tiff"},
+}
 # What agents make is searched. Scratch is only working files, so it can be looked at but isn't.
 INDEXED_FOLDER = "artifacts"
 BROWSABLE_FOLDERS = ("documents", "artifacts", "scratch", "memory", "prompts")
@@ -121,8 +129,8 @@ def _email_parts(
     meta = _meta(ctx)
     marks = ",".join("?" * len(EMAIL_KINDS))
     rows = ctx.bus.db.fetch_all(
-        "SELECT p.extraction, p.extraction_reason, p.message, p.part_index, p.filename, p.content_type, p.size, p.kind, m.date, m.thread_id"
-        f" FROM message_parts p JOIN messages m ON m.id = p.message WHERE p.kind IN ({marks}) {where}"  # noqa: S608
+        "SELECT p.extraction, p.extraction_reason, p.message, p.part_index, p.filename, p.content_type, p.size, p.kind, m.date, m.thread_id, m.from_name, m.from_addr"
+        f" FROM message_parts p JOIN messages m ON m.id = p.message WHERE p.kind IN ({marks}) AND m.folder_role NOT IN ('junk', 'trash') {where}"  # noqa: S608
         " ORDER BY m.date DESC LIMIT 5000",
         (*EMAIL_KINDS, *params),
     )
@@ -132,6 +140,7 @@ def _email_parts(
         folder, tags = meta.get(key, (None, []))
         documents.append(
             DocumentRow(
+                sender=f"{row['from_name']} {row['from_addr']}",
                 key=key,
                 name=row["filename"],
                 content_type=row["content_type"],
@@ -233,6 +242,15 @@ def list_documents(query: ListDocuments, ctx: Context) -> DocumentLibrary:
         documents = [d for d in documents if d.folder == query.folder]
     if query.tag:
         documents = [d for d in documents if query.tag in d.tags]
+    if query.file_type:
+        documents = [d for d in documents if _file_type(d.name) == query.file_type]
+    if query.sender:
+        who = query.sender.lower()
+        documents = [d for d in documents if d.sender and who in d.sender.lower()]
+    if query.date_from:
+        documents = [d for d in documents if d.date >= query.date_from]
+    if query.date_to:
+        documents = [d for d in documents if d.date <= query.date_to]
     if query.query.strip():
         keys = _search_keys(ctx, query.query)
         engine = semantic.engine()
@@ -252,6 +270,11 @@ def list_documents(query: ListDocuments, ctx: Context) -> DocumentLibrary:
     return DocumentLibrary(
         documents=documents[: query.limit], folders=[row["name"] for row in folders], tags=tags
     )
+
+
+def _file_type(name: str) -> str:
+    extension = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    return next((kind for kind, known in FILE_TYPES.items() if extension in known), "other")
 
 
 def _part_data(ctx: Context, message: int, index: int) -> bytes | None:

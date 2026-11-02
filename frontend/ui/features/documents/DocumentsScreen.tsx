@@ -1,9 +1,13 @@
 "use client";
 
+import type { DocumentRow } from "@/ui/client/contracts.generated";
+import { ContextMenu } from "@/ui/primitives/ContextMenu";
+import { useDocumentActions, usePreview } from "./DocumentPreview";
+import { sizeOf } from "./sizes";
 import { useRouter } from "next/navigation";
-import { useRef, useState, type DragEvent } from "react";
+import { useRef, useState, type DragEvent, useMemo } from "react";
 import { ApiRequestError } from "@/ui/client/api";
-import { documentUrl, useDocument, useDocuments, useReadAgain, useRemoveDocument, useSaveFolders, useUpdateDocument, useUpload } from "@/ui/client/documents";
+import { useDocuments, useSaveFolders, useUpdateDocument, useUpload } from "@/ui/client/documents";
 import { useDateTime } from "@/ui/client/format";
 import { AskAgent } from "@/ui/features/agent/AskAgent";
 import { MeaningNotice } from "@/ui/features/settings/LocalModelSettings";
@@ -38,7 +42,6 @@ const VIEWS: Readonly<Record<Exclude<DocumentView, "home">, { title: StringKey; 
 const NO_FOLDER = "none";
 const ALL_FOLDERS = "all";
 
-const sizeOf = (bytes: number) => new Intl.NumberFormat(undefined, { style: "unit", unit: bytes < 1024 ** 2 ? "kilobyte" : "megabyte", maximumFractionDigits: 1 }).format(bytes < 1024 ** 2 ? bytes / 1024 : bytes / 1024 ** 2);
 const messageOf = (error: unknown) => (error instanceof ApiRequestError ? error.detail.message : t("settings.models.error"));
 
 interface Adding {
@@ -136,78 +139,6 @@ function StatusBadge({ status }: { status: string | undefined }) {
   ) : null;
 }
 
-function Preview({ documentKey, folders, onClose }: { documentKey: string | null; folders: readonly string[]; onClose: () => void }) {
-  const document = useDocument(documentKey);
-  const update = useUpdateDocument();
-  const remove = useRemoveDocument();
-  const readAgain = useReadAgain();
-  const row = document.data?.document;
-  // Reading happens in the background, and the event that says it's done brings this up to date.
-  const reading = row?.status === "pending";
-  const [tagText, setTagText] = useState("");
-  const tags = row?.tags ?? [];
-  const folder = row?.folder ?? NO_FOLDER;
-  const save = (changes: { folder?: string | null; tags?: string[] }) => {
-    if (row) update.mutate({ key: row.key, folder: row.folder ?? null, tags, ...changes }, { onSuccess: () => void document.refetch() });
-  };
-  return (
-    <Dialog title={row?.name ?? t("documents.preview")} shape="drawer" open={Boolean(documentKey)} onOpenChange={(open) => (open ? null : onClose())}>
-      {document.isPending ? <Skeleton className="h-6 w-full" /> : null}
-      {document.isError ? <ErrorState title={t("documents.previewFailed")} description={messageOf(document.error)} /> : null}
-      {row ? (
-        <div className="flex flex-col gap-4">
-          {row.risky ? <p className="text-md text-status-danger">{t("documents.risky")}</p> : <a className="focus-ring self-start rounded-sm text-md text-accent-default underline underline-offset-2" href={documentUrl(row.key)}>{t("documents.download")}</a>}
-          {row.risky ? null : <TextLink className="self-start text-md" href={`/documents/view?key=${encodeURIComponent(row.key)}`}>{t("documents.openFull")}</TextLink>}
-          {row.thread_id ? <TextLink className="self-start text-md" href={`/mail/all/${row.thread_id}`}>{t("documents.openMessage")}</TextLink> : null}
-          {row.risky ? null : <div><AskAgent context={[`document:${row.key}`]} title={row.name} /></div>}
-          <Field label={t("documents.folder")}>{({ invalid, id }) => <Select id={id} invalid={invalid} value={folder} options={[{ value: NO_FOLDER, label: t("documents.noFolder") }, ...folders.map((value) => ({ value, label: value }))]} onChange={(next) => save({ folder: next === NO_FOLDER ? null : next })} />}</Field>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              const tag = tagText.trim();
-              if (tag && !tags.includes(tag)) save({ tags: [...tags, tag] });
-              setTagText("");
-            }}
-          >
-            <Field label={t("documents.addTag")}>{({ invalid, ...control }) => <Input invalid={invalid} value={tagText} onChange={(event) => setTagText(event.target.value)} {...control} />}</Field>
-          </form>
-          {tags.length ? (
-            <ul className="flex flex-wrap gap-1">
-              {tags.map((tag) => (
-                <li key={tag}>
-                  <Pressable aria-label={t("documents.removeTag", { tag })} className="rounded-sm" onClick={() => save({ tags: tags.filter((item) => item !== tag) })}>
-                    <Badge>{tag}</Badge>
-                  </Pressable>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {row.status_reason ? (
-            <div className="flex flex-col items-start gap-2 rounded-md bg-surface-sunken p-3">
-              <p data-testid="document-reason" className="text-md text-ink-secondary">{row.status_reason}</p>
-              <Button loading={readAgain.isPending} onClick={() => readAgain.mutate(row.key, { onSuccess: () => void document.refetch() })}>
-                {t("documents.readAgain")}
-              </Button>
-            </div>
-          ) : null}
-          {reading ? <p className="text-md text-ink-muted">{t("documents.status.pending")}</p> : null}
-          <section>
-            <h3 className="mb-2 text-md font-medium">{t("documents.text")}</h3>
-            <div data-testid="document-text" className="max-h-popover overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-surface-sunken p-3 text-sm text-ink-secondary">{document.data?.text || t("documents.noText")}</div>
-          </section>
-          {row.source === "upload" ? (
-            <div>
-              <Button variant="danger" loading={remove.isPending} onClick={() => remove.mutate(row.key, { onSuccess: onClose })}>
-                {t("documents.remove")}
-              </Button>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </Dialog>
-  );
-}
-
 function Folders({ folders, current, onChoose }: { folders: readonly string[]; current: string; onChoose: (folder: string) => void }) {
   const save = useSaveFolders();
   const [name, setName] = useState("");
@@ -260,15 +191,38 @@ export function DocumentsScreen({ view }: { view: DocumentView }) {
   return <Library view={view} />;
 }
 
+function LibraryRow({ document, list, onOpen, format }: { document: DocumentRow; list: readonly { key: string }[]; onOpen: () => void; format: (value: string) => string }) {
+  const actions = useDocumentActions(document, [], list);
+  return (
+    <li>
+      <ContextMenu items={actions}>
+        <Pressable data-testid="document-row" onClick={onOpen} className="focus-ring flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors duration-fast hover:bg-surface-sunken">
+          <Icon name={document.source === "email" ? "fromEmail" : document.source === "home" ? "agent" : "documents"} className="h-4 w-4 shrink-0 text-ink-muted" />
+          <span className="min-w-0 flex-1 truncate text-md text-ink-primary">{document.name}</span>
+          {document.risky ? <Badge tone="danger">{t("documents.riskyBadge")}</Badge> : <StatusBadge status={document.status} />}
+          {document.place ? <span data-testid="document-place"><Badge>{document.place}</Badge></span> : null}
+          {document.folder ? <Badge>{document.folder}</Badge> : null}
+          {(document.tags ?? []).map((tag) => (
+            <Badge key={tag}>{tag}</Badge>
+          ))}
+          <span className="shrink-0 text-sm tabular-nums text-ink-muted">{sizeOf(document.size)}</span>
+          <span className="shrink-0 text-sm tabular-nums text-ink-muted">{format(document.date)}</span>
+        </Pressable>
+      </ContextMenu>
+    </li>
+  );
+}
+
 function Library({ view }: { view: Exclude<DocumentView, "home"> }) {
   const config = VIEWS[view];
   const [query, setQuery] = useState("");
   const [folder, setFolder] = useState(ALL_FOLDERS);
-  const [open, setOpen] = useState<string | null>(null);
+  const preview = usePreview();
   const format = useDateTime();
   const library = useDocuments({ query, ...(config.source ? { source: config.source } : {}), ...(folder === ALL_FOLDERS ? {} : { folder }) });
   const documents = library.data?.documents ?? [];
   const folders = library.data?.folders ?? [];
+  const list = useMemo(() => documents.map((row) => ({ key: row.key })), [documents]);
   return (
     <div className="mx-auto flex max-w-page flex-col gap-4 p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -285,26 +239,10 @@ function Library({ view }: { view: Exclude<DocumentView, "home"> }) {
           {library.isError ? <ErrorState title={t("documents.error")} onRetry={() => void library.refetch()} /> : null}
           {library.isSuccess && documents.length === 0 ? <EmptyState icon="documents" title={t(query ? "documents.none" : "documents.empty")} /> : null}
           <ul aria-label={t(config.title)} className="flex flex-col gap-px">
-            {documents.map((document) => (
-              <li key={document.key}>
-                <Pressable data-testid="document-row" onClick={() => setOpen(document.key)} className="focus-ring flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors duration-fast hover:bg-surface-sunken">
-                  <Icon name={document.source === "email" ? "fromEmail" : document.source === "home" ? "agent" : "documents"} className="h-4 w-4 shrink-0 text-ink-muted" />
-                  <span className="min-w-0 flex-1 truncate text-md text-ink-primary">{document.name}</span>
-                  {document.risky ? <Badge tone="danger">{t("documents.riskyBadge")}</Badge> : <StatusBadge status={document.status} />}
-                  {document.place ? <span data-testid="document-place"><Badge>{document.place}</Badge></span> : null}
-                  {document.folder ? <Badge>{document.folder}</Badge> : null}
-                  {(document.tags ?? []).map((tag) => (
-                    <Badge key={tag}>{tag}</Badge>
-                  ))}
-                  <span className="shrink-0 text-sm tabular-nums text-ink-muted">{sizeOf(document.size)}</span>
-                  <span className="shrink-0 text-sm tabular-nums text-ink-muted">{format(document.date)}</span>
-                </Pressable>
-              </li>
-            ))}
+            {documents.map((document) => <LibraryRow key={document.key} document={document} list={list} onOpen={() => preview.show({ key: document.key }, list)} format={format} />)}
           </ul>
         </div>
       </div>
-      <Preview documentKey={open} folders={folders} onClose={() => setOpen(null)} />
     </div>
   );
 }

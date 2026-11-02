@@ -73,6 +73,8 @@ export function usePipelines() {
   });
 }
 export const usePausePipeline = () => useCommand(["pipelines", "mail-status", "cockpit"], (input: { id: string; paused: boolean }) => command("pipelines.pause", input));
+export const useStopPipeline = () => useCommand(["pipelines", "mail-status", "cockpit"], (id: string) => command("pipelines.stop", { id }));
+export const usePipelineMore = () => useCommand(["pipelines", "mail-status", "cockpit"], (input: { id: string; count: number | null }) => command("pipelines.more", input));
 export const useRunPipeline = () => useCommand(["pipelines"], (id: string) => command("pipelines.run", { id }));
 export const useActivity = () => useReady(["activity"], () => query("activity.list", {}));
 export const useUndo = () => useCommand(["activity"], (id: number) => command("activity.undo", { id }));

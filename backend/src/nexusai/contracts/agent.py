@@ -184,13 +184,33 @@ class RateMessage(BaseModel):
     value: Literal["up", "down"] | None = None
 
 
+class SessionCompaction(BaseModel):
+    after_turn: int
+    time: str
+    before_tokens: int
+    after_tokens: int
+    how: str
+
+
 class SessionView(BaseModel):
     session: SessionRow
     messages: list[dict[str, Any]]
     active: bool
+    compactions: list[SessionCompaction] = Field(default_factory=list)
+
+
+class ApprovalPreview(BaseModel):
+    """What's being approved, briefly, with all of it a click away."""
+
+    kind: Literal["command", "file", "mail", "change", "other"]
+    summary: str
+    language: str = "text"
+    content: str = ""
+    location: str | None = None
 
 
 class ToolApproval(BaseModel):
+    preview: ApprovalPreview | None = None
     id: int
     session: str
     session_title: str
@@ -576,6 +596,10 @@ class Pipeline(BaseModel):
     next_run: str | None = None
     # False when there's nothing it could do yet, such as no account to sync.
     available: bool = True
+    # Older work is still coming, so Stop means something. Get more is offered once it's done.
+    history_open: bool = False
+    # How much is still out there to get.
+    left: int = 0
     link: str | None = None
 
 
@@ -598,6 +622,14 @@ class RunPipeline(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str = Field(max_length=64)
+
+
+class PipelineMore(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(max_length=64)
+    # Empty means all that's left.
+    count: int | None = Field(default=None, ge=1)
 
 
 class UpcomingRun(BaseModel):
@@ -784,7 +816,14 @@ MailMode = Literal["each", "hourly", "both"]
 class MailAgentSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    mode: MailMode = "each"
+    mode: MailMode = "both"
+    # How many past emails the rule engine didn't catch it reads before going live.
+    learn_emails: int | None = Field(default=None, ge=1, le=5000)
+    # Filled in when read, to say how that's going.
+    learning_state: str | None = None
+    learning_done: int | None = None
+    learning_total: int | None = None
+    tokens_per_email: int | None = None
 
 
 class GetMailAgentSettings(BaseModel):

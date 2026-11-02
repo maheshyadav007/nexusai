@@ -82,6 +82,10 @@
     "press": "0.98",
     "easing": "cubic-bezier(0.22, 1, 0.36, 1)"
   },
+  "glass": {
+    "opacity": "80%",
+    "blur": "28px"
+  },
   "layout": {
     "content": "960px",
     "sidebar": "256px",
@@ -90,6 +94,9 @@
     "popover": "320px",
     "drawer": "420px",
     "dialog": "480px",
+    "modal": "1080px",
+    "modalHeight": "760px",
+    "aura": "10px",
     "page": "1200px",
     "railWide": "180px",
     "dock": "440px",

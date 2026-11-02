@@ -90,7 +90,7 @@ test("new mail is judged, and reaches Today, the thread and the channel", async 
   await page.getByRole("button", { name: "Ask agent" }).click();
   await expect(page.getByTestId("assistant-dock")).toBeVisible();
   await expect(page.getByTestId("context-chip")).toContainText(subject);
-  await page.getByRole("button", { name: /^Remove / }).click();
+  await page.getByRole("button", { name: /^Remove (?!from )/ }).click();
   await expect(page.getByTestId("context-chip")).toHaveCount(0);
 });
 

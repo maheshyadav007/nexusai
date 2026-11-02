@@ -64,6 +64,21 @@ export function mergeResults(blocks: readonly Block[], pending: ReadonlyMap<stri
   return shown;
 }
 
+export interface MessageSource {
+  kind: "mail" | "doc";
+  ref: string;
+  title: string;
+  detail: string;
+  date?: string | null;
+  n?: number | null;
+  page?: string | null;
+}
+
+export const sourcesOf = (message: UIMessage): MessageSource[] => {
+  const part = message.parts.find((item) => item.type === "data-sources") as { data?: { sources?: MessageSource[] } } | undefined;
+  return part?.data?.sources ?? [];
+};
+
 export const followUpsOf = (message: UIMessage): string[] => {
   const part = message.parts.find((item) => item.type === "data-followups") as { data?: { questions?: string[] } } | undefined;
   return part?.data?.questions ?? [];
@@ -78,6 +93,8 @@ export const textOf = (message: UIMessage) =>
   message.parts
     .flatMap((part) => (part.type === "text" ? [part.text] : []))
     .join("\n\n")
+    // Numbers mean nothing outside this chat, so copying leaves them behind.
+    .replace(/\s?\[\d+\]\(#cite-\d+\)/g, "")
     .trim();
 
 export interface Versions {

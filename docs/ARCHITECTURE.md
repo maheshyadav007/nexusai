@@ -215,6 +215,7 @@ Session:     queued → running ⇄ waitingForApproval → done
                         └──▶ failed
 Mail sync:   idle → connecting → syncing → live → (disconnected → connecting)
              any state → paused (by the person, and kept across restarts) → connecting
+             older mail: coming → finished (budget used, Stop, or all here) → coming (Get more)
 Approval:    pending → approved | denied | expired
 ```
 

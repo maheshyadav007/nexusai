@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 
 from nexusai.contracts.mail import (
     AttachmentView,
+    MailFolderRef,
     MessageView,
     SearchHit,
     SearchMail,
@@ -114,8 +115,67 @@ CREATE TABLE mail_sync_settings (
   last_check TEXT, last_found INTEGER NOT NULL DEFAULT 0, last_pulled INTEGER NOT NULL DEFAULT 0, last_found_at TEXT);
 """,
     ),
+    Migration(
+        "mail_locations_001",
+        """
+CREATE TABLE message_locations (
+  message INTEGER NOT NULL, account TEXT NOT NULL, folder TEXT NOT NULL, role TEXT NOT NULL, uid INTEGER NOT NULL,
+  PRIMARY KEY (account, folder, uid));
+CREATE INDEX message_locations_message ON message_locations (message);
+INSERT INTO message_locations (message, account, folder, role, uid)
+  SELECT id, account, folder, folder_role, uid FROM messages;
+ALTER TABLE mail_folders ADD COLUMN server_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE mail_folders ADD COLUMN server_unseen INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE mail_folders ADD COLUMN uid_next INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE mail_folders ADD COLUMN history_more INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE mail_folders ADD COLUMN copies_below INTEGER;
+ALTER TABLE threads ADD COLUMN in_junk INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE threads ADD COLUMN extra_categories TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE mail_sync_settings ADD COLUMN history_budget INTEGER;
+ALTER TABLE mail_sync_settings ADD COLUMN never_delete INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE mail_sync_settings ADD COLUMN history_finished TEXT;
+UPDATE mail_sync_settings SET history_budget = MAX(0, pull_limit - (SELECT COUNT(*) FROM messages m WHERE m.account = mail_sync_settings.account)) WHERE pull_limit IS NOT NULL;
+UPDATE mail_sync_settings SET history_budget = 0, paused = 0 WHERE paused = 1;
+ALTER TABLE mail_sync_settings DROP COLUMN pull_limit;
+""",
+    ),
+    Migration(
+        "mail_kinds_001",
+        """
+UPDATE threads SET category = 'Updates' WHERE category = 'Automated';
+UPDATE threads SET category = 'Promotions' WHERE category = 'Newsletters';
+UPDATE mail_categories SET name = 'Updates' WHERE name = 'Automated' AND NOT EXISTS (SELECT 1 FROM mail_categories WHERE name = 'Updates');
+UPDATE mail_categories SET name = 'Promotions' WHERE name = 'Newsletters' AND NOT EXISTS (SELECT 1 FROM mail_categories WHERE name = 'Promotions');
+""",
+    ),
+    Migration(
+        "mail_images_001",
+        """
+CREATE TABLE mail_image_senders (address TEXT PRIMARY KEY, allow INTEGER NOT NULL);
+UPDATE message_parts SET kind = 'signature' WHERE content_type LIKE 'image/%' AND kind IN ('inline', 'attachment') AND (
+  size < 30000
+  OR sha256 IN (SELECT sha256 FROM image_hashes WHERE seen >= 3)
+  OR (size < 200000 AND (LOWER(filename) GLOB 'image[0-9]*.*' OR LOWER(filename) GLOB 'image.*' OR LOWER(filename) GLOB 'outlook-*' OR LOWER(filename) GLOB 'logo*' OR LOWER(filename) GLOB 'banner*' OR LOWER(filename) GLOB 'signature*' OR LOWER(filename) GLOB 'footer*')));
+UPDATE message_parts SET kind = 'signature' WHERE kind = 'attachment' AND (content_type LIKE 'multipart/%' OR ((filename = '' OR filename = 'attachment') AND content_type IN ('text/x-amp-html', 'text/html', 'text/plain')));
+UPDATE messages SET has_attachments = EXISTS (SELECT 1 FROM message_parts p WHERE p.message = messages.id AND p.kind IN ('attachment', 'calendar', 'risky'));
+UPDATE threads SET has_attachments = EXISTS (SELECT 1 FROM messages m WHERE m.thread_id = threads.id AND m.has_attachments = 1);
+""",
+    ),
 ]
-THREAD_COLUMNS = {"inbox": "in_inbox", "sent": "in_sent", "drafts": "in_drafts", "trash": "in_trash", "archive": "in_archive", "other": "in_other"}  # fmt: skip
+ATTACHMENTS_FROM_PARTS = (
+    "UPDATE messages SET has_attachments = EXISTS (SELECT 1 FROM message_parts p WHERE p.message = ?"
+    " AND p.kind IN ('attachment', 'calendar', 'risky')) WHERE id = ?"
+)
+THREAD_COLUMNS = {"inbox": "in_inbox", "sent": "in_sent", "drafts": "in_drafts", "trash": "in_trash", "archive": "in_archive", "other": "in_other", "junk": "in_junk"}  # fmt: skip
+# Which of an email's folders speaks for it, when something needs just one.
+ROLE_RANK = {
+    role: index
+    for index, role in enumerate(
+        ("inbox", "sent", "drafts", "other", "archive", "all", "junk", "trash")
+    )
+}
+# Mail only in these stays in its own folder: no agent, search or Documents sees it.
+SET_APART = ("junk", "trash")
 FOLDER_FILTERS = {
     **{name: f"{column} = 1" for name, column in THREAD_COLUMNS.items()},
     # What came in, wherever it's been filed since.
@@ -123,7 +183,8 @@ FOLDER_FILTERS = {
     # What needs attention: judged important, waiting on the person, in a category they marked,
     # or not judged yet, so nothing is hidden just because no model has looked at it.
     "priority": (
-        "(in_inbox = 1 AND (importance = 'high' OR status = 'waiting_on_you' OR category IS NULL"
+        "(in_inbox = 1 AND (importance = 'high' OR status = 'waiting_on_you'"
+        " OR (category IS NULL AND importance != 'low')"
         " OR category IN (SELECT name FROM mail_categories WHERE in_priority = 1)))"
     ),
 }
@@ -228,11 +289,20 @@ def refresh_thread(tx: sqlite3.Connection, thread: int) -> None:
         tx.execute("DELETE FROM threads WHERE id = ?", (thread,))
         return
     seen: dict[str, bool] = {}
-    roles: set[str] = set()
+    roles = {
+        row[0]
+        for row in tx.execute(
+            "SELECT DISTINCT l.role FROM message_locations l JOIN messages m ON m.id = l.message"
+            " WHERE m.thread_id = ?",
+            (thread,),
+        )
+    }
+    # On Gmail, what's filed nowhere but All Mail is what the person archived.
+    if "all" in roles and not roles & {"inbox", "sent", "drafts"}:
+        roles.add("archive")
     people: list[str] = []
     for row in rows:
         seen[row["message_id"]] = seen.get(row["message_id"], True) and bool(row["read"])
-        roles.add(row["folder_role"])
         for address in [row["from_addr"], *json.loads(row["to_json"]), *json.loads(row["cc_json"])]:
             if address and address not in people:
                 people.append(address)
@@ -270,11 +340,15 @@ def store_message(
     match: RuleMatch | None,
     config: MailConfig,
 ) -> Stored | None:
-    """None if this copy is already stored."""
+    """None if this email is already stored, in which case it just gains this folder."""
     if tx.execute(
-        "SELECT 1 FROM messages WHERE account = ? AND folder = ? AND uid = ?",
+        "SELECT 1 FROM message_locations WHERE account = ? AND folder = ? AND uid = ?",
         (account, folder, uid),
     ).fetchone():
+        return None
+    held = find_message(tx, account, parsed.message_id)
+    if held is not None:
+        add_location(tx, held, account, folder, role, uid)
         return None
     thread, is_new = _assign_thread(tx, account, parsed)
     kinds: list[tuple[Part, str]] = []
@@ -289,7 +363,10 @@ def store_message(
             seen = tx.execute(
                 "SELECT seen FROM image_hashes WHERE sha256 = ?", (part.sha256,)
             ).fetchone()[0]
-        kinds.append((part, classify(part, seen, config)))
+        kinds.append((part, classify(part, seen, config, parsed.html)))
+        # Seen often enough to be a logo, so copies filed before this one were too.
+        if seen == config.signature_repeat_count:
+            _mark_repeats_as_logos(tx, part.sha256)
     has_attachments = any(kind in {"attachment", "calendar", "risky"} for _, kind in kinds)
     is_read = read or bool(match and match.actions.mark_read)
     cursor = tx.execute(
@@ -306,6 +383,10 @@ def store_message(
         ),
     )  # fmt: skip
     message = int(cursor.lastrowid or 0)
+    tx.execute(
+        "INSERT INTO message_locations (message, account, folder, role, uid) VALUES (?, ?, ?, ?, ?)",
+        (message, account, folder, role, uid),
+    )
     tx.execute(
         "INSERT INTO message_raw (message, data) VALUES (?, ?)", (message, zlib.compress(raw))
     )
@@ -339,11 +420,95 @@ def store_message(
     )
 
 
+def _mark_repeats_as_logos(tx: sqlite3.Connection, sha256: str) -> None:
+    rows = tx.execute(
+        "SELECT DISTINCT message FROM message_parts WHERE sha256 = ? AND kind IN ('inline', 'attachment')",
+        (sha256,),
+    ).fetchall()
+    tx.execute(
+        "UPDATE message_parts SET kind = 'signature' WHERE sha256 = ? AND kind IN ('inline', 'attachment')",
+        (sha256,),
+    )
+    for row in rows:
+        tx.execute(ATTACHMENTS_FROM_PARTS, (row["message"], row["message"]))
+        thread = tx.execute(
+            "SELECT thread_id FROM messages WHERE id = ?", (row["message"],)
+        ).fetchone()
+        if thread:
+            refresh_thread(tx, thread[0])
+
+
+def find_message(tx: sqlite3.Connection, account: str, message_id: str) -> int | None:
+    row = tx.execute(
+        "SELECT id FROM messages WHERE account = ? AND message_id = ? ORDER BY id LIMIT 1",
+        (account, message_id),
+    ).fetchone()
+    return int(row[0]) if row else None
+
+
+def _settle_primary(tx: sqlite3.Connection, message: int) -> None:
+    """Keeps the columns on messages pointing at the folder that best speaks for this email."""
+    rows = tx.execute(
+        "SELECT folder, role, uid FROM message_locations WHERE message = ?", (message,)
+    ).fetchall()
+    if not rows:
+        return
+    best = min(rows, key=lambda row: ROLE_RANK.get(row["role"], ROLE_RANK["other"]))
+    tx.execute(
+        "UPDATE messages SET folder = ?, folder_role = ?, uid = ? WHERE id = ?",
+        (best["folder"], best["role"], best["uid"], message),
+    )
+
+
+def add_location(
+    tx: sqlite3.Connection, message: int, account: str, folder: str, role: str, uid: int
+) -> None:
+    tx.execute(
+        "INSERT OR IGNORE INTO message_locations (message, account, folder, role, uid)"
+        " VALUES (?, ?, ?, ?, ?)",
+        (message, account, folder, role, uid),
+    )
+    _settle_primary(tx, message)
+    row = tx.execute("SELECT thread_id FROM messages WHERE id = ?", (message,)).fetchone()
+    if row:
+        refresh_thread(tx, row[0])
+
+
+def remove_location(tx: sqlite3.Connection, account: str, folder: str, uid: int) -> None:
+    """Gone from one folder. The email itself goes only when this was its last."""
+    row = tx.execute(
+        "SELECT message FROM message_locations WHERE account = ? AND folder = ? AND uid = ?",
+        (account, folder, uid),
+    ).fetchone()
+    if row is None:
+        return
+    message = row[0]
+    tx.execute(
+        "DELETE FROM message_locations WHERE account = ? AND folder = ? AND uid = ?",
+        (account, folder, uid),
+    )
+    if tx.execute("SELECT 1 FROM message_locations WHERE message = ?", (message,)).fetchone():
+        _settle_primary(tx, message)
+        thread = tx.execute("SELECT thread_id FROM messages WHERE id = ?", (message,)).fetchone()
+        if thread:
+            refresh_thread(tx, thread[0])
+        return
+    remove_message(tx, message)
+
+
+def locations_of(db_or_tx: Database | sqlite3.Connection, message: int) -> list[sqlite3.Row]:
+    sql = "SELECT folder, role, uid FROM message_locations WHERE message = ?"
+    if isinstance(db_or_tx, Database):
+        return db_or_tx.fetch_all(sql, (message,))
+    return db_or_tx.execute(sql, (message,)).fetchall()
+
+
 def remove_message(tx: sqlite3.Connection, message: int) -> None:
     row = tx.execute("SELECT thread_id FROM messages WHERE id = ?", (message,)).fetchone()
     if row is None:
         return
     for statement in (
+        "DELETE FROM message_locations WHERE message = ?",
         "DELETE FROM messages WHERE id = ?",
         "DELETE FROM message_raw WHERE message = ?",
         "DELETE FROM message_refs WHERE message = ?",
@@ -367,6 +532,7 @@ def row_of(row: sqlite3.Row) -> ThreadRow:
         has_attachments=bool(row["has_attachments"]),
         category=row["category"],
         category_source=row["category_source"],
+        extra_categories=json.loads(row["extra_categories"]),
         why=row["why"],
         status=row["status"],
         importance=row["importance"],
@@ -374,14 +540,29 @@ def row_of(row: sqlite3.Row) -> ThreadRow:
     )
 
 
+# One conversation can be in several categories, and the first is the one Priority goes by.
+IN_CATEGORY = "(category = ? OR EXISTS (SELECT 1 FROM json_each(extra_categories) WHERE value = ?))"
+IN_LOCATION = (
+    "id IN (SELECT m.thread_id FROM message_locations l JOIN messages m ON m.id = l.message"
+    " WHERE l.account = ? AND l.folder = ?)"
+)
+
+
 def list_threads(
-    db: Database, account: str, folder: str, category: str | None, before: str | None, limit: int
+    db: Database,
+    account: str,
+    folder: str,
+    category: str | None,
+    before: str | None,
+    limit: int,
+    location: str | None = None,
 ) -> ThreadList:
-    where = ["account = ?", FOLDER_FILTERS[folder]]
-    params: list[object] = [account]
+    # A folder on the server is asked for by name, and the rest go by what kind of folder it is.
+    where = ["account = ?", IN_LOCATION if location else FOLDER_FILTERS[folder]]
+    params: list[object] = [account, account, location] if location else [account]
     if category:
-        where.append("category = ?")
-        params.append(category)
+        where.append(IN_CATEGORY)
+        params += [category, category]
     if before:
         date, _, identifier = before.rpartition("|")
         where.append("(last_date, id) < (?, ?)")
@@ -404,6 +585,18 @@ def list_threads(
         next_before=f"{page[-1]['last_date']}|{page[-1]['id']}" if len(rows) > limit else None,
         categories=[row["category"] for row in categories],
     )
+
+
+def unread_counts(db: Database, account: str) -> dict[str, int]:
+    return {
+        name: int(
+            db.fetch_all(
+                f"SELECT COUNT(*) AS n FROM threads WHERE account = ? AND unread_count > 0 AND {where}",  # noqa: S608
+                (account,),
+            )[0]["n"]
+        )
+        for name, where in FOLDER_FILTERS.items()
+    }
 
 
 def raw_of(db: Database, message: int) -> bytes | None:
@@ -433,7 +626,13 @@ def _safe_html(db: Database, row: sqlite3.Row) -> str | None:
     return sanitize(row["html"], inline)
 
 
-def thread_view(db: Database, thread: int) -> ThreadView | None:
+def show_images(db: Database, sender: str, default: str) -> bool:
+    """The person's choice for this sender, or else their general setting."""
+    rows = db.fetch_all("SELECT allow FROM mail_image_senders WHERE address = ?", (sender.lower(),))
+    return bool(rows[0]["allow"]) if rows else default != "block"
+
+
+def thread_view(db: Database, thread: int, remote_images: str = "load") -> ThreadView | None:
     rows = db.fetch_all("SELECT * FROM threads WHERE id = ?", (thread,))
     if not rows:
         return None
@@ -457,6 +656,11 @@ def thread_view(db: Database, thread: int) -> ThreadView | None:
         parts = db.fetch_all("SELECT * FROM message_parts WHERE message = ?", (message["id"],))
         views.append(
             MessageView(
+                show_images=show_images(db, message["from_addr"], remote_images),
+                folders=[
+                    MailFolderRef(name=row["folder"], role=row["role"])
+                    for row in locations_of(db, message["id"])
+                ],
                 id=message["id"],
                 subject=message["subject"],
                 from_name=message["from_name"],
@@ -589,14 +793,25 @@ def search(db: Database, account: str, query: SearchMail) -> SearchResults:
         conditions.append("m.date <= ?")
         params.append(query.date_to)
     if query.category:
-        conditions.append("t.category = ?")
-        params.append(query.category)
+        conditions.append(
+            "(t.category = ? OR EXISTS (SELECT 1 FROM json_each(t.extra_categories) WHERE value = ?))"
+        )
+        params += [query.category, query.category]
     if query.has_attachment is not None:
         conditions.append("m.has_attachments = ?")
         params.append(int(query.has_attachment))
     if query.folder:
-        conditions.append("m.folder_role = ?")
+        conditions.append(
+            "EXISTS (SELECT 1 FROM message_locations l WHERE l.message = m.id AND l.role = ?)"
+        )
         params.append(query.folder)
+    else:
+        conditions.append(f"m.folder_role NOT IN {SET_APART}")
+    if query.location:
+        conditions.append(
+            "EXISTS (SELECT 1 FROM message_locations l WHERE l.message = m.id AND l.folder = ?)"
+        )
+        params.append(query.location)
     if match:
         rows = _ranked_matches(db, match, conditions, params, by_relevance=bool(words))
     else:
@@ -661,14 +876,25 @@ def merge_meaning(
         conditions.append("m.date <= ?")
         params.append(query.date_to)
     if query.category:
-        conditions.append("t.category = ?")
-        params.append(query.category)
+        conditions.append(
+            "(t.category = ? OR EXISTS (SELECT 1 FROM json_each(t.extra_categories) WHERE value = ?))"
+        )
+        params += [query.category, query.category]
     if query.has_attachment is not None:
         conditions.append("m.has_attachments = ?")
         params.append(int(query.has_attachment))
     if query.folder:
-        conditions.append("m.folder_role = ?")
+        conditions.append(
+            "EXISTS (SELECT 1 FROM message_locations l WHERE l.message = m.id AND l.role = ?)"
+        )
         params.append(query.folder)
+    else:
+        conditions.append(f"m.folder_role NOT IN {SET_APART}")
+    if query.location:
+        conditions.append(
+            "EXISTS (SELECT 1 FROM message_locations l WHERE l.message = m.id AND l.folder = ?)"
+        )
+        params.append(query.location)
     excerpts = dict(meaning)
     marks = ",".join("?" * len(excerpts))
     rows = db.fetch_all(

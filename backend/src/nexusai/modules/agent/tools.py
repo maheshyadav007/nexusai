@@ -25,7 +25,7 @@ from nexusai.contracts.mail import SearchMail, SearchResults
 from nexusai.kernel.database import Migration
 from nexusai.kernel.home import scratch_folder
 from nexusai.kernel.module import CommandError, Context
-from nexusai.modules.agent import channel, mail_agent, memory, policy, work_tools
+from nexusai.modules.agent import channel, citations, mail_agent, memory, policy, work_tools
 from nexusai.modules.agent.policy import Action
 from nexusai.modules.connectors import module as connectors
 from nexusai.modules.documents.module import get_document as _get_document
@@ -502,11 +502,20 @@ class _RecordTriage(BaseModel):
     )
     draft: str | None = Field(default=None, description="A suggested reply as plain text.")
     memory: str | None = Field(default=None, description="A lasting fact about their work.")
+    learned: list[str] = Field(
+        default_factory=list,
+        description="Short notes on anything lasting this shows about the person. Usually empty.",
+    )
     suggest_category: dict[str, Any] | None = Field(
         default=None,
         description='For repeated mail from one place, {"name": ..., "sender": ..., "reason": ...}.',
     )
     question: str | None = Field(default=None, description="Something only the person can answer.")
+    tool_call_id: Annotated[str, InjectedToolCallId]
+
+
+class _SaveLearned(BaseModel):
+    summary: str = Field(description="What you've learned about the person, in short sections.")
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
@@ -548,6 +557,8 @@ MAIL_AGENT_TOOLS = frozenset(
 )
 # It ends a run, so judging simple mail takes one model call.
 ENDS_THE_RUN = frozenset({"record_triage"})
+LEARNING_ORIGIN = "mail-learn"
+MAIL_AGENT_ONLY = frozenset({"record_triage", "save_what_i_learned"})
 
 
 def allowed_for(agent: str, origin: str, has_email: bool) -> frozenset[str] | None:
@@ -556,6 +567,9 @@ def allowed_for(agent: str, origin: str, has_email: bool) -> frozenset[str] | No
     if agent != "mail":
         return None
     allowed = MAIL_AGENT_TOOLS | {"ask_user"} if origin == "person" else MAIL_AGENT_TOOLS
+    # Only the run that wraps up reading past mail can rewrite what it learned.
+    if origin == LEARNING_ORIGIN and not has_email:
+        allowed |= {"save_what_i_learned"}
     return allowed if has_email else allowed - {"record_triage"}
 
 
@@ -626,6 +640,23 @@ def build_tools(
             0,
         )
         return result
+
+    def save_what_i_learned(summary: str, tool_call_id: str) -> str:
+        memory.replace_learned(ctx.config.home, summary)
+        with ctx.bus.unit_of_work() as work:
+            work.emit("memory.changed", {}, source="agent", trace_id=ctx.trace_id)
+        _log_call(
+            ctx,
+            session,
+            tool_call_id,
+            "save_what_i_learned",
+            summary[:200],
+            "Saved.",
+            "done",
+            None,
+            0,
+        )
+        return "Saved. The person can read and correct it on the Memory page."
 
     def read_file(path: str, tool_call_id: str) -> str:
         target = _resolve(ctx, session, path)
@@ -791,6 +822,8 @@ def build_tools(
     def search_mail(query: str, tool_call_id: str) -> str:
         def work() -> str:
             hits = cast(SearchResults, run_search(SearchMail(query=query, limit=20), ctx)).hits
+            for hit in hits:
+                citations.note(ctx.bus.db, session, citations.MAIL, str(hit.thread.id))
             lines = [
                 f"[thread {h.thread.id}] {h.thread.subject} | {', '.join(h.thread.participants[:3])} | {h.excerpt}"
                 for h in hits
@@ -816,6 +849,7 @@ def build_tools(
             view = store.thread_view(ctx.bus.db, thread_id)
             if view is None:
                 return "That conversation no longer exists."
+            citations.note(ctx.bus.db, session, citations.MAIL, str(thread_id), opened=True)
             recent = view.messages[-ctx.config.agent.max_recent_thread_messages :]
             body = "\n\n".join(
                 f"From {m.from_name} <{m.from_addr}> on {m.date}\n{m.own_text}" for m in recent
@@ -987,6 +1021,8 @@ def build_tools(
     def search_documents(query: str, tool_call_id: str) -> str:
         def work() -> str:
             found = list_documents(ListDocuments(query=query, limit=20), ctx).documents
+            for document in found:
+                citations.note(ctx.bus.db, session, citations.DOCUMENT, document.key)
             return _untrusted("\n".join(f"[{d.key}] {d.name}" for d in found) or "Nothing found.")
 
         return _guarded(
@@ -1006,9 +1042,11 @@ def build_tools(
     def read_document(key: str, tool_call_id: str) -> str:
         def work() -> str:
             try:
-                return _untrusted(get_document(GetDocument(key=key), ctx).text)
+                text = get_document(GetDocument(key=key), ctx).text
             except CommandError as error:
                 return error.message
+            citations.note(ctx.bus.db, session, citations.DOCUMENT, key, opened=True)
+            return _untrusted(text)
 
         return _guarded(
             ctx,
@@ -1030,6 +1068,12 @@ def build_tools(
             _RecordTriage,
             "Record your judgement of the email this run was started for. Call it once, when "
             "you've decided. It finishes the run, so write nothing before it.",
+        ),
+        (
+            save_what_i_learned,
+            _SaveLearned,
+            "Replace your notes about the person with this tidy version. It stays marked as "
+            "coming from mail, and the person can read and correct it.",
         ),
         (
             ask_user,
@@ -1182,7 +1226,7 @@ def build_tools(
             marks_untrusted=marks_untrusted,
         )
 
-    specs += work_tools.specs(ctx, guarded, _untrusted)
+    specs += work_tools.specs(ctx, guarded, _untrusted, session)
     own = [
         StructuredTool.from_function(
             func=func,
@@ -1194,7 +1238,7 @@ def build_tools(
         for func, schema, description in specs
         if func.__name__ != "semantic_search" or _meaning_is_on()
         # Judging mail belongs to the Mail agent alone.
-        if (allowed is None and func.__name__ != "record_triage")
+        if (allowed is None and func.__name__ not in MAIL_AGENT_ONLY)
         or (allowed is not None and func.__name__ in allowed)
     ]
     return own if allowed is not None else [*own, *_connector_tools(ctx, session)]

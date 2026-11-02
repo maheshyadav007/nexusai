@@ -135,6 +135,10 @@ def place_of(text: str, chunk: int, most: int) -> str | None:
     return found[-1] if found else None
 
 
+# Spam and Trash stay in their own folders, so they're never found by meaning.
+KEPT_MAIL = "folder_role NOT IN ('junk', 'trash')"
+
+
 class Engine:
     """One per open Home: the download, the model in memory, and the indexing thread."""
 
@@ -239,11 +243,13 @@ class Engine:
 
     def _total(self, kind: str) -> int:
         if kind == MAIL:
-            return int(self.db.fetch_all("SELECT COUNT(*) AS n FROM messages")[0]["n"])
+            return int(
+                self.db.fetch_all(f"SELECT COUNT(*) AS n FROM messages WHERE {KEPT_MAIL}")[0]["n"]
+            )  # noqa: S608
         rows = self.db.fetch_all(
             "SELECT (SELECT COUNT(*) FROM documents)"
             " + (SELECT COUNT(*) FROM home_files)"
-            " + (SELECT COUNT(*) FROM message_parts WHERE kind = 'attachment' AND text IS NOT NULL AND text != '')"
+            " + (SELECT COUNT(*) FROM message_parts p JOIN messages m ON m.id = p.message WHERE p.kind = 'attachment' AND p.text IS NOT NULL AND p.text != '' AND m.folder_role NOT IN ('junk', 'trash'))"
             " AS n"
         )
         return int(rows[0]["n"])
@@ -377,7 +383,7 @@ class Engine:
 
     def _refill(self, model: str) -> None:
         """What has no vectors yet: mail, then uploads, then attachments. Nothing is read twice."""
-        rows = self.db.fetch_all("SELECT id FROM messages ORDER BY id DESC")
+        rows = self.db.fetch_all(f"SELECT id FROM messages WHERE {KEPT_MAIL} ORDER BY id DESC")  # noqa: S608
         done = self.stores[MAIL].done_refs(model)
         items = [(MAIL, str(r["id"])) for r in rows if str(r["id"]) not in done]
         done = self.stores[DOCUMENT].done_refs(model)
@@ -390,8 +396,9 @@ class Engine:
         )
         items += [(DOCUMENT, f"h:{r['id']}") for r in rows if f"h:{r['id']}" not in done]
         rows = self.db.fetch_all(
-            "SELECT message, part_index FROM message_parts"
-            " WHERE kind = 'attachment' AND text IS NOT NULL AND text != '' ORDER BY message DESC"
+            "SELECT p.message, p.part_index FROM message_parts p JOIN messages m ON m.id = p.message"
+            " WHERE p.kind = 'attachment' AND p.text IS NOT NULL AND p.text != ''"
+            " AND m.folder_role NOT IN ('junk', 'trash') ORDER BY p.message DESC"
         )
         for row in rows:
             ref = f"m:{row['message']}:{row['part_index']}"
@@ -506,7 +513,9 @@ class Engine:
         """Mail moved or removed since leaves vectors behind, which only take up space."""
         store = self.stores[MAIL]
         model = self.active().id
-        here = {str(r["id"]) for r in self.db.fetch_all("SELECT id FROM messages")}
+        here = {
+            str(r["id"]) for r in self.db.fetch_all(f"SELECT id FROM messages WHERE {KEPT_MAIL}")
+        }  # noqa: S608
         store.forget_many(store.done_refs(model) - here)
 
     def rebuild(self, kind: str) -> None:

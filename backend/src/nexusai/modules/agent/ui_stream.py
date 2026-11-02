@@ -4,10 +4,15 @@ This is the only file that knows either format, so a change in v3 stops here.
 """
 
 import json
+import re
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from nexusai.modules.agent.citations import Citations
 
 MODEL_NODE = "model"
+PARTIAL = re.compile(r"\[(?:m|ma|mai|mail|d|do|doc|(?:mail|doc):[^\]\s]{0,240})?$")
 FOLLOWUPS_OPEN = "<followups>"
 FOLLOWUPS_CLOSE = "</followups>"
 MAX_FOLLOWUPS = 4
@@ -39,8 +44,14 @@ class UiTranslator:
     """One per run. It carries what a stream needs to keep straight across events."""
 
     def __init__(
-        self, *, started: bool, declined_text: str = "", metadata: dict[str, Any] | None = None
+        self,
+        *,
+        started: bool,
+        declined_text: str = "",
+        metadata: dict[str, Any] | None = None,
+        citations: "Citations | None" = None,
     ) -> None:
+        self.citations = citations
         self.started = started
         self.declined_text = declined_text
         self.metadata = metadata or {}
@@ -195,12 +206,29 @@ class UiTranslator:
             size = _held_back(text)
             block["held"] = text[-size:] if size else ""
             text = text[:-size] if size else text
+        text = self._cited(block, text)
         return [{"type": "text-delta", "id": block["id"], "delta": text}] if text else []
+
+    def _cited(self, block: dict[str, Any], text: str) -> str:
+        """Turns markers into numbers, keeping back one that may finish in the next chunk."""
+        if self.citations is None:
+            return text
+        text = block.pop("cite_held", "") + text
+        partial = PARTIAL.search(text)
+        if partial:
+            block["cite_held"] = text[partial.start() :]
+            text = text[: partial.start()]
+        return self.citations.rewrite(text)
 
     def _end_text(self, block: dict[str, Any]) -> list[dict[str, Any]]:
         parts: list[dict[str, Any]] = []
-        if block.get("held"):
-            parts.append({"type": "text-delta", "id": block["id"], "delta": block["held"]})
+        held = self._cited(block, block["held"]) if block.get("held") else ""
+        # Anything still kept back never became a marker, so it's only words, unless it was cut off.
+        leftover = block.pop("cite_held", "")
+        if ":" not in leftover:
+            held += leftover
+        if held:
+            parts.append({"type": "text-delta", "id": block["id"], "delta": held})
         parts.append({"type": "text-end", "id": block["id"]})
         if "hidden" in block:
             parts += followups_part(block["hidden"])

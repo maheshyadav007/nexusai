@@ -3,9 +3,11 @@
 import { useSessions } from "@/ui/client/sessions";
 import { useWaitingCount } from "@/ui/client/work";
 import { CategoryNav } from "./CategoryNav";
+import { FolderNav } from "./FolderNav";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useMailFolders } from "@/ui/client/mail";
 import appConfig from "@/app.config.json";
 import { Icon } from "@/ui/icons";
 import { useSidebar } from "@/ui/client/settings";
@@ -20,6 +22,8 @@ import { arrange } from "./sidebarLayout";
 
 // One highlight that glides to the row you chose.
 const ACTIVE_ROW = "nav-active";
+const MAIL_SECTION = "mail";
+const FOLDERS_COME_BEFORE = new Set(["archive", "trash"]);
 
 function NavRow({ item, active, collapsed, count }: { item: NavItem; active: boolean; collapsed: boolean; count: number | undefined }) {
   const label = t(item.label);
@@ -54,9 +58,17 @@ function useWaitingCounts(): Readonly<Record<string, number>> {
   return { ...(waiting ? { sessions: waiting } : {}), ...(decisions ? { today: decisions } : {}) };
 }
 
+/** Unread conversations in each fixed mail folder, the same as any other folder shows. */
+function useUnreadCounts(): Readonly<Record<string, number>> {
+  const folders = useMailFolders();
+  const found = folders.data?.counts ?? {};
+  return { priority: found.priority ?? 0, "all-mail": found.all ?? 0, sent: found.sent ?? 0, drafts: found.drafts ?? 0, archive: found.archive ?? 0, trash: found.trash ?? 0 };
+}
+
 export function NavSidebar({ counts }: { counts?: Readonly<Record<string, number>> }) {
   const pathname = usePathname();
   const waiting = useWaitingCounts();
+  const unread = useUnreadCounts();
   const layout = useSidebar();
   const sections = arrange(NAV_SECTIONS, layout.data).filter((section) => !section.hidden);
   const [collapsed, setCollapsed] = useState(false);
@@ -83,7 +95,7 @@ export function NavSidebar({ counts }: { counts?: Readonly<Record<string, number
     const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
     return (
       <li key={item.id}>
-        <NavRow item={item} active={active} collapsed={collapsed} count={(counts ?? waiting)[item.id]} />
+        <NavRow item={item} active={active} collapsed={collapsed} count={(counts ?? { ...unread, ...waiting })[item.id]} />
       </li>
     );
   };
@@ -100,15 +112,21 @@ export function NavSidebar({ counts }: { counts?: Readonly<Record<string, number
       <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-5 px-2 pb-4">
           <ul className="flex flex-col gap-px">{NAV_TOP.map(row)}</ul>
-          {sections.map((section) => (
-            <Fragment key={section.id}>
-              <section aria-label={t(section.label)}>
-                {collapsed ? null : <h2 className="mb-1 px-2 text-sm text-ink-muted">{t(section.label)}</h2>}
-                <ul className="flex flex-col gap-px">{section.items.filter((item) => !item.hidden).map(row)}</ul>
+          {sections.map((section) => {
+            const items = section.items.filter((item) => !item.hidden);
+            // Every folder and category sits together, before the two that end the list.
+            const closing = items.findIndex((item) => FOLDERS_COME_BEFORE.has(item.id));
+            const split = section.id === MAIL_SECTION ? (closing < 0 ? items.length : closing) : items.length;
+            return (
+              <section key={section.id} aria-label={t(section.label)}>
+                {collapsed || !section.heading ? null : <h2 className="mb-1 px-2 text-sm text-ink-muted">{t(section.label)}</h2>}
+                <ul className="flex flex-col gap-px">{items.slice(0, split).map(row)}</ul>
+                {section.id === MAIL_SECTION ? <CategoryNav collapsed={collapsed} /> : null}
+                {section.id === MAIL_SECTION ? <FolderNav collapsed={collapsed} /> : null}
+                <ul className="flex flex-col gap-px">{items.slice(split).map(row)}</ul>
               </section>
-              {section.id === "mail" ? <CategoryNav collapsed={collapsed} /> : null}
-            </Fragment>
-          ))}
+            );
+          })}
         </div>
       </ScrollArea>
       <ul className="flex shrink-0 flex-col gap-px border-t border-line-subtle p-2">{NAV_BOTTOM.map(row)}</ul>

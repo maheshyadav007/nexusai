@@ -14,6 +14,7 @@ from langchain.agents.middleware import (
 )
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import HumanMessage, RemoveMessage, trim_messages
+from langchain_core.messages.utils import count_tokens_approximately  # noqa: E402
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 
 from nexusai.contracts.agent import ContextProfile, ContextSettings
@@ -122,16 +123,30 @@ class TrimView(AgentMiddleware):
         return handler(request.override(messages=recent(list(request.messages), self.keep)))
 
 
+def approximate_tokens(messages: list[Any]) -> int:
+    return int(count_tokens_approximately(messages))
+
+
 class AutoCompact(SummarizationMiddleware):
     """Summarizes when long. If that fails the run still goes on, with the older part trimmed."""
 
-    def __init__(self, keep_messages: int, **options: Any) -> None:
+    def __init__(
+        self,
+        keep_messages: int,
+        on_compacted: Callable[[int, int], None] | None = None,
+        **options: Any,
+    ) -> None:
         super().__init__(keep=("messages", keep_messages), **options)
         self.keep_messages = keep_messages
+        self.on_compacted = on_compacted
 
     def before_model(self, state: Any, runtime: Any) -> dict[str, Any] | None:
         try:
-            return super().before_model(state, runtime)
+            update = super().before_model(state, runtime)
+            if update is not None and self.on_compacted is not None:
+                kept = [m for m in update["messages"] if not isinstance(m, RemoveMessage)]
+                self.on_compacted(approximate_tokens(state["messages"]), approximate_tokens(kept))
+            return update
         except Exception as error:
             log.warning("compact_failed", kind=type(error).__name__)
             messages = state["messages"]
@@ -166,11 +181,18 @@ class TaskContent(AgentMiddleware):
         return handler(request.override(messages=messages))
 
 
-def summarizer(model: Any, settings: ContextSettings, *, trigger: Any) -> AutoCompact:
+def summarizer(
+    model: Any,
+    settings: ContextSettings,
+    *,
+    trigger: Any,
+    on_compacted: Callable[[int, int], None] | None = None,
+) -> AutoCompact:
     # Only the rules go with it. The agent's job and tools would just invite it to carry on working.
     writer = model.model_copy(update={"agent": "compress", "layers": model.layers[:1], "specs": []})
     return AutoCompact(
         settings.compact.keep_messages,
+        on_compacted,
         model=writer,
         trigger=trigger,
         summary_prompt=packaged("compress.md"),
@@ -179,12 +201,16 @@ def summarizer(model: Any, settings: ContextSettings, *, trigger: Any) -> AutoCo
 
 
 def middleware(
-    model: Any, settings: ContextSettings, profile: ContextProfile, task: str
+    model: Any,
+    settings: ContextSettings,
+    profile: ContextProfile,
+    task: str,
+    on_compacted: Callable[[int, int], None] | None = None,
 ) -> list[Any]:
     chain: list[Any] = []
     if profile.mode == "auto_compact":
         trigger = ("tokens", settings.compact.trigger_tokens)
-        chain.append(summarizer(model, settings, trigger=trigger))
+        chain.append(summarizer(model, settings, trigger=trigger, on_compacted=on_compacted))
     elif profile.trim_saved_history:
         chain.append(TrimSaved(profile.keep_messages))
     else:

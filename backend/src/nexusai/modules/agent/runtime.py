@@ -21,6 +21,7 @@ from langgraph.types import Command
 from nexusai.contracts.agent import (
     ApprovalList,
     ContextProfile,
+    SessionCompaction,
     SessionRow,
     SessionView,
     ToolApproval,
@@ -30,7 +31,9 @@ from nexusai.kernel.database import Migration, StandardErrorsConnection, connect
 from nexusai.kernel.home import scratch_folder
 from nexusai.kernel.module import CommandError, Context
 from nexusai.modules.agent import (
+    approval_view,
     channel,
+    citations,
     context,
     gateway,
     guard,
@@ -66,6 +69,15 @@ EDIT_MIGRATION = Migration(
     """
 ALTER TABLE agent_turns ADD COLUMN created TEXT;
 ALTER TABLE agent_turns ADD COLUMN checkpoint TEXT;
+""",
+)
+COMPACTIONS_MIGRATION = Migration(
+    "agent_compactions_001",
+    """
+CREATE TABLE session_compactions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, session TEXT NOT NULL, after_turn INTEGER NOT NULL, time TEXT NOT NULL,
+  before_tokens INTEGER NOT NULL, after_tokens INTEGER NOT NULL, how TEXT NOT NULL);
+CREATE INDEX session_compactions_session ON session_compactions (session);
 """,
 )
 RETRY_MIGRATION = Migration(
@@ -265,8 +277,16 @@ class SessionRuntime:
             )
         if assembled:
             assembled[-1]["versions"] = self._versions(session, assembled[-1]["id"])
+        compactions = self.db.fetch_all(
+            "SELECT after_turn, time, before_tokens, after_tokens, how FROM session_compactions"
+            " WHERE session = ? ORDER BY id",
+            (session,),
+        )
         return SessionView(
-            session=row, messages=ui_stream.assemble_messages(assembled), active=active
+            session=row,
+            messages=ui_stream.assemble_messages(assembled),
+            active=active,
+            compactions=[SessionCompaction(**dict(entry)) for entry in compactions],
         )
 
     def active_turn(self, session: str) -> int | None:
@@ -403,6 +423,28 @@ class SessionRuntime:
         self._submit(session, turn, payload, start_from)
         return turn
 
+    def _auto_compacted(self, session: str, before: int, after: int) -> None:
+        turn = self.active_turn(session)
+        if turn is None:
+            return
+        self.note_compaction(session, turn, before, after, "auto")
+        with self.ctx.bus.unit_of_work() as work:
+            work.emit(
+                "session.compacted",
+                {"session": session},
+                source="agent",
+                trace_id=self.ctx.trace_id,
+            )
+
+    def note_compaction(self, session: str, turn: int, before: int, after: int, how: str) -> None:
+        """So the chat can show it happened, where it happened, even after a reload."""
+        with self.db.transaction() as tx:
+            tx.execute(
+                "INSERT INTO session_compactions (session, after_turn, time, before_tokens,"
+                " after_tokens, how) VALUES (?, ?, ?, ?, ?, ?)",
+                (session, turn, datetime.now(UTC).isoformat(), before, after, how),
+            )
+
     def compact(self, session: str) -> bool:
         """When asked, summarizes what's older than the messages kept. The chat shows it all still."""
         row = self.row(session)
@@ -430,7 +472,10 @@ class SessionRuntime:
             update = context.compact_now(model, settings, messages)
             if update is None:
                 return False
+            before = context.approximate_tokens(messages)
             saved = agent.update_state(config, update, as_node=context.COMPACT_AS_NODE)
+            after = context.approximate_tokens(agent.get_state(saved).values.get("messages", []))
+            self.note_compaction(session, last["id"], before, after, "asked")
             with self.db.transaction() as tx:
                 tx.execute(
                     "UPDATE agent_turns SET end_checkpoint = ? WHERE id = ?",
@@ -550,7 +595,13 @@ class SessionRuntime:
                 control,
                 tools.allowed_for(row.agent, origin, bool(turn and turn["target"])),
             ),
-            middleware=context.middleware(model, settings, profile, task),
+            middleware=context.middleware(
+                model,
+                settings,
+                profile,
+                task,
+                on_compacted=lambda before, after: self._auto_compacted(session, before, after),
+            ),
             checkpointer=self.saver,
         )
 
@@ -566,6 +617,7 @@ class SessionRuntime:
         translator = ui_stream.UiTranslator(
             started=started,
             declined_text=tools.DENIED,
+            citations=citations.Citations(self.ctx, turn),
             metadata={
                 "turn": turn,
                 "versions": self._versions(session, turn),
@@ -684,6 +736,8 @@ class SessionRuntime:
         ending: str,
     ) -> None:
         parts = translator.close_open_blocks()
+        if translator.citations is not None:
+            parts += translator.citations.part()
         if ending == "error":
             parts.append({"type": "error", "errorText": error or "Something went wrong."})
         elif ending == "abort":
@@ -1005,6 +1059,7 @@ def approvals_view(db: Any) -> ApprovalList:
                 summary=row["summary"],
                 reason=row["reason"],
                 detail=row["detail"],
+                preview=approval_view.describe(row["tool"], row["summary"], row["detail"]),
                 undoable=bool(row["undoable"]),
                 status=row["status"],
                 time=row["time"],

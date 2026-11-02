@@ -8,6 +8,7 @@ Tone = Literal["formal", "friendly", "brief"]
 Accent = Literal["terracotta", "cobalt", "moss", "plum"]
 DefaultScreen = Literal["today", "inbox"]
 DateFormat = Literal["system", "day-month", "month-day", "iso"]
+RemoteImages = Literal["load", "block"]
 TimeFormat = Literal["system", "12", "24"]
 THEME_ID_PATTERN = r"^[a-z0-9-]+$"
 
@@ -20,6 +21,10 @@ class Settings(BaseModel):
     default_screen: DefaultScreen
     date_format: DateFormat
     time_format: TimeFormat
+    remote_images: RemoteImages
+    sound_muted: bool
+    # Kinds of notification that make no sound.
+    sound_off: list[str]
 
 
 class GetSettings(BaseModel):
@@ -38,6 +43,9 @@ class UpdateSettings(BaseModel):
     default_screen: DefaultScreen | None = None
     date_format: DateFormat | None = None
     time_format: TimeFormat | None = None
+    remote_images: RemoteImages | None = None
+    sound_muted: bool | None = None
+    sound_off: list[str] | None = None
 
 
 class Profile(BaseModel):
@@ -82,4 +90,4 @@ class SidebarChanged(BaseModel):
 
 
 class SettingsChanged(BaseModel):
-    changed: dict[str, str]
+    changed: dict[str, str | bool | list[str]]

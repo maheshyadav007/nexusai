@@ -11,6 +11,8 @@ from nexusai.modules.semantic import downloader
 def isolated_app_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Tests must never read the real pointer file or saved mail accounts."""
     monkeypatch.setenv("NEXUSAI_APP_DATA", str(tmp_path / "app-data"))
+    # Reading past mail is tested on its own. Elsewhere it would add runs tests don't expect.
+    monkeypatch.setenv("NEXUSAI_LEARN_EMAILS", "0")
 
 
 @pytest.fixture(autouse=True)

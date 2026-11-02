@@ -69,9 +69,14 @@ def _sync(ctx: Context, event: AppEvent) -> Line | None:
         "failed": ("Mail couldn't sign in", True),
         "offline": ("Mail can't reach its server", True),
         "syncing": ("Mail is downloading", False),
-        "paused": ("Mail sync stopped", False),
+        "paused": ("Mail sync paused", False),
     }.get(state or "")
     return Line(words[0], link="/connectors", problem=words[1]) if words else None
+
+
+def _history(ctx: Context, event: AppEvent) -> Line:
+    pulled, total = event.payload["pulled"], event.payload["total"]
+    return Line(f"Older mail finished: {pulled:,} of {total:,} here", link="/connectors")
 
 
 def _pst(ctx: Context, event: AppEvent) -> Line | None:
@@ -140,6 +145,7 @@ FEED: dict[str, tuple[str, Describe]] = {
         ),
     ),
     "mail.sent": ("mail", lambda ctx, e: Line("Mail sent")),
+    "mail.historyFinished": ("mail", _history),
     "mail.pulled": (
         "mail",
         lambda ctx, e: Line(f"Found {e.payload['found']:,} new, pulled {e.payload['pulled']:,}"),

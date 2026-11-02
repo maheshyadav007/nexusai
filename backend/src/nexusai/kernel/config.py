@@ -45,6 +45,8 @@ class AgentConfig:
     max_thread_chars: int
     memory_max_chars: int
     triage_token_limit: int
+    learn_emails: int
+    learn_recent_days: int
     command_timeout_seconds: float
     max_tool_output_chars: int
     max_agent_messages_per_run: int
@@ -118,7 +120,14 @@ def load_config(home_dir: Path | None = None) -> Config:
         log_page_size=events["log_page_size"],
         default_settings=raw["settings"],
         mail=MailConfig(**raw["mail"]),
-        agent=AgentConfig(**raw["agent"]),
+        agent=AgentConfig(
+            **{
+                **raw["agent"],
+                "learn_emails": int(
+                    os.environ.get("NEXUSAI_LEARN_EMAILS", raw["agent"]["learn_emails"])
+                ),
+            }
+        ),
         context=raw["context"],
         chatgpt=ChatGptConfig(
             issuer=os.environ.get("NEXUSAI_CHATGPT_ISSUER", chatgpt["issuer"]),

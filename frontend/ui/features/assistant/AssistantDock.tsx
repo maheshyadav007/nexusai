@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import light from "@/ui/theme/themes/nexus-light.json";
 import { useSessions } from "@/ui/client/sessions";
 import { useWaitingCount } from "@/ui/client/work";
@@ -36,9 +36,9 @@ function NewChat() {
     <div className="flex min-h-0 flex-1 flex-col justify-end gap-3 p-3">
       <div className="flex flex-col px-1">
         <p className="mb-2 text-lg font-medium text-ink-primary">{t("chat.new.title")}</p>
-        <ul className="flex flex-col border-t border-line-subtle">
+        <ul className="flex flex-col">
           {STARTERS.map((key) => (
-            <li key={key} className="border-b border-line-subtle">
+            <li key={key}>
               <Pressable onClick={() => send(t(key))} className="focus-ring flex w-full items-center gap-2 py-2 text-left text-md text-ink-secondary transition-colors duration-fast hover:text-ink-primary">
                 <Icon name="followUp" className="h-3 w-3 shrink-0 text-ink-muted" />
                 {t(key)}
@@ -89,16 +89,41 @@ function Panel() {
   const chats = [...(sessions.data?.sessions ?? [])].sort((a, b) => Number(b.id === MAIL_AGENT) - Number(a.id === MAIL_AGENT));
   const options = chats.map((row) => ({ value: row.id, label: row.status === "waiting" ? t("chat.waitingLabel", { title: row.title }) : row.title }));
   // Only one panel ever exists, so pinning moves it instead of restarting the conversation.
-  const attached = assistant.pinned && width >= SMALL_SCREEN;
+  // Out from the edge it sits against that edge, so the pointer that called it is already on it.
+  const attached = (assistant.pinned || assistant.peeking) && width >= SMALL_SCREEN;
   const place = attached ? { top: 0, right: 0, bottom: 0, borderRadius: 0 } : { top: Math.max(GAP, height - GAP - FLOATING_HEIGHT), right: GAP, bottom: GAP, borderRadius: GAP - 2 };
+  // Out from the edge, it goes back when the person's done with it, unless they're mid-thought.
+  // Its input focuses itself on opening, so focus only counts once they've used it.
+  const used = useRef(false);
+  const panel = useRef<HTMLElement>(null);
+  const { peeking, setOpen } = assistant;
+  useEffect(() => {
+    if (!peeking) return;
+    // The pointer that called it never crossed into it, so the panel's own leave event can't be trusted.
+    const moved = (event: PointerEvent) => {
+      const node = panel.current;
+      if (!node || event.clientX >= node.getBoundingClientRect().left || node.querySelector("textarea")?.value) return;
+      if (!used.current || !node.contains(document.activeElement)) setOpen(false);
+    };
+    window.addEventListener("pointermove", moved);
+    return () => window.removeEventListener("pointermove", moved);
+  }, [peeking, setOpen]);
   return (
     <SlidePanel
       attached={attached}
       place={place}
+      ref={panel}
+      onPointerDown={() => {
+        used.current = true;
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && assistant.peeking) assistant.setOpen(false);
+        else used.current = true;
+      }}
       aria-label={t("chat.title")}
       data-testid="assistant-dock"
-      data-pinned={attached}
-      className={`fixed z-40 flex w-dock max-w-full flex-col overflow-hidden border border-line-subtle bg-surface-page ${attached ? "border-y-0 border-r-0" : "shadow-overlay"}`}
+      data-pinned={assistant.pinned && attached}
+      className={`fixed z-40 flex w-dock max-w-full flex-col overflow-hidden border border-line-subtle bg-surface-page ${attached ? `border-y-0 border-r-0 ${assistant.peeking ? "shadow-overlay" : ""}` : "shadow-overlay"}`}
     >
       <header className="flex h-topbar shrink-0 items-center gap-1 border-b border-line-subtle px-2">
         <div className="min-w-0 flex-1">
@@ -136,6 +161,7 @@ export function AssistantDock() {
   const pathname = usePathname();
   const sessions = useSessions("");
   const waiting = useWaitingCount();
+  const { width } = useWindowSize();
   const running = sessions.data?.running ?? 0;
   // The session page already is this conversation, and two live views of one chat would fight.
   if (pathname.startsWith("/agent/sessions/")) return null;
@@ -143,6 +169,8 @@ export function AssistantDock() {
     <Presence>
       {assistant.open ? (
         <Panel key="panel" />
+      ) : assistant.tucked && width >= SMALL_SCREEN ? (
+        <Pressable key="aura" data-testid="assistant-aura" data-waiting={waiting > 0} aria-label={t("chat.openFromEdge")} onMouseEnter={() => assistant.setOpen(true)} onClick={() => assistant.setOpen(true)} className="assistant-aura focus-ring fixed bottom-0 right-0 top-0 z-40 w-aura" />
       ) : (
         <RiseButton key="pill" onClick={() => assistant.setOpen(true)} data-testid="assistant-pill" className="focus-ring fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full border border-line-subtle bg-surface-raised px-4 py-2 text-md font-medium text-ink-primary shadow-overlay transition-colors duration-fast hover:bg-surface-sunken">
           <Icon name="chat" />

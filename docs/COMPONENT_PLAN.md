@@ -84,7 +84,7 @@ Copying is allowed where licenses permit, so we move faster. Everything copied i
 |---|---|---|
 | **Radix UI primitives** | Behaviour and accessibility of Dialog, Menu, Popover, Tabs, Tooltip, Select, Switch | MIT. Unstyled, so all looks come from our tokens |
 | **Beautiful UI** | Main source for agent screens. 21 primitives, all listed below | MIT. Keep notice. Copy-paste; stack not stated, so check each on import |
-| **AICSS free components** | Thinking and reasoning, inline citations, code and data blocks | MIT, public packages only. Snippets are self-contained CSS, so rewrite to tokens |
+| **AICSS free components** | Thinking and reasoning, code and data blocks. Inline Citations isn't in its public MIT package, so it isn't used: see `SourcesPill`, after Beautiful UI's Streaming Text | MIT, public packages only. Snippets are self-contained CSS, so rewrite to tokens |
 | **Amicro** | Micro-interactions | MIT per earlier review; page wasn't reachable this time, so recheck on first use |
 | **Our own code** | Mail, threads, panels, data guard screens, and anything specific to NexusAI | |
 

@@ -14,6 +14,8 @@ from nexusai.contracts.mail import (
     CategoryList,
     CategoryName,
     CategorySaved,
+    ChangeThreadCategory,
+    ChangeThreadFolder,
     CheckDraft,
     ConnectionResult,
     DecideCategory,
@@ -23,6 +25,7 @@ from nexusai.contracts.mail import (
     GetMailAccounts,
     GetMailPresets,
     GetMailStatus,
+    GetMoreMail,
     GetPstImports,
     GetPstSearch,
     GetRules,
@@ -30,13 +33,16 @@ from nexusai.contracts.mail import (
     GetThread,
     ListCategories,
     ListDrafts,
+    ListMailFolders,
     ListThreads,
     MailAccounts,
     MailAccountView,
     MailCategory,
     MailChanged,
     MailDone,
+    MailFolder,
     MailFolderCount,
+    MailFolders,
     MailPreset,
     MailPresets,
     MailProfile,
@@ -70,12 +76,14 @@ from nexusai.contracts.mail import (
     SendDraft,
     SendProblem,
     ServerProbe,
-    SetPullLimit,
+    SetNeverDelete,
+    SetSenderImages,
     SetThreadCategory,
     SetThreadFlag,
     SetThreadRead,
     SetThreadStatus,
     StartPstUpload,
+    StopHistory,
     TestMailAccount,
     ThreadList,
     ThreadUpdated,
@@ -84,8 +92,9 @@ from nexusai.contracts.mail import (
 )
 from nexusai.kernel.module import CommandError, Context, Module
 from nexusai.modules.mail import accounts, pst, pst_search, pst_upload, rules, send, store
-from nexusai.modules.mail.imap import test_imap
-from nexusai.modules.mail.parse import normalize_subject
+from nexusai.modules.mail.imap import DELETING_ROLES, Folder, distinct_total, test_imap
+from nexusai.modules.mail.parse import normalize_subject, parse_message
+from nexusai.modules.mail.rules import own_domain_of
 from nexusai.modules.mail.sync import MailSync
 from nexusai.modules.semantic import module as semantic
 
@@ -93,7 +102,18 @@ log = structlog.get_logger()
 ATTACHED_WORDS = re.compile(r"\b(attached|attachment|enclosed|첨부)\b|첨부", re.I)
 mail_module = Module(name="mail", migrations=[*store.MIGRATIONS, pst.MIGRATION])
 
+# Filing that only exists on this computer, and old mail read from an archive file.
+LOCAL_PREFIXES = ("local:", "pst:")
+# Removing the last folder is what Delete is for.
+MINIMUM_TO_REMOVE = 2
+# A count far larger than any folder, for "everything in this one".
+FOLDER_EVERYTHING = 1_000_000_000
+
+KINDS_SORTED = "mail_kinds_sorted_001"
+KINDS_BATCH = 200
+
 _sync: MailSync | None = None
+_closing = threading.Event()
 _sync_lock = threading.Lock()
 
 
@@ -118,11 +138,65 @@ def _start_sync(ctx: Context) -> None:
         settings = store.sync_settings(ctx.bus.db, active)
         if settings is None or settings["paused"]:
             return
-        _sync = MailSync(ctx, active, profile, password, settings["pull_limit"])
+        _sync = MailSync(ctx, active, profile, password)
         _sync.start()
 
 
+def _sort_kinds_once(ctx: Context) -> None:
+    """Sorts mail filed before Promotions, Updates and Forums existed, a little at a time."""
+    db = ctx.bus.db
+    if db.fetch_all("SELECT 1 FROM migrations WHERE id = ?", (KINDS_SORTED,)):
+        return
+    last = 0
+    home_rules = rules.load_rules(ctx.config.home)
+    changed = False
+    while not _closing.is_set():
+        rows = db.fetch_all(
+            "SELECT m.id, m.thread_id, m.account FROM messages m"
+            " WHERE m.rule IS NOT NULL AND m.id > ? ORDER BY m.id LIMIT ?",
+            (last, KINDS_BATCH),
+        )
+        if not rows:
+            with db.transaction() as tx:
+                tx.execute("INSERT INTO migrations (id) VALUES (?)", (KINDS_SORTED,))
+            break
+        last = rows[-1]["id"]
+        with db.transaction() as tx:
+            for row in rows:
+                raw = store.raw_of(db, row["id"])
+                if raw is None:
+                    continue
+                parsed = parse_message(raw)
+                _, profiles = accounts.read_accounts(ctx.config)
+                profile = profiles.get(row["account"])
+                domain = own_domain_of(profile.address or profile.auth.user) if profile else None
+                match = rules.evaluate(parsed, home_rules, domain)
+                if match is None:
+                    continue
+                tx.execute(
+                    "UPDATE messages SET rule = ?, why = ? WHERE id = ?",
+                    (match.name, match.why, row["id"]),
+                )
+                if match.actions.category:
+                    tx.execute(
+                        "UPDATE threads SET category = ?, why = ? WHERE id = ?"
+                        " AND category_source = 'rule'",
+                        (match.actions.category, match.why, row["thread_id"]),
+                    )
+                    changed = True
+    if changed:
+        with ctx.bus.unit_of_work() as work:
+            work.emit(
+                "mail.changed",
+                MailChanged(threads=0, reason="kinds").model_dump(),
+                source="mail",
+                trace_id=ctx.trace_id,
+            )
+
+
 def _startup(ctx: Context) -> None:
+    _closing.clear()
+    threading.Thread(target=_sort_kinds_once, args=(ctx,), daemon=True, name="mail-kinds").start()
     _start_sync(ctx)
     # An import that was running when the app closed carries on from its saved position.
     pst.runner.kick(ctx)
@@ -130,6 +204,7 @@ def _startup(ctx: Context) -> None:
 
 def _shutdown() -> None:
     global _sync
+    _closing.set()
     with _sync_lock:
         if _sync:
             _sync.stop()
@@ -234,12 +309,17 @@ def test_account(command: TestMailAccount, ctx: Context) -> MailTestResult:
     if not password:
         raise CommandError("mail.no_password", "Enter the password first.", 422)
     timeout = ctx.config.mail.connect_timeout_seconds
-    counts: dict[str, int] = {}
+    counts: dict[Folder, int] = {}
     imap_problem = test_imap(command.profile, password, timeout, counts)
     smtp_problem = send.test_smtp(command.profile, password, timeout)
+    total = distinct_total(counts)
     return MailTestResult(
-        counts=[MailFolderCount(role=role, messages=count) for role, count in counts.items()],
-        suggested_pull=min(ctx.config.mail.suggested_pull, sum(counts.values())),
+        counts=[
+            MailFolderCount(name=folder.name, role=folder.role, messages=count)
+            for folder, count in counts.items()
+        ],
+        total=total,
+        suggested_pull=min(ctx.config.mail.suggested_pull, total),
         ok=not imap_problem and not smtp_problem,
         results=[
             ConnectionResult(
@@ -261,11 +341,12 @@ def save_account(command: SaveMailAccount, ctx: Context) -> MailAccounts:
     if command.password:
         accounts.set_password(ctx.config, command.profile.auth.user, command.password)
     accounts.write_accounts(ctx.config, command.name if command.make_active else active, profiles)
-    # Connecting is asking for mail, so an account stopped earlier starts again.
+    # Connecting is asking for mail, so an account paused earlier starts again. How much history
+    # it brings is only decided once. Stop and Get more change that afterwards.
     with ctx.bus.db.transaction() as tx:
         tx.execute(
-            "INSERT INTO mail_sync_settings (account, pull_limit) VALUES (?, ?)"
-            " ON CONFLICT (account) DO UPDATE SET pull_limit = excluded.pull_limit, paused = 0",
+            "INSERT INTO mail_sync_settings (account, history_budget) VALUES (?, ?)"
+            " ON CONFLICT (account) DO UPDATE SET paused = 0",
             (command.name, command.pull_limit),
         )
     _start_sync(ctx)
@@ -276,20 +357,111 @@ def save_account(command: SaveMailAccount, ctx: Context) -> MailAccounts:
     return _accounts_view(ctx)
 
 
-@mail_module.command("mail.sync.limit")
-def set_pull_limit(command: SetPullLimit, ctx: Context) -> MailStatus:
-    """Takes effect from now. Mail already here stays, and raising it carries on downloading."""
+def stop_history(ctx: Context) -> None:
+    """Enough older mail. New mail keeps coming, so this also ends a pause."""
     account = _account(ctx)
     with ctx.bus.db.transaction() as tx:
         tx.execute(
-            "INSERT INTO mail_sync_settings (account, pull_limit) VALUES (?, ?)"
-            " ON CONFLICT (account) DO UPDATE SET pull_limit = excluded.pull_limit",
-            (account, command.pull_limit),
+            "INSERT INTO mail_sync_settings (account, history_budget) VALUES (?, 0)"
+            " ON CONFLICT (account) DO UPDATE SET history_budget = 0, paused = 0",
+            (account,),
+        )
+    if _sync is None:
+        _start_sync(ctx)
+    _wake()
+
+
+def get_more(ctx: Context, count: int | None, folder: str | None = None) -> None:
+    """More older mail, from one folder or from all of them in turn. Empty means all of it."""
+    account = _account(ctx)
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO mail_sync_settings (account) VALUES (?) ON CONFLICT DO NOTHING", (account,)
+        )
+        if folder:
+            tx.execute(
+                "UPDATE mail_folders SET history_more = history_more + ?"
+                " WHERE account = ? AND name = ?",
+                (count or FOLDER_EVERYTHING, account, folder),
+            )
+        elif count is None:
+            tx.execute(
+                "UPDATE mail_sync_settings SET history_budget = NULL WHERE account = ?", (account,)
+            )
+        else:
+            tx.execute(
+                "UPDATE mail_sync_settings SET history_budget = COALESCE(history_budget, 0) + ?"
+                " WHERE account = ?",
+                (count, account),
+            )
+        tx.execute(
+            "UPDATE mail_sync_settings SET history_finished = NULL, paused = 0 WHERE account = ?",
+            (account,),
+        )
+    if _sync is None:
+        _start_sync(ctx)
+    _wake()
+
+
+@mail_module.command("mail.history.stop")
+def history_stop(command: StopHistory, ctx: Context) -> MailStatus:
+    stop_history(ctx)
+    return cast(MailStatus, get_status(GetMailStatus(), ctx))
+
+
+@mail_module.command("mail.history.more")
+def history_more(command: GetMoreMail, ctx: Context) -> MailStatus:
+    get_more(ctx, command.count, command.folder)
+    return cast(MailStatus, get_status(GetMailStatus(), ctx))
+
+
+@mail_module.command("mail.sync.neverDelete")
+def set_never_delete(command: SetNeverDelete, ctx: Context) -> MailStatus:
+    """Applies from the next connection, so the running one is restarted to pick it up."""
+    account = _account(ctx)
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "UPDATE mail_sync_settings SET never_delete = ? WHERE account = ?",
+            (int(command.value), account),
         )
     _start_sync(ctx)
-    status = cast(MailStatus, get_status(GetMailStatus(), ctx))
-    _announce(ctx, status.state)
-    return status
+    return cast(MailStatus, get_status(GetMailStatus(), ctx))
+
+
+@mail_module.query("mail.folders")
+def mail_folders(query: ListMailFolders, ctx: Context) -> MailFolders:
+    account = accounts.current_account(ctx.config)
+    db = ctx.bus.db
+    tally = {
+        row["folder"]: (row["n"], row["unread"] or 0)
+        for row in db.fetch_all(
+            "SELECT l.folder, COUNT(*) AS n, COUNT(DISTINCT CASE WHEN m.read = 0 THEN m.thread_id END)"
+            " AS unread FROM message_locations l JOIN messages m ON m.id = l.message"
+            " WHERE l.account = ? GROUP BY l.folder",
+            (account,),
+        )
+    }
+    rows = db.fetch_all(
+        "SELECT name, role, server_count FROM mail_folders WHERE account = ? ORDER BY name COLLATE NOCASE",
+        (account,),
+    )
+    names = {row["name"] for row in rows}
+    found: list[MailFolder] = []
+    for row in rows:
+        parent, _, leaf = str(row["name"]).rpartition("/")
+        here, unread = tally.get(row["name"], (0, 0))
+        found.append(
+            MailFolder(
+                name=row["name"],
+                label=leaf or row["name"],
+                parent=parent if parent in names else None,
+                role=row["role"],
+                on_server=row["server_count"],
+                here=here,
+                unread=unread,
+            )
+        )
+    return MailFolders(folders=found, counts=store.unread_counts(db, account))
 
 
 @mail_module.command("mail.accounts.remove")
@@ -321,23 +493,25 @@ def get_status(query: GetMailStatus, ctx: Context) -> MailStatus:
     settings = store.sync_settings(ctx.bus.db, active) if active else None
     # Mail brought in from a PST isn't part of what's on the server.
     pulled = ctx.bus.db.fetch_all(
-        "SELECT COUNT(*) AS n FROM messages WHERE account = ?"
-        " AND folder IN (SELECT name FROM mail_folders WHERE account = ?)",
-        (active, active),
+        "SELECT COUNT(DISTINCT message) AS n FROM message_locations"
+        " WHERE account = ? AND folder NOT LIKE 'pst:%'",
+        (active,),
     )[0]["n"]
+    kept: dict[str, Any] = (
+        {
+            "history_budget": settings["history_budget"],
+            "history_finished": bool(settings["history_finished"]),
+            "never_delete": bool(settings["never_delete"]),
+            "server_total": settings["server_total"],
+            "last_check": settings["last_check"],
+            "last_found": settings["last_found"],
+            "last_pulled": settings["last_pulled"],
+            "last_found_at": settings["last_found_at"],
+        }
+        if settings
+        else {}
+    )
     if _sync is None:
-        kept = (
-            {
-                "pull_limit": settings["pull_limit"],
-                "server_total": settings["server_total"],
-                "last_check": settings["last_check"],
-                "last_found": settings["last_found"],
-                "last_pulled": settings["last_pulled"],
-                "last_found_at": settings["last_found_at"],
-            }
-            if settings
-            else {}
-        )
         state = "paused" if settings and settings["paused"] else "off"
         return MailStatus(
             account=active,
@@ -347,23 +521,26 @@ def get_status(query: GetMailStatus, ctx: Context) -> MailStatus:
             check_every_seconds=every,
             **kept,
         )
+    live = _sync.status
     return MailStatus(
+        **{
+            **kept,
+            "server_total": live.server_total or kept.get("server_total", 0),
+            "last_check": live.last_check,
+            "last_found": live.last_found,
+            "last_pulled": live.last_pulled,
+            "last_found_at": live.last_found_at,
+        },
         account=active,
-        state=_sync.status.state,
-        message=_sync.status.message,
+        state=live.state,
+        message=live.message,
         messages=count,
         pulled=pulled,
-        backfill_remaining=_sync.status.backfill_remaining,
-        total=_sync.status.total,
-        done=_sync.status.done,
-        pull_limit=_sync.limit,
-        server_total=_sync.status.server_total,
+        backfill_remaining=live.backfill_remaining,
+        total=live.total,
+        done=live.done,
         check_every_seconds=every,
-        last_check=_sync.status.last_check,
-        next_check=_sync.status.next_check,
-        last_found=_sync.status.last_found,
-        last_pulled=_sync.status.last_pulled,
-        last_found_at=_sync.status.last_found_at,
+        next_check=live.next_check,
     )
 
 
@@ -384,13 +561,39 @@ def mail_presets(query: GetMailPresets, ctx: Context) -> MailPresets:
 def list_threads(query: ListThreads, ctx: Context) -> ThreadList:
     account = accounts.current_account(ctx.config)
     return store.list_threads(
-        ctx.bus.db, account, query.folder, query.category, query.before, query.limit
+        ctx.bus.db, account, query.folder, query.category, query.before, query.limit, query.location
+    )
+
+
+@mail_module.command("mail.images.sender")
+def set_sender_images(command: SetSenderImages, ctx: Context) -> MailDone:
+    """Always load this sender's images, or never."""
+    with ctx.bus.unit_of_work() as work:
+        work.tx.execute(
+            "INSERT INTO mail_image_senders (address, allow) VALUES (?, ?)"
+            " ON CONFLICT (address) DO UPDATE SET allow = excluded.allow",
+            (command.address.lower(), int(command.allow)),
+        )
+        work.emit(
+            "mail.changed",
+            MailChanged(threads=0, reason="images").model_dump(),
+            source="mail",
+            trace_id=ctx.trace_id,
+        )
+    return MailDone()
+
+
+def _remote_images(ctx: Context) -> str:
+    """The person's setting, or the default for this install, which a company can set to block."""
+    rows = ctx.bus.db.fetch_all("SELECT value FROM settings WHERE key = 'remote_images'")
+    return str(
+        json.loads(rows[0]["value"]) if rows else ctx.config.default_settings["remote_images"]
     )
 
 
 @mail_module.query("thread.get")
 def get_thread(query: GetThread, ctx: Context) -> ThreadView:
-    view = store.thread_view(ctx.bus.db, query.id)
+    view = store.thread_view(ctx.bus.db, query.id, _remote_images(ctx))
     if view is None:
         raise CommandError("thread.not_found", "That conversation no longer exists.", 404)
     # Older mail's attachments get read the first time someone opens them.
@@ -426,6 +629,15 @@ def _outbox(work_tx: object, account: str, op: str, payload: dict[str, object]) 
     )
 
 
+def _on_server(tx: Any, message: object) -> list[Any]:
+    """Where this email really is. Local filing and PST archives aren't folders on the server."""
+    return [
+        row
+        for row in store.locations_of(tx, int(str(message)))
+        if not str(row["folder"]).startswith(LOCAL_PREFIXES)
+    ]
+
+
 def _thread_messages(ctx: Context, thread: int) -> list[dict[str, object]]:
     rows = ctx.bus.db.fetch_all("SELECT * FROM messages WHERE thread_id = ?", (thread,))
     if not rows:
@@ -457,17 +669,19 @@ def set_read(command: SetThreadRead, ctx: Context) -> MailDone:
                 work.tx.execute(
                     "UPDATE messages SET read = ? WHERE id = ?", (int(command.read), message["id"])
                 )
-                _outbox(
-                    work.tx,
-                    str(message["account"]),
-                    "read",
-                    {
-                        "message": message["id"],
-                        "folder": message["folder"],
-                        "uid": message["uid"],
-                        "value": command.read,
-                    },
-                )
+                # Every folder on the server, since a company server keeps each copy's own flags.
+                for place in _on_server(work.tx, message["id"]):
+                    _outbox(
+                        work.tx,
+                        str(message["account"]),
+                        "read",
+                        {
+                            "message": message["id"],
+                            "folder": place["folder"],
+                            "uid": place["uid"],
+                            "value": command.read,
+                        },
+                    )
         store.refresh_thread(work.tx, command.id)
         _changed(work, ctx, command.id, "read", command.read)
     _wake()
@@ -486,17 +700,18 @@ def set_flag(command: SetThreadFlag, ctx: Context) -> MailDone:
                 "UPDATE messages SET flagged = ? WHERE id = ?",
                 (int(command.flagged), message["id"]),
             )
-            _outbox(
-                work.tx,
-                str(message["account"]),
-                "flag",
-                {
-                    "message": message["id"],
-                    "folder": message["folder"],
-                    "uid": message["uid"],
-                    "value": command.flagged,
-                },
-            )
+            for place in _on_server(work.tx, message["id"]):
+                _outbox(
+                    work.tx,
+                    str(message["account"]),
+                    "flag",
+                    {
+                        "message": message["id"],
+                        "folder": place["folder"],
+                        "uid": place["uid"],
+                        "value": command.flagged,
+                    },
+                )
         store.refresh_thread(work.tx, command.id)
         _changed(work, ctx, command.id, "flagged", command.flagged)
     _wake()
@@ -510,21 +725,141 @@ def move_thread(command: MoveThread, ctx: Context) -> MailDone:
         for message in messages:
             if message["folder_role"] != "inbox":
                 continue
+            account = str(message["account"])
+            settings = store.sync_settings(ctx.bus.db, account)
+            refused = command.to in DELETING_ROLES and (not settings or settings["never_delete"])
+            # Refused moves would only ever be refused again, so they stay on this computer.
+            if not refused:
+                _outbox(
+                    work.tx,
+                    account,
+                    "move",
+                    {
+                        "message": message["id"],
+                        "folder": message["folder"],
+                        "uid": message["uid"],
+                        "role": command.to,
+                    },
+                )
+            # Filed here straight away. Mail not otherwise downloaded would never come back.
+            store.add_location(
+                work.tx,
+                int(str(message["id"])),
+                account,
+                f"local:{command.to}",
+                command.to,
+                int(str(message["id"])),
+            )
+            store.remove_location(
+                work.tx, account, str(message["folder"]), int(str(message["uid"]))
+            )
+        _changed(work, ctx, command.id, "folder", command.to)
+    _wake()
+    return MailDone()
+
+
+@mail_module.command("thread.addToFolder")
+def add_to_folder(command: ChangeThreadFolder, ctx: Context) -> MailDone:
+    """Copies on the server. The next check sees the copy and files it, so this needs no guess."""
+    messages = _thread_messages(ctx, command.id)
+    with ctx.bus.unit_of_work() as work:
+        for message in messages:
+            places = _on_server(work.tx, message["id"])
+            if not places or any(place["folder"] == command.folder for place in places):
+                continue
             _outbox(
                 work.tx,
                 str(message["account"]),
-                "move",
+                "copy",
                 {
                     "message": message["id"],
-                    "folder": message["folder"],
-                    "uid": message["uid"],
-                    "role": command.to,
+                    "folder": places[0]["folder"],
+                    "uid": places[0]["uid"],
+                    "target": command.folder,
                 },
             )
-            # It returns from the server with its new folder's UID on the next sync.
-            store.remove_message(work.tx, int(str(message["id"])))
-        _changed(work, ctx, command.id, "folder", command.to)
+        _changed(work, ctx, command.id, "folder", command.folder)
     _wake()
+    return MailDone()
+
+
+@mail_module.command("thread.removeFromFolder")
+def remove_from_folder(command: ChangeThreadFolder, ctx: Context) -> MailDone:
+    """Out of this folder and no other. An email can't lose its last folder this way."""
+    messages = _thread_messages(ctx, command.id)
+    with ctx.bus.unit_of_work() as work:
+        for message in messages:
+            places = store.locations_of(work.tx, int(str(message["id"])))
+            here = next((p for p in places if p["folder"] == command.folder), None)
+            if here is None or len(places) < MINIMUM_TO_REMOVE:
+                continue
+            _outbox(
+                work.tx,
+                str(message["account"]),
+                "remove_from",
+                {
+                    "message": message["id"],
+                    "folder": here["folder"],
+                    "uid": here["uid"],
+                    "role": here["role"],
+                },
+            )
+            store.remove_location(work.tx, str(message["account"]), here["folder"], here["uid"])
+        _changed(work, ctx, command.id, "folder", command.folder)
+    _wake()
+    return MailDone()
+
+
+@mail_module.command("thread.addCategory")
+def add_category(command: ChangeThreadCategory, ctx: Context) -> MailDone:
+    """Another category for this conversation. The first one set is still what Priority goes by."""
+    rows = ctx.bus.db.fetch_all(
+        "SELECT category, extra_categories FROM threads WHERE id = ?", (command.id,)
+    )
+    if not rows:
+        raise CommandError("thread.not_found", "That conversation no longer exists.", 404)
+    with ctx.bus.unit_of_work() as work:
+        if rows[0]["category"] is None:
+            work.tx.execute(
+                "UPDATE threads SET category = ?, category_source = 'user', why = ? WHERE id = ?",
+                (command.name, "You chose this category", command.id),
+            )
+        elif command.name != rows[0]["category"]:
+            extras = {*json.loads(rows[0]["extra_categories"]), command.name}
+            work.tx.execute(
+                "UPDATE threads SET extra_categories = ? WHERE id = ?",
+                (json.dumps(sorted(extras)), command.id),
+            )
+        _changed(work, ctx, command.id, "category", command.name)
+    return MailDone()
+
+
+@mail_module.command("thread.removeCategory")
+def remove_thread_category(command: ChangeThreadCategory, ctx: Context) -> MailDone:
+    rows = ctx.bus.db.fetch_all(
+        "SELECT category, extra_categories FROM threads WHERE id = ?", (command.id,)
+    )
+    if not rows:
+        raise CommandError("thread.not_found", "That conversation no longer exists.", 404)
+    extras = [name for name in json.loads(rows[0]["extra_categories"]) if name != command.name]
+    main = rows[0]["category"]
+    with ctx.bus.unit_of_work() as work:
+        # The next one along takes over as the main category.
+        if main == command.name:
+            main = extras.pop(0) if extras else None
+            work.tx.execute(
+                "UPDATE threads SET category = ?, category_source = ?, why = ? WHERE id = ?",
+                (
+                    main,
+                    "user" if main else None,
+                    "You chose this category" if main else None,
+                    command.id,
+                ),
+            )
+        work.tx.execute(
+            "UPDATE threads SET extra_categories = ? WHERE id = ?", (json.dumps(extras), command.id)
+        )
+        _changed(work, ctx, command.id, "category", command.name)
     return MailDone()
 
 
@@ -596,16 +931,34 @@ SUGGESTED, DECLINED = 1, 2
 UNORDERED = 1_000_000
 
 
+def _rename_extras(tx: Any, names: set[str], into: str | None) -> None:
+    """The same change for conversations that have this as one of several categories."""
+    for row in tx.execute(
+        "SELECT id, category, extra_categories FROM threads WHERE extra_categories != '[]'"
+    ).fetchall():
+        current = json.loads(row["extra_categories"])
+        if not names & set(current):
+            continue
+        replaced = {into if name in names else name for name in current} - {None, row["category"]}
+        tx.execute(
+            "UPDATE threads SET extra_categories = ? WHERE id = ?",
+            (json.dumps(sorted(replaced)), row["id"]),
+        )
+
+
 def category_rows(ctx: Context) -> list[MailCategory]:
     db = ctx.bus.db
     account = accounts.current_account(ctx.config)
     counts = {
-        row["category"]: (row["n"], row["unread"])
+        row["name"]: (row["n"], row["unread"])
         for row in db.fetch_all(
-            "SELECT category, COUNT(*) AS n, SUM(unread_count > 0) AS unread FROM threads"
-            " WHERE account = ? AND category IS NOT NULL AND (in_inbox = 1 OR in_archive = 1)"
-            " GROUP BY category",
-            (account,),
+            "SELECT name, COUNT(*) AS n, SUM(unread_count > 0) AS unread FROM ("
+            " SELECT category AS name, unread_count FROM threads WHERE account = ?"
+            " AND category IS NOT NULL AND (in_inbox = 1 OR in_archive = 1)"
+            " UNION ALL SELECT e.value, t.unread_count FROM threads t, json_each(t.extra_categories) e"
+            " WHERE t.account = ? AND t.extra_categories != '[]' AND (t.in_inbox = 1 OR t.in_archive = 1)"
+            ") GROUP BY name",
+            (account, account),
         )
     }
     found = []
@@ -785,6 +1138,7 @@ def update_category(command: UpdateCategory, ctx: Context) -> CategoryList:
             (new_name, int(in_priority), sender, subject, now, command.name),
         )
         tx.execute("UPDATE threads SET category = ? WHERE category = ?", (new_name, command.name))
+        _rename_extras(tx, {command.name}, new_name)
     if new_name != command.name:
         # Rules the person wrote themselves may file into it too.
         def renamed(existing: list[MailRule]) -> list[MailRule]:
@@ -818,6 +1172,7 @@ def merge_categories(command: MergeCategories, ctx: Context) -> CategoryList:
         )
         for name in others:
             tx.execute("UPDATE threads SET category = ? WHERE category = ?", (command.into, name))
+            _rename_extras(tx, {name}, command.into)
             tx.execute("DELETE FROM mail_categories WHERE name = ?", (name,))
 
     def renamed(existing: list[MailRule]) -> list[MailRule]:
@@ -853,6 +1208,7 @@ def remove_category(command: CategoryName, ctx: Context) -> CategoryList:
             "UPDATE threads SET category = NULL, category_source = NULL WHERE category = ?",
             (command.name,),
         )
+        _rename_extras(tx, {command.name}, None)
     _apply_category_rule(ctx, command.name, None, None)
     _categories_changed(ctx)
     return CategoryList(categories=category_rows(ctx))
@@ -938,9 +1294,12 @@ def save_draft(command: Draft, ctx: Context) -> Draft:
         raw = send.build_message(
             saved, profile, _sender_name(ctx), in_reply_to, references, draft_marker=marker
         ).as_bytes()
-        # The server keeps one copy of each draft: the old one goes before the new one lands.
-        _outbox(work.tx, active, "delete_drafts", {"draft": marker})
-        _outbox(work.tx, active, "append", {"role": "drafts", "raw": raw.hex()})
+        # The server keeps one copy of each draft: the old one goes before the new one lands. With
+        # deleting refused, old copies would pile up there, so drafts stay on this computer.
+        settings = store.sync_settings(ctx.bus.db, active)
+        if settings and not settings["never_delete"]:
+            _outbox(work.tx, active, "delete_drafts", {"draft": marker})
+            _outbox(work.tx, active, "append", {"role": "drafts", "raw": raw.hex()})
         work.emit("drafts.changed", {"id": saved.id}, source="mail", trace_id=ctx.trace_id)
     _wake()
     return saved

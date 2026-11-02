@@ -1,46 +1,156 @@
 {
   "top": [
-    { "id": "today", "labelKey": "nav.today", "icon": "today", "href": "/today" },
-    { "id": "cockpit", "labelKey": "nav.cockpit", "icon": "cockpit", "href": "/cockpit" },
-    { "id": "schedules", "labelKey": "nav.schedules", "icon": "schedules", "href": "/agent/schedules" },
-    { "id": "connectors", "labelKey": "nav.connectors", "icon": "connectors", "href": "/connectors" },
-    { "id": "documents", "labelKey": "nav.documents", "icon": "documents", "href": "/documents" }
+    {
+      "id": "today",
+      "labelKey": "nav.today",
+      "icon": "today",
+      "href": "/today"
+    }
   ],
   "sections": [
     {
       "id": "mail",
       "labelKey": "nav.mail",
+      "heading": false,
       "items": [
-        { "id": "priority", "labelKey": "nav.priority", "icon": "priority", "href": "/mail/priority" },
-        { "id": "all-mail", "labelKey": "nav.allMail", "icon": "inbox", "href": "/mail/all" },
-        { "id": "sent", "labelKey": "nav.sent", "icon": "sent", "href": "/mail/sent" },
-        { "id": "drafts", "labelKey": "nav.drafts", "icon": "drafts", "href": "/mail/drafts" },
-        { "id": "archive", "labelKey": "nav.archive", "icon": "archive", "href": "/mail/archive" },
-        { "id": "trash", "labelKey": "nav.trash", "icon": "trash", "href": "/mail/trash" }
+        {
+          "id": "priority",
+          "labelKey": "nav.priority",
+          "icon": "priority",
+          "href": "/mail/priority"
+        },
+        {
+          "id": "all-mail",
+          "labelKey": "nav.allMail",
+          "icon": "inbox",
+          "href": "/mail/all"
+        },
+        {
+          "id": "sent",
+          "labelKey": "nav.sent",
+          "icon": "sent",
+          "href": "/mail/sent"
+        },
+        {
+          "id": "drafts",
+          "labelKey": "nav.drafts",
+          "icon": "drafts",
+          "href": "/mail/drafts"
+        },
+        {
+          "id": "archive",
+          "labelKey": "nav.archive",
+          "icon": "archive",
+          "href": "/mail/archive"
+        },
+        {
+          "id": "trash",
+          "labelKey": "nav.trash",
+          "icon": "trash",
+          "href": "/mail/trash"
+        }
+      ]
+    },
+    {
+      "id": "library",
+      "labelKey": "nav.documents",
+      "heading": false,
+      "items": [
+        {
+          "id": "documents",
+          "labelKey": "nav.documents",
+          "icon": "documents",
+          "href": "/documents"
+        }
       ]
     },
     {
       "id": "agent",
       "labelKey": "nav.agent",
+      "heading": true,
       "items": [
-        { "id": "sessions", "labelKey": "nav.sessions", "icon": "sessions", "href": "/agent/sessions" },
-        { "id": "channel", "labelKey": "nav.channel", "icon": "channel", "href": "/agent/channel" },
-        { "id": "memory", "labelKey": "nav.memory", "icon": "memory", "href": "/agent/memory" },
-        { "id": "activity", "labelKey": "nav.activity", "icon": "activity", "href": "/agent/activity" }
+        {
+          "id": "sessions",
+          "labelKey": "nav.sessions",
+          "icon": "sessions",
+          "href": "/agent/sessions"
+        },
+        {
+          "id": "channel",
+          "labelKey": "nav.channel",
+          "icon": "channel",
+          "href": "/agent/channel"
+        },
+        {
+          "id": "memory",
+          "labelKey": "nav.memory",
+          "icon": "memory",
+          "href": "/agent/memory"
+        },
+        {
+          "id": "activity",
+          "labelKey": "nav.activity",
+          "icon": "activity",
+          "href": "/agent/activity"
+        }
       ]
     },
     {
       "id": "planner",
       "labelKey": "nav.planner",
+      "heading": true,
       "items": [
-        { "id": "tasks", "labelKey": "nav.tasks", "icon": "tasks", "href": "/planner/tasks" },
-        { "id": "reminders", "labelKey": "nav.reminders", "icon": "reminders", "href": "/planner/reminders" }
+        {
+          "id": "tasks",
+          "labelKey": "nav.tasks",
+          "icon": "tasks",
+          "href": "/planner/tasks"
+        },
+        {
+          "id": "reminders",
+          "labelKey": "nav.reminders",
+          "icon": "reminders",
+          "href": "/planner/reminders"
+        },
+        {
+          "id": "schedules",
+          "labelKey": "nav.schedules",
+          "icon": "schedules",
+          "href": "/agent/schedules"
+        }
       ]
     }
   ],
   "bottom": [
-    { "id": "panels", "labelKey": "nav.panels", "icon": "panels", "href": "/panels" },
-    { "id": "logs", "labelKey": "nav.logs", "icon": "logs", "href": "/logs" },
-    { "id": "settings", "labelKey": "nav.settings", "icon": "settings", "href": "/settings" }
+    {
+      "id": "cockpit",
+      "labelKey": "nav.cockpit",
+      "icon": "cockpit",
+      "href": "/cockpit"
+    },
+    {
+      "id": "connectors",
+      "labelKey": "nav.connectors",
+      "icon": "connectors",
+      "href": "/connectors"
+    },
+    {
+      "id": "panels",
+      "labelKey": "nav.panels",
+      "icon": "panels",
+      "href": "/panels"
+    },
+    {
+      "id": "logs",
+      "labelKey": "nav.logs",
+      "icon": "logs",
+      "href": "/logs"
+    },
+    {
+      "id": "settings",
+      "labelKey": "nav.settings",
+      "icon": "settings",
+      "href": "/settings"
+    }
   ]
 }

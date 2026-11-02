@@ -62,3 +62,35 @@ svg.lucide {
     min-height: calc(2lh + 2 * var(--space-1));
   }
 }
+
+/* Frosted glass: a raised surface you can just see through. Reading surfaces stay solid. */
+.surface-glass {
+  background-color: theme(colors.surface.raised / var(--glass-opacity));
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .surface-glass {
+    @apply bg-surface-raised;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .surface-glass {
+    @apply bg-surface-raised;
+    backdrop-filter: none;
+  }
+}
+
+.glass-backdrop {
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.2);
+}
+
+/* A thin glow on the right edge, where the chat waits while something needs the room. */
+.assistant-aura {
+  background: linear-gradient(to left, theme(colors.accent.default / 28%), transparent);
+}
+
+.assistant-aura[data-waiting="true"] {
+  background: linear-gradient(to left, theme(colors.accent.default / 70%), transparent);
+}

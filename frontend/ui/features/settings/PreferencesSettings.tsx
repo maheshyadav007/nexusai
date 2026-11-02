@@ -22,6 +22,11 @@ const TIMES = [
   { value: "24", label: t("preferences.time.24") },
 ] as const;
 
+const IMAGES = [
+  { value: "load", label: t("preferences.images.load") },
+  { value: "block", label: t("preferences.images.block") },
+] as const;
+
 export function PreferencesSettings() {
   const settings = useSettings();
   const update = useUpdateSettings();
@@ -32,6 +37,9 @@ export function PreferencesSettings() {
       </SettingRow>
       <SettingRow label={t("preferences.date")}>
         <Select compact label={t("preferences.date")} {...(settings.data?.date_format ? { value: settings.data.date_format } : {})} options={DATES} onChange={(date_format) => update.mutate({ date_format: date_format as (typeof DATES)[number]["value"] })} />
+      </SettingRow>
+      <SettingRow label={t("preferences.images")} description={t("preferences.images.hint")}>
+        <Select compact label={t("preferences.images")} {...(settings.data?.remote_images ? { value: settings.data.remote_images } : {})} options={IMAGES} onChange={(remote_images) => update.mutate({ remote_images: remote_images as "load" | "block" })} />
       </SettingRow>
       <SettingRow label={t("preferences.time")}>
         <Select compact label={t("preferences.time")} {...(settings.data?.time_format ? { value: settings.data.time_format } : {})} options={TIMES} onChange={(time_format) => update.mutate({ time_format: time_format as (typeof TIMES)[number]["value"] })} />
