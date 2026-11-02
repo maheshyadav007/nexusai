@@ -2,6 +2,7 @@
   "top": [
     { "id": "today", "labelKey": "nav.today", "icon": "today", "href": "/today" },
     { "id": "cockpit", "labelKey": "nav.cockpit", "icon": "cockpit", "href": "/cockpit" },
+    { "id": "schedules", "labelKey": "nav.schedules", "icon": "schedules", "href": "/agent/schedules" },
     { "id": "connectors", "labelKey": "nav.connectors", "icon": "connectors", "href": "/connectors" },
     { "id": "documents", "labelKey": "nav.documents", "icon": "documents", "href": "/documents" }
   ],
@@ -25,8 +26,7 @@
         { "id": "sessions", "labelKey": "nav.sessions", "icon": "sessions", "href": "/agent/sessions" },
         { "id": "channel", "labelKey": "nav.channel", "icon": "channel", "href": "/agent/channel" },
         { "id": "memory", "labelKey": "nav.memory", "icon": "memory", "href": "/agent/memory" },
-        { "id": "activity", "labelKey": "nav.activity", "icon": "activity", "href": "/agent/activity" },
-        { "id": "schedules", "labelKey": "nav.schedules", "icon": "schedules", "href": "/agent/schedules" }
+        { "id": "activity", "labelKey": "nav.activity", "icon": "activity", "href": "/agent/activity" }
       ]
     },
     {

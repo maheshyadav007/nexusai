@@ -58,6 +58,22 @@ export const useRemoveTrigger = () => useCommand(["triggers"], (id: string) => c
 export const useJobs = () => useReady(["jobs"], () => query("jobs.list", {}));
 export const useCockpit = () => useReady(["cockpit"], () => query("cockpit.view", {}));
 export const useCockpitEvents = (filter: NonNullable<GetCockpitEvents["filter"]>) => useReady(["cockpit-events", filter], () => query("cockpit.events", { filter }));
+// A check that finds nothing announces nothing, so one timer reads the list just after the next is due.
+const AFTER_CHECK_MS = 5_000;
+export function usePipelines() {
+  const ready = useHomeReady();
+  return useQuery({
+    queryKey: ["pipelines"],
+    queryFn: () => query("pipelines.list", {}),
+    enabled: ready,
+    refetchInterval: (found) => {
+      const due = (found.state.data?.pipelines ?? []).flatMap((row) => (row.next_run ? [Date.parse(row.next_run)] : []));
+      return due.length ? Math.max(Math.min(...due) - Date.now(), 0) + AFTER_CHECK_MS : false;
+    },
+  });
+}
+export const usePausePipeline = () => useCommand(["pipelines", "mail-status", "cockpit"], (input: { id: string; paused: boolean }) => command("pipelines.pause", input));
+export const useRunPipeline = () => useCommand(["pipelines"], (id: string) => command("pipelines.run", { id }));
 export const useActivity = () => useReady(["activity"], () => query("activity.list", {}));
 export const useUndo = () => useCommand(["activity"], (id: number) => command("activity.undo", { id }));
 

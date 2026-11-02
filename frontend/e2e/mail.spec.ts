@@ -49,17 +49,63 @@ test("a mail account can be tested, and a wrong password says so", async ({ page
   await page.getByRole("switch", { name: "Encrypted connection" }).click();
   await noViolations(page);
 
-  await page.getByRole("button", { name: "Test connection" }).click();
+  // Connecting tries the login first, and nothing is saved if it's refused.
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.getByTestId("connection-results")).toContainText("refused that username or password");
 
+  // Once it's in, it says how much is there and asks how much of that to download.
+  for (const number of [1, 2, 3]) await deliver(page, { subject: `Waiting on the server ${number}` });
   await page.getByLabel("Password").fill("test-password");
-  await page.getByRole("button", { name: "Test connection" }).click();
-  await expect(page.getByTestId("connection-results").getByText("Connected")).toHaveCount(2);
-
   await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page.getByTestId("connection-results").getByText("Connected")).toHaveCount(2);
+  const chooser = page.getByTestId("pull-chooser");
+  await expect(chooser).toContainText("3 emails on the server");
+  await expect(chooser).toContainText("Inbox 3");
+  await expect(chooser.getByRole("spinbutton", { name: "How many to download" })).toHaveValue("3");
+  await chooser.getByRole("spinbutton", { name: "How many to download" }).fill("2");
+  await noViolations(page);
+
+  await page.getByRole("button", { name: "Start download" }).click();
   await expect(page.getByTestId("mail-state")).toContainText("Up to date", { timeout: 20_000 });
   await expect(page.getByText(USER)).toBeVisible();
   await expect(page.getByLabel("Password")).toHaveCount(0);
+  await expect(page.getByTestId("mail-counts")).toContainText("2 of 3 on this computer");
+  await expect(page.getByRole("spinbutton", { name: "Download the newest" })).toHaveValue("2");
+
+  // Asking for all of it fetches what the limit left behind.
+  await page.getByRole("spinbutton", { name: "Download the newest" }).fill("");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByTestId("mail-counts")).toContainText("3 of 3 on this computer", { timeout: 20_000 });
+});
+
+test("mail sync shows on the Schedules page and the Cockpit, and can be stopped from each", async ({ page }) => {
+  await page.goto("/agent/schedules");
+  const row = page.getByTestId("pipeline").filter({ hasText: "Mail sync" });
+  await expect(row).toContainText("Every minute");
+  await expect(row).toContainText("On the server");
+  await expect(row).toContainText("Last checked");
+  await noViolations(page);
+
+  const subject = unique("Held while stopped");
+  await row.getByRole("button", { name: "Stop" }).click();
+  await expect(row).toContainText("Stopped.");
+  await deliver(page, { subject });
+
+  await page.goto("/cockpit");
+  const again = page.getByTestId("pipeline").filter({ hasText: "Mail sync" });
+  await expect(again).toContainText("Stopped.");
+  await expect(page.getByTestId("health-mail")).toContainText("Stopped");
+  await noViolations(page);
+
+  await page.goto("/connectors");
+  await expect(page.getByTestId("mail-state")).toContainText("Stopped");
+  await page.getByRole("button", { name: "Resume" }).click();
+  await expect(page.getByTestId("mail-state")).toContainText("Up to date", { timeout: 20_000 });
+
+  // What came in while it was stopped is reported once it's going again.
+  await page.goto("/cockpit");
+  await expect(page.getByTestId("cockpit-event").filter({ hasText: "Found 1 new, pulled 1" }).first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId("pipeline").filter({ hasText: "Mail sync" })).toContainText("Found 1, pulled 1");
 });
 
 test("new mail appears by itself, opens safely, and reads as read", async ({ page }) => {

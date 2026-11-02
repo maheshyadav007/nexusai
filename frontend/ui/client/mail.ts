@@ -24,8 +24,19 @@ export const useTestAccount = () =>
 export function useSaveAccount() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: { name: string; profile: MailProfile; password?: string | null }) => command("mail.accounts.save", input),
+    mutationFn: (input: { name: string; profile: MailProfile; password?: string | null; pull_limit: number | null }) => command("mail.accounts.save", input),
     onSuccess: (accounts) => client.setQueryData(["mail-accounts"], accounts),
+  });
+}
+
+export function useSetPullLimit() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (pull_limit: number | null) => command("mail.sync.limit", { pull_limit }),
+    onSuccess: (status) => {
+      client.setQueryData(["mail-status"], status);
+      void client.invalidateQueries({ queryKey: ["pipelines"] });
+    },
   });
 }
 

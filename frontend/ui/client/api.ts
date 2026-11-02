@@ -223,8 +223,7 @@ import type {
   StartModelLogin,
   TestModel,
   TraceView,
-  UpdateSettings,
-} from "./contracts.generated";
+  UpdateSettings, ListPipelines, PausePipeline, PipelineList, RunPipeline, SetPullLimit } from "./contracts.generated";
 
 interface Commands {
   "settings.update": [UpdateSettings, Settings];
@@ -241,6 +240,9 @@ interface Commands {
   "notifications.markRead": [MarkNotificationsRead, NotificationsChanged];
   "network.check": [CheckNetwork, NetworkChecks];
   "mail.accounts.test": [TestMailAccount, MailTestResult];
+  "mail.sync.limit": [SetPullLimit, MailStatus];
+  "pipelines.pause": [PausePipeline, PipelineList];
+  "pipelines.run": [RunPipeline, PipelineList];
   "mail.accounts.save": [SaveMailAccount, MailAccounts];
   "mail.accounts.remove": [RemoveMailAccount, MailAccounts];
   "thread.setRead": [SetThreadRead, MailDone];
@@ -366,6 +368,7 @@ interface Queries {
   "mail.presets": [GetMailPresets, MailPresets];
   "pst.search": [GetPstSearch, PstSearchStatus];
   "cockpit.view": [GetCockpit, Cockpit];
+  "pipelines.list": [ListPipelines, PipelineList];
   "cockpit.events": [GetCockpitEvents, CockpitEvents];
   "mailAgent.get": [GetMailAgentSettings, MailAgentSettings];
   "context.get": [GetContextSettings, ContextSettings];

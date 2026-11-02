@@ -557,6 +557,49 @@ class ListJobs(BaseModel):
     pass
 
 
+class PipelineFact(BaseModel):
+    label: str
+    value: str
+
+
+class Pipeline(BaseModel):
+    """Work that runs on a timer with no agent or model involved."""
+
+    id: str
+    title: str
+    cadence: str
+    state: Literal["running", "waiting", "stopped", "problem"]
+    # What's going on, when that isn't just waiting for the next run.
+    message: str | None = None
+    facts: list[PipelineFact] = Field(default_factory=list)
+    last_run: str | None = None
+    next_run: str | None = None
+    # False when there's nothing it could do yet, such as no account to sync.
+    available: bool = True
+    link: str | None = None
+
+
+class ListPipelines(BaseModel):
+    pass
+
+
+class PipelineList(BaseModel):
+    pipelines: list[Pipeline]
+
+
+class PausePipeline(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(max_length=64)
+    paused: bool
+
+
+class RunPipeline(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(max_length=64)
+
+
 class UpcomingRun(BaseModel):
     id: int
     title: str

@@ -30,6 +30,13 @@ from nexusai.modules.mail.parse import (
 from nexusai.modules.mail.rules import RuleMatch
 from nexusai.modules.mail.safe_html import sanitize
 
+
+def sync_settings(db: Database, account: str) -> sqlite3.Row | None:
+    """How this account is set to download, and how its last check went."""
+    rows = db.fetch_all("SELECT * FROM mail_sync_settings WHERE account = ?", (account,))
+    return rows[0] if rows else None
+
+
 MIGRATIONS = [
     Migration(
         "mail_001",
@@ -97,6 +104,14 @@ CREATE INDEX threads_category ON threads (account, category, last_date DESC, id 
         """
 ALTER TABLE mail_categories ADD COLUMN position INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE mail_categories ADD COLUMN updated TEXT;
+""",
+    ),
+    Migration(
+        "mail_sync_settings_001",
+        """
+CREATE TABLE mail_sync_settings (
+  account TEXT PRIMARY KEY, pull_limit INTEGER, paused INTEGER NOT NULL DEFAULT 0, server_total INTEGER NOT NULL DEFAULT 0,
+  last_check TEXT, last_found INTEGER NOT NULL DEFAULT 0, last_pulled INTEGER NOT NULL DEFAULT 0, last_found_at TEXT);
 """,
     ),
 ]

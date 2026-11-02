@@ -174,8 +174,11 @@ Every data source is a connector: an MCP server with its own tools, skills and r
 
 | ID | Feature | Pri |
 |---|---|---|
-| ACC-1 | Mail accounts in one encrypted file, `mail-accounts.enc` (corporate, Gmail test). Only a server name, username and password are needed, and the rest is worked out, with details to override it; "Test connection" | MVP |
+| ACC-1 | Mail accounts in one encrypted file, `mail-accounts.enc` (corporate, Gmail test). Only a server name, username and password are needed, and the rest is worked out, with details to override it. Connecting tries the login first | MVP |
 | ACC-3 | IMAP sync: newest N first, then backfill in the background; live new mail via IDLE; reconnects after sleep or network change, and resumes after restart | MVP |
+| ACC-3a | Connecting tries the login, shows how many emails are in the Inbox, Sent and Drafts, and asks how many of the newest to download (suggestion in `mail.suggested_pull`). The limit can change later: raising it carries on, lowering it keeps what's here, and new mail always comes down | MVP |
+| ACC-3b | Mail sync can be stopped and resumed from the account, the Schedules page and the Cockpit, and stays stopped across restarts. While stopped nothing downloads, and read, flag and move changes wait | MVP |
+| ACC-3c | Each check runs at most `mail.check_every_seconds` apart (a minute), and sooner when the server announces new mail. The Schedules page and Cockpit show what's on the server, what's here, the last and next check, and what the last check found and pulled. Checks that find nothing add nothing to the event log | MVP |
 | ACC-6 | Send, reply and forward via SMTP, only after approval; Sent and Drafts folders, including agent drafts awaiting approval | MVP |
 | ACC-8 | Two-way mail state: read, flag, move, delete and drafts sync with the server | MVP |
 | NAV-2 | Mail categories: built-in (Needs you, FYI, Newsletters, Automated) and user-created; set by rules or the agent | MVP |
@@ -455,6 +458,7 @@ The main focus space on Today is a two-way channel between the agents and the us
 |---|---|---|
 | NTF-3 | Today: greeting and one-line brief, Needs you, Due, Important mail, Waiting on others, Since you last looked, and one status line linking to the Cockpit | MVP |
 | NTF-7 | Cockpit: what's running, health of each part, what's coming up, and a filterable feed of what happened | MVP |
+| NTF-7a | Work on a timer with no agent is listed once (`modules/agent/pipelines.py`), and shows on the Schedules page and in the Cockpit with Stop and Run now. Mail sync is the only one today | MVP |
 | CHN-1 | User channel with Ask, Suggest and Tell from all agents and sessions, each linked to its source; reply in place, or "Open session" to continue in full | MVP |
 | CHN-3 | Asks don't hold up other work: the Mail agent uses its best guess, marks the result provisional, and updates it when answered; a session can pause until answered | MVP |
 | CHN-5 | Noise control: similar messages grouped, daily limit, respects quiet hours; only urgent asks raise a notification | MVP |

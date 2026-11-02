@@ -28,6 +28,7 @@ ROLE_NAMES = {
     "deleted items": "trash",
     "archive": "archive",
 }
+SYNCED_ROLES = ("inbox", "sent", "drafts")
 READ, FLAGGED = b"\\Seen", b"\\Flagged"
 ConnectionFailed = (OSError, IMAPClientError, ssl.SSLError, EOFError, TimeoutError)
 
@@ -143,10 +144,26 @@ class ImapSession:
             pass
 
 
-def test_imap(profile: MailProfile, password: str, timeout: float) -> str | None:
-    """None if it worked, or what went wrong in plain words."""
+def synced_folders(folders: list[Folder]) -> list[Folder]:
+    """The one folder for each role that gets downloaded."""
+    wanted: list[Folder] = []
+    for role in SYNCED_ROLES:
+        wanted += [f for f in folders if f.role == role][:1]
+    return wanted
+
+
+def test_imap(
+    profile: MailProfile, password: str, timeout: float, counts: dict[str, int] | None = None
+) -> str | None:
+    """None if it worked, or what went wrong in plain words. Fills counts by folder role."""
     try:
-        ImapSession(profile, password, timeout).close()
+        session = ImapSession(profile, password, timeout)
+        try:
+            if counts is not None:
+                for folder in synced_folders(session.folders()):
+                    counts[folder.role] = session.select(folder.name)[1]
+        finally:
+            session.close()
     except SignInFailed:
         return "The server refused that username or password."
     except ConnectionFailed as error:

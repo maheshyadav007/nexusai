@@ -5,7 +5,9 @@ from pydantic import BaseModel, ConfigDict, Field
 ThreadStatus = Literal["none", "waiting_on_you", "waiting_on_others", "resolved", "fyi"]
 Importance = Literal["low", "normal", "high"]
 FolderRole = Literal["inbox", "sent", "drafts", "trash", "archive", "other"]
-SyncState = Literal["off", "connecting", "syncing", "backfilling", "live", "offline", "failed"]
+SyncState = Literal[
+    "off", "paused", "connecting", "syncing", "backfilling", "live", "offline", "failed"
+]
 
 
 class ServerSettings(BaseModel):
@@ -57,6 +59,8 @@ class SaveMailAccount(BaseModel):
     profile: MailProfile
     password: str | None = Field(default=None, max_length=1024)
     make_active: bool = True
+    # The newest this many come down, and new mail always does. Empty means all of it.
+    pull_limit: int | None = Field(default=None, ge=1)
 
 
 class TestMailAccount(BaseModel):
@@ -72,9 +76,28 @@ class ConnectionResult(BaseModel):
     message: str
 
 
+class MailFolderCount(BaseModel):
+    role: str
+    messages: int
+
+
 class MailTestResult(BaseModel):
     ok: bool
     results: list[ConnectionResult]
+    # What's in the folders that get downloaded, so the person can choose how much to pull.
+    counts: list[MailFolderCount] = Field(default_factory=list)
+    suggested_pull: int = 0
+
+
+class SetPullLimit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    pull_limit: int | None = Field(default=None, ge=1)
+
+
+class MailPulled(BaseModel):
+    found: int
+    pulled: int
 
 
 class RemoveMailAccount(BaseModel):
@@ -93,9 +116,19 @@ class MailStatus(BaseModel):
     message: str | None = None
     messages: int = 0
     backfill_remaining: bool = False
-    # How much of what's on the server has come down so far.
+    # How much of what's wanted from the server has come down so far.
     total: int = 0
     done: int = 0
+    pull_limit: int | None = None
+    # Everything in the downloaded folders, whether wanted or not, and how much of it is here.
+    server_total: int = 0
+    pulled: int = 0
+    check_every_seconds: int = 0
+    last_check: str | None = None
+    next_check: str | None = None
+    last_found: int = 0
+    last_pulled: int = 0
+    last_found_at: str | None = None
 
 
 class ProbeServer(BaseModel):

@@ -69,6 +69,7 @@ def _sync(ctx: Context, event: AppEvent) -> Line | None:
         "failed": ("Mail couldn't sign in", True),
         "offline": ("Mail can't reach its server", True),
         "syncing": ("Mail is downloading", False),
+        "paused": ("Mail sync stopped", False),
     }.get(state or "")
     return Line(words[0], link="/connectors", problem=words[1]) if words else None
 
@@ -139,6 +140,10 @@ FEED: dict[str, tuple[str, Describe]] = {
         ),
     ),
     "mail.sent": ("mail", lambda ctx, e: Line("Mail sent")),
+    "mail.pulled": (
+        "mail",
+        lambda ctx, e: Line(f"Found {e.payload['found']:,} new, pulled {e.payload['pulled']:,}"),
+    ),
     "mail.syncChanged": ("mail", _sync),
     "pst.progress": ("mail", _pst),
     "document.indexed": ("indexing", lambda ctx, e: Line("A document was read")),

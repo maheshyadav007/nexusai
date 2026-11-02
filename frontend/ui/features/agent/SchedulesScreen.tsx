@@ -16,6 +16,7 @@ import { Select } from "@/ui/primitives/Select";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { Switch } from "@/ui/primitives/Switch";
 import { TextLink } from "@/ui/primitives/TextLink";
+import { Pipelines } from "@/ui/features/cockpit/Pipelines";
 import { TriggersCard } from "./TriggersCard";
 import { t } from "@/ui/strings";
 
@@ -147,6 +148,7 @@ export function SchedulesScreen() {
   return (
     <div className="mx-auto flex max-w-reading flex-col gap-5 p-6">
       <PageHeader title={t("nav.schedules")} />
+      <Pipelines />
       {schedules.isPending ? <Skeleton className="h-6 w-full" /> : null}
       {schedules.isError ? <ErrorState title={t("schedules.error")} onRetry={() => void schedules.refetch()} /> : null}
       <Card title={t("schedules.defaults")} description={t("schedules.defaults.description")}>

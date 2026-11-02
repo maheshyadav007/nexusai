@@ -38,10 +38,12 @@ connect_timeout_seconds = 30
 initial_batch = 200
 backfill_batch = 100
 flag_window = 500
-# Servers drop IDLE connections after about 30 minutes, so renew before that.
+# How many emails the connect form suggests downloading. New mail always comes down.
+suggested_pull = 5000
+# The longest between checks for new mail. Servers that support IDLE announce it sooner.
 # Mail landing between the last fetch and IDLE starting may not be announced, so this is also
-# how long it could take to appear.
-idle_seconds = 60
+# how long it could take to appear. Servers drop IDLE after about 30 minutes, so stay below that.
+check_every_seconds = 60
 reconnect_min_seconds = 2
 reconnect_max_seconds = 300
 signature_max_bytes = 30000

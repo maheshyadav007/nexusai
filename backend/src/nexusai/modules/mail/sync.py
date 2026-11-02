@@ -4,12 +4,14 @@ import json
 import threading
 import time
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 
 import structlog
 
 from nexusai.contracts.mail import (
     MailChanged,
     MailProfile,
+    MailPulled,
     MailReceived,
     MailSyncChanged,
     SyncState,
@@ -17,14 +19,35 @@ from nexusai.contracts.mail import (
 from nexusai.contracts.notifications import NotificationRequested
 from nexusai.kernel.module import Context
 from nexusai.modules.mail import store
-from nexusai.modules.mail.imap import READ, ConnectionFailed, Folder, ImapSession, SignInFailed
+from nexusai.modules.mail.imap import (
+    READ,
+    ConnectionFailed,
+    Folder,
+    ImapSession,
+    SignInFailed,
+    synced_folders,
+)
 from nexusai.modules.mail.parse import parse_message
 from nexusai.modules.mail.rules import evaluate, load_rules
 
 log = structlog.get_logger()
-SYNCED_ROLES = ("inbox", "sent", "drafts")
 DRAFT_HEADER = "x-nexusai-draft"
 PROGRESS_NOTICE_SECONDS = 1.0
+
+
+def shares_of(limit: int | None, totals: dict[str, int]) -> dict[str, int]:
+    """How many of the newest emails each folder gets, in proportion to its size."""
+    everything = sum(totals.values())
+    if limit is None or limit >= everything:
+        return dict(totals)
+    shares = {name: limit * total // everything for name, total in totals.items()}
+    spare = limit - sum(shares.values())
+    # In the order the folders were given, so the inbox gets what rounding left over.
+    for name, total in totals.items():
+        extra = min(spare, total - shares[name])
+        shares[name] += extra
+        spare -= extra
+    return shares
 
 
 @dataclass
@@ -35,14 +58,28 @@ class SyncStatus:
     folders: dict[str, str] = field(default_factory=dict)
     total: int = 0
     done: int = 0
+    server_total: int = 0
+    last_check: str | None = None
+    next_check: str | None = None
+    last_found: int = 0
+    last_pulled: int = 0
+    last_found_at: str | None = None
 
 
 class MailSync:
-    def __init__(self, ctx: Context, account: str, profile: MailProfile, password: str) -> None:
+    def __init__(
+        self,
+        ctx: Context,
+        account: str,
+        profile: MailProfile,
+        password: str,
+        limit: int | None = None,
+    ) -> None:
         self.ctx = ctx
         self.account = account
         self.profile = profile
         self.password = password
+        self.limit = limit
         self.config = ctx.config.mail
         self.status = SyncStatus()
         self._stop = threading.Event()
@@ -50,6 +87,16 @@ class MailSync:
         self._thread = threading.Thread(target=self._run, daemon=True, name=f"mail-{account}")
         # For each folder still coming down: how many are on the server, and how many are left.
         self._coming: dict[str, tuple[int, int]] = {}
+        self._shares: dict[str, int] = {}
+        # Folders that have all the limit allows, so a quiet check needn't list every UID again.
+        self._filled: set[str] = set()
+        rows = store.sync_settings(ctx.bus.db, account)
+        if rows:
+            self.status.server_total = rows["server_total"]
+            self.status.last_check = rows["last_check"]
+            self.status.last_found = rows["last_found"]
+            self.status.last_pulled = rows["last_pulled"]
+            self.status.last_found_at = rows["last_found_at"]
         self._last_notice = 0.0
 
     def start(self) -> None:
@@ -126,9 +173,7 @@ class MailSync:
 
     def _discover(self, session: ImapSession) -> list[Folder]:
         folders = session.folders()
-        wanted: list[Folder] = []
-        for role in SYNCED_ROLES:
-            wanted += [f for f in folders if f.role == role][:1]
+        wanted = synced_folders(folders)
         self.status.folders = {f.role: f.name for f in folders}
         with self.ctx.bus.db.transaction() as tx:
             for folder in wanted:
@@ -145,11 +190,18 @@ class MailSync:
         while not self._stop.is_set():
             self._wake.clear()
             self._drain_outbox(session)
+            self._measure(session, folders)
+            found = pulled = 0
             for folder in folders:
-                self._fetch_new(session, folder)
+                if self._stop.is_set():
+                    return
+                came = self._fetch_new(session, folder)
+                found += came[0]
+                pulled += came[1]
             self._sync_flags(session, folders)
             remaining = self._backfill(session, folders)
             self.status.backfill_remaining = remaining
+            self._checked(found, pulled, waiting=not remaining)
             if remaining:
                 self._set_state("backfilling")
                 continue
@@ -157,10 +209,47 @@ class MailSync:
             if inbox:
                 session.select(inbox.name)
                 session.wait_for_change(
-                    self.config.idle_seconds, lambda: self._stop.is_set() or self._wake.is_set()
+                    self.config.check_every_seconds,
+                    lambda: self._stop.is_set() or self._wake.is_set(),
                 )
             else:
-                self._wake.wait(self.config.idle_seconds)
+                self._wake.wait(self.config.check_every_seconds)
+
+    def _measure(self, session: ImapSession, folders: list[Folder]) -> None:
+        totals = {folder.name: session.select(folder.name)[1] for folder in folders}
+        self.status.server_total = sum(totals.values())
+        self._shares = shares_of(self.limit, totals)
+
+    def _checked(self, found: int, pulled: int, *, waiting: bool) -> None:
+        """One check is done: note what it found, so the Cockpit can say whether we're in step."""
+        now = datetime.now(UTC)
+        status = self.status
+        status.last_check = now.isoformat()
+        wait = timedelta(seconds=self.config.check_every_seconds)
+        status.next_check = (now + wait).isoformat() if waiting else None
+        if found:
+            status.last_found, status.last_pulled = found, pulled
+            status.last_found_at = status.last_check
+        with self.ctx.bus.unit_of_work() as work:
+            work.tx.execute(
+                "UPDATE mail_sync_settings SET server_total = ?, last_check = ?, last_found = ?,"
+                " last_pulled = ?, last_found_at = ? WHERE account = ?",
+                (
+                    status.server_total,
+                    status.last_check,
+                    status.last_found,
+                    status.last_pulled,
+                    status.last_found_at,
+                    self.account,
+                ),
+            )
+            if found:
+                work.emit(
+                    "mail.pulled",
+                    MailPulled(found=found, pulled=pulled).model_dump(),
+                    source="mail",
+                    trace_id=self.ctx.trace_id,
+                )
 
     def _folder_row(self, name: str) -> tuple[int | None, int, int | None]:
         row = self.ctx.bus.db.fetch_all(
@@ -184,7 +273,8 @@ class MailSync:
                 (validity, self.account, name),
             )
 
-    def _fetch_new(self, session: ImapSession, folder: Folder) -> None:
+    def _fetch_new(self, session: ImapSession, folder: Folder) -> tuple[int, int]:
+        """How many new emails this check found in the folder, and how many came down."""
         validity, _ = session.select(folder.name)
         known, last_uid, _ = self._folder_row(folder.name)
         if known is not None and known != validity:
@@ -194,46 +284,60 @@ class MailSync:
         first_sync = known is None
         if first_sync:
             uids = session.all_uids()
-            newest = uids[-self.config.initial_batch :]
-            below = newest[0] if len(uids) > len(newest) and newest else None
+            share = min(self._shares.get(folder.name, len(uids)), len(uids))
+            take = min(self.config.initial_batch, share)
+            newest = uids[-take:] if take else []
+            # Past the newest kept here, whatever the limit left behind can still come later.
+            below = (newest[0] if newest else uids[-1] + 1) if len(uids) > len(newest) else None
             self._set_state("syncing")
             with self.ctx.bus.db.transaction() as tx:
                 tx.execute(
-                    "UPDATE mail_folders SET uidvalidity = ?, backfill_below = ?"
+                    "UPDATE mail_folders SET uidvalidity = ?, backfill_below = ?, last_uid = ?"
                     " WHERE account = ? AND name = ?",
-                    (validity, below, self.account, folder.name),
+                    (validity, below, uids[-1] if uids else 0, self.account, folder.name),
                 )
             self._ingest(session, folder, newest, live=False, advance=True)
-            self._note_progress(folder.name, len(uids), len(uids) - len(newest))
-            return
+            self._note_progress(folder.name, share, share - len(newest))
+            return 0, 0
         uids = session.uids_after(last_uid)
+        pulled = 0
         for start in range(0, len(uids), self.config.backfill_batch):
-            self._ingest(
-                session,
-                folder,
-                uids[start : start + self.config.backfill_batch],
-                live=True,
-                advance=True,
-            )
+            if self._stop.is_set():
+                break
+            batch = uids[start : start + self.config.backfill_batch]
+            # A week with the laptop closed can take a while, so that shows as downloading.
+            if len(uids) > len(batch):
+                self._set_state("syncing")
+            self._ingest(session, folder, batch, live=True, advance=True)
+            pulled += len(batch)
+            if len(uids) > len(batch):
+                self._note_progress(folder.name, len(uids), len(uids) - pulled)
+        return len(uids), pulled
 
     def _backfill(self, session: ImapSession, folders: list[Folder]) -> bool:
         """One batch of history per pass, so new mail is never kept waiting by a large mailbox."""
         for folder in folders:
             _, _, below = self._folder_row(folder.name)
-            if not below:
+            if not below or folder.name in self._filled:
                 continue
             session.select(folder.name)
-            older = [uid for uid in session.all_uids() if uid < below]
+            uids = session.all_uids()
+            share = min(self._shares.get(folder.name, len(uids)), len(uids))
+            older = [uid for uid in (uids[-share:] if share else []) if uid < below]
+            if not older:
+                # Kept below stays set, so raising the limit later carries on from here.
+                self._filled.add(folder.name)
+                self._note_progress(folder.name, share, 0)
+                continue
             batch = older[-self.config.backfill_batch :]
-            next_below = batch[0] if len(older) > len(batch) else None
+            next_below = batch[0] if uids[0] < batch[0] else None
             self._ingest(session, folder, batch, live=False, advance=False)
             with self.ctx.bus.db.transaction() as tx:
                 tx.execute(
                     "UPDATE mail_folders SET backfill_below = ? WHERE account = ? AND name = ?",
                     (next_below, self.account, folder.name),
                 )
-            total = len(session.all_uids())
-            self._note_progress(folder.name, total, len(older) - len(batch))
+            self._note_progress(folder.name, share, len(older) - len(batch))
             return True
         return False
 

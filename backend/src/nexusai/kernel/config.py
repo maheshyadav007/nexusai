@@ -26,7 +26,8 @@ class MailConfig:
     initial_batch: int
     backfill_batch: int
     flag_window: int
-    idle_seconds: float
+    suggested_pull: int
+    check_every_seconds: float
     reconnect_min_seconds: float
     reconnect_max_seconds: float
     signature_max_bytes: int

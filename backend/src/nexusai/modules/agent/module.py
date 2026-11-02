@@ -50,6 +50,7 @@ from nexusai.contracts.agent import (
     ListChannel,
     ListJobs,
     ListMemory,
+    ListPipelines,
     ListPrompts,
     ListSchedules,
     ListSessions,
@@ -58,7 +59,9 @@ from nexusai.contracts.agent import (
     MarkTodaySeen,
     MemoryList,
     ModelCallView,
+    PausePipeline,
     Permissions,
+    PipelineList,
     PromptFile,
     PromptList,
     QuietHours,
@@ -69,6 +72,7 @@ from nexusai.contracts.agent import (
     RenameSession,
     RespondChannel,
     RunMailAgent,
+    RunPipeline,
     RunSchedule,
     SaveMemory,
     SavePrompt,
@@ -114,6 +118,7 @@ from nexusai.modules.agent import (
     guard,
     mail_agent,
     memory,
+    pipelines,
     policy,
     prompts_builder,
     providers,
@@ -791,6 +796,7 @@ def _health(ctx: Context) -> list[HealthItem]:
     mail_states: dict[str, tuple[Any, str]] = {
         "live": ("ok", f"Up to date, {status.messages} messages"),
         "off": ("off", "Not connected"),
+        "paused": ("off", "Stopped"),
         "failed": ("problem", status.message or "It couldn't sign in"),
         "offline": ("problem", status.message or "It can't reach the server"),
     }
@@ -857,6 +863,23 @@ def cockpit_view(query: GetCockpit, ctx: Context) -> Cockpit:
         upcoming=[UpcomingRun(id=r["id"], title=r["title"], when=r["next_run"]) for r in rows],
         health=_health(ctx),
     )
+
+
+@agent_module.query("pipelines.list")
+def list_pipelines(query: ListPipelines, ctx: Context) -> PipelineList:
+    return PipelineList(pipelines=pipelines.views(ctx))
+
+
+@agent_module.command("pipelines.pause")
+def pause_pipeline(command: PausePipeline, ctx: Context) -> PipelineList:
+    pipelines.entry(command.id).pause(ctx, command.paused)
+    return PipelineList(pipelines=pipelines.views(ctx))
+
+
+@agent_module.command("pipelines.run")
+def run_pipeline(command: RunPipeline, ctx: Context) -> PipelineList:
+    pipelines.entry(command.id).run(ctx)
+    return PipelineList(pipelines=pipelines.views(ctx))
 
 
 @agent_module.query("cockpit.events")

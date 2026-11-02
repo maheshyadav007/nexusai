@@ -214,6 +214,7 @@ Session:     queued → running ⇄ waitingForApproval → done
                         ├──▶ paused ──▶ running
                         └──▶ failed
 Mail sync:   idle → connecting → syncing → live → (disconnected → connecting)
+             any state → paused (by the person, and kept across restarts) → connecting
 Approval:    pending → approved | denied | expired
 ```
 

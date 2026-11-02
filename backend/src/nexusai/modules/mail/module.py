@@ -4,7 +4,7 @@ import threading
 from datetime import UTC, datetime
 from email.utils import parseaddr
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import structlog
 
@@ -36,11 +36,13 @@ from nexusai.contracts.mail import (
     MailCategory,
     MailChanged,
     MailDone,
+    MailFolderCount,
     MailPreset,
     MailPresets,
     MailProfile,
     MailRule,
     MailStatus,
+    MailSyncChanged,
     MailTestResult,
     MergeCategories,
     MoveThread,
@@ -68,6 +70,7 @@ from nexusai.contracts.mail import (
     SendDraft,
     SendProblem,
     ServerProbe,
+    SetPullLimit,
     SetThreadCategory,
     SetThreadFlag,
     SetThreadRead,
@@ -107,7 +110,15 @@ def _start_sync(ctx: Context) -> None:
         password = accounts.get_password(ctx.config, profile.auth.user)
         if password is None or accounts.require_encrypted(profile):
             return
-        _sync = MailSync(ctx, active, profile, password)
+        with ctx.bus.db.transaction() as tx:
+            tx.execute(
+                "INSERT INTO mail_sync_settings (account) VALUES (?) ON CONFLICT DO NOTHING",
+                (active,),
+            )
+        settings = store.sync_settings(ctx.bus.db, active)
+        if settings is None or settings["paused"]:
+            return
+        _sync = MailSync(ctx, active, profile, password, settings["pull_limit"])
         _sync.start()
 
 
@@ -164,6 +175,34 @@ def _wake() -> None:
         _sync.wake()
 
 
+def check_now() -> None:
+    _wake()
+
+
+def pause_sync(ctx: Context, paused: bool) -> None:
+    """Stops the connection altogether, or starts it again. A restart keeps this as it was."""
+    account = _account(ctx)
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO mail_sync_settings (account, paused) VALUES (?, ?)"
+            " ON CONFLICT (account) DO UPDATE SET paused = excluded.paused",
+            (account, int(paused)),
+        )
+    _start_sync(ctx)
+    if paused:
+        _announce(ctx, "paused")
+
+
+def _announce(ctx: Context, state: Any) -> None:
+    with ctx.bus.unit_of_work() as work:
+        work.emit(
+            "mail.syncChanged",
+            MailSyncChanged(state=state).model_dump(),
+            source="mail",
+            trace_id=ctx.trace_id,
+        )
+
+
 # Accounts
 
 
@@ -195,9 +234,12 @@ def test_account(command: TestMailAccount, ctx: Context) -> MailTestResult:
     if not password:
         raise CommandError("mail.no_password", "Enter the password first.", 422)
     timeout = ctx.config.mail.connect_timeout_seconds
-    imap_problem = test_imap(command.profile, password, timeout)
+    counts: dict[str, int] = {}
+    imap_problem = test_imap(command.profile, password, timeout, counts)
     smtp_problem = send.test_smtp(command.profile, password, timeout)
     return MailTestResult(
+        counts=[MailFolderCount(role=role, messages=count) for role, count in counts.items()],
+        suggested_pull=min(ctx.config.mail.suggested_pull, sum(counts.values())),
         ok=not imap_problem and not smtp_problem,
         results=[
             ConnectionResult(
@@ -219,12 +261,35 @@ def save_account(command: SaveMailAccount, ctx: Context) -> MailAccounts:
     if command.password:
         accounts.set_password(ctx.config, command.profile.auth.user, command.password)
     accounts.write_accounts(ctx.config, command.name if command.make_active else active, profiles)
+    # Connecting is asking for mail, so an account stopped earlier starts again.
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO mail_sync_settings (account, pull_limit) VALUES (?, ?)"
+            " ON CONFLICT (account) DO UPDATE SET pull_limit = excluded.pull_limit, paused = 0",
+            (command.name, command.pull_limit),
+        )
     _start_sync(ctx)
     with ctx.bus.unit_of_work() as work:
         work.emit(
             "mail.accountsChanged", {"name": command.name}, source="mail", trace_id=ctx.trace_id
         )
     return _accounts_view(ctx)
+
+
+@mail_module.command("mail.sync.limit")
+def set_pull_limit(command: SetPullLimit, ctx: Context) -> MailStatus:
+    """Takes effect from now. Mail already here stays, and raising it carries on downloading."""
+    account = _account(ctx)
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO mail_sync_settings (account, pull_limit) VALUES (?, ?)"
+            " ON CONFLICT (account) DO UPDATE SET pull_limit = excluded.pull_limit",
+            (account, command.pull_limit),
+        )
+    _start_sync(ctx)
+    status = cast(MailStatus, get_status(GetMailStatus(), ctx))
+    _announce(ctx, status.state)
+    return status
 
 
 @mail_module.command("mail.accounts.remove")
@@ -235,6 +300,8 @@ def remove_account(command: RemoveMailAccount, ctx: Context) -> MailAccounts:
     still_used = removed and any(p.auth.user == removed.auth.user for p in profiles.values())
     if removed and not still_used:
         accounts.delete_password(ctx.config, removed.auth.user)
+    with ctx.bus.db.transaction() as tx:
+        tx.execute("DELETE FROM mail_sync_settings WHERE account = ?", (command.name,))
     _start_sync(ctx)
     with ctx.bus.unit_of_work() as work:
         work.emit(
@@ -250,16 +317,53 @@ def get_status(query: GetMailStatus, ctx: Context) -> MailStatus:
         "SELECT COUNT(*) AS n FROM messages WHERE account = ?",
         (accounts.current_account(ctx.config),),
     )[0]["n"]
+    every = int(ctx.config.mail.check_every_seconds)
+    settings = store.sync_settings(ctx.bus.db, active) if active else None
+    # Mail brought in from a PST isn't part of what's on the server.
+    pulled = ctx.bus.db.fetch_all(
+        "SELECT COUNT(*) AS n FROM messages WHERE account = ?"
+        " AND folder IN (SELECT name FROM mail_folders WHERE account = ?)",
+        (active, active),
+    )[0]["n"]
     if _sync is None:
-        return MailStatus(account=active, state="off", messages=count)
+        kept = (
+            {
+                "pull_limit": settings["pull_limit"],
+                "server_total": settings["server_total"],
+                "last_check": settings["last_check"],
+                "last_found": settings["last_found"],
+                "last_pulled": settings["last_pulled"],
+                "last_found_at": settings["last_found_at"],
+            }
+            if settings
+            else {}
+        )
+        state = "paused" if settings and settings["paused"] else "off"
+        return MailStatus(
+            account=active,
+            state=state,
+            messages=count,
+            pulled=pulled,
+            check_every_seconds=every,
+            **kept,
+        )
     return MailStatus(
         account=active,
         state=_sync.status.state,
         message=_sync.status.message,
         messages=count,
+        pulled=pulled,
         backfill_remaining=_sync.status.backfill_remaining,
         total=_sync.status.total,
         done=_sync.status.done,
+        pull_limit=_sync.limit,
+        server_total=_sync.status.server_total,
+        check_every_seconds=every,
+        last_check=_sync.status.last_check,
+        next_check=_sync.status.next_check,
+        last_found=_sync.status.last_found,
+        last_pulled=_sync.status.last_pulled,
+        last_found_at=_sync.status.last_found_at,
     )
 
 

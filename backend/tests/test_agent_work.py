@@ -79,7 +79,7 @@ def fake() -> Iterator[FakeMail]:
 @pytest.fixture
 def app_config(config: Config) -> Config:
     mail = replace(
-        config.mail, connect_timeout_seconds=3, reconnect_min_seconds=0.1, idle_seconds=1
+        config.mail, connect_timeout_seconds=3, reconnect_min_seconds=0.1, check_every_seconds=1
     )
     agent = replace(config.agent, triage_retry_seconds=0.1)
     return replace(config, mail=mail, agent=agent)

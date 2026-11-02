@@ -9,7 +9,8 @@ import { useEvents } from "@/ui/client/events";
 import { useDateTime } from "@/ui/client/format";
 import { useCancelModel } from "@/ui/client/semantic";
 import { useStopSession } from "@/ui/client/sessions";
-import { useCockpit, useCockpitEvents, useTriageEstimate, useTriageExisting } from "@/ui/client/work";
+import { useCockpit, useCockpitEvents, usePausePipeline, useTriageEstimate, useTriageExisting } from "@/ui/client/work";
+import { Pipelines } from "@/ui/features/cockpit/Pipelines";
 import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
 import { EmptyState } from "@/ui/primitives/EmptyState";
@@ -28,6 +29,7 @@ const HEALTH_TONES = { ok: "done", working: "running", problem: "failed", off: "
 const SESSION_PREFIX = "session-";
 const PST_PREFIX = "pst-";
 const MODEL_PREFIX = "model-";
+const MAIL_PIPELINE = "mail-sync";
 // A busy moment can bring many events a second, and reading the list once covers them all.
 const REFRESH_MS = 1000;
 
@@ -36,6 +38,7 @@ function JobRow({ job }: { job: Job }) {
   const pausePst = usePausePst();
   const stopLooking = useStopFindPst();
   const cancelModel = useCancelModel();
+  const stopSync = usePausePipeline();
   const session = job.id.startsWith(SESSION_PREFIX) ? job.id.slice(SESSION_PREFIX.length) : null;
   const importing = job.kind === "pst" && job.status !== "paused" ? Number(job.id.slice(PST_PREFIX.length)) : null;
   const model = job.kind === "model" ? job.id.slice(MODEL_PREFIX.length) : null;
@@ -48,6 +51,7 @@ function JobRow({ job }: { job: Job }) {
         <span className="flex shrink-0 items-center gap-2 text-sm text-ink-secondary">
           {job.status}
           {session ? <Button variant="quiet" className="py-px" loading={stop.isPending} onClick={() => stop.mutate(session)}>{t("sessions.stop")}</Button> : null}
+          {job.kind === "sync" ? <Button variant="quiet" className="py-px" loading={stopSync.isPending} onClick={() => stopSync.mutate({ id: MAIL_PIPELINE, paused: true })}>{t("pipelines.stop")}</Button> : null}
           {importing !== null ? <Button variant="quiet" className="py-px" onClick={() => pausePst.mutate(importing)}>{t("pst.pause")}</Button> : null}
           {job.kind === "pst-search" ? <Button variant="quiet" className="py-px" onClick={() => stopLooking.mutate(undefined)}>{t("pst.find.stop")}</Button> : null}
           {model ? <Button variant="quiet" className="py-px" onClick={() => cancelModel.mutate(model)}>{t("semantic.cancel")}</Button> : null}
@@ -80,7 +84,10 @@ function RunningNow() {
       </ul>
       {upcoming.length ? (
         <>
-          <h3 className="text-md font-medium text-ink-primary">{t("cockpit.upcoming")}</h3>
+          <div className="flex items-baseline justify-between gap-3">
+            <h3 className="text-md font-medium text-ink-primary">{t("cockpit.upcoming")}</h3>
+            <TextLink className="text-sm" href="/agent/schedules">{t("cockpit.upcoming.all")}</TextLink>
+          </div>
           <ul data-testid="upcoming" className="flex flex-col border-t border-line-subtle">
             {upcoming.map((run) => (
               <li key={run.id} className="flex items-baseline justify-between gap-3 border-b border-line-subtle py-2 text-md">
@@ -192,6 +199,7 @@ export function CockpitScreen() {
       <PageHeader title={t("nav.cockpit")} summary={t("cockpit.description")} />
       <Health />
       <RunningNow />
+      <Pipelines />
       <Feed />
     </div>
   );

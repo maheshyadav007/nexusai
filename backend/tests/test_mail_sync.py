@@ -25,7 +25,7 @@ def fake() -> Iterator[FakeMail]:
 @pytest.fixture
 def client(config: Config) -> Iterator[TestClient]:
     mail = replace(
-        config.mail, connect_timeout_seconds=3, reconnect_min_seconds=0.1, idle_seconds=1
+        config.mail, connect_timeout_seconds=3, reconnect_min_seconds=0.1, check_every_seconds=1
     )
     with TestClient(
         create_app(replace(config, mail=mail)), base_url="http://127.0.0.1:8765"
@@ -230,7 +230,7 @@ def test_new_mail_isnt_kept_waiting_by_backfill(client: TestClient, fake: FakeMa
 
 def test_sync_resumes_after_restart_without_repeats(config: Config, fake: FakeMail) -> None:
     mail = replace(
-        config.mail, connect_timeout_seconds=3, reconnect_min_seconds=0.1, idle_seconds=1
+        config.mail, connect_timeout_seconds=3, reconnect_min_seconds=0.1, check_every_seconds=1
     )
     app_config = replace(config, mail=mail)
     fake.state.deliver(make_mail(subject="Before restart"))
@@ -661,3 +661,152 @@ def test_send_checks_warn_block_and_can_be_turned_off(client: TestClient, fake: 
     refused = client.post("/api/commands/mail.send", json={"draft": draft})
     assert refused.status_code == 422 and refused.json()["code"] == "mail.send_blocked"
     assert len(fake.sent) == 1
+
+
+def pipeline(client: TestClient) -> dict[str, Any]:
+    rows = client.post("/api/queries/pipelines.list").json()["pipelines"]
+    return next(row for row in rows if row["id"] == "mail-sync")
+
+
+def fill(fake: FakeMail, count: int, box: str = "INBOX") -> None:
+    for number in range(count):
+        fake.state.deliver(make_mail(subject=f"{box} {number}"), box=box)
+
+
+def save(client: TestClient, fake: FakeMail, **body: Any) -> None:
+    saved = client.post(
+        "/api/commands/mail.accounts.save",
+        json={"name": "test", "profile": fake.profile(), "password": PASSWORD, **body},
+    )
+    assert saved.status_code == 200, saved.text
+
+
+def test_the_connection_test_counts_what_is_on_the_server(
+    client: TestClient, fake: FakeMail
+) -> None:
+    fill(fake, 3)
+    fill(fake, 2, "Sent")
+    result = client.post(
+        "/api/commands/mail.accounts.test", json={"profile": fake.profile(), "password": PASSWORD}
+    ).json()
+    assert {row["role"]: row["messages"] for row in result["counts"]}["inbox"] == 3
+    assert {row["role"]: row["messages"] for row in result["counts"]}["sent"] == 2
+    assert result["suggested_pull"] == 5
+
+
+def test_only_the_newest_come_down_and_raising_the_limit_carries_on(
+    client: TestClient, fake: FakeMail
+) -> None:
+    fill(fake, 12)
+    save(client, fake, pull_limit=5)
+    wait(lambda: status(client)["state"] == "live", "sync to go live")
+    assert status(client)["pulled"] == 5
+    assert status(client)["server_total"] == 12
+    subjects = {row["subject"] for row in threads(client)}
+    assert subjects == {f"INBOX {number}" for number in range(7, 12)}
+
+    # New mail always comes, whatever the limit says.
+    fake.state.deliver(make_mail(subject="Just arrived"))
+    thread_with(client, "Just arrived")
+    assert events(client, "mail.received")
+
+    client.post("/api/commands/mail.sync.limit", json={"pull_limit": 9})
+    wait(lambda: status(client)["pulled"] == 9, "the raised limit to fill")
+    client.post("/api/commands/mail.sync.limit", json={"pull_limit": None})
+    wait(lambda: status(client)["pulled"] == 13, "the rest to come down")
+    # None of that history looked like new mail, so no agent ran on it.
+    assert len(events(client, "mail.received")) == 1
+
+
+def test_lowering_the_limit_keeps_what_is_here(client: TestClient, fake: FakeMail) -> None:
+    fill(fake, 6)
+    connect(client, fake)
+    assert status(client)["pulled"] == 6
+    client.post("/api/commands/mail.sync.limit", json={"pull_limit": 2})
+    wait(lambda: status(client)["state"] == "live", "sync to go live again")
+    assert status(client)["pulled"] == 6
+
+
+def test_a_limit_too_small_for_a_folder_still_treats_its_old_mail_as_old(
+    client: TestClient, fake: FakeMail
+) -> None:
+    fill(fake, 9)
+    fill(fake, 1, "Sent")
+    save(client, fake, pull_limit=2)
+    wait(lambda: status(client)["state"] == "live", "sync to go live")
+    time.sleep(1.2)
+    assert status(client)["pulled"] == 2
+    assert not events(client, "mail.received")
+
+
+def test_stopping_stays_stopped_after_a_restart(config: Config, fake: FakeMail) -> None:
+    mail = replace(
+        config.mail, connect_timeout_seconds=3, reconnect_min_seconds=0.1, check_every_seconds=1
+    )
+    settings = replace(config, mail=mail)
+    with TestClient(create_app(settings), base_url="http://127.0.0.1:8765") as first:
+        connect(first, fake)
+        first.post("/api/commands/mail.sync.limit", json={"pull_limit": 7})
+        first.post("/api/commands/pipelines.pause", json={"id": "mail-sync", "paused": True})
+    logins = fake.state.logins
+    with TestClient(create_app(settings), base_url="http://127.0.0.1:8765") as second:
+        assert status(second)["state"] == "paused"
+        assert status(second)["pull_limit"] == 7
+        assert fake.state.logins == logins
+        # Connecting the account again is asking for mail, so that starts it.
+        connect(second, fake)
+
+
+def test_stopping_holds_new_mail_until_resumed(client: TestClient, fake: FakeMail) -> None:
+    connect(client, fake)
+    stopped = client.post("/api/commands/pipelines.pause", json={"id": "mail-sync", "paused": True})
+    assert stopped.status_code == 200, stopped.text
+    assert status(client)["state"] == "paused"
+    assert pipeline(client)["state"] == "stopped"
+
+    fake.state.deliver(make_mail(subject="While stopped"))
+    time.sleep(1.5)
+    assert not [row for row in threads(client) if row["subject"] == "While stopped"]
+
+    client.post("/api/commands/pipelines.pause", json={"id": "mail-sync", "paused": False})
+    thread_with(client, "While stopped")
+    wait(lambda: status(client)["state"] == "live", "sync to go live")
+
+
+def test_each_check_says_what_it_found_and_pulled(client: TestClient, fake: FakeMail) -> None:
+    connect(client, fake)
+    first = wait(lambda: pipeline(client)["last_run"], "a first check")
+    assert pipeline(client)["next_run"]
+    assert "Every second" not in pipeline(client)["cadence"]
+
+    fake.state.deliver(make_mail(subject="One"))
+    fake.state.deliver(make_mail(subject="Two"))
+    wait(lambda: events(client, "mail.pulled"), "the check to report")
+    found = sum(row["payload"]["found"] for row in events(client, "mail.pulled"))
+    pulled = sum(row["payload"]["pulled"] for row in events(client, "mail.pulled"))
+    assert (found, pulled) == (2, 2)
+    wait(lambda: pipeline(client)["last_run"] != first, "a later check")
+    facts = {fact["label"]: fact["value"] for fact in pipeline(client)["facts"]}
+    assert facts["On the server"] == "2"
+    assert facts["On this computer"] == "2"
+    assert "pulled" in facts["Last new mail"]
+
+    # A check that finds nothing says nothing, so the log isn't filled once a minute.
+    quiet = len(events(client, "mail.pulled"))
+    time.sleep(1.5)
+    assert len(events(client, "mail.pulled")) == quiet
+
+
+def test_run_now_checks_straight_away(client: TestClient, fake: FakeMail) -> None:
+    connect(client, fake)
+    done = client.post("/api/commands/pipelines.run", json={"id": "mail-sync"})
+    assert done.status_code == 200, done.text
+    assert client.post("/api/commands/pipelines.run", json={"id": "nope"}).status_code == 404
+
+
+def test_with_no_account_the_mail_schedule_says_so(client: TestClient) -> None:
+    row = pipeline(client)
+    assert row["available"] is False
+    assert row["state"] == "stopped"
+    refused = client.post("/api/commands/pipelines.pause", json={"id": "mail-sync", "paused": True})
+    assert refused.status_code == 409

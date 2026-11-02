@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { ApiRequestError } from "@/ui/client/api";
 import type { MailProfile } from "@/ui/client/contracts.generated";
-import { useMailAccounts, useMailPresets, useMailStatus, useProbeServer, useRemoveAccount, useSaveAccount, useTestAccount } from "@/ui/client/mail";
+import { useMailAccounts, useMailPresets, useMailStatus, useProbeServer, useRemoveAccount, useSaveAccount, useSetPullLimit, useTestAccount } from "@/ui/client/mail";
+import { usePausePipeline } from "@/ui/client/work";
 import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
 import { ErrorState } from "@/ui/primitives/ErrorState";
@@ -13,8 +14,10 @@ import { Progress } from "@/ui/primitives/Progress";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { StatusDot } from "@/ui/primitives/StatusDot";
 import { Switch } from "@/ui/primitives/Switch";
-import { t } from "@/ui/strings";
+import { t, type StringKey } from "@/ui/strings";
 
+const MAIL_PIPELINE = "mail-sync";
+const FOLDER_NAMES: Readonly<Record<string, StringKey>> = { inbox: "accounts.folder.inbox", sent: "accounts.folder.sent", drafts: "accounts.folder.drafts" };
 const BLANK = { imapHost: "", imapPort: "993", smtpHost: "", smtpPort: "465", secure: true };
 // A company's own server is listed under this, for logins with no @ in them.
 const ANY_LOGIN = "*";
@@ -23,7 +26,7 @@ const messageOf = (error: unknown) => (error instanceof ApiRequestError ? error.
 
 const nameFor = (login: string) => login.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "mail";
 
-const STATES: Readonly<Record<string, { tone: "done" | "running" | "failed" | "idle"; label: "accounts.state.live" | "accounts.state.syncing" | "accounts.state.offline" | "accounts.state.failed" | "accounts.state.off" }>> = {
+const STATES: Readonly<Record<string, { tone: "done" | "running" | "failed" | "idle"; label: StringKey }>> = {
   live: { tone: "done", label: "accounts.state.live" },
   connecting: { tone: "running", label: "accounts.state.syncing" },
   syncing: { tone: "running", label: "accounts.state.syncing" },
@@ -31,6 +34,7 @@ const STATES: Readonly<Record<string, { tone: "done" | "running" | "failed" | "i
   offline: { tone: "failed", label: "accounts.state.offline" },
   failed: { tone: "failed", label: "accounts.state.failed" },
   off: { tone: "idle", label: "accounts.state.off" },
+  paused: { tone: "idle", label: "accounts.state.paused" },
 };
 
 /** Fetching mail carries on in the background, so nobody has to wait here for it. */
@@ -43,6 +47,40 @@ function MailDownload() {
     <div data-testid="mail-download" className="flex w-full flex-col gap-1">
       <Progress label={t("accounts.download")} value={done} max={total} />
       <p className="text-sm tabular-nums text-ink-muted">{t("accounts.download.count", { done, total })}</p>
+    </div>
+  );
+}
+
+/** Stop or resume, and how much history to keep coming. Settings and the Connectors page share this. */
+function MailSyncControls() {
+  const status = useMailStatus();
+  const pause = usePausePipeline();
+  const setLimit = useSetPullLimit();
+  const saved = status.data?.pull_limit == null ? "" : String(status.data.pull_limit);
+  const [limit, setValue] = useState(saved);
+  useEffect(() => setValue(saved), [saved]);
+  const paused = status.data?.state === "paused";
+  const total = status.data?.server_total ?? 0;
+  const pulled = status.data?.pulled ?? 0;
+  const valid = limit === "" || Number(limit) >= 1;
+  return (
+    <div className="flex w-full flex-col gap-3">
+      {total ? <p data-testid="mail-counts" className="text-sm tabular-nums text-ink-muted">{t("accounts.state.counts", { pulled: pulled.toLocaleString(), total: total.toLocaleString() })}</p> : null}
+      <form
+        className="flex flex-wrap items-end gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setLimit.mutate(limit === "" ? null : Number(limit));
+        }}
+      >
+        <div className="w-48">
+          <Field label={t("accounts.limit")} hint={t("accounts.limit.hint")}>{({ invalid, ...control }) => <Input type="number" min={1} placeholder={t("accounts.limit.all")} invalid={invalid} value={limit} onChange={(event) => setValue(event.target.value)} {...control} />}</Field>
+        </div>
+        <Button type="submit" loading={setLimit.isPending} disabled={!valid || limit === saved}>{t("accounts.limit.save")}</Button>
+      </form>
+      <div>
+        <Button loading={pause.isPending} onClick={() => pause.mutate({ id: MAIL_PIPELINE, paused: !paused })}>{t(paused ? "pipelines.resume" : "pipelines.stop")}</Button>
+      </div>
     </div>
   );
 }
@@ -69,6 +107,7 @@ export function AccountSettings() {
   const [address, setAddress] = useState("");
   const [servers, setServers] = useState(BLANK);
   const [details, setDetails] = useState(false);
+  const [pull, setPull] = useState("");
 
   const active = accounts.data?.accounts.find((account) => account.name === accounts.data?.active);
   const domain = login.includes("@") ? (login.split("@").pop() ?? "").trim().toLowerCase() : ANY_LOGIN;
@@ -98,6 +137,19 @@ export function AccountSettings() {
     return next;
   };
   const ready = login.trim() && password && server;
+  // What the server holds has to be known before anyone can choose how much of it to download.
+  const reached = test.data?.results.find((result) => result.service === "imap")?.ok === true;
+  const counts = reached ? (test.data?.counts ?? []) : [];
+  const onServer = counts.reduce((sum, row) => sum + row.messages, 0);
+  const wanted = Number(pull);
+  const canStart = onServer === 0 || (Number.isInteger(wanted) && wanted >= 1);
+  const { reset: forgetTest } = test;
+  // A different login or server may hold different mail, so that's asked again.
+  useEffect(() => forgetTest(), [forgetTest, login, password, servers.imapHost]);
+  const suggested = test.data?.suggested_pull;
+  useEffect(() => {
+    if (suggested !== undefined) setPull(String(suggested));
+  }, [suggested]);
   const state = STATES[status.data?.state ?? "off"] ?? STATES.off;
 
   if (accounts.isPending) return <Card title={t("accounts.title")}><Skeleton className="h-6 w-full" /></Card>;
@@ -115,6 +167,7 @@ export function AccountSettings() {
             </p>
             <MailDownload />
             <p className="text-sm tabular-nums text-ink-muted">{t("accounts.count", { count: status.data?.messages ?? 0 })}</p>
+            <MailSyncControls />
             {!active.has_password ? <p className="text-md text-status-warning">{t("accounts.noPassword")}</p> : null}
             <div className="flex gap-2">
               <Button onClick={() => setEditing(true)}>{t("accounts.change")}</Button>
@@ -126,7 +179,11 @@ export function AccountSettings() {
             className="flex flex-col gap-4"
             onSubmit={(event) => {
               event.preventDefault();
-              void settled().then((found) => save.mutate({ name: nameFor(login), profile: profileWith(found), password }, { onSuccess: () => setEditing(false) }));
+              if (!reached) {
+                void settled().then((found) => test.mutate({ profile: profileWith(found), password }));
+                return;
+              }
+              void settled().then((found) => save.mutate({ name: nameFor(login), profile: profileWith(found), password, pull_limit: onServer && wanted < onServer ? wanted : null }, { onSuccess: () => setEditing(false) }));
             }}
           >
             <Field label={t("accounts.server")} hint={t("accounts.server.hint")}>{({ invalid, ...control }) => <Input autoComplete="off" spellCheck={false} placeholder={t("accounts.server.placeholder")} invalid={invalid} value={servers.imapHost} onChange={(event) => setServers({ ...servers, imapHost: event.target.value })} {...control} />}</Field>
@@ -156,12 +213,25 @@ export function AccountSettings() {
                 ))}
               </ul>
             ) : null}
+            {onServer ? (
+              <div data-testid="pull-chooser" className="flex flex-col gap-3">
+                <div>
+                  <p className="text-md tabular-nums text-ink-primary">{t("accounts.onServer", { total: onServer.toLocaleString() })}</p>
+                  <p className="text-sm tabular-nums text-ink-muted">{t("accounts.onServer.folders", { folders: counts.map((row) => `${FOLDER_NAMES[row.role] ? t(FOLDER_NAMES[row.role] as StringKey) : row.role} ${row.messages.toLocaleString()}`).join(", ") })}</p>
+                </div>
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="w-48">
+                    <Field label={t("accounts.pull")} hint={t("accounts.pull.hint")}>{({ invalid, ...control }) => <Input type="number" min={1} max={onServer} invalid={invalid} value={pull} onChange={(event) => setPull(event.target.value)} {...control} />}</Field>
+                  </div>
+                  <Button variant="quiet" onClick={() => setPull(String(onServer))}>{t("accounts.pull.all", { total: onServer.toLocaleString() })}</Button>
+                </div>
+              </div>
+            ) : null}
             {probe.isError ? <ErrorState title={t("accounts.server.invalid")} /> : null}
             {test.isError ? <ErrorState title={t("accounts.testFailed")} description={messageOf(test.error)} /> : null}
             {save.isError ? <ErrorState title={t("accounts.saveFailed")} description={messageOf(save.error)} /> : null}
             <div className="flex flex-wrap gap-2">
-              <Button loading={test.isPending || probe.isPending} disabled={!ready} onClick={() => void settled().then((found) => test.mutate({ profile: profileWith(found), password }))}>{t("accounts.test")}</Button>
-              <Button type="submit" variant="primary" loading={save.isPending} disabled={!ready}>{t("accounts.connect")}</Button>
+              <Button type="submit" variant="primary" loading={save.isPending || test.isPending || probe.isPending} disabled={!ready || (reached && !canStart)}>{t(reached ? "accounts.start" : "accounts.connect")}</Button>
               {active ? <Button variant="quiet" onClick={() => setEditing(false)}>{t("home.picker.cancel")}</Button> : null}
             </div>
           </form>
