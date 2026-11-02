@@ -18,7 +18,7 @@ function* files(path) {
 const problems = [];
 for (const root of process.argv.slice(2)) {
   for (const path of files(root)) {
-    const layer = Object.keys(RULES).find((name) => path.split("/").includes(name));
+    const layer = Object.keys(RULES).find((name) => path.split(/[\\/]/).includes(name));
     if (!layer) continue;
     const text = readFileSync(path, "utf8");
     for (const [, target] of text.matchAll(/from "(?:@\/ui\/|\.\.\/)([a-z]+)\//g)) {

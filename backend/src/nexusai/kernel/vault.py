@@ -17,6 +17,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from nexusai.kernel.database import PLAIN_HEADER, connect_raw, key_pragma
+from nexusai.kernel.files import replace_file
 from nexusai.kernel.secrets import SecretStore
 
 KEY_BYTES = 32
@@ -70,7 +71,7 @@ def _write_atomic(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
     temporary.write_text(content, encoding="utf-8")
-    os.replace(temporary, path)
+    replace_file(temporary, path)
 
 
 def _seal(home: Path, vault_id: str, key: str, recovery: str) -> None:
@@ -183,7 +184,7 @@ def encrypt_existing(path: Path, key: str) -> bool:
         check.execute("SELECT COUNT(*) FROM sqlite_master").fetchone()
     finally:
         check.close()
-    os.replace(temporary, path)
+    replace_file(temporary, path)
     for suffix in ("-wal", "-shm"):
         path.with_name(path.name + suffix).unlink(missing_ok=True)
     return True

@@ -1,5 +1,6 @@
 """The agent's tools. Every call goes through one door: policy, approval, logging, then the work."""
 
+import contextlib
 import difflib
 import json
 import os
@@ -15,6 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal, cast
 
+import psutil
 import structlog
 from langchain_core.tools import InjectedToolCallId, StructuredTool
 from langgraph.types import interrupt
@@ -73,14 +75,63 @@ class RunControl:
             _kill_tree(process)
 
 
+def _kill_children_too(process: subprocess.Popen[str]) -> None:
+    """Without process groups, whatever a command started has to be found and stopped by name."""
+    try:
+        parent = psutil.Process(process.pid)
+        family = [*parent.children(recursive=True), parent]
+    except psutil.Error:
+        family = []
+    for member in family:
+        with contextlib.suppress(psutil.Error):
+            member.kill()
+
+
 def _kill_tree(process: subprocess.Popen[str]) -> None:
     try:
         if sys.platform == "win32":
-            process.kill()
+            _kill_children_too(process)
         else:
             os.killpg(process.pid, signal.SIGTERM)
     except OSError:
         pass
+
+
+# The script comes in on stdin, because Windows caps a command line at about 32,000 characters and
+# an agent can write a whole file in one command. Both directions need saying they're UTF-8.
+AFTER_STOP_SECONDS = 5
+POWERSHELL_RUNNER = (
+    "$utf8 = New-Object System.Text.UTF8Encoding $false; "
+    "[Console]::InputEncoding = $utf8; [Console]::OutputEncoding = $utf8; $OutputEncoding = $utf8; "
+    "Invoke-Expression ([Console]::In.ReadToEnd()); "
+    "$ok = $?; if ($LASTEXITCODE) { exit $LASTEXITCODE }; if (-not $ok) { exit 1 }"
+)
+
+
+def _after_stopping(process: subprocess.Popen[str], expired: subprocess.TimeoutExpired) -> str:
+    """What it had said so far. Something that escaped can hold its output open, so this gives up."""
+    try:
+        return process.communicate(timeout=AFTER_STOP_SECONDS)[0]
+    except subprocess.TimeoutExpired:
+        for stream in (process.stdin, process.stdout):
+            with contextlib.suppress(OSError):
+                if stream:
+                    stream.close()
+        partial = expired.output
+        return partial.decode("utf-8", "replace") if isinstance(partial, bytes) else partial or ""
+
+
+def shell_command(command: str, windows: bool) -> tuple[list[str], str | None]:
+    """How to start a command here, and what to send it on stdin."""
+    if windows:
+        return [
+            "powershell",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            POWERSHELL_RUNNER,
+        ], command
+    return [shutil.which("zsh") or "/bin/sh", "-c", command], None
 
 
 def list_documents(query: ListDocuments, ctx: Context) -> DocumentLibrary:
@@ -325,26 +376,23 @@ def undo(ctx: Context, activity: int) -> str | None:
 
 
 def run_shell(command: str, cwd: Path, timeout: float, control: RunControl) -> str:
-    shell = (
-        ["powershell", "-NoProfile", "-Command", command]
-        if sys.platform == "win32"
-        else ["/bin/zsh", "-c", command]
-    )
+    shell, script = shell_command(command, sys.platform == "win32")
     process = subprocess.Popen(
         shell,
         cwd=cwd,
+        stdin=subprocess.PIPE if script is not None else subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        text=True,
+        encoding="utf-8",
         errors="replace",
         start_new_session=sys.platform != "win32",
     )
     control.attach(process)
     try:
-        output, _ = process.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
+        output, _ = process.communicate(input=script, timeout=timeout)
+    except subprocess.TimeoutExpired as expired:
         _kill_tree(process)
-        output, _ = process.communicate()
+        output = _after_stopping(process, expired)
         return f"{output}\n[Stopped: it ran past the {int(timeout)} second limit.]"
     finally:
         control.attach(None)

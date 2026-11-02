@@ -14,6 +14,7 @@ from pathlib import Path
 import structlog
 
 from nexusai.kernel.database import connect_raw
+from nexusai.kernel.files import replace_file
 
 log = structlog.get_logger()
 
@@ -49,7 +50,7 @@ def _copy(source: Path, target: Path) -> None:
     temporary.mkdir(parents=True)
     for file in _files(source):
         shutil.copy2(file, temporary / file.name)
-    temporary.rename(target)
+    replace_file(temporary, target)
 
 
 def listing(home: Path) -> list[Backup]:
@@ -136,7 +137,7 @@ def create_online(home: Path, key: str, keep: int, stopping: threading.Event) ->
         return None
     for leftover in temporary.glob("*-*"):
         leftover.unlink(missing_ok=True)
-    temporary.rename(target)
+    replace_file(temporary, target)
     return _finished(home, name, keep)
 
 

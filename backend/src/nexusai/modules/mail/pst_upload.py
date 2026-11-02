@@ -74,7 +74,7 @@ def _meta(ctx: Context, identifier: str) -> dict[str, object]:
     path = _part(ctx, identifier).with_suffix(".json")
     if not path.exists():
         raise CommandError("pst.upload_unknown", "That upload no longer exists.", 404)
-    return dict(json.loads(path.read_text()))
+    return dict(json.loads(path.read_text(encoding="utf-8")))
 
 
 def start(ctx: Context, command: StartPstUpload) -> PstUploadStarted:
@@ -93,7 +93,9 @@ def start(ctx: Context, command: StartPstUpload) -> PstUploadStarted:
             "There isn't enough free space for this file. Try its location instead.",
             422,
         )
-    part.with_suffix(".json").write_text(json.dumps({"name": name, "size": command.size}))
+    part.with_suffix(".json").write_text(
+        json.dumps({"name": name, "size": command.size}), encoding="utf-8"
+    )
     part.touch()
     return PstUploadStarted(id=identifier, received=have)
 

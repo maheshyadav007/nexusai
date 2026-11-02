@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
@@ -101,6 +102,7 @@ def test_a_home_from_a_newer_app_is_refused(tmp_path: Path) -> None:
     assert "newer" in check.problems[0]
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Needs symlinks or POSIX file modes")
 def test_check_blocks_files_and_unwritable_folders(tmp_path: Path) -> None:
     file = tmp_path / "file.txt"
     file.write_text("x")
@@ -181,6 +183,7 @@ def test_agent_is_kept_out_of_everything_else(home: Path, path: str, write: bool
         homes.agent_path(home, path, write=write)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Needs symlinks or POSIX file modes")
 def test_symlinks_cant_lead_out(home: Path, tmp_path: Path) -> None:
     secret = tmp_path / "secret"
     secret.mkdir()

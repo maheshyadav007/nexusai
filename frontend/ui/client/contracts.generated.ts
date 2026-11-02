@@ -1470,6 +1470,7 @@ export type Path14 = string;
 export type Parent1 = string | null;
 export type Folders5 = string[];
 export type Files1 = string[];
+export type Drives = string[];
 export type Path15 = string;
 export type Ok7 = boolean;
 export type Problems1 = string[];
@@ -4898,6 +4899,7 @@ export interface FolderListing {
   parent: Parent1;
   folders: Folders5;
   files?: Files1;
+  drives?: Drives;
   [k: string]: unknown;
 }
 /**

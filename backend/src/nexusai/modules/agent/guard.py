@@ -15,6 +15,7 @@ from typing import Any
 
 from nexusai.contracts.agent import GuardFinding, GuardRule, GuardRules, GuardTestResult
 from nexusai.kernel.database import Database, Migration
+from nexusai.kernel.files import replace_file
 
 MIGRATION = Migration(
     "agent_guard_001",
@@ -48,7 +49,7 @@ def load_rules(home: Path) -> GuardRules:
         rules = default_rules()
         save_rules(home, rules)
         return rules
-    return GuardRules.model_validate(json.loads(path.read_text()))
+    return GuardRules.model_validate(json.loads(path.read_text(encoding="utf-8")))
 
 
 def save_rules(home: Path, rules: GuardRules) -> None:
@@ -56,8 +57,8 @@ def save_rules(home: Path, rules: GuardRules) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     # A unique name, because sessions starting together can all arrive here at once.
     temporary = path.with_suffix(f".{uuid.uuid4().hex}.tmp")
-    temporary.write_text(rules.model_dump_json(indent=2))
-    temporary.replace(path)
+    temporary.write_text(rules.model_dump_json(indent=2), encoding="utf-8")
+    replace_file(temporary, path)
 
 
 def rule_errors(rules: GuardRules) -> list[str]:

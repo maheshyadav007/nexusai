@@ -527,7 +527,7 @@ def _scan_home_files(ctx: Context) -> None:
     if root.is_dir():
         for path in root.rglob("*"):
             if path.is_file() and not path.is_symlink() and not path.name.startswith("."):
-                seen[str(path.relative_to(ctx.config.home))] = path
+                seen[path.relative_to(ctx.config.home).as_posix()] = path
     db = ctx.bus.db
     known = {row["path"]: row for row in db.fetch_all("SELECT * FROM home_files")}
     changed = False
@@ -703,7 +703,7 @@ def _relative(ctx: Context, requested: str) -> Path:
 
 def _entry(ctx: Context, path: Path, labels: dict[str, str]) -> HomeEntry:
     info = path.stat()
-    relative = str(path.relative_to(ctx.config.home.resolve()))
+    relative = path.relative_to(ctx.config.home.resolve()).as_posix()
     return HomeEntry(
         name=path.name,
         label=labels.get(path.name, path.name),
@@ -745,7 +745,9 @@ def list_home_folder(query: ListHomeFolder, ctx: Context) -> HomeFolder:
         raise CommandError("home.not_found", "That folder no longer exists.", 404)
     labels = _labels(ctx, target) if target != home else {}
     entries = [_entry(ctx, path, labels) for path in paths]
-    return HomeFolder(path=str(target.relative_to(home)) if target != home else "", entries=entries)
+    return HomeFolder(
+        path=target.relative_to(home).as_posix() if target != home else "", entries=entries
+    )
 
 
 def _safe_page(found: tuple[str, bytes] | None) -> str | None:

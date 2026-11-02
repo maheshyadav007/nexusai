@@ -23,6 +23,7 @@ from keyring.errors import KeyringError
 
 from nexusai.contracts.mail import MailProfile, ServerProbe
 from nexusai.kernel.config import Config
+from nexusai.kernel.files import replace_file
 from nexusai.kernel.home import app_data_dir
 from nexusai.kernel.secrets import FileStore
 
@@ -64,8 +65,8 @@ def _write(config: Config, body: dict[str, Any]) -> None:
     }
     temporary = path.with_suffix(".tmp")
     temporary.touch(mode=0o600)
-    temporary.write_text(json.dumps(fields))
-    temporary.replace(path)
+    temporary.write_text(json.dumps(fields), encoding="utf-8")
+    replace_file(temporary, path)
 
 
 def _empty() -> dict[str, Any]:
@@ -98,7 +99,7 @@ def _move_in_old_accounts(config: Config) -> dict[str, Any] | None:
     source = here if here.exists() else earlier if earlier.exists() else None
     if source is None:
         return None
-    raw = json.loads(source.read_text())
+    raw = json.loads(source.read_text(encoding="utf-8"))
     profiles = raw.get("profiles", {})
     body = {"activeProfile": raw.get("activeProfile"), "profiles": profiles, "passwords": {}}
     for profile in profiles.values():
@@ -119,7 +120,7 @@ def _load(config: Config) -> dict[str, Any]:
     if not path.exists():
         return _move_in_old_accounts(config) or _empty()
     try:
-        fields = json.loads(path.read_text())
+        fields = json.loads(path.read_text(encoding="utf-8"))
         plain = AESGCM(_key(config)).decrypt(
             base64.b64decode(fields["nonce"]), base64.b64decode(fields["data"]), KEY_INFO
         )

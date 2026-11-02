@@ -30,6 +30,11 @@ export function FolderPicker({ start, trigger, extension, onPick }: { start: str
       <p data-testid="picker-path" className="mb-3 break-all font-mono text-sm text-ink-secondary">
         {listing?.path ?? path}
       </p>
+      {listing?.drives?.length ? (
+        <div role="group" aria-label={t("home.picker.drives")} className="mb-3 flex flex-wrap gap-1">
+          {listing.drives.map((drive) => <Button key={drive} variant="quiet" className="py-px" onClick={() => setPath(drive)}>{drive}</Button>)}
+        </div>
+      ) : null}
       {folders.isError ? <ErrorState title={t("home.picker.error")} onRetry={() => void folders.refetch()} /> : null}
       {folders.isPending ? <Skeleton className="h-6 w-full" /> : null}
       {listing ? (

@@ -1,4 +1,5 @@
 import asyncio
+import gc
 import json
 import threading
 import uuid
@@ -226,8 +227,13 @@ def create_app(config: Config | None = None) -> FastAPI:
                     forget(context)
             vault.forget(home, store)
             close_home()
-            homes.wipe(home, keep_models=keep_models)
-            homes.remove_pointer(data_dir)
+            # Files can stay open until the last references to them are collected.
+            gc.collect()
+            try:
+                homes.wipe(home, keep_models=keep_models)
+            finally:
+                # The key is gone by now, so what's left can't be opened either way.
+                homes.remove_pointer(data_dir)
             log.info("home_reset")
 
     @asynccontextmanager
@@ -338,7 +344,16 @@ def create_app(config: Config | None = None) -> FastAPI:
             return _error(409, "home.not_ready", "There's nothing to reset.")
         if command.confirm != RESET_WORD:
             return _error(422, "home.not_confirmed", "Type the word to confirm.")
-        await asyncio.to_thread(reset_everything, command.keep_models)
+        try:
+            await asyncio.to_thread(reset_everything, command.keep_models)
+        except PermissionError as error:
+            log.warning("home_reset_incomplete", path=str(error.filename))
+            return _error(
+                409,
+                "home.reset_incomplete",
+                f"NexusAI is reset, but another program has this open, so it's still there:"
+                f" {error.filename}. Close that program and delete the folder yourself.",
+            )
         return home_status()
 
     @app.post("/api/home/unlock", response_model=None)

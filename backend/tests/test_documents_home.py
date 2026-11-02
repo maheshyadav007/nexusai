@@ -4,6 +4,7 @@
 import io
 import json
 import struct
+import sys
 import tarfile
 import zipfile
 import zlib
@@ -361,6 +362,7 @@ def test_nothing_private_or_outside_can_be_reached(
     assert client.get("/api/home/file", params={"path": path}).status_code == 403
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Needs symlinks or POSIX file modes")
 def test_a_link_cant_lead_out_of_home(
     client: TestClient, script: Script, app_config: Config, tmp_path: Path
 ) -> None:

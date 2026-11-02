@@ -117,7 +117,8 @@ class PstRunner:
             worker_command(str(job["path"]), int(str(job["position"]))),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
             bufsize=1,
         )
         with self._lock:

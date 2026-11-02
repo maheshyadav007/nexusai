@@ -2,10 +2,12 @@
 # ruff: noqa: F811
 
 import json
+import sys
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+import psutil
 import pytest
 from fastapi.testclient import TestClient
 
@@ -135,6 +137,7 @@ def test_downloaded_models_stay_only_if_asked(
     assert downloader is not None
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Needs symlinks or POSIX file modes")
 def test_only_what_nexusai_made_is_removed(
     setup: Any, tmp_path: Path, script: Script, fake: FakeMail
 ) -> None:
@@ -174,3 +177,27 @@ def test_running_work_is_stopped_first(setup: Any, script: Script) -> None:
     wait(lambda: script.requests, "the run to start")
     script.gate.set()
     assert reset(client).is_success
+
+
+def test_no_file_stays_open_when_a_home_closes(setup: Any, script: Script, fake: FakeMail) -> None:
+    """Windows refuses to remove an open file, so a handle left behind would break Reset there."""
+    client, home, _, _ = setup
+    fill_everything(client, script, fake, home)
+    assert reset(client, keep_models=False).is_success
+    left = [item.path for item in psutil.Process().open_files() if str(home) in item.path]
+    assert left == []
+
+
+def test_a_file_held_by_another_program_is_named_and_the_app_can_carry_on(
+    setup: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, home, _, _ = setup
+
+    def refused(*_: Any, **__: Any) -> None:
+        raise PermissionError(13, "in use", str(home / "documents" / "held.docx"))
+
+    monkeypatch.setattr(homes, "wipe", refused)
+    answer = reset(client, keep_models=False)
+    assert answer.status_code == 409
+    assert "held.docx" in answer.json()["message"]
+    assert client.post("/api/home/status").json()["state"] == "unset"

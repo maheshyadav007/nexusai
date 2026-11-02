@@ -21,6 +21,13 @@ make dev      # then open http://127.0.0.1:3000
 make check    # lint, types, boundaries, no-hardcoding, tests
 ```
 
+On Windows, which usually has no `make`, install [uv](https://docs.astral.sh/uv/) and Node, keep the clone at a short path such as `C:\\dev\\nexusai`, and use:
+
+```sh
+node scripts/dev.mjs setup
+node scripts/dev.mjs       # then open http://127.0.0.1:3000
+```
+
 Browser tests: `cd frontend && npx playwright install chromium && npm run test:e2e`.
 
 Development data goes in `backend/.dev-home/`. Set `NEXUSAI_HOME` to use another folder.

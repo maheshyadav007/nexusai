@@ -11,6 +11,7 @@ from pathlib import Path
 import psutil
 
 from nexusai.contracts.home import FolderListing, HomeCheck
+from nexusai.kernel.files import remove_tree, replace_file
 
 FORMAT_VERSION = 1
 SUBFOLDERS = ("system", "prompts", "memory", "documents", "artifacts", "scratch")
@@ -54,7 +55,9 @@ def default_home() -> Path:
 
 def read_pointer(data_dir: Path) -> Path | None:
     try:
-        return Path(json.loads((data_dir / "home-pointer.json").read_text())["path"])
+        return Path(
+            json.loads((data_dir / "home-pointer.json").read_text(encoding="utf-8"))["path"]
+        )
     except (OSError, ValueError, KeyError, TypeError):
         return None
 
@@ -62,8 +65,8 @@ def read_pointer(data_dir: Path) -> Path | None:
 def write_pointer(data_dir: Path, home: Path) -> None:
     data_dir.mkdir(parents=True, exist_ok=True)
     temporary = data_dir / "home-pointer.json.tmp"
-    temporary.write_text(json.dumps({"path": str(home)}))
-    temporary.replace(data_dir / "home-pointer.json")
+    temporary.write_text(json.dumps({"path": str(home)}), encoding="utf-8")
+    replace_file(temporary, data_dir / "home-pointer.json")
 
 
 def remove_pointer(data_dir: Path) -> None:
@@ -83,7 +86,7 @@ def wipe(home: Path, *, keep_models: bool) -> None:
             if name == "system" and keep_models:
                 _wipe_except(folder, "models")
             else:
-                shutil.rmtree(folder)
+                remove_tree(folder)
     (home / "home.json").unlink(missing_ok=True)
 
 
@@ -92,21 +95,26 @@ def _wipe_except(folder: Path, kept: str) -> None:
         if path.name == kept and not path.is_symlink():
             continue
         if path.is_dir() and not path.is_symlink():
-            shutil.rmtree(path)
+            remove_tree(path)
         else:
             path.unlink()
 
 
 def is_home(path: Path) -> bool:
     try:
-        return int(json.loads((path / "home.json").read_text())["format_version"]) >= 1
+        return (
+            int(json.loads((path / "home.json").read_text(encoding="utf-8"))["format_version"]) >= 1
+        )
     except (OSError, ValueError, KeyError, TypeError):
         return False
 
 
 def too_new(path: Path) -> bool:
     try:
-        return int(json.loads((path / "home.json").read_text())["format_version"]) > FORMAT_VERSION
+        return (
+            int(json.loads((path / "home.json").read_text(encoding="utf-8"))["format_version"])
+            > FORMAT_VERSION
+        )
     except (OSError, ValueError, KeyError, TypeError):
         return False
 
@@ -128,8 +136,10 @@ def _is_network_path(path: Path) -> bool:
     best, kind = "", ""
     for partition in psutil.disk_partitions(all=True):
         mount = partition.mountpoint
-        if str(path).startswith(mount) and len(mount) > len(best):
-            best, kind = mount, partition.fstype.lower()
+        if str(path).lower().startswith(mount.lower()) and len(mount) > len(best):
+            # A mapped drive on Windows reports its real filesystem, and "remote" among its options.
+            remote = "remote" in partition.opts.lower()
+            best, kind = mount, "smb" if remote else partition.fstype.lower()
     return kind in NETWORK_FILESYSTEMS
 
 
@@ -195,10 +205,21 @@ def create_home(path: Path) -> None:
         marker = path / "home.json"
         if not marker.exists():
             marker.write_text(
-                json.dumps({"format_version": FORMAT_VERSION, "id": uuid.uuid4().hex}, indent=2)
+                json.dumps({"format_version": FORMAT_VERSION, "id": uuid.uuid4().hex}, indent=2),
+                encoding="utf-8",
             )
     except OSError as error:
         raise HomeError("Couldn't create the folder there. Choose another one.") from error
+
+
+def _other_drives(path: Path) -> list[str]:
+    """Going up stops at C:\\ on Windows, so the other drives need their own way in."""
+    if sys.platform != "win32":
+        return []
+    mounts = [
+        part.mountpoint for part in psutil.disk_partitions(all=False) if "cdrom" not in part.opts
+    ]
+    return [mount for mount in mounts if mount.lower() != path.anchor.lower()]
 
 
 def browse(raw: str | None, extension: str | None = None) -> FolderListing:
@@ -216,7 +237,9 @@ def browse(raw: str | None, extension: str | None = None) -> FolderListing:
     except OSError as error:
         raise HomeError("Couldn't open that folder.") from error
     parent = None if path.parent == path else str(path.parent)
-    return FolderListing(path=str(path), parent=parent, folders=folders, files=files)
+    return FolderListing(
+        path=str(path), parent=parent, folders=folders, files=files, drives=_other_drives(path)
+    )
 
 
 def agent_path(home: Path, requested: str, *, write: bool) -> Path:

@@ -182,7 +182,7 @@ def main() -> None:
         schema["$defs"].update(model_schema.pop("$defs", {}))
         schema["$defs"][model.__name__] = model_schema
         schema["properties"][model.__name__] = {"$ref": f"#/$defs/{model.__name__}"}
-    Path(sys.argv[1]).write_text(json.dumps(schema, indent=2) + "\n")
+    Path(sys.argv[1]).write_text(json.dumps(schema, indent=2) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

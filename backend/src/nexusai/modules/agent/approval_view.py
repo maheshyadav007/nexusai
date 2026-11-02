@@ -5,7 +5,7 @@ summary mustn't hide what's being approved, so it only says less when that loses
 """
 
 import re
-from pathlib import PurePosixPath
+from pathlib import PurePosixPath, PureWindowsPath
 
 from nexusai.contracts.agent import ApprovalPreview
 
@@ -14,6 +14,12 @@ from nexusai.contracts.agent import ApprovalPreview
 FILE_WRITE = re.compile(
     r"""\A\s*cat\s*>\s*(?P<path>[^\s;&|<>`$()'"]+)\s*<<-?\s*(?P<quote>['"])(?P<end>\w+)(?P=quote)[ \t]*\n"""
     r"""(?P<body>.*)\n(?P=end)[ \t]*\n?\s*\Z""",
+    re.S,
+)
+# The same on Windows: a literal @'...'@ block, unexpanded, into one file and nothing else.
+POWERSHELL_WRITE = re.compile(
+    r"""\A\s*@'[ \t]*\r?\n(?P<body>.*)\r?\n'@[ \t]*\|[ \t]*(?:Set-Content|Out-File)[ \t]+(?:-(?:Path|FilePath|LiteralPath)[ \t]+)?"""
+    r"""(?P<quote>['"]?)(?P<path>[^\s;&|<>`$()'"]+)(?P=quote)(?:[ \t]+-Encoding[ \t]+\w+)?\s*\Z""",
     re.S,
 )
 SUMMARY_CHARS = 120
@@ -65,11 +71,22 @@ def _command(detail: str) -> ApprovalPreview:
             content=written["body"],
             location=name,
         )
+    written = POWERSHELL_WRITE.match(detail)
+    # A line starting '@ ends the text early, and what follows would run.
+    if written and not re.search(r"^'@", written["body"], re.M):
+        name = PureWindowsPath(written["path"]).name
+        return ApprovalPreview(
+            kind="file",
+            summary=f"Create file {name}, {_size(written['body'])}",
+            language=LANGUAGES.get(PureWindowsPath(name).suffix.lower(), "text"),
+            content=written["body"],
+            location=written["path"],
+        )
     lines = detail.strip().splitlines() or [""]
     first = lines[0][:SUMMARY_CHARS]
     more = f", {len(lines)} lines" if len(lines) > 1 else ""
     return ApprovalPreview(
-        kind="command", summary=f"Run a command: {first}{more}", language="bash", content=detail
+        kind="command", summary=f"Run a command: {first}{more}", language="shell", content=detail
     )
 
 

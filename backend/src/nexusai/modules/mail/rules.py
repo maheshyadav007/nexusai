@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from nexusai.contracts.mail import MailRule, RuleActions, RuleCondition, RuleSet
+from nexusai.kernel.files import replace_file
 from nexusai.modules.mail.parse import ParsedMessage
 
 NO_REPLY = re.compile(
@@ -128,7 +129,7 @@ def load_rules(home: Path) -> list[MailRule]:
     path = rules_path(home)
     if not path.exists():
         return []
-    return RuleSet.model_validate(json.loads(path.read_text())).rules
+    return RuleSet.model_validate(json.loads(path.read_text(encoding="utf-8"))).rules
 
 
 def save_rules(home: Path, rules: RuleSet) -> None:
@@ -140,8 +141,8 @@ def _write(home: Path, rules: RuleSet) -> None:
     path = rules_path(home)
     # Its own name each time, so two saves at once can't take each other's file away.
     temporary = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
-    temporary.write_text(rules.model_dump_json(indent=2))
-    temporary.replace(path)
+    temporary.write_text(rules.model_dump_json(indent=2), encoding="utf-8")
+    replace_file(temporary, path)
 
 
 def change_rules(home: Path, change: Callable[[list[MailRule]], list[MailRule]]) -> None:

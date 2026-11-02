@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "theme": "tsx ui/theme/generate.ts",
-    "contracts": "cd ../backend && uv run --quiet python -m nexusai.api.export_contracts ../frontend/ui/client/contracts.schema.json && cd ../frontend && json2ts -i ui/client/contracts.schema.json -o ui/client/contracts.generated.ts --unreachableDefinitions && rm ui/client/contracts.schema.json",
+    "contracts": "cd ../backend && uv run --quiet python -m nexusai.api.export_contracts ../frontend/ui/client/contracts.schema.json && cd ../frontend && json2ts -i ui/client/contracts.schema.json -o ui/client/contracts.generated.ts --unreachableDefinitions && node -e \"require('fs').rmSync('ui/client/contracts.schema.json')\"",
     "predev": "npm run theme",
     "dev": "next dev",
     "prebuild": "npm run theme",

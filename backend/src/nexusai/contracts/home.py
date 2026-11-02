@@ -48,6 +48,8 @@ class FolderListing(BaseModel):
     parent: str | None
     folders: list[str]
     files: list[str] = Field(default_factory=list)
+    # Other drives to go to, on Windows.
+    drives: list[str] = Field(default_factory=list)
 
 
 class UnlockHome(BaseModel):

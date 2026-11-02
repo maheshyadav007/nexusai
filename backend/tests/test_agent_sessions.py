@@ -1,4 +1,5 @@
 import json
+import sys
 import threading
 import time
 from collections.abc import Callable, Iterator
@@ -346,6 +347,7 @@ def test_system_folder_is_refused_outright(
     assert script.requests[1].messages[-1].text.startswith("Not allowed:")
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Needs symlinks or POSIX file modes")
 def test_paths_with_dots_and_links_cant_escape_scratch(
     client: TestClient, script: Script, config: Config, tmp_path: Path
 ) -> None:

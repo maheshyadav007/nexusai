@@ -1,7 +1,6 @@
 """Fetches a model once: resumes after a dropped connection, and checks every byte before use."""
 
 import hashlib
-import os
 import shutil
 import threading
 from collections.abc import Callable
@@ -10,6 +9,7 @@ from pathlib import Path
 import httpx
 import structlog
 
+from nexusai.kernel.files import replace_file
 from nexusai.modules.semantic.catalog import CatalogModel, ModelFile, folder, url
 
 log = structlog.get_logger()
@@ -101,7 +101,7 @@ def _fetch(
         raise DownloadFailed(
             "The downloaded file didn't match what was expected, so it wasn't used."
         )
-    os.replace(partial, target)
+    replace_file(partial, target)
 
 
 def download(
@@ -164,7 +164,7 @@ def import_files(home: Path, model: CatalogModel, source: Path) -> None:
             raise DownloadFailed(f"{found.name} isn't the expected file.")
         partial = _partial(base / item.name)
         shutil.copyfile(found, partial)
-        os.replace(partial, base / item.name)
+        replace_file(partial, base / item.name)
 
 
 def remove(home: Path, model: CatalogModel) -> None:

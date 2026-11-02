@@ -127,6 +127,8 @@ function Palette({ onClose }: { onClose: () => void }) {
 /** Looks like a search field, and opens instant results over the page. Also on Cmd or Ctrl K. */
 export function SearchBox() {
   const [open, setOpen] = useState(false);
+  const [onMac, setOnMac] = useState(false);
+  useEffect(() => setOnMac(/mac/i.test(navigator.platform)), []);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -142,7 +144,7 @@ export function SearchBox() {
       <Pressable data-testid="search-open" onClick={() => setOpen(true)} className="flex w-full items-center gap-2 rounded-md border border-line-subtle bg-surface-page px-3 py-2 text-left text-md text-ink-muted transition-colors duration-fast hover:bg-surface-sunken">
         <Icon name="search" className="h-4 w-4 shrink-0" />
         <span className="min-w-0 flex-1 truncate">{t("search.placeholder")}</span>
-        <Kbd>{t("search.shortcut")}</Kbd>
+        <Kbd>{t(onMac ? "search.shortcut.mac" : "search.shortcut")}</Kbd>
       </Pressable>
       {open ? <Palette onClose={() => setOpen(false)} /> : null}
     </div>

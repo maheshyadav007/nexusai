@@ -2,6 +2,7 @@
 # ruff: noqa: F811
 
 import json
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -281,6 +282,7 @@ def test_download_progress_counts_what_has_come_down(
         assert (finished["total"], finished["done"]) == (0, 0)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Needs symlinks or POSIX file modes")
 def test_finding_pst_files_lists_them_and_can_be_stopped(
     client: TestClient,
     script: Script,

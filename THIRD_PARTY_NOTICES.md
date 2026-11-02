@@ -5,6 +5,7 @@ Packages installed through npm and uv keep their own licenses in their packages.
 | Work | Used for | License |
 |---|---|---|
 | [unslop](https://github.com/heydamir/unslop) by Damir Sokolovsky ([@heydamir](https://x.com/heydamir)) | Design audit skill, in `.claude/skills/unslop` | CC BY 4.0 |
+| [Hallmark](https://github.com/nutlope/hallmark) by Nutlope | Old design skill, kept in `archive/2026-11-01/skills` and not built or served | MIT |
 | [Hermes Agent](https://github.com/NousResearch/hermes-agent) by Nous Research | Reference for the ChatGPT sign-in and request format. No code was copied | MIT |
 | [Beautiful UI](https://www.beautifului.dev/) by Shane Levine | Design and behaviour of the question card, thinking trace, tool rows, message box and sources pill, rebuilt on our tokens | MIT |
 | [AICSS](https://www.aicss.dev/) by Kevin (kvnkld), free components only | Design of the thinking summary, message actions and code block, rebuilt on our tokens | Free components may be copied, per its terms |
