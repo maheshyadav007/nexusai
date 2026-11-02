@@ -292,12 +292,12 @@ def test_search_by_meaning_stays_quick() -> None:
     # A mailbox this size holds more chunks than messages, since long mail is split.
     chunks = MESSAGES * 2
     rng = np.random.default_rng(13)
-    index = VectorIndex(cast(Database, None), "speed")
+    index = VectorIndex(cast(Database, None), "mail", "speed")
     index.vectors = rng.integers(-127, 127, (chunks, DIMENSIONS), dtype=np.int8)
-    index.rows = [("mail", str(number // 2), number % 2) for number in range(chunks)]
+    index.rows = [(str(number // 2), number % 2) for number in range(chunks)]
     query = rng.normal(size=DIMENSIONS).astype(np.float32)
     query /= np.linalg.norm(query)
 
-    median, slowest = timed(lambda _: index.search(query, {"mail"}, 200))
+    median, slowest = timed(lambda _: index.search(query, 200))
     report("Search by meaning", median, slowest, SEARCH_TARGET_MS)
     assert median < SEARCH_TARGET_MS

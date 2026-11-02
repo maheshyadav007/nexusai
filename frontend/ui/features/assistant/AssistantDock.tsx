@@ -15,17 +15,22 @@ import { StatusDot } from "@/ui/primitives/StatusDot";
 import { Tooltip } from "@/ui/primitives/Tooltip";
 import { t, tn } from "@/ui/strings";
 import { useAssistant } from "./AssistantProvider";
+import { AttachedChips, AttachMenu, ModelPicker, useAttachedReading, type Attached } from "./ChatControls";
+import { CompactAction } from "./ChatView";
 import { Composer } from "./Composer";
 import { SessionChat } from "./SessionChat";
 
 const STARTERS = ["chat.starter.today", "chat.starter.mail", "chat.starter.reminder"] as const;
-const SELF_RUNNING = "mail";
+const MAIL_AGENT = "mail-agent";
 
 function NewChat() {
   const assistant = useAssistant();
   const [text, setText] = useState("");
+  const [model, setModel] = useState<string | null>(null);
+  const [attached, setAttached] = useState<readonly Attached[]>([]);
+  const reading = useAttachedReading(attached);
   const send = (words: string) => {
-    if (words.trim()) assistant.start({ text: words.trim(), title: words.trim().slice(0, TITLE_LENGTH) });
+    if (words.trim() && !reading.size) assistant.start({ text: words.trim(), title: words.trim().slice(0, TITLE_LENGTH), model, context: attached.map((item) => item.ref) });
   };
   return (
     <div className="flex min-h-0 flex-1 flex-col justify-end gap-3 p-3">
@@ -42,7 +47,19 @@ function NewChat() {
           ))}
         </ul>
       </div>
-      <Composer value={text} onChange={setText} onSubmit={() => send(text)} placeholder={t("sessions.prompt.placeholder")} label={t("sessions.prompt")} busy={assistant.starting} autoFocus />
+      <AttachedChips items={attached} reading={reading} onRemove={(ref) => setAttached(attached.filter((item) => item.ref !== ref))} />
+      <Composer
+        value={text}
+        onChange={setText}
+        onSubmit={() => send(text)}
+        placeholder={t("sessions.prompt.placeholder")}
+        label={t("sessions.prompt")}
+        busy={assistant.starting}
+        holdSend={reading.size > 0}
+        autoFocus
+        leading={<AttachMenu onAttach={(items) => setAttached([...attached, ...items.filter((item) => !attached.some((other) => other.ref === item.ref))])} />}
+        trailing={<ModelPicker value={model} onChange={setModel} />}
+      />
     </div>
   );
 }
@@ -68,7 +85,8 @@ function Panel() {
   const assistant = useAssistant();
   const sessions = useSessions("");
   const { width, height } = useWindowSize();
-  const chats = (sessions.data?.sessions ?? []).filter((row) => row.agent !== SELF_RUNNING);
+  // The Mail agent's chat is always first, so its triggered runs are easy to get to.
+  const chats = [...(sessions.data?.sessions ?? [])].sort((a, b) => Number(b.id === MAIL_AGENT) - Number(a.id === MAIL_AGENT));
   const options = chats.map((row) => ({ value: row.id, label: row.status === "waiting" ? t("chat.waitingLabel", { title: row.title }) : row.title }));
   // Only one panel ever exists, so pinning moves it instead of restarting the conversation.
   const attached = assistant.pinned && width >= SMALL_SCREEN;
@@ -87,6 +105,7 @@ function Panel() {
           {assistant.session && options.length ? <Select quiet label={t("chat.switch")} value={assistant.session} options={options} onChange={assistant.openSession} /> : <p className="px-2 text-md font-medium text-ink-primary">{t("chat.title")}</p>}
         </div>
         <IconButton icon="newChat" label={t("chat.new")} onClick={assistant.newChat} />
+        {assistant.session ? <CompactAction session={assistant.session} /> : null}
         {assistant.session ? (
           <Tooltip content={t("chat.expand")}>
             <Link href={`/agent/sessions/${assistant.session}`} aria-label={t("chat.expand")} className="focus-ring inline-flex rounded-md p-2 text-ink-secondary transition-colors duration-fast hover:bg-surface-sunken hover:text-ink-primary">

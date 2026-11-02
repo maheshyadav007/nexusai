@@ -2,6 +2,7 @@
 
 import json
 import threading
+import time
 from dataclasses import dataclass, field
 
 import structlog
@@ -23,6 +24,7 @@ from nexusai.modules.mail.rules import evaluate, load_rules
 log = structlog.get_logger()
 SYNCED_ROLES = ("inbox", "sent", "drafts")
 DRAFT_HEADER = "x-nexusai-draft"
+PROGRESS_NOTICE_SECONDS = 1.0
 
 
 @dataclass
@@ -31,6 +33,8 @@ class SyncStatus:
     message: str | None = None
     backfill_remaining: bool = False
     folders: dict[str, str] = field(default_factory=dict)
+    total: int = 0
+    done: int = 0
 
 
 class MailSync:
@@ -44,6 +48,9 @@ class MailSync:
         self._stop = threading.Event()
         self._wake = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True, name=f"mail-{account}")
+        # For each folder still coming down: how many are on the server, and how many are left.
+        self._coming: dict[str, tuple[int, int]] = {}
+        self._last_notice = 0.0
 
     def start(self) -> None:
         self._thread.start()
@@ -68,6 +75,25 @@ class MailSync:
                     source="mail",
                     trace_id=self.ctx.trace_id,
                 )
+
+    def _note_progress(self, folder: str, total: int, left: int) -> None:
+        if left:
+            self._coming[folder] = (total, left)
+        else:
+            self._coming.pop(folder, None)
+        self.status.total = sum(pair[0] for pair in self._coming.values())
+        self.status.done = self.status.total - sum(pair[1] for pair in self._coming.values())
+        now = time.monotonic()
+        if now - self._last_notice < PROGRESS_NOTICE_SECONDS:
+            return
+        self._last_notice = now
+        with self.ctx.bus.unit_of_work() as work:
+            work.emit(
+                "mail.syncProgress",
+                {"total": self.status.total, "done": self.status.done},
+                source="mail",
+                trace_id=self.ctx.trace_id,
+            )
 
     def _run(self) -> None:
         delay = self.config.reconnect_min_seconds
@@ -178,6 +204,7 @@ class MailSync:
                     (validity, below, self.account, folder.name),
                 )
             self._ingest(session, folder, newest, live=False, advance=True)
+            self._note_progress(folder.name, len(uids), len(uids) - len(newest))
             return
         uids = session.uids_after(last_uid)
         for start in range(0, len(uids), self.config.backfill_batch):
@@ -205,6 +232,8 @@ class MailSync:
                     "UPDATE mail_folders SET backfill_below = ? WHERE account = ? AND name = ?",
                     (next_below, self.account, folder.name),
                 )
+            total = len(session.all_uids())
+            self._note_progress(folder.name, total, len(older) - len(batch))
             return True
         return False
 

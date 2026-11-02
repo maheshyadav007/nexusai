@@ -8,17 +8,27 @@ import threading
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, cast
+from urllib.parse import quote
 
 import structlog
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 from nexusai.contracts.documents import (
     DocumentDone,
     DocumentLibrary,
     DocumentPreview,
+    DocumentReader,
     DocumentRow,
     GetDocument,
+    HomeEntry,
+    HomeFolder,
     ListDocuments,
+    ListHomeFolder,
+    ReadDocument,
     ReadDocumentAgain,
+    ReaderKind,
     RemoveDocument,
     SaveFolders,
     UpdateDocument,
@@ -32,6 +42,7 @@ from nexusai.modules.mail.extract import Extraction, extract_safely
 from nexusai.modules.mail.parse import part_bytes
 from nexusai.modules.mail.pst import PST_PART_OFFSET
 from nexusai.modules.mail.pst_worker import read_attachment
+from nexusai.modules.mail.safe_html import sanitize
 from nexusai.modules.semantic import module as semantic
 
 log = structlog.get_logger()
@@ -60,10 +71,39 @@ ALTER TABLE message_parts ADD COLUMN extraction TEXT;
 ALTER TABLE message_parts ADD COLUMN extraction_reason TEXT;
 """,
         ),
+        Migration(
+            "documents_home_files_001",
+            """
+CREATE TABLE home_files (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, path TEXT NOT NULL UNIQUE, name TEXT NOT NULL, size INTEGER NOT NULL, modified REAL NOT NULL,
+  added TEXT NOT NULL, status TEXT NOT NULL, status_reason TEXT, text TEXT NOT NULL DEFAULT '');
+""",
+        ),
     ],
 )
 EMAIL_KINDS = ("attachment", "calendar", "inline", "risky")
 READER_IDLE_SECONDS = 30.0
+# What agents make is searched. Scratch is only working files, so it can be looked at but isn't.
+INDEXED_FOLDER = "artifacts"
+BROWSABLE_FOLDERS = ("documents", "artifacts", "scratch", "memory", "prompts")
+LISTING_LIMIT = 2000
+READ_LIMIT_BYTES = 50_000_000
+INLINE_TYPES = {
+    ".pdf": "application/pdf",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".bmp": "image/bmp",
+}
+TABLE_TYPES = {".csv", ".tsv", ".xlsx", ".xlsm", ".xls", ".ods"}
+MARKDOWN_TYPES = {".md", ".markdown"}
+HTML_TYPES = {".html", ".htm"}
+DOCUMENT_TYPES = {
+    ".doc", ".docx", ".docm", ".odt", ".rtf", ".hwp", ".hwpx", ".ppt", ".pptx", ".pptm", ".odp", ".eml", ".msg", ".ipynb",
+}  # fmt: skip
+_home_changed = threading.Event()
 
 
 def _file_folder(ctx: Context) -> Path:
@@ -132,6 +172,29 @@ def _uploads(ctx: Context) -> list[DocumentRow]:
     return documents
 
 
+def _home_rows(ctx: Context) -> list[DocumentRow]:
+    meta = _meta(ctx)
+    documents = []
+    for row in ctx.bus.db.fetch_all("SELECT * FROM home_files ORDER BY modified DESC"):
+        key = f"h:{row['id']}"
+        folder, tags = meta.get(key, (None, []))
+        documents.append(
+            DocumentRow(
+                key=key,
+                name=row["name"],
+                content_type=mimetypes.guess_type(row["name"])[0] or "application/octet-stream",
+                size=row["size"],
+                date=row["added"],
+                source="home",
+                folder=folder,
+                tags=tags,
+                status=row["status"],
+                status_reason=row["status_reason"],
+            )
+        )
+    return documents
+
+
 def _search_keys(ctx: Context, query: str) -> set[str]:
     words = re.findall(r"[\w@.+-]+", query, flags=re.UNICODE)
     if not words:
@@ -149,15 +212,21 @@ def _search_keys(ctx: Context, query: str) -> set[str]:
         (needle, needle),
     ):
         found.add(f"m:{row['message']}:{row['part_index']}")
+    for row in ctx.bus.db.fetch_all(
+        "SELECT id FROM home_files WHERE name LIKE ? OR text LIKE ?", (needle, needle)
+    ):
+        found.add(f"h:{row['id']}")
     return found
 
 
 @documents_module.query("documents.list")
 def list_documents(query: ListDocuments, ctx: Context) -> DocumentLibrary:
     documents: list[DocumentRow] = []
-    if query.source != "email":
+    if query.source in {None, "upload"}:
         documents += _uploads(ctx)
-    if query.source != "upload":
+    if query.source in {None, "home"}:
+        documents += _home_rows(ctx)
+    if query.source in {None, "email"}:
         documents += _email_parts(ctx)
     tags = sorted({tag for document in documents for tag in document.tags})
     if query.folder:
@@ -167,12 +236,17 @@ def list_documents(query: ListDocuments, ctx: Context) -> DocumentLibrary:
     if query.query.strip():
         keys = _search_keys(ctx, query.query)
         engine = semantic.engine()
-        # Words work right away. If the model isn't here yet, asking is what fetches it.
-        if engine is not None and engine.ensure():
-            keys |= {
-                hit.ref for hit in engine.search(query.query, {"document"}, MEANING_CANDIDATES)
+        # Words always work. Meaning only joins in if the person chose to download its model.
+        places: dict[str, str | None] = {}
+        if engine is not None and engine.is_ready():
+            places = {
+                hit.ref: hit.place
+                for hit in engine.search(query.query, {"document"}, MEANING_CANDIDATES)
             }
-        documents = [d for d in documents if d.key in keys]
+        keys |= set(places)
+        documents = [
+            d.model_copy(update={"place": places.get(d.key)}) for d in documents if d.key in keys
+        ]
     documents.sort(key=lambda d: d.date, reverse=True)
     folders = ctx.bus.db.fetch_all("SELECT name FROM document_folders ORDER BY position")
     return DocumentLibrary(
@@ -260,6 +334,8 @@ def extract_opened(event: AppEvent, ctx: Context) -> None:
 def _find(ctx: Context, key: str) -> DocumentRow:
     if key.startswith("u:"):
         found = [d for d in _uploads(ctx) if d.key == key]
+    elif key.startswith("h:"):
+        found = [d for d in _home_rows(ctx) if d.key == key]
     else:
         parts = key.split(":")
         if len(parts) != 3:
@@ -280,6 +356,11 @@ def get_document(query: GetDocument, ctx: Context) -> DocumentPreview:
             "SELECT text FROM documents WHERE id = ?", (int(query.key[2:]),)
         )
         text = rows[0]["text"] or "" if rows else ""
+    elif query.key.startswith("h:"):
+        rows = ctx.bus.db.fetch_all(
+            "SELECT text FROM home_files WHERE id = ?", (int(query.key[2:]),)
+        )
+        text = rows[0]["text"] if rows else ""
     else:
         _, message, index = query.key.split(":")
         text = part_text(ctx, int(message), int(index))
@@ -351,6 +432,13 @@ def read_again(command: ReadDocumentAgain, ctx: Context) -> DocumentDone:
                 "documents.changed", {"key": command.key}, source="documents", trace_id=ctx.trace_id
             )
         _reader_wake.set()
+    elif command.key.startswith("h:"):
+        with ctx.bus.db.transaction() as tx:
+            tx.execute(
+                "UPDATE home_files SET status = 'pending', status_reason = NULL WHERE id = ?",
+                (int(command.key[2:]),),
+            )
+        _reader_wake.set()
     else:
         _, message, index = command.key.split(":")
         with ctx.bus.db.transaction() as tx:
@@ -409,10 +497,74 @@ def _read_pending(ctx: Context) -> bool:
     return True
 
 
+def _scan_home_files(ctx: Context) -> None:
+    """Keeps up with artifacts, however they got there: an agent, or the person's own editor."""
+    root = ctx.config.home / INDEXED_FOLDER
+    seen: dict[str, Path] = {}
+    if root.is_dir():
+        for path in root.rglob("*"):
+            if path.is_file() and not path.is_symlink() and not path.name.startswith("."):
+                seen[str(path.relative_to(ctx.config.home))] = path
+    db = ctx.bus.db
+    known = {row["path"]: row for row in db.fetch_all("SELECT * FROM home_files")}
+    changed = False
+    with db.transaction() as tx:
+        for relative, path in seen.items():
+            info = path.stat()
+            row = known.get(relative)
+            if row and row["size"] == info.st_size and row["modified"] == info.st_mtime:
+                continue
+            changed = True
+            tx.execute(
+                "INSERT INTO home_files (path, name, size, modified, added, status) VALUES (?, ?, ?, ?, ?, 'pending')"
+                " ON CONFLICT (path) DO UPDATE SET size = excluded.size, modified = excluded.modified, status = 'pending'",
+                (relative, path.name, info.st_size, info.st_mtime, datetime.now(UTC).isoformat()),
+            )
+    engine = semantic.engine()
+    for relative, row in known.items():
+        stale = relative not in seen or row["modified"] != seen[relative].stat().st_mtime
+        if stale and engine is not None:
+            engine.forget("document", f"h:{row['id']}")
+    gone = [row["id"] for relative, row in known.items() if relative not in seen]
+    if gone:
+        changed = True
+        with db.transaction() as tx:
+            for identifier in gone:
+                tx.execute("DELETE FROM home_files WHERE id = ?", (identifier,))
+    if changed:
+        with ctx.bus.unit_of_work() as work:
+            work.emit("documents.changed", {}, source="documents", trace_id=ctx.trace_id)
+
+
+def _read_home_file(ctx: Context) -> bool:
+    rows = ctx.bus.db.fetch_all(
+        "SELECT id, path, name FROM home_files WHERE status = 'pending' ORDER BY id LIMIT 1"
+    )
+    if not rows:
+        return False
+    row = rows[0]
+    try:
+        found = extract_safely(row["name"], (ctx.config.home / row["path"]).read_bytes())
+    except OSError:
+        found = Extraction("", "failed", "This file is missing from your Home folder.")
+    key = f"h:{row['id']}"
+    with ctx.bus.unit_of_work() as work:
+        work.tx.execute(
+            "UPDATE home_files SET text = ?, status = ?, status_reason = ? WHERE id = ?",
+            (found.text, found.status, found.reason, row["id"]),
+        )
+        work.emit("documents.changed", {"key": key}, source="documents", trace_id=ctx.trace_id)
+        work.emit("document.indexed", {"key": key}, source="documents", trace_id=ctx.trace_id)
+    return True
+
+
 def _reader_loop(ctx: Context) -> None:
     while not _reader_stop.is_set():
         try:
-            if _read_pending(ctx):
+            if _home_changed.is_set():
+                _home_changed.clear()
+                _scan_home_files(ctx)
+            if _read_pending(ctx) or _read_home_file(ctx):
                 continue
         except Exception:
             log.exception("document_reader_failed")
@@ -494,6 +646,9 @@ def document_file(ctx: Context, key: str) -> tuple[str, bytes] | None:
             return None
         path = _file_folder(ctx) / rows[0]["stored_name"]
         return (rows[0]["name"], path.read_bytes()) if path.exists() else None
+    if key.startswith("h:"):
+        rows = ctx.bus.db.fetch_all("SELECT path FROM home_files WHERE id = ?", (int(key[2:]),))
+        return home_file(ctx, rows[0]["path"]) if rows else None
     parts = key.split(":")
     if len(parts) != 3:
         return None
@@ -506,3 +661,172 @@ def document_file(ctx: Context, key: str) -> tuple[str, bytes] | None:
         return None
     data = _part_data(ctx, message, index)
     return (rows[0]["filename"], data) if data is not None else None
+
+
+# Looking around Home
+
+
+def _relative(ctx: Context, requested: str) -> Path:
+    """Under Home, in a folder people may look at, with .. and links worked out first."""
+    home = ctx.config.home.resolve()
+    target = (home / requested).resolve()
+    if not target.is_relative_to(home):
+        raise CommandError("home.not_allowed", "That's outside your NexusAI Home.", 403)
+    parts = target.relative_to(home).parts
+    if parts and parts[0] not in BROWSABLE_FOLDERS:
+        raise CommandError("home.not_allowed", "NexusAI keeps that folder to itself.", 403)
+    return target
+
+
+def _entry(ctx: Context, path: Path, labels: dict[str, str]) -> HomeEntry:
+    info = path.stat()
+    relative = str(path.relative_to(ctx.config.home.resolve()))
+    return HomeEntry(
+        name=path.name,
+        label=labels.get(path.name, path.name),
+        path=relative,
+        is_folder=path.is_dir(),
+        size=0 if path.is_dir() else info.st_size,
+        modified=datetime.fromtimestamp(info.st_mtime, UTC).isoformat(),
+    )
+
+
+def _labels(ctx: Context, target: Path) -> dict[str, str]:
+    """Scratch folders are named after sessions, and uploads get generated names."""
+    relative = target.relative_to(ctx.config.home.resolve()).parts
+    if relative == ("scratch",):
+        rows = ctx.bus.db.fetch_all("SELECT id, title FROM agent_sessions")
+        return {row["id"]: row["title"] for row in rows}
+    if relative == ("documents",):
+        rows = ctx.bus.db.fetch_all("SELECT stored_name, name FROM documents")
+        return {row["stored_name"]: row["name"] for row in rows}
+    return {}
+
+
+@documents_module.query("homeFiles.list")
+def list_home_folder(query: ListHomeFolder, ctx: Context) -> HomeFolder:
+    target = _relative(ctx, query.path)
+    home = ctx.config.home.resolve()
+    if target == home:
+        paths = [home / name for name in BROWSABLE_FOLDERS if (home / name).is_dir()]
+    elif target.is_dir():
+        paths = sorted(
+            (
+                path
+                for path in target.iterdir()
+                if not path.name.startswith(".") and not path.is_symlink()
+            ),
+            key=lambda path: (not path.is_dir(), path.name.lower()),
+        )[:LISTING_LIMIT]
+    else:
+        raise CommandError("home.not_found", "That folder no longer exists.", 404)
+    labels = _labels(ctx, target) if target != home else {}
+    entries = [_entry(ctx, path, labels) for path in paths]
+    return HomeFolder(path=str(target.relative_to(home)) if target != home else "", entries=entries)
+
+
+def _safe_page(found: tuple[str, bytes] | None) -> str | None:
+    return sanitize(found[1].decode("utf-8", "replace"), []) if found else None
+
+
+def reader_kind(name: str, status: str) -> ReaderKind:
+    suffix = Path(name).suffix.lower()
+    if suffix == ".pdf":
+        return "pdf"
+    if suffix in INLINE_TYPES:
+        return "image"
+    if suffix in MARKDOWN_TYPES:
+        return "markdown"
+    if suffix in TABLE_TYPES:
+        return "table"
+    if suffix in HTML_TYPES:
+        return "html"
+    if suffix in DOCUMENT_TYPES:
+        return "document"
+    return "code" if status in {"ready", "pending"} else "other"
+
+
+def home_file(ctx: Context, requested: str) -> tuple[str, bytes] | None:
+    target = _relative(ctx, requested)
+    if not target.is_file():
+        return None
+    if target.stat().st_size > READ_LIMIT_BYTES:
+        raise CommandError("home.too_large", "This file is too large to open here.", 413)
+    return target.name, target.read_bytes()
+
+
+@documents_module.query("documents.read")
+def read_document(query: ReadDocument, ctx: Context) -> DocumentReader:
+    """What the reader page shows. Files outside the library are read when they're opened."""
+    if query.key:
+        preview = cast(DocumentPreview, get_document(GetDocument(key=query.key), ctx))
+        row = preview.document
+        kind = reader_kind(row.name, row.status)
+        return DocumentReader(
+            name=row.name,
+            kind=kind,
+            text=preview.text,
+            status=row.status,
+            status_reason=row.status_reason,
+            url=f"/api/documents/file?key={quote(row.key)}",
+            key=row.key,
+            html=_safe_page(document_file(ctx, row.key))
+            if kind == "html" and not row.risky
+            else None,
+        )
+    found = home_file(ctx, query.path or "")
+    if found is None:
+        raise CommandError("document.not_found", "That file no longer exists.", 404)
+    name, data = found
+    label = _labels(ctx, _relative(ctx, query.path or "").parent).get(name, name)
+    extraction = extract_safely(label, data)
+    return DocumentReader(
+        name=label,
+        kind=reader_kind(label, extraction.status),
+        text=extraction.text,
+        status=extraction.status,
+        status_reason=extraction.reason,
+        url=f"/api/home/file?path={quote(query.path or '')}",
+        html=_safe_page(found) if reader_kind(label, extraction.status) == "html" else None,
+    )
+
+
+# Knows when artifacts change, so nothing has to keep checking.
+
+
+class _ArtifactsChanged(FileSystemEventHandler):
+    def on_any_event(self, event: Any) -> None:
+        _home_changed.set()
+        _reader_wake.set()
+
+
+_observer: Any = None
+
+
+def _start_watching(ctx: Context) -> None:
+    global _observer
+    folder = ctx.config.home / INDEXED_FOLDER
+    folder.mkdir(parents=True, exist_ok=True)
+    _home_changed.set()
+    _reader_wake.set()
+    try:
+        _observer = Observer()
+        _observer.daemon = True
+        _observer.schedule(_ArtifactsChanged(), str(folder), recursive=True)
+        _observer.start()
+    except OSError:
+        # Some systems limit how many folders can be watched. A restart still catches up.
+        log.warning("artifacts_not_watched")
+        _observer = None
+
+
+def _stop_watching() -> None:
+    global _observer
+    if _observer is not None:
+        _observer.stop()
+        _observer.join(timeout=5)
+        _observer = None
+
+
+documents_module.on_start.append(_start_watching)
+documents_module.on_stop.append(_stop_watching)

@@ -47,6 +47,19 @@ reconnect_max_seconds = 300
 signature_max_bytes = 30000
 signature_repeat_count = 3
 
+# Known servers, matched on the part of the username after the @. Add the company's server here,
+# so people there only need a username and password. A preset with domain = "*" applies to a
+# username with no @ in it.
+[[mail.presets]]
+domain = "gmail.com"
+label = "Gmail"
+imap_host = "imap.gmail.com"
+imap_port = 993
+smtp_host = "smtp.gmail.com"
+smtp_port = 465
+secure = true
+password_hint = "Use a Google App Password, not your normal password."
+
 [agent]
 # 0 means no limit.
 daily_token_cap = 0
@@ -56,11 +69,36 @@ triage_retry_seconds = 60
 max_recent_thread_messages = 8
 max_thread_chars = 20000
 memory_max_chars = 4000
-compress_after_chars = 60000
+# One run of the Mail agent. It stops there, and what it finished is kept.
+triage_token_limit = 30000
 command_timeout_seconds = 120
 max_tool_output_chars = 20000
 max_agent_messages_per_run = 20
 max_steps = 40
+
+# Typed messages. The chat shows everything, and this is only what the model is sent.
+[context.chat]
+# "trim" or "auto_compact".
+mode = "trim"
+keep_messages = 40
+trim_saved_history = false
+
+# Events and schedules. Those chats grow forever, so what's saved is shortened too.
+[context.triggered]
+mode = "trim"
+keep_messages = 12
+trim_saved_history = true
+
+# Used by auto_compact and by Compact now.
+[context.compact]
+trigger_tokens = 15000
+keep_messages = 12
+summarize_up_to_tokens = 4000
+
+# Whatever the mode, so one run with large results can't overflow the model.
+[context.tool_results]
+clear_after_tokens = 100000
+keep_recent = 3
 
 [logs]
 retention_days = 30

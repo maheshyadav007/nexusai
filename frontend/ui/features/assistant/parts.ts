@@ -10,7 +10,7 @@ export interface ToolPart {
 }
 
 /** A tool with its own card in the conversation. Everything else folds into the trace. */
-export const CARD_TOOLS = new Set(["ask_user", "send_mail", "create_reminders", "create_tasks", "create_categories", "create_agent", "propose_task", "propose_reminder", "draft_reply", "save_draft"]);
+export const CARD_TOOLS = new Set(["ask_user", "send_mail", "record_triage", "create_reminders", "create_tasks", "create_categories", "create_agent", "propose_task", "propose_reminder", "draft_reply", "save_draft"]);
 
 export const toolName = (part: ToolPart) => part.type.slice("tool-".length);
 export const isFinished = (part: ToolPart) => part.state === "output-available" || part.state === "output-denied" || part.state === "output-error";
@@ -46,7 +46,7 @@ export function toBlocks(message: UIMessage, pending: ReadonlySet<string>): Bloc
 
 export type Shown = Block | { kind: "results"; parts: ToolPart[]; key: string };
 
-const WITH_OWN_CARD = new Set(["ask_user", "send_mail"]);
+const WITH_OWN_CARD = new Set(["ask_user", "send_mail", "record_triage"]);
 
 /** Side by side, results of the same kind become one card. What's still being decided stays out. */
 export function mergeResults(blocks: readonly Block[], pending: ReadonlyMap<string, unknown>): Shown[] {
@@ -79,6 +79,22 @@ export const textOf = (message: UIMessage) =>
     .flatMap((part) => (part.type === "text" ? [part.text] : []))
     .join("\n\n")
     .trim();
+
+export interface Versions {
+  turns: readonly number[];
+  current: number;
+}
+
+interface TurnFacts {
+  turn?: number;
+  feedback?: "up" | "down" | null;
+  versions?: Versions | null;
+  origin?: string | null;
+  thread?: number | null;
+}
+
+/** Which turn an answer came from, and how it's been rated and tried again. */
+export const factsOf = (message: UIMessage): TurnFacts => (message.metadata as TurnFacts | undefined) ?? {};
 
 export const timeOf = (message: UIMessage): string | null => {
   const metadata = message.metadata as { time?: string | null } | undefined;

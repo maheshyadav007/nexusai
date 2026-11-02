@@ -48,6 +48,10 @@ RUN_LIMIT_MIGRATION = Migration(
     "agent_gateway_run_limits_001",
     "CREATE TABLE model_run_limits (session TEXT PRIMARY KEY, token_limit INTEGER NOT NULL);",
 )
+RUN_LIMIT_SINCE_MIGRATION = Migration(
+    "gateway_run_limit_since_001",
+    "ALTER TABLE model_run_limits ADD COLUMN since INTEGER NOT NULL DEFAULT 0;",
+)
 
 
 class RunLimitReached(Exception):
@@ -118,25 +122,33 @@ def _message_text(message: Message) -> str:
 
 
 def set_run_limit(db: Database, session: str, token_limit: int) -> None:
-    if token_limit:
-        with db.transaction() as tx:
-            tx.execute(
-                "INSERT INTO model_run_limits (session, token_limit) VALUES (?, ?)",
-                (session, token_limit),
-            )
+    """For the run about to start. A chat can run many times, so earlier runs don't count."""
+    with db.transaction() as tx:
+        if not token_limit:
+            tx.execute("DELETE FROM model_run_limits WHERE session = ?", (session,))
+            return
+        tx.execute(
+            "INSERT INTO model_run_limits (session, token_limit, since)"
+            " VALUES (?, ?, (SELECT COALESCE(MAX(id), 0) FROM model_calls))"
+            " ON CONFLICT (session) DO UPDATE SET token_limit = excluded.token_limit, since = excluded.since",
+            (session, token_limit),
+        )
 
 
 def _check_run_limit(db: Database, session: str | None) -> None:
     """Checked before each call, so a run can pass its limit by at most the call in progress."""
     if not session:
         return
-    limits = db.fetch_all("SELECT token_limit FROM model_run_limits WHERE session = ?", (session,))
+    limits = db.fetch_all(
+        "SELECT token_limit, since FROM model_run_limits WHERE session = ?", (session,)
+    )
     if not limits:
         return
     limit = int(limits[0]["token_limit"])
     used = db.fetch_all(
-        "SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS used FROM model_calls WHERE session = ?",
-        (session,),
+        "SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS used FROM model_calls"
+        " WHERE session = ? AND id > ?",
+        (session, limits[0]["since"]),
     )
     if int(used[0]["used"]) >= limit:
         raise RunLimitReached(f"Stopped at its limit of {limit} tokens. What it finished is kept.")

@@ -1,4 +1,3 @@
-import json
 import threading
 import time
 from collections.abc import Callable, Iterator
@@ -40,7 +39,7 @@ def triage_reply(**fields: Any) -> list[Any]:
         "memory": None,
         "question": None,
     }
-    return [TextChunk(json.dumps({**base, **fields}))]
+    return [ToolCall("t1", "record_triage", {**base, **fields})]
 
 
 class Script:
@@ -207,7 +206,7 @@ def test_a_burst_is_grouped_by_conversation(
         "the queue to empty",
     )
     assert len(script.requests) == 2
-    assert script.requests[1].messages[0].text.count("From ") >= 4
+    assert script.requests[1].messages[-1].text.count("From ") >= 4
 
 
 def test_triage_waits_for_the_model_and_catches_up(
@@ -222,9 +221,16 @@ def test_triage_waits_for_the_model_and_catches_up(
     assert next(j for j in jobs if j["kind"] == "triage")["status"] == "waiting for the model"
     script.default = None
     triaged(client, "While down")
-    assert not [
-        j for j in client.post("/api/queries/jobs.list").json()["jobs"] if j["kind"] == "triage"
-    ]
+    wait(
+        lambda: (
+            not [
+                j
+                for j in client.post("/api/queries/jobs.list").json()["jobs"]
+                if j["kind"] == "triage"
+            ]
+        ),
+        "the run to finish",
+    )
 
 
 def test_flagged_mail_stays_uncategorized_and_shows_the_error(
@@ -339,7 +345,7 @@ def test_a_question_gives_a_best_guess_then_updates_when_answered(
         "update",
     )
     assert updated["why"] == "You said it's urgent."
-    assert "Yes, today" in script.requests[-1].messages[0].text
+    assert "Yes, today" in script.requests[-1].messages[-1].text
     assert client.post("/api/queries/channel.list").json()["messages"] == []
 
 
@@ -360,7 +366,7 @@ def test_an_answered_question_is_not_asked_again_and_nothing_doubles(
     ask = wait(lambda: client.post("/api/queries/channel.list").json()["messages"], "ask")[0]
     client.post("/api/commands/channel.respond", json={"id": ask["id"], "answer": "Yes"})
     wait(
-        lambda: len(script.requests) == 2 and "Yes" in script.requests[-1].messages[0].text,
+        lambda: len(script.requests) == 2 and "Yes" in script.requests[-1].messages[-1].text,
         "second",
     )
     wait(lambda: "best guess" not in thread_named(client, "Twice judged")["why"], "settled")
@@ -386,10 +392,12 @@ def test_mail_agent_is_one_entry_with_a_record_per_run(
     sessions = client.post("/api/queries/sessions.list", json={}).json()["sessions"]
     assert [s["title"] for s in sessions].count("Mail agent") == 1
     view = client.post("/api/queries/session.get", json={"id": "mail-agent"}).json()
-    assert [m["parts"][0]["text"] for m in view["messages"] if m["role"] == "user"] == [
-        "Triage: First",
-        "Triage: Second",
+    said = [m for m in view["messages"] if m["role"] == "user"]
+    assert [m["parts"][0]["text"] for m in said] == [
+        "New email from Priya Nair: First. Triage it.",
+        "New email from Priya Nair: Second. Triage it.",
     ]
+    assert {m["metadata"]["origin"] for m in said} == {"mail"}
 
 
 def test_turning_the_mail_agent_off_stops_new_runs(
@@ -472,7 +480,13 @@ def test_prompts_join_every_run_and_outside_edits_are_picked_up(
         list(response.iter_lines())
     call = client.post("/api/queries/modelCall.get", json={"session": session}).json()
     names = [layer["name"] for layer in call["layers"]]
-    assert names == ["System prompt", "Agent prompt", "Personalized prompts", "Task content"]
+    assert names == [
+        "System prompt",
+        "Agent prompt",
+        "Personalized prompts",
+        "This run",
+        "Task content",
+    ]
     assert (
         "I lead procurement." in call["layers"][2]["real"]
         and "Always answer in French." in call["layers"][1]["real"]
@@ -945,7 +959,7 @@ def test_daily_prep_shows_on_today(client: TestClient, script: Script, fake: Fak
     )
     assert [t["subject"] for t in today["needs_you"]] == ["Needs me"]
     assert [t["subject"] for t in today["waiting"]] == ["Waiting one"]
-    assert today["brief"].startswith("1 needs you")
+    assert today["brief"] == "1 important email to look at."
     assert today["prep_text"] is None
 
     script.default = [TextChunk("Your morning: one thing needs you.")]

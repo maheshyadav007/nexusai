@@ -1,7 +1,10 @@
-"""One timer for whatever's due next, so nothing polls. Missed work happens on the next wake."""
+"""One timer for whatever's due next, so nothing polls. Missed work happens on the next wake.
+
+The clock only says something came due. Starting the agent is the same as for any other event.
+"""
 
 import threading
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import structlog
 
@@ -32,6 +35,14 @@ ALTER TABLE schedules ADD COLUMN updated TEXT;
 # A closed laptop can skip any timer, so the wait is capped and the clock is re-read on waking.
 LONGEST_SLEEP_SECONDS = 300
 OVERDUE_NOTICE_KIND = "overdue"
+CONTEXT_MIGRATION = Migration(
+    "agent_schedule_context_001",
+    """
+ALTER TABLE schedules ADD COLUMN context_mode TEXT;
+ALTER TABLE schedules ADD COLUMN keep_messages INTEGER;
+INSERT INTO schedules (title, prompt, kind, every, time, enabled) VALUES ('Mail agent, hourly', '', 'mail-hourly', 'hour', '00:00', 0);
+""",
+)
 
 
 def _local_now() -> datetime:
@@ -44,6 +55,11 @@ def next_run_after(schedule: Schedule, after: datetime) -> str | None:
         if not schedule.date:
             return None
         return f"{schedule.date}T{schedule.time}"
+    if schedule.every == "hour":
+        candidate = after.replace(minute=minute, second=0, microsecond=0)
+        if candidate <= after:
+            candidate += timedelta(hours=1)
+        return candidate.strftime("%Y-%m-%dT%H:%M")
     candidate = after.replace(hour=hour, minute=minute, second=0, microsecond=0)
     if schedule.every == "week":
         candidate += timedelta(days=(schedule.weekday - candidate.weekday()) % 7)
@@ -64,21 +80,35 @@ def time_check_enabled(ctx: Context) -> bool:
     return not rows or rows[0]["value"] == "1"
 
 
-def set_default(ctx: Context, key: str, value: bool) -> None:
+def set_default(ctx: Context, key: str, value: bool | str) -> None:
+    text = value if isinstance(value, str) else "1" if value else "0"
     with ctx.bus.db.transaction() as tx:
         tx.execute(
             "INSERT INTO agent_defaults (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
-            (key, "1" if value else "0"),
+            (key, text),
+        )
+
+
+def set_hourly(ctx: Context, enabled: bool) -> None:
+    """The Mail agent's hourly run, which the person turns on through its setting."""
+    rows = ctx.bus.db.fetch_all("SELECT * FROM schedules WHERE kind = 'mail-hourly'")
+    if not rows:
+        return
+    following = next_run_after(row_to_schedule(rows[0]), _local_now()) if enabled else None
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "UPDATE schedules SET enabled = ?, next_run = ? WHERE id = ?",
+            (int(enabled), following, rows[0]["id"]),
         )
 
 
 class Scheduler:
-    def __init__(self, ctx: Context, run_prompt: object) -> None:
+    def __init__(self, ctx: Context) -> None:
         self.ctx = ctx
-        self.run_prompt = run_prompt
         self.wake = threading.Event()
         self.stopping = threading.Event()
         self.thread = threading.Thread(target=self._loop, daemon=True, name="scheduler")
+        self.pruned_on: str | None = None
 
     def start(self) -> None:
         self.thread.start()
@@ -115,7 +145,17 @@ class Scheduler:
             self.wake.wait(seconds)
             self.wake.clear()
 
+    def _prune_events(self, now: datetime) -> None:
+        """Once a day, since the event log would otherwise grow forever."""
+        day = now.strftime("%Y-%m-%d")
+        if self.pruned_on == day:
+            return
+        self.pruned_on = day
+        keep = timedelta(days=self.ctx.config.log_retention_days)
+        self.ctx.bus.prune((datetime.now(UTC) - keep).isoformat())
+
     def tick(self, now: datetime) -> None:
+        self._prune_events(now)
         if time_check_enabled(self.ctx):
             planner.fire_due_reminders(self.ctx, now)
             self._overdue(now)
@@ -150,15 +190,14 @@ class Scheduler:
         for row in rows:
             schedule = row_to_schedule(row)
             following = None if schedule.every == "once" else next_run_after(schedule, now)
-            session = self.run_prompt(schedule)  # type: ignore[operator]
             with self.ctx.bus.unit_of_work() as work:
                 work.tx.execute(
-                    "UPDATE schedules SET next_run = ?, last_run = ?, last_session = ?, enabled = ? WHERE id = ?",
-                    (following, stamp, session, int(schedule.every != "once"), schedule.id),
+                    "UPDATE schedules SET next_run = ?, last_run = ?, enabled = ? WHERE id = ?",
+                    (following, stamp, int(schedule.every != "once"), schedule.id),
                 )
                 work.emit(
-                    "schedule.ran",
-                    {"id": schedule.id, "session": session},
+                    "schedule.due",
+                    {"id": schedule.id},
                     source="agent",
                     trace_id=self.ctx.trace_id,
                 )

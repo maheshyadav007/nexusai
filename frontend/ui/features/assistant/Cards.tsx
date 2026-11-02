@@ -224,6 +224,29 @@ export function MailCard({ part, approval }: { part: ToolPart; approval?: ToolAp
   );
 }
 
+/** What the Mail agent decided about a conversation, and why. */
+export function TriageCard({ part, thread }: { part: ToolPart; thread: number | null | undefined }) {
+  const input = part.input ?? {};
+  const category = typeof input.category === "string" ? input.category : null;
+  const importance = String(input.importance ?? "normal");
+  return (
+    <Shell testid="triage-card">
+      <p className="flex flex-wrap items-center gap-2 text-md font-medium text-ink-primary">
+        {category ?? t("chat.triage.noCategory")}
+        {importance === "high" ? <span className="text-sm font-normal text-accent-default">{t("today.important")}</span> : null}
+      </p>
+      {input.summary ? <p className="break-words text-md text-ink-primary">{String(input.summary)}</p> : null}
+      {input.reason ? <p className="break-words text-sm text-ink-muted">{String(input.reason)}</p> : null}
+      {!isFinished(part) ? <p className="text-sm text-ink-muted">{t("chat.result.working")}</p> : null}
+      {thread ? (
+        <Link href={`/mail/thread/${thread}`} className="focus-ring self-start rounded-sm text-sm text-ink-secondary underline underline-offset-2 transition-colors duration-fast hover:text-ink-primary">
+          {t("chat.result.openMail")}
+        </Link>
+      ) : null}
+    </Shell>
+  );
+}
+
 const RESULT: Readonly<Record<string, { icon: IconName; href: string; open: Parameters<typeof t>[0] }>> = {
   create_tasks: { icon: "tasks", href: "/planner/tasks", open: "chat.result.openTasks" },
   propose_task: { icon: "tasks", href: "/planner/tasks", open: "chat.result.openTasks" },

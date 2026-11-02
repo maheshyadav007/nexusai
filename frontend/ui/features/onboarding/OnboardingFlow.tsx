@@ -5,13 +5,15 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { useHomeStatus, useRecoveryKey } from "@/ui/client/home";
 import { PendingRecoveryKey } from "@/ui/features/home/RecoveryKey";
 import { useFinishOnboarding, useOnboarding, useSetStep } from "@/ui/client/onboarding";
-import { useDownloadModel, useSemantic } from "@/ui/client/semantic";
+import { useMailStatus } from "@/ui/client/mail";
+import { useModelStatus } from "@/ui/client/models";
+import { useSemantic } from "@/ui/client/semantic";
 import { useStarterPrompts } from "@/ui/client/work";
 import { AgentPresets } from "@/ui/features/settings/AgentSettings";
 import { HomeChooser } from "@/ui/features/home/HomeChooser";
-import { AccountSettings } from "@/ui/features/settings/AccountSettings";
+import { EmailConnector } from "@/ui/features/connectors/ConnectorsScreen";
 import { AppearanceSettings } from "@/ui/features/settings/AppearanceSettings";
-import { LocalModelSettings } from "@/ui/features/settings/LocalModelSettings";
+import { LocalModelSettings, SearchModelChoice } from "@/ui/features/settings/LocalModelSettings";
 import { ModelSettings } from "@/ui/features/settings/ModelSettings";
 import { ProfileForm } from "@/ui/features/settings/ProfileForm";
 import { Button } from "@/ui/primitives/Button";
@@ -70,20 +72,31 @@ function RecoveryStep({ step, index, back, onDone }: { step: Step; index: number
   );
 }
 
-/** Arriving here is the decision to get it, and it never holds up the next step. */
+/** Nothing downloads until the person says so. Skipping just means search goes by keyword. */
 function SearchStep() {
+  return (
+    <div className="flex flex-col gap-4">
+      <SearchModelChoice />
+      <LocalModelSettings brief />
+    </div>
+  );
+}
+
+/** Which earlier steps were passed without being done, so they aren't shown as finished. */
+function useSkippedSteps(): ReadonlySet<number> {
+  const mail = useMailStatus();
+  const model = useModelStatus();
   const semantic = useSemantic();
-  const { mutate: fetch } = useDownloadModel();
-  const model = semantic.data?.models.find((row) => row.active);
-  const missing = model?.state === "missing";
-  const id = model?.id;
-  useEffect(() => {
-    if (missing && id) fetch(id);
-  }, [missing, id, fetch]);
-  return <LocalModelSettings brief />;
+  const skipped: Record<string, boolean> = {
+    mail: Boolean(mail.data) && !mail.data?.account,
+    model: Boolean(model.data) && !model.data?.connected,
+    search: Boolean(semantic.data) && !semantic.data?.ready && !semantic.data?.models.some((row) => row.state === "downloading"),
+  };
+  return new Set(STEPS.flatMap((item, index) => (skipped[item.id] ? [index] : [])));
 }
 
 function Frame({ step, index, actions, children }: { step: Step; index: number; actions?: ReactNode; children: ReactNode }) {
+  const skipped = useSkippedSteps();
   const seen = useRef(index);
   const forward = index >= seen.current;
   useEffect(() => {
@@ -93,13 +106,13 @@ function Frame({ step, index, actions, children }: { step: Step; index: number; 
     <div className="flex min-h-screen bg-surface-page text-ink-primary">
       <aside className="sticky top-0 hidden h-screen w-sidebar shrink-0 flex-col gap-6 border-r border-line-subtle p-5 lg:flex">
         <span className="text-lg font-medium">{t("app.name")}</span>
-        <StepRail label={t("setup.progress")} steps={STEPS.map((item) => t(item.label))} current={index} />
+        <StepRail label={t("setup.progress")} steps={STEPS.map((item) => t(item.label))} current={index} skipped={skipped} skippedLabel={t("setup.skipped")} />
         <p className="mt-auto text-sm text-ink-muted">{t("setup.time")}</p>
       </aside>
       <main className="flex min-w-0 flex-1 flex-col gap-6 p-6">
         <header className="flex flex-col gap-4 lg:hidden">
           <span className="text-lg font-medium">{t("app.name")}</span>
-          <Stepper label={t("setup.progress")} steps={STEPS.map((item) => t(item.label))} current={index} />
+          <Stepper label={t("setup.progress")} steps={STEPS.map((item) => t(item.label))} current={index} skipped={skipped} />
         </header>
         <div className="mx-auto w-full max-w-reading py-5">
           <Steps step={step.id} forward={forward}>
@@ -125,6 +138,8 @@ export function OnboardingFlow() {
   const setStep = useSetStep();
   const finish = useFinishOnboarding();
   const starters = useStarterPrompts();
+  const mail = useMailStatus();
+  const semantic = useSemantic();
 
   const done = onboarding.data?.completed;
   useEffect(() => {
@@ -191,12 +206,12 @@ export function OnboardingFlow() {
         <>
           {back}
           <Button variant="primary" loading={setStep.isPending || finish.isPending} onClick={goNext}>
-            {t(isLast ? "setup.enter" : "setup.next")}
+            {t(isLast ? "setup.enter" : (step.id === "mail" && !mail.data?.account) || (step.id === "search" && !semantic.data?.ready && !semantic.data?.models.some((row) => row.state === "downloading")) ? "setup.skip" : "setup.next")}
           </Button>
         </>
       }
     >
-      {step.id === "mail" ? <AccountSettings /> : null}
+      {step.id === "mail" ? <EmailConnector /> : null}
       {step.id === "model" ? <ModelSettings /> : null}
       {step.id === "search" ? <SearchStep /> : null}
       {step.id === "permissions" ? <AgentPresets /> : null}

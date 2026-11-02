@@ -19,9 +19,12 @@ from nexusai.contracts.mail import (
     DecideCategory,
     Draft,
     DraftList,
+    FindPst,
     GetMailAccounts,
+    GetMailPresets,
     GetMailStatus,
     GetPstImports,
+    GetPstSearch,
     GetRules,
     GetSendChecks,
     GetThread,
@@ -33,15 +36,20 @@ from nexusai.contracts.mail import (
     MailCategory,
     MailChanged,
     MailDone,
+    MailPreset,
+    MailPresets,
     MailProfile,
     MailRule,
     MailStatus,
     MailTestResult,
     MergeCategories,
     MoveThread,
+    ProbeServer,
     PstImport,
     PstImportAction,
     PstImports,
+    PstSearchStatus,
+    PstUploadStarted,
     Recipient,
     RemoveDraft,
     RemoveMailAccount,
@@ -59,10 +67,12 @@ from nexusai.contracts.mail import (
     SendCheckSettings,
     SendDraft,
     SendProblem,
+    ServerProbe,
     SetThreadCategory,
     SetThreadFlag,
     SetThreadRead,
     SetThreadStatus,
+    StartPstUpload,
     TestMailAccount,
     ThreadList,
     ThreadUpdated,
@@ -70,7 +80,7 @@ from nexusai.contracts.mail import (
     UpdateCategory,
 )
 from nexusai.kernel.module import CommandError, Context, Module
-from nexusai.modules.mail import accounts, pst, rules, send, store
+from nexusai.modules.mail import accounts, pst, pst_search, pst_upload, rules, send, store
 from nexusai.modules.mail.imap import test_imap
 from nexusai.modules.mail.parse import normalize_subject
 from nexusai.modules.mail.sync import MailSync
@@ -102,7 +112,6 @@ def _start_sync(ctx: Context) -> None:
 
 
 def _startup(ctx: Context) -> None:
-    accounts.adopt_earlier_accounts(ctx.config)
     _start_sync(ctx)
     # An import that was running when the app closed carries on from its saved position.
     pst.runner.kick(ctx)
@@ -119,6 +128,15 @@ def _shutdown() -> None:
 mail_module.on_start.append(_startup)
 mail_module.on_stop.append(_shutdown)
 mail_module.on_stop.append(pst.runner.stop)
+mail_module.on_stop.append(pst_search.search.stop)
+
+
+def _forget(ctx: Context) -> None:
+    accounts.forget_everything(ctx.config)
+    pst_search.search.status = PstSearchStatus(state="idle")
+
+
+mail_module.on_reset.append(_forget)
 
 
 def _account(ctx: Context) -> str:
@@ -212,8 +230,11 @@ def save_account(command: SaveMailAccount, ctx: Context) -> MailAccounts:
 @mail_module.command("mail.accounts.remove")
 def remove_account(command: RemoveMailAccount, ctx: Context) -> MailAccounts:
     active, profiles = accounts.read_accounts(ctx.config)
-    profiles.pop(command.name, None)
+    removed = profiles.pop(command.name, None)
     accounts.write_accounts(ctx.config, None if active == command.name else active, profiles)
+    still_used = removed and any(p.auth.user == removed.auth.user for p in profiles.values())
+    if removed and not still_used:
+        accounts.delete_password(ctx.config, removed.auth.user)
     _start_sync(ctx)
     with ctx.bus.unit_of_work() as work:
         work.emit(
@@ -237,7 +258,19 @@ def get_status(query: GetMailStatus, ctx: Context) -> MailStatus:
         message=_sync.status.message,
         messages=count,
         backfill_remaining=_sync.status.backfill_remaining,
+        total=_sync.status.total,
+        done=_sync.status.done,
     )
+
+
+@mail_module.command("mail.accounts.probe")
+def probe_server(command: ProbeServer, ctx: Context) -> ServerProbe:
+    return accounts.probe(command.server)
+
+
+@mail_module.query("mail.presets")
+def mail_presets(query: GetMailPresets, ctx: Context) -> MailPresets:
+    return MailPresets(presets=[MailPreset(**preset) for preset in ctx.config.mail.presets])
 
 
 # Reading
@@ -271,7 +304,7 @@ def run_search(query: SearchMail, ctx: Context) -> SearchResults:
     found = store.search(ctx.bus.db, account, query)
     engine = semantic.engine()
     # Words work right away. If the model isn't here yet, asking is what fetches it.
-    if not query.query.strip() or engine is None or not engine.ensure():
+    if not query.query.strip() or engine is None or not engine.is_ready():
         return found
     hits = engine.search(query.query, {"mail"}, MEANING_CANDIDATES)
     return store.merge_meaning(
@@ -827,7 +860,7 @@ def reply_draft(query: ReplyContext, ctx: Context) -> ReplyDraft:
     if not rows:
         raise CommandError("thread.not_found", "That message no longer exists.", 404)
     message = rows[0]
-    me = profile.auth.user.lower()
+    me = (profile.address or profile.auth.user).lower()
     sender = message["from_addr"]
     to_people = json.loads(message["to_json"])
     cc_people = json.loads(message["cc_json"])
@@ -892,7 +925,8 @@ def _problems(
             found.append(SendProblem(check=check, level=level, message=message))
 
     active, profiles = accounts.read_accounts(ctx.config)
-    domain = profiles[active].auth.user.rsplit("@", 1)[-1].lower() if active else ""
+    own = (profiles[active].address or profiles[active].auth.user) if active else ""
+    domain = own.rsplit("@", 1)[-1].lower() if "@" in own else ""
     recipients = [r.address.lower() for r in [*draft.to, *draft.cc, *draft.bcc]]
     if draft.thread_id is not None and domain:
         rows = ctx.bus.db.fetch_all(
@@ -997,6 +1031,28 @@ def pst_add(command: AddPstImport, ctx: Context) -> PstImports:
         work.emit("pst.progress", {"status": "queued"}, source="mail", trace_id=ctx.trace_id)
     pst.runner.kick(ctx)
     return _pst_rows(ctx)
+
+
+@mail_module.query("pst.search")
+def pst_search_status(query: GetPstSearch, ctx: Context) -> PstSearchStatus:
+    return pst_search.search.status
+
+
+@mail_module.command("pst.find")
+def pst_find(command: FindPst, ctx: Context) -> PstSearchStatus:
+    pst_search.search.start(ctx, command.everywhere)
+    return pst_search.search.status
+
+
+@mail_module.command("pst.findStop")
+def pst_find_stop(command: GetPstSearch, ctx: Context) -> PstSearchStatus:
+    pst_search.search.stop()
+    return pst_search.search.status
+
+
+@mail_module.command("pst.uploadStart")
+def pst_upload_start(command: StartPstUpload, ctx: Context) -> PstUploadStarted:
+    return pst_upload.start(ctx, command)
 
 
 @mail_module.command("pst.pause")

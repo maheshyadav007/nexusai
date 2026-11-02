@@ -42,6 +42,7 @@ def ctx(config: Config) -> Iterator[Context]:
             guard.MIGRATION,
             gateway.MIGRATION,
             gateway.RUN_LIMIT_MIGRATION,
+            gateway.RUN_LIMIT_SINCE_MIGRATION,
             *notifications_module.migrations,
         ]
     )

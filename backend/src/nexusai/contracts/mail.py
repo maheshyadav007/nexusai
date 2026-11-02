@@ -31,6 +31,8 @@ class MailProfile(BaseModel):
     smtp: ServerSettings
     auth: MailAuth
     mailboxes: list[str] = Field(default_factory=lambda: ["INBOX"])
+    # When the login isn't the person's mail address, as with many company accounts.
+    address: str | None = Field(default=None, max_length=320)
 
 
 class GetMailAccounts(BaseModel):
@@ -91,6 +93,42 @@ class MailStatus(BaseModel):
     message: str | None = None
     messages: int = 0
     backfill_remaining: bool = False
+    # How much of what's on the server has come down so far.
+    total: int = 0
+    done: int = 0
+
+
+class ProbeServer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    server: str = Field(min_length=1, max_length=255, pattern=r"^[A-Za-z0-9.-]+$")
+
+
+class ServerProbe(BaseModel):
+    imap_port: int
+    smtp_host: str
+    smtp_port: int
+
+
+class GetMailPresets(BaseModel):
+    pass
+
+
+class MailPreset(BaseModel):
+    """Server details known in advance, so most people only need a login and password."""
+
+    domain: str
+    label: str
+    imap_host: str
+    imap_port: int
+    smtp_host: str
+    smtp_port: int
+    secure: bool = True
+    password_hint: str | None = None
+
+
+class MailPresets(BaseModel):
+    presets: list[MailPreset]
 
 
 class ListThreads(BaseModel):
@@ -452,6 +490,51 @@ class AddPstImport(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     path: str = Field(min_length=1, max_length=4096)
+
+
+class FindPst(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    everywhere: bool = False
+
+
+class GetPstSearch(BaseModel):
+    pass
+
+
+class FoundPst(BaseModel):
+    path: str
+    name: str
+    size: int
+    modified: str
+
+
+class PstSearchStatus(BaseModel):
+    state: Literal["idle", "running", "done", "stopped"]
+    everywhere: bool = False
+    place: str | None = None
+    scanned: int = 0
+    found: list[FoundPst] = Field(default_factory=list)
+
+
+class StartPstUpload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=500)
+    size: int = Field(gt=0)
+    modified: int = 0
+
+
+class PstUploadStarted(BaseModel):
+    id: str
+    received: int
+
+
+class PstUploadStatus(BaseModel):
+    received: int
+    size: int
+    # Set once the whole file is here.
+    path: str | None = None
 
 
 class PstImportAction(BaseModel):

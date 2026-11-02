@@ -31,6 +31,7 @@ class MailConfig:
     reconnect_max_seconds: float
     signature_max_bytes: int
     signature_repeat_count: int
+    presets: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -42,7 +43,7 @@ class AgentConfig:
     max_recent_thread_messages: int
     max_thread_chars: int
     memory_max_chars: int
-    compress_after_chars: int
+    triage_token_limit: int
     command_timeout_seconds: float
     max_tool_output_chars: int
     max_agent_messages_per_run: int
@@ -72,6 +73,8 @@ class Config:
     chatgpt: ChatGptConfig
     mail: MailConfig
     agent: AgentConfig
+    # What the model sees of a conversation. Settings can change it, so it's checked there.
+    context: dict[str, Any]
     secrets_test_file: Path | None = None
     # Not printed if a config is ever logged.
     database_key: str | None = field(default=None, repr=False)
@@ -115,6 +118,7 @@ def load_config(home_dir: Path | None = None) -> Config:
         default_settings=raw["settings"],
         mail=MailConfig(**raw["mail"]),
         agent=AgentConfig(**raw["agent"]),
+        context=raw["context"],
         chatgpt=ChatGptConfig(
             issuer=os.environ.get("NEXUSAI_CHATGPT_ISSUER", chatgpt["issuer"]),
             base_url=os.environ.get("NEXUSAI_CHATGPT_BASE_URL", chatgpt["base_url"]),

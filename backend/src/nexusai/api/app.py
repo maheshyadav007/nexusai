@@ -30,9 +30,11 @@ from nexusai.contracts.home import (
     HomeCheck,
     HomeStatus,
     RecoveryKeyView,
+    ResetHome,
     RestoreBackup,
     UnlockHome,
 )
+from nexusai.contracts.mail import PstUploadStatus
 from nexusai.contracts.notifications import NotificationRequested
 from nexusai.kernel import backups, vault
 from nexusai.kernel import home as homes
@@ -44,8 +46,10 @@ from nexusai.kernel.module import CommandError, Context, Endpoint, Listener, Mod
 from nexusai.kernel.secrets import secret_store
 from nexusai.modules.agent import module as agent
 from nexusai.modules.agent.module import agent_module
+from nexusai.modules.connectors.module import connectors_module
 from nexusai.modules.documents import module as documents
 from nexusai.modules.documents.module import documents_module
+from nexusai.modules.mail import pst_upload
 from nexusai.modules.mail import store as mail_store
 from nexusai.modules.mail.module import mail_module
 from nexusai.modules.models.module import models_module, reset_login
@@ -68,11 +72,13 @@ MODULES: list[Module] = [
     panels_module,
     planner_module,
     semantic_module,
+    connectors_module,
     agent_module,
 ]
 log = structlog.get_logger()
 # Present while the app runs, so one left behind means the last exit wasn't clean.
 RUNNING_FILE = "running"
+RESET_WORD = "RESET"
 
 
 def _error(status: int, code: str, message: str, trace_id: str | None = None) -> JSONResponse:
@@ -193,11 +199,9 @@ def create_app(config: Config | None = None) -> FastAPI:
             return pointer
         return None
 
-    @asynccontextmanager
-    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-        if home := startup_home():
-            open_home(home)
-        yield
+    def close_home() -> None:
+        """Stops everything and closes every file, so the Home can be left, or removed."""
+        nonlocal runtime
         reset_login()
         for module in MODULES:
             for stop in module.on_stop:
@@ -208,6 +212,30 @@ def create_app(config: Config | None = None) -> FastAPI:
             runtime.db.close()
             (runtime.config.home / "system" / RUNNING_FILE).unlink(missing_ok=True)
             sink.detach()
+            runtime = None
+
+    def reset_everything(keep_models: bool) -> None:
+        with runtime_lock:
+            current = runtime
+            assert current is not None
+            context = Context(bus=current.bus, config=current.config, trace_id=uuid.uuid4().hex)
+            home = current.config.home
+            # While the database can still say what's stored outside Home.
+            for module in MODULES:
+                for forget in module.on_reset:
+                    forget(context)
+            vault.forget(home, store)
+            close_home()
+            homes.wipe(home, keep_models=keep_models)
+            homes.remove_pointer(data_dir)
+            log.info("home_reset")
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        if home := startup_home():
+            open_home(home)
+        yield
+        close_home()
 
     app = FastAPI(title="NexusAI", lifespan=lifespan)
     app.add_middleware(
@@ -243,7 +271,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             return JSONResponse(result.model_dump(mode="json"), headers={"x-trace-id": trace_id})
 
     def home_status() -> HomeStatus:
-        default = str(homes.default_home())
+        default = str(cfg.home_dir or homes.default_home())
         if runtime is not None:
             return HomeStatus(state="ready", path=str(runtime.config.home), default_path=default)
         if blocked is not None:
@@ -302,6 +330,15 @@ def create_app(config: Config | None = None) -> FastAPI:
             return _error(422, "home.not_allowed", str(error))
         homes.write_pointer(data_dir, path)
         log.info("home_opened", existing=check.is_existing_home)
+        return home_status()
+
+    @app.post("/api/home/reset", response_model=None)
+    async def reset_home(command: ResetHome) -> HomeStatus | JSONResponse:
+        if runtime is None:
+            return _error(409, "home.not_ready", "There's nothing to reset.")
+        if command.confirm != RESET_WORD:
+            return _error(422, "home.not_confirmed", "Type the word to confirm.")
+        await asyncio.to_thread(reset_everything, command.keep_models)
         return home_status()
 
     @app.post("/api/home/unlock", response_model=None)
@@ -405,8 +442,34 @@ def create_app(config: Config | None = None) -> FastAPI:
         except CommandError as error:
             return _error(error.status, error.code, error.message)
 
+    @app.post("/api/pst/upload/{identifier}", response_model=None)
+    async def upload_pst_piece(
+        identifier: str, offset: int, request: Request
+    ) -> PstUploadStatus | JSONResponse:
+        """One piece of a large file. A browser can't hand over a path, so it sends the bytes."""
+        ctx = bare_context()
+        if ctx is None:
+            return _error(409, "home.not_ready", "Choose a NexusAI Home first.")
+        if int(request.headers.get("content-length") or 0) > pst_upload.MOST_BYTES:
+            return _error(413, "pst.piece_too_large", "That piece is too large.")
+        data = await request.body()
+        try:
+            return await asyncio.to_thread(pst_upload.write, ctx, identifier, offset, data)
+        except CommandError as error:
+            return _error(error.status, error.code, error.message)
+
+    def file_response(found: tuple[str, bytes], inline: bool) -> Response:
+        """Only pictures and PDFs ever open in place. Anything else could run as a page here."""
+        kind = documents.INLINE_TYPES.get(Path(found[0]).suffix.lower()) if inline else None
+        disposition = "inline" if kind else "attachment"
+        headers = {
+            "Content-Disposition": f"{disposition}; filename*=UTF-8''{quote(found[0])}",
+            "X-Content-Type-Options": "nosniff",
+        }
+        return Response(found[1], media_type=kind or "application/octet-stream", headers=headers)
+
     @app.get("/api/documents/file", response_model=None)
-    async def document_file(key: str) -> Response:
+    async def document_file(key: str, inline: bool = False) -> Response:
         ctx = bare_context()
         if ctx is None:
             return _error(409, "home.not_ready", "Choose a NexusAI Home first.")
@@ -416,11 +479,20 @@ def create_app(config: Config | None = None) -> FastAPI:
             found = None
         if found is None:
             return _error(404, "document.not_found", "That document no longer exists.")
-        headers = {
-            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(found[0])}",
-            "X-Content-Type-Options": "nosniff",
-        }
-        return Response(found[1], media_type="application/octet-stream", headers=headers)
+        return file_response(found, inline)
+
+    @app.get("/api/home/file", response_model=None)
+    async def home_file(path: str, inline: bool = False) -> Response:
+        ctx = bare_context()
+        if ctx is None:
+            return _error(409, "home.not_ready", "Choose a NexusAI Home first.")
+        try:
+            found = await asyncio.to_thread(documents.home_file, ctx, path)
+        except CommandError as error:
+            return _error(error.status, error.code, error.message)
+        if found is None:
+            return _error(404, "document.not_found", "That file no longer exists.")
+        return file_response(found, inline)
 
     ui_stream_headers = {
         "Cache-Control": "no-cache",
@@ -436,7 +508,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             return _error(409, "home.not_ready", "Choose a NexusAI Home first.")
         try:
             sessions = agent.current()
-            turn = await asyncio.to_thread(sessions.send, body.id, body.text, body.edit_index)
+            turn = await asyncio.to_thread(sessions.send, body.id, body.text, body.retry)
         except CommandError as error:
             return _error(error.status, error.code, error.message)
         stream = sessions.stream_turn(turn, request.is_disconnected)
@@ -486,7 +558,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         if runtime is None:
             return EventLog(events=[], failed=[])
         return EventLog(
-            events=runtime.bus.events_since(query.since, cfg.log_page_size),
+            events=runtime.bus.newest_events(query.since, cfg.log_page_size),
             failed=runtime.bus.failed_events(),
         )
 

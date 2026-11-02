@@ -14,8 +14,10 @@ dependencies = [
     "langgraph>=0.2",
     "langgraph-checkpoint-sqlite>=2",
     "libpff-python>=20240101",
+    "mcp>=2.3",
     "nh3>=0.2",
     "numpy>=1.26",
+    "olefile>=0.47",
     "onnxruntime>=1.20",
     "openpyxl>=3.1",
     "psutil>=6",
@@ -24,9 +26,12 @@ dependencies = [
     "python-docx>=1.1",
     "python-pptx>=1",
     "sqlcipher3-wheels>=0.5.7",
+    "striprtf>=0.0.35",
     "structlog>=26.1.0",
     "tokenizers>=0.20",
     "uvicorn[standard]>=0.54.0",
+    "watchdog>=7",
+    "xlrd>=2.0.2",
 ]
 
 [project.scripts]
@@ -65,6 +70,9 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 "src/nexusai/modules/planner/*" = ["E501"]
 "src/nexusai/modules/models/module.py" = ["E501"]
 "src/nexusai/modules/semantic/module.py" = ["E501"]
+"src/nexusai/modules/semantic/index.py" = ["E501"]
+"tests/test_documents_home.py" = ["E501"]
+"src/nexusai/modules/connectors/module.py" = ["E501"]
 "tests/*" = ["E501"]
 
 [tool.mypy]
@@ -73,7 +81,7 @@ files = ["src"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["imapclient.*", "pypff.*", "docx.*", "pptx.*", "openpyxl.*", "onnxruntime.*"]
+module = ["imapclient.*", "pypff.*", "docx.*", "pptx.*", "openpyxl.*", "onnxruntime.*", "olefile.*", "xlrd.*", "striprtf.*"]
 ignore_missing_imports = true
 
 [tool.importlinter]
@@ -99,4 +107,5 @@ dev = [
     "pytest-asyncio>=1.4.1",
     "ruff>=0.17.3",
     "types-psutil>=7.2.2.20260906",
+    "xlwt>=1.3",
 ]

@@ -28,15 +28,23 @@ test.describe.configure({ mode: "serial" });
 test("a mail account can be tested, and a wrong password says so", async ({ page }) => {
   await page.goto("/mail/all");
   await expect(page.getByText("No mail account connected")).toBeVisible();
-  await page.getByRole("link", { name: "Connect mail in Settings" }).click();
-  await expect(page).toHaveURL(/section=accounts/);
+  await page.getByRole("link", { name: "Connect your mail" }).click();
+  await expect(page).toHaveURL(/\/connectors$/);
 
-  await page.getByRole("radio", { name: "Other" }).click();
-  await page.getByRole("textbox", { name: "Email address" }).fill(USER);
+  // A known provider fills in its server, and its details are there to check.
+  await page.getByRole("textbox", { name: "Username" }).fill("someone@gmail.com");
+  await expect(page.getByRole("textbox", { name: "Server name" })).toHaveValue("imap.gmail.com");
+  await expect(page.getByText("Use a Google App Password")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "IMAP port" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Server details" }).click();
+  await expect(page.getByRole("textbox", { name: "Sending server" })).toHaveValue("smtp.gmail.com");
+  await expect(page.getByRole("textbox", { name: "SMTP port" })).toHaveValue("465");
+
+  await page.getByRole("textbox", { name: "Server name" }).fill("127.0.0.1");
+  await page.getByRole("textbox", { name: "Username" }).fill(USER);
   await page.getByLabel("Password").fill("wrong-password");
-  await page.getByRole("textbox", { name: "IMAP server" }).fill("127.0.0.1");
   await page.getByRole("textbox", { name: "IMAP port" }).fill("8143");
-  await page.getByRole("textbox", { name: "SMTP server" }).fill("127.0.0.1");
+  await page.getByRole("textbox", { name: "Sending server" }).fill("127.0.0.1");
   await page.getByRole("textbox", { name: "SMTP port" }).fill("8025");
   await page.getByRole("switch", { name: "Encrypted connection" }).click();
   await noViolations(page);
@@ -231,7 +239,7 @@ test("a document uploads, opens with its text, and can be filed, tagged and remo
 });
 
 test("PST imports show progress and can be paused and resumed", async ({ page }) => {
-  await page.goto("/settings?section=archive");
+  await page.goto("/connectors");
   await page.getByRole("textbox", { name: "PST file" }).fill("/no/such/file.pst");
   await page.getByRole("button", { name: "Import" }).click();
   await expect(page.getByText("That file doesn't exist")).toBeVisible();
@@ -255,6 +263,40 @@ test("PST imports show progress and can be paused and resumed", async ({ page })
   await expect(card).toContainText("Paused");
   await card.getByRole("button", { name: "Resume" }).click();
   await expect(card).toContainText("Importing");
+});
+
+test("a PST file can be sent up, and picks up again after a dropped connection", async ({ page }) => {
+  await page.goto("/connectors");
+  let dropped = 0;
+  await page.route("**/api/pst/upload/**", (route) => {
+    // The second piece fails twice, as if the connection dropped.
+    if (route.request().url().includes(`offset=${8 * 1024 * 1024}`) && dropped < 2) {
+      dropped += 1;
+      return route.abort();
+    }
+    return route.continue();
+  });
+  const name = `sent-${Date.now()}.pst`;
+  await page.getByTestId("pst-input").setInputFiles({ name, mimeType: "application/octet-stream", buffer: Buffer.alloc(20 * 1024 * 1024, 1) });
+  await expect(page.getByTestId("pst-import").filter({ hasText: name })).toBeVisible({ timeout: 30_000 });
+  expect(dropped).toBe(2);
+  await expect(page.getByTestId("pst-upload")).toHaveCount(0);
+  await noViolations(page);
+});
+
+test("the Connectors page lists Email and takes an MCP server by its address", async ({ page }) => {
+  await page.goto("/connectors");
+  await expect(page.getByRole("heading", { level: 1, name: "Connectors" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Email" })).toBeVisible();
+  await page.getByRole("button", { name: "Add a server" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("textbox", { name: "Name" }).fill("Nothing there");
+  await dialog.getByRole("textbox", { name: "Web address" }).fill("http://127.0.0.1:9/mcp");
+  await expect(dialog.getByText("This address isn't encrypted")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Add", exact: true })).toBeDisabled();
+  await dialog.getByRole("button", { name: "Test" }).click();
+  await expect(dialog.getByText("Couldn't reach that server")).toBeVisible();
+  await noViolations(page);
 });
 
 test("panels show live results, and can be added, resized, reordered and reset", async ({ page }) => {
@@ -322,6 +364,51 @@ test("adding many files shows how each one went, and says why one can't be read"
   await expect(page.getByTestId("document-row").filter({ hasText: again })).toHaveCount(0);
 });
 
+test("Documents filters by where things came from, and shows the Home folder", async ({ page }) => {
+  await page.goto("/documents/all");
+  await page.getByRole("radio", { name: "Home folder" }).click();
+  await expect(page).toHaveURL(/\/documents\/home$/);
+  const folders = page.getByTestId("home-entry");
+  await expect(folders.filter({ hasText: "scratch" })).toBeVisible();
+  await expect(folders.filter({ hasText: "system" })).toHaveCount(0);
+  await noViolations(page);
+  await page.getByRole("radio", { name: "Email attachments" }).click();
+  await expect(page).toHaveURL(/\/documents\/from-email$/);
+});
+
+test("each kind of file opens the way it reads best", async ({ page }) => {
+  const upload = async (name: string, body: string) => {
+    const response = await page.request.post(`/api/documents/upload?name=${name}`, { data: Buffer.from(body), headers: { "content-type": "application/octet-stream" } });
+    const row = (await response.json()) as { key: string };
+    await expect
+      .poll(async () => ((await (await page.request.post("/api/queries/documents.get", { data: { key: row.key } })).json()) as { document: { status: string } }).document.status)
+      .not.toBe("pending");
+    return row.key;
+  };
+  const stamp = Date.now();
+  const code = await upload(`script-${stamp}.py`, "print('one')\nprint('two')");
+  await page.goto(`/documents/view?key=${encodeURIComponent(code)}`);
+  const lines = page.getByRole("region", { name: `script-${stamp}.py` });
+  await expect(lines).toContainText("print('two')");
+  await expect(lines.getByRole("row")).toHaveCount(2);
+  await noViolations(page);
+
+  const sheet = await upload(`table-${stamp}.csv`, "Item,Cost\nServers,1200");
+  await page.goto(`/documents/view?key=${encodeURIComponent(sheet)}`);
+  await expect(page.getByRole("columnheader", { name: "Cost" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "1200" })).toBeVisible();
+  await noViolations(page);
+
+  const note = await upload(`note-${stamp}.md`, "# Heading\n\nSome **bold** words.");
+  await page.goto(`/documents/view?key=${encodeURIComponent(note)}`);
+  await expect(page.getByTestId("reader-text").getByRole("heading", { name: "Heading" })).toBeVisible();
+
+  const page_ = await upload(`page-${stamp}.html`, "<h1>Safe title</h1><script>document.title='HACKED'</script>");
+  await page.goto(`/documents/view?key=${encodeURIComponent(page_)}`);
+  await expect(page.frameLocator("iframe").getByText("Safe title")).toBeVisible();
+  await expect(page).not.toHaveTitle("HACKED");
+});
+
 test("search says what it's doing about meaning, and words still work without the model", async ({ page }) => {
   await page.goto("/search?q=budget");
   await expect(page.getByTestId("meaning-notice")).toContainText("word matches");
@@ -331,5 +418,7 @@ test("search says what it's doing about meaning, and words still work without th
   await expect(page.getByTestId("local-model").getByRole("alert")).toContainText(/mirror/);
   // A failed download opens the other ways to get it, without being asked.
   await expect(page.getByLabel("Use files you already have")).toBeVisible();
+  await expect(page.getByTestId("index-mail")).toContainText("Off");
+  await expect(page.getByTestId("index-document")).toContainText("Revision");
   await noViolations(page);
 });

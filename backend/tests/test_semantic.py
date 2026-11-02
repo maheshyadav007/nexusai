@@ -13,6 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from fake_mail import FakeMail, make_mail
+from nexusai.kernel.config import Config
 from nexusai.modules.agent.providers import TextChunk, ToolCall
 from nexusai.modules.mail.extract import extract_detail, extract_safely
 from nexusai.modules.semantic import downloader
@@ -26,6 +27,8 @@ from test_agent_work import (
     connect,
     fake,  # noqa: F401
     script,  # noqa: F401
+    thread_named,
+    triaged,
     wait,
 )
 from test_chat_engine_tools import use_tool
@@ -134,46 +137,21 @@ def test_filters_still_apply_to_what_meaning_found(
     assert found["hits"] == []
 
 
-def test_without_the_model_words_still_work_and_asking_fetches_it(
+def test_without_the_model_words_still_work_and_nothing_downloads_by_itself(
     client: TestClient, fake: FakeMail, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    asked = threading.Event()
-    release = threading.Event()
-
-    def slow(*_: object, **__: object) -> None:
-        asked.set()
-        release.wait(10)
-        raise downloader.DownloadFailed("Couldn't reach the download server.")
-
-    monkeypatch.setattr(downloader, "download", slow)
-    connect(client, fake)
-    fake.state.deliver(make_mail(subject="Finance review", body="the budget"))
-    wait(lambda: client.post("/api/queries/mail.status").json()["messages"] == 1, "mail")
-
-    assert status(client)["ready"] is False
-    hits = search(client, "budget")
-    assert [h["matched_by"] for h in hits] == ["words"]
-    assert asked.wait(5), "searching should start the download"
-    assert status(client)["models"][0]["state"] == "downloading"
-    release.set()
-    wait(lambda: status(client)["models"][0]["state"] == "failed", "the failure to show")
-    assert "reach" in status(client)["models"][0]["error"]
-    # It doesn't keep trying behind the person's back.
-    asked.clear()
-    search(client, "budget")
-    assert not asked.wait(0.2)
-
-
-def test_turning_off_automatic_download_is_respected(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     asked: list[bool] = []
     monkeypatch.setattr(downloader, "download", lambda *_: asked.append(True))
-    client.post("/api/commands/semantic.saveSettings", json={"auto_download": False})
-    search(client, "budget")
+    connect(client, fake)
+    fake.state.deliver(make_mail(subject="Finance review", body="the budget"))
+    thread_named(client, "Finance review")
+    assert search(client, "budget")[0]["thread"]["subject"] == "Finance review"
     client.post("/api/queries/documents.list", json={"query": "budget"})
+    client.post("/api/commands/semantic.setActive", json={"id": "all-minilm-l6-v2"})
     assert asked == []
-    assert status(client)["auto_download"] is False
+    now = status(client)
+    assert not now["ready"]
+    assert {index["state"] for index in now["indexes"]} == {"off"}
 
 
 def test_jobs_show_the_model_while_it_downloads(
@@ -192,6 +170,7 @@ def test_the_agent_tool_finds_by_meaning(
 ) -> None:
     connect(client, fake)
     fake.state.deliver(make_mail(subject="Finance review", body="cut the spending"))
+    triaged(client, "Finance review")
     wait(lambda: all_indexed(client), "indexing")
     result = use_tool(
         client,
@@ -201,14 +180,158 @@ def test_the_agent_tool_finds_by_meaning(
     assert "Finance review" in result
 
 
-def test_the_agent_hears_when_the_model_isnt_here(
+def test_when_skipped_the_agent_isnt_offered_it_and_is_told(
     client: TestClient, script: Script, fake: FakeMail
 ) -> None:
     connect(client, fake)
+    session = client.post("/api/commands/session.create", json={}).json()["id"]
+    script.replies = [[TextChunk("ok")]]
+    with client.stream("POST", "/api/sessions/chat", json={"id": session, "text": "Hi"}) as reply:
+        list(reply.iter_lines())
+    request = script.requests[-1]
+    assert "semantic_search" not in {tool.name for tool in request.tools}
+    assert "Search by meaning is off" in request.instructions
+
+
+def test_when_the_model_goes_midway_the_agent_hears_why(
+    client: TestClient, script: Script, fake: FakeMail, model_here: None
+) -> None:
+    connect(client, fake)
     fake.state.deliver(make_mail(subject="Finance review", body="the budget"))
-    wait(lambda: client.post("/api/queries/mail.status").json()["messages"] == 1, "mail")
-    result = use_tool(client, script, ToolCall("t1", "semantic_search", {"query": "budget"}))
+    triaged(client, "Finance review")
+    session = client.post("/api/commands/session.create", json={}).json()["id"]
+    script.gate = threading.Event()
+    script.replies = [
+        [ToolCall("t1", "semantic_search", {"query": "budget"})],
+        [TextChunk("Done.")],
+    ]
+    before = len(script.requests)
+
+    def run() -> None:
+        with client.stream(
+            "POST", "/api/sessions/chat", json={"id": session, "text": "Go"}
+        ) as reply:
+            list(reply.iter_lines())
+
+    worker = threading.Thread(target=run, daemon=True)
+    worker.start()
+    wait(lambda: len(script.requests) > before, "the first call")
+    current = semantic.engine()
+    assert current is not None
+    current.is_ready = lambda: False  # type: ignore[method-assign]
+    script.gate.set()
+    worker.join(timeout=15)
+    result = next(m.text for m in script.requests[-1].messages if m.role == "tool")
     assert "isn't available yet" in result and "Finance review" in result
+
+
+def test_partial_results_say_how_much_they_cover(
+    client: TestClient, script: Script, fake: FakeMail, model_here: None
+) -> None:
+    connect(client, fake)
+    fake.state.deliver(make_mail(subject="Finance review", body="cut the spending"))
+    triaged(client, "Finance review")
+    wait(lambda: all_indexed(client), "indexing")
+    current = semantic.engine()
+    assert current is not None
+    # As if one email had just arrived and isn't ready yet.
+    current._total = lambda kind: 2 if kind == "mail" else 0  # type: ignore[method-assign]
+    result = use_tool(client, script, ToolCall("t1", "semantic_search", {"query": "budget"}))
+    assert "covers 1 of 2 emails" in result and "Finance review" in result
+
+
+# Separate indexes and versions
+
+
+def index(client: TestClient, kind: str) -> dict[str, Any]:
+    return next(row for row in status(client)["indexes"] if row["kind"] == kind)
+
+
+def test_mail_and_documents_keep_separate_files_outside_the_main_database(
+    client: TestClient, fake: FakeMail, model_here: None, app_config: Config
+) -> None:
+    connect(client, fake)
+    fake.state.deliver(make_mail(subject="Finance review", body="the spending"))
+    upload(client, "notes.txt", b"the budget for next year")
+    wait(lambda: all_indexed(client) and status(client)["total"] == 2, "indexing")
+    folder = app_config.home / "system" / "index"
+    assert {path.name for path in folder.glob("*.db")} == {"mail.db", "document.db"}
+    assert index(client, "mail")["indexed"] == 1
+    assert index(client, "document")["indexed"] == 1
+    bus = client.app.state.bus  # type: ignore[attr-defined]
+    assert not bus.db.fetch_all(
+        "SELECT 1 FROM sqlite_master WHERE name IN ('semantic_chunks', 'semantic_done')"
+    )
+
+
+def test_an_index_records_what_built_it(
+    client: TestClient, fake: FakeMail, model_here: None
+) -> None:
+    connect(client, fake)
+    fake.state.deliver(make_mail(subject="Finance review", body="the spending"))
+    wait(lambda: index(client, "mail")["indexed"] == 1, "indexing")
+    mail = index(client, "mail")
+    assert mail["state"] == "current"
+    assert mail["built"]
+    settings = mail["build_settings"]
+    assert settings["model"] == "multilingual-e5-small"
+    assert settings["revision"] and settings["files"]["model.onnx"]
+    assert settings["chunk_chars"] and settings["most_chunks"] and settings["quantization"]
+    assert "extractor" not in settings
+    assert "extractor" in index(client, "document")["build_settings"]
+
+
+def test_changed_settings_show_as_out_of_date_and_only_rebuild_when_asked(
+    client: TestClient, fake: FakeMail, model_here: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    connect(client, fake)
+    fake.state.deliver(make_mail(subject="Finance review", body="the spending"))
+    upload(client, "notes.txt", b"the budget for next year")
+    wait(lambda: all_indexed(client) and status(client)["total"] == 2, "indexing")
+    before = index(client, "mail")["fingerprint"]
+    monkeypatch.setattr(semantic, "CHUNK_CHARS", 500)
+    mail = index(client, "mail")
+    assert mail["fingerprint"] != before
+    assert (mail["state"], mail["stale"]) == ("out_of_date", 1)
+    # What's there keeps working until then.
+    assert search(client, "budget")[0]["thread"]["subject"] == "Finance review"
+    document_before = index(client, "document")
+    client.post("/api/commands/semantic.rebuild", json={"kind": "mail"})
+    wait(lambda: index(client, "mail")["state"] == "current", "the rebuild")
+    # Rebuilding one leaves the other as it was.
+    assert index(client, "document")["indexed"] == document_before["indexed"]
+    assert index(client, "document")["stale"] == document_before["stale"]
+
+
+def test_a_document_match_says_which_page_it_was_on(
+    client: TestClient, fake: FakeMail, model_here: None
+) -> None:
+    pad = "Nothing much here. " * 60
+    body = f"[Page 1]\n{pad}\n\n[Page 2]\nThe budget is approved.".encode()
+    upload(client, "report.txt", body)
+    wait(lambda: index(client, "document")["indexed"] == 1, "indexing")
+    found = client.post("/api/queries/documents.list", json={"query": "spending"}).json()
+    assert [row["place"] for row in found["documents"]] == ["Page 2"]
+
+
+def test_detection_finds_what_is_here_and_suits_the_computer(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(semantic, "_hub_answers", lambda *_: False)
+    found = client.post("/api/queries/semantic.detect").json()
+    assert found["on_this_computer"] == []
+    assert found["reachable"] is False
+    assert found["memory_bytes"] > 0 and found["free_bytes"] > 0
+
+    class Small:
+        total = 4 * 1024**3
+
+    monkeypatch.setattr(semantic.psutil, "virtual_memory", lambda: Small)
+    small = client.post("/api/queries/semantic.detect").json()
+    assert (small["recommended"], small["reason"]) == ("all-minilm-l6-v2", "small_computer")
+    monkeypatch.setattr(downloader, "is_complete", lambda *_: True)
+    here = client.post("/api/queries/semantic.detect").json()
+    assert here["reason"] == "already_here" and here["on_this_computer"]
 
 
 def test_mail_search_tool_uses_meaning_too(
@@ -216,6 +339,7 @@ def test_mail_search_tool_uses_meaning_too(
 ) -> None:
     connect(client, fake)
     fake.state.deliver(make_mail(subject="Finance review", body="cut the spending"))
+    triaged(client, "Finance review")
     wait(lambda: all_indexed(client), "indexing")
     script.replies = [[ToolCall("t1", "search_mail", {"query": "budget"})], [TextChunk("Done.")]]
     session = client.post("/api/commands/session.create", json={}).json()["id"]
@@ -278,7 +402,7 @@ def test_files_that_cant_be_kept_are_refused_plainly(
     [
         ("scan.png", b"\x89PNG\r\n\x1a\n", "image"),
         ("broken.pdf", b"%PDF-1.4 this is not really a pdf", "failed"),
-        ("old.doc", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1rest", "unsupported"),
+        ("old.doc", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1rest", "failed"),
         ("mystery.xyz", b"\x00\x01\x02", "unsupported"),
     ],
 )

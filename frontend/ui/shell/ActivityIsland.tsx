@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { Popover } from "@/ui/primitives/Popover";
 import { Pressable } from "@/ui/primitives/Pressable";
 import { StageBar } from "@/ui/primitives/StageBar";
 import { StatusDot } from "@/ui/primitives/StatusDot";
+import { TextLink } from "@/ui/primitives/TextLink";
 import { t } from "@/ui/strings";
 
 export interface Activity {
@@ -18,10 +20,10 @@ export function ActivityIsland({ activities = [] }: { activities?: readonly Acti
   const [first] = activities;
   if (!first) {
     return (
-      <p className="flex items-center gap-2 text-md text-ink-muted">
+      <Link href="/cockpit" data-testid="activity-idle" className="focus-ring flex items-center gap-2 rounded-sm text-md text-ink-muted transition-colors duration-fast hover:text-ink-primary">
         <StatusDot tone="done" />
         {t("activity.idle")}
-      </p>
+      </Link>
     );
   }
   return (
@@ -47,6 +49,9 @@ export function ActivityIsland({ activities = [] }: { activities?: readonly Acti
           </li>
         ))}
       </ul>
+      <p className="mt-3 text-sm">
+        <TextLink href="/cockpit">{t("activity.open")}</TextLink>
+      </p>
     </Popover>
   );
 }

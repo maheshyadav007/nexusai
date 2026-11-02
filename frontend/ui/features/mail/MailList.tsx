@@ -25,5 +25,5 @@ export function SyncNotice() {
 }
 
 export function NoAccount() {
-  return <EmptyState icon="inbox" title={t("mail.noAccount.title")} description={t("mail.noAccount.description")} action={<TextLink href="/settings?section=accounts">{t("mail.noAccount.action")}</TextLink>} />;
+  return <EmptyState icon="inbox" title={t("mail.noAccount.title")} description={t("mail.noAccount.description")} action={<TextLink href="/connectors">{t("mail.noAccount.action")}</TextLink>} />;
 }

@@ -62,6 +62,14 @@ class RecoveryKeyView(BaseModel):
     pending: str | None = None
 
 
+class ResetHome(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Typed by the person. It can't be undone, so nothing else starts it.
+    confirm: str = Field(max_length=16)
+    keep_models: bool = True
+
+
 class BackupRow(BaseModel):
     name: str
     reason: str

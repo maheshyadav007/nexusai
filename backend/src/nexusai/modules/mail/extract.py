@@ -1,6 +1,5 @@
 """Pulls readable text out of documents. A bad file gives no text, never an error for the caller."""
 
-import csv
 import io
 import json
 import subprocess
@@ -10,8 +9,12 @@ from dataclasses import dataclass
 
 import structlog
 
+from nexusai.modules.mail.readers import OLE_BASED, READERS, ZIP_BASED
+
 log = structlog.get_logger()
 MAX_INPUT_BYTES = 50_000_000
+# Raised when what's read from a file changes, so document vectors show as out of date.
+EXTRACTOR_VERSION = 2
 MAX_TEXT_CHARS = 1_000_000
 ZIP_RATIO_LIMIT = 200
 TEXT_TYPES = {
@@ -31,61 +34,11 @@ TEXT_TYPES = {
 }
 HTML_TYPES = {"html", "htm"}
 IMAGE_TYPES = {"png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff", "heic"}
-OLD_OFFICE = {"doc", "xls", "ppt"}
+# Enough of a file to tell text from something that isn't.
+SNIFF_BYTES = 8192
 # Password-protected Office files aren't zips at all, they're this older container.
 OLE_HEADER = bytes.fromhex("d0cf11e0a1b11ae1")
 WORKER_SECONDS = 120.0
-
-
-def _pdf(data: bytes) -> str:
-    from pypdf import PdfReader
-
-    reader = PdfReader(io.BytesIO(data))
-    if reader.is_encrypted:
-        reader.decrypt("")
-    return "\n".join((page.extract_text() or "") for page in reader.pages)
-
-
-def _docx(data: bytes) -> str:
-    from docx import Document
-
-    document = Document(io.BytesIO(data))
-    cells = (cell.text for table in document.tables for row in table.rows for cell in row.cells)
-    return "\n".join([*(p.text for p in document.paragraphs), *cells])
-
-
-def _xlsx(data: bytes) -> str:
-    from openpyxl import load_workbook
-
-    book = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
-    lines: list[str] = []
-    for sheet in book.worksheets:
-        for row in sheet.iter_rows(values_only=True):
-            cells = [str(cell) for cell in row if cell is not None]
-            if cells:
-                lines.append(" ".join(cells))
-    return "\n".join(lines)
-
-
-def _pptx(data: bytes) -> str:
-    from pptx import Presentation
-
-    deck = Presentation(io.BytesIO(data))
-    return "\n".join(
-        shape.text_frame.text
-        for slide in deck.slides
-        for shape in slide.shapes
-        if shape.has_text_frame
-    )
-
-
-def _csv(data: bytes) -> str:
-    rows = csv.reader(io.StringIO(data.decode("utf-8", "replace")))
-    return "\n".join(" ".join(row) for row in rows)
-
-
-READERS = {"pdf": _pdf, "docx": _docx, "xlsx": _xlsx, "pptx": _pptx, "csv": _csv}
-ZIP_BASED = {"docx", "xlsx", "pptx"}
 
 
 def _safe_zip(data: bytes) -> bool:
@@ -128,6 +81,13 @@ def _html(data: bytes) -> str:
     return html.unescape(re.sub(r"<[^>]+>", " ", text))
 
 
+def _looks_like_text(data: bytes) -> bool:
+    start = data[:SNIFF_BYTES]
+    if start.startswith((b"\xff\xfe", b"\xfe\xff", b"\xef\xbb\xbf")):
+        return True
+    return b"\0" not in start
+
+
 def _zip_listing(data: bytes) -> str:
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
         return "\n".join(item.filename for item in archive.infolist() if not item.is_dir())
@@ -149,12 +109,6 @@ def extract_detail(filename: str, data: bytes) -> Extraction:
         return Extraction("", "too_large", "This file is too large to read, but it's kept here.")
     if extension in IMAGE_TYPES:
         return Extraction("", "image", "Text in images can't be read yet.")
-    if extension in OLD_OFFICE:
-        return Extraction(
-            "",
-            "unsupported",
-            f"Old .{extension} files can't be read. Saving it as .{extension}x would fix that.",
-        )
     try:
         if extension in ZIP_BASED and data.startswith(OLE_HEADER):
             return Extraction(
@@ -180,12 +134,21 @@ def extract_detail(filename: str, data: bytes) -> Extraction:
             text = _zip_listing(data)
         elif extension in READERS:
             text = READERS[extension](data)
+        elif _looks_like_text(data):
+            # Source code and config come in more kinds than any list, so the content decides.
+            text = _decode(data)
         else:
             return Extraction(
                 "", "unsupported", "This kind of file is kept, but its text can't be read."
             )
     except Exception as error:
         log.info("text_extraction_failed", extension=extension, error=type(error).__name__)
+        if extension in OLE_BASED:
+            return Extraction(
+                "",
+                "failed",
+                f"This old .{extension} file couldn't be read. A newer format would fix that.",
+            )
         return Extraction("", "failed", "This file looks damaged, so its text couldn't be read.")
     if not text.strip():
         if extension == "pdf":

@@ -121,6 +121,22 @@ mail.received          Mail connector saves the message
 
 Every step shares one `traceId`, so the whole journey appears in one view in Logs.
 
+### Starting an agent
+
+A typed message, an event and the clock all reach `SessionRuntime.dispatch` as the same kind of start, and each emits `agent.triggered`. Time is an event too: the scheduler emits `schedule.due`. A record in `trigger_runs` means a replayed event can't start a run twice.
+
+Each agent has one chat, and each schedule has its own. What the chat shows comes from `agent_parts` and is never shortened. What the model is sent is decided per run in `modules/agent/context.py`:
+
+| Way of keeping context | Saved history | Used for |
+|---|---|---|
+| Trim, saved | Shortened | Events and schedules, by default |
+| Trim, view only | Unchanged | Typed messages, by default |
+| Auto compact | Older part replaced by a summary | Off by default |
+| Compact now | Older part replaced by a summary | On request |
+| Clearing old tool results | Unchanged | Always, at a high limit |
+
+The defaults are in `defaults.toml`, Settings can change them, and a schedule can have its own. A trigger's data, such as an email's body, goes beside its message for that run only. It's never saved in the history, and it never sits with the instructions.
+
 ## 5. Modules and interfaces
 
 A module owns one area. Its data and code are private, and others reach it only through its contract. Replacing a module's internals never affects another module.
@@ -183,7 +199,8 @@ LangChain and LangGraph handle agent flow, but it only reaches models and tools 
 ## 7. Data
 
 - **SQLite in WAL mode:** readers don't block the writer.
-- **One writer:** only Core writes to the database, through a single connection. Other processes send commands, and Heavy jobs send results in batches. This removes a whole class of locking bugs.
+- **One writer for each file:** only Core writes, through a single connection per database. Other processes send commands, and Heavy jobs send results in batches. This removes a whole class of locking bugs.
+- **Search indexes are separate files:** `system/index/mail.db` and `system/index/document.db` hold vectors and a manifest of exactly what built them. They're encrypted with the same key, can be rebuilt from mail and documents, and stay out of backups. A change and its event are still saved together, because they're never in an index file.
 - **Migrations:** numbered and forward-only, run automatically after a backup. Tested against a copy of an older database.
 - **Tables per module:** a module doesn't read another's tables. Panels are the planned exception, going through a read-only query layer.
 - **Large content:** attachments live on disk, stored by hash, with only references in the database.

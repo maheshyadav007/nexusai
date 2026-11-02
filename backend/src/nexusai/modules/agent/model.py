@@ -21,6 +21,13 @@ from nexusai.kernel.module import Context
 from nexusai.modules.agent.gateway import Layer, stream_model
 from nexusai.modules.agent.providers import Message, TextChunk, ToolCall, ToolSpec, Usage
 
+SUMMARY_SOURCE = "summarization"
+
+
+def is_summary(message: BaseMessage) -> bool:
+    """LangChain marks its summaries this way, and sends them as if the person had said them."""
+    return message.additional_kwargs.get("lc_source") == SUMMARY_SOURCE
+
 
 def _text_of(content: Any) -> str:
     """Content is a string, or a list of blocks once v3 has been through it."""
@@ -42,6 +49,14 @@ def to_messages(messages: Sequence[BaseMessage]) -> tuple[list[Message], list[La
     for message in messages:
         if isinstance(message, SystemMessage):
             extra.append(Layer("Earlier in this session", _text_of(message.content)))
+        elif is_summary(message):
+            # It may retell mail, so it can't carry the person's authority.
+            extra.append(
+                Layer(
+                    "Earlier in this session",
+                    f"<untrusted>\n{_text_of(message.content)}\n</untrusted>",
+                )
+            )
         elif isinstance(message, ToolMessage):
             converted.append(
                 Message("tool", _text_of(message.content), tool_call_id=message.tool_call_id)
@@ -62,6 +77,7 @@ class GatewayChatModel(BaseChatModel):
     session: str | None
     layers: list[Layer]
     specs: list[ToolSpec] = []
+    model_override: str | None = None
 
     @property
     def _llm_type(self) -> str:
@@ -75,7 +91,9 @@ class GatewayChatModel(BaseChatModel):
                 ToolSpec(
                     function["name"],
                     function.get("description", ""),
-                    function.get("parameters", {}),
+                    # A connector's tool describes itself, so its own schema goes as it came.
+                    (getattr(tool, "metadata", None) or {}).get("parameters")
+                    or function.get("parameters", {}),
                 )
             )
         return self.model_copy(update={"specs": specs})
@@ -90,6 +108,7 @@ class GatewayChatModel(BaseChatModel):
             layers=[*self.layers, *extra],
             messages=converted,
             tools=self.specs,
+            model_override=self.model_override,
         ):
             if isinstance(chunk, TextChunk):
                 yield AIMessageChunk(content=chunk.text)

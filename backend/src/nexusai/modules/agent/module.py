@@ -1,7 +1,8 @@
 import json
 import threading
+import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from nexusai.contracts.agent import (
     ActivityList,
@@ -12,22 +13,34 @@ from nexusai.contracts.agent import (
     ApprovalList,
     BoardList,
     ChannelList,
+    ChooseVersion,
+    Cockpit,
+    CockpitEvents,
+    CompactResult,
     ContextItem,
+    ContextSettings,
     CreateSession,
     DecideApproval,
     DecideApprovals,
     DecideMemoryProposal,
     DismissChannel,
+    DueItem,
+    GetCockpit,
+    GetCockpitEvents,
+    GetContextSettings,
     GetGuardRules,
+    GetMailAgentSettings,
     GetModelCall,
     GetPermissions,
     GetQuietHours,
     GetThreadRuns,
     GetToday,
     GetToolCatalog,
+    GetTriggers,
     GetUsage,
     GuardRules,
     GuardTestResult,
+    HealthItem,
     Job,
     JobList,
     ListActivity,
@@ -40,19 +53,26 @@ from nexusai.contracts.agent import (
     ListPrompts,
     ListSchedules,
     ListSessions,
+    MailAgentRun,
+    MailAgentSettings,
+    MarkTodaySeen,
     MemoryList,
     ModelCallView,
     Permissions,
     PromptFile,
     PromptList,
     QuietHours,
+    RateMessage,
     RemoveMemory,
     RemoveSchedule,
+    RemoveTrigger,
     RenameSession,
     RespondChannel,
+    RunMailAgent,
     RunSchedule,
     SaveMemory,
     SavePrompt,
+    SaveTrigger,
     Schedule,
     ScheduleList,
     SessionAction,
@@ -63,7 +83,9 @@ from nexusai.contracts.agent import (
     SetDailyCap,
     SetDefaults,
     SetSessionContext,
+    SetSessionModel,
     SetTopicMuted,
+    SinceLastLook,
     SummarizeThread,
     TestGuardRules,
     ThreadRuns,
@@ -74,24 +96,35 @@ from nexusai.contracts.agent import (
     ToolInfo,
     TriageEstimate,
     TriageExisting,
+    TriggerList,
     UndoActivity,
+    UpcomingRun,
     UsageView,
 )
 from nexusai.contracts.events import AppEvent
+from nexusai.contracts.mail import GetMailStatus, MailStatus
+from nexusai.contracts.semantic import IndexInfo
+from nexusai.kernel import backups
 from nexusai.kernel.module import CommandError, Context, Module
 from nexusai.modules.agent import (
     channel,
+    cockpit,
+    context,
     gateway,
     guard,
     mail_agent,
     memory,
     policy,
     prompts_builder,
+    providers,
     runtime,
     scheduler,
     tools,
+    triggers,
 )
-from nexusai.modules.mail import accounts
+from nexusai.modules.connectors import module as connectors
+from nexusai.modules.mail import accounts, pst_search, pst_upload
+from nexusai.modules.mail import module as mail
 from nexusai.modules.semantic import module as semantic
 
 STARTER_PROMPTS = ("importance", "categories")
@@ -110,51 +143,51 @@ agent_module = Module(
         guard.MIGRATION,
         gateway.MIGRATION,
         gateway.RUN_LIMIT_MIGRATION,
+        gateway.RUN_LIMIT_SINCE_MIGRATION,
         policy.MIGRATION,
         tools.MIGRATION,
         runtime.MIGRATION,
         runtime.EDIT_MIGRATION,
+        runtime.RETRY_MIGRATION,
+        runtime.TRIGGER_MIGRATION,
         memory.MIGRATION,
         channel.MIGRATION,
         channel.QUESTIONS_MIGRATION,
         mail_agent.MIGRATION,
+        mail_agent.TRIGGER_MIGRATION,
         scheduler.MIGRATION,
         scheduler.TIMES_MIGRATION,
+        scheduler.CONTEXT_MIGRATION,
+        triggers.MIGRATION,
     ],
 )
 _runtime: runtime.SessionRuntime | None = None
-_mail_agent: mail_agent.MailAgent | None = None
+_triggers: triggers.Triggers | None = None
 _scheduler: scheduler.Scheduler | None = None
 _runtime_lock = threading.Lock()
 
 
-def _run_schedule(schedule: Schedule) -> str:
-    agent = "daily-prep" if schedule.kind == "daily-prep" else "scheduled"
-    prompt = schedule.prompt or "Prepare my morning from the work board."
-    return current().run_scheduled(schedule.title, prompt, agent, schedule.token_limit)
-
-
 def _startup(ctx: Context) -> None:
-    global _runtime, _mail_agent, _scheduler
+    global _runtime, _triggers, _scheduler
     guard.load_rules(ctx.config.home)
     with _runtime_lock:
         _runtime = runtime.SessionRuntime(ctx)
         _runtime.resume_after_restart()
-        _mail_agent = mail_agent.MailAgent(ctx)
-        _mail_agent.start()
-        _scheduler = scheduler.Scheduler(ctx, _run_schedule)
+        _triggers = triggers.Triggers(ctx, _runtime)
+        _triggers.start()
+        _scheduler = scheduler.Scheduler(ctx)
         _scheduler.start()
 
 
 def _shutdown() -> None:
-    global _runtime, _mail_agent, _scheduler
+    global _runtime, _triggers, _scheduler
     with _runtime_lock:
         if _scheduler:
             _scheduler.stop()
             _scheduler = None
-        if _mail_agent:
-            _mail_agent.stop()
-            _mail_agent = None
+        if _triggers:
+            _triggers.stop()
+            _triggers = None
         if _runtime:
             _runtime.close()
             _runtime = None
@@ -162,13 +195,30 @@ def _shutdown() -> None:
 
 @agent_module.on("mail.needsTriage", "agent.triage")
 def needs_triage(event: AppEvent, ctx: Context) -> None:
-    mail_agent.on_needs_triage(event, ctx, _mail_agent)
+    if mail_agent.enabled(ctx):
+        mail_agent.enqueue(
+            ctx, int(event.payload["message_id"]), int(event.payload["thread_id"]), event=event.id
+        )
+        if _triggers:
+            _triggers.wake.set()
+
+
+@agent_module.on("mail.*", "agent.custom_triggers")
+def custom_triggers(event: AppEvent, ctx: Context) -> None:
+    if _triggers and event.type in triggers.EVENT_CHOICES:
+        _triggers.on_event(event)
+
+
+@agent_module.on("schedule.due", "agent.schedule_due")
+def schedule_due(event: AppEvent, ctx: Context) -> None:
+    if _triggers:
+        _triggers.fire_schedule(event.id, int(event.payload["id"]))
 
 
 @agent_module.on("models.changed", "agent.triage_model_back")
 def model_changed(event: AppEvent, ctx: Context) -> None:
-    if _mail_agent:
-        _mail_agent.wake.set()
+    if _triggers:
+        _triggers.model_changed()
 
 
 @agent_module.on("reminders.changed", "agent.scheduler_reminders")
@@ -189,7 +239,7 @@ def current() -> runtime.SessionRuntime:
 
 @agent_module.command("session.create")
 def create_session(command: CreateSession, ctx: Context) -> SessionRow:
-    return current().create(command.title, command.context, command.agent)
+    return current().create(command.title, command.context, command.agent, command.model)
 
 
 @agent_module.query("sessions.list")
@@ -327,6 +377,25 @@ def undo_activity(command: UndoActivity, ctx: Context) -> AgentDone:
     return AgentDone()
 
 
+@agent_module.command("session.setModel")
+def set_session_model(command: SetSessionModel, ctx: Context) -> AgentDone:
+    current().row(command.id)
+    current()._set(command.id, model=command.model)
+    return AgentDone()
+
+
+@agent_module.command("session.chooseVersion")
+def choose_version(command: ChooseVersion, ctx: Context) -> SessionView:
+    current().choose_version(command.id, command.turn)
+    return current().view(command.id)
+
+
+@agent_module.command("message.rate")
+def rate_message(command: RateMessage, ctx: Context) -> AgentDone:
+    current().rate(command.turn, command.value)
+    return AgentDone()
+
+
 @agent_module.query("session.context")
 def session_context(query: SessionAction, ctx: Context) -> SessionContext:
     rows = ctx.bus.db.fetch_all("SELECT context FROM agent_sessions WHERE id = ?", (query.id,))
@@ -460,8 +529,8 @@ def respond_channel(command: RespondChannel, ctx: Context) -> AgentDone:
     if row["triage_message"]:
         # The Mail agent's best guess gets corrected with the real answer.
         mail_agent.enqueue(ctx, row["triage_message"], row["thread"], command.answer)
-        if _mail_agent:
-            _mail_agent.wake.set()
+        if _triggers:
+            _triggers.wake.set()
     if row["session"] and row["session"] != mail_agent.SESSION_ID:
         current().answered(row["session"])
     return AgentDone()
@@ -522,8 +591,8 @@ def triage_estimate(query: ListJobs, ctx: Context) -> TriageEstimate:
 def triage_existing(command: TriageExisting, ctx: Context) -> TriageEstimate:
     if command.confirm:
         mail_agent.queue_existing(ctx)
-        if _mail_agent:
-            _mail_agent.wake.set()
+        if _triggers:
+            _triggers.wake.set()
     return mail_agent.estimate(ctx)
 
 
@@ -541,7 +610,7 @@ def summarize_thread(command: SummarizeThread, ctx: Context) -> ThreadSummary:
 
 
 def _schedule_list(ctx: Context) -> ScheduleList:
-    rows = ctx.bus.db.fetch_all("SELECT * FROM schedules ORDER BY id")
+    rows = ctx.bus.db.fetch_all("SELECT * FROM schedules WHERE kind != 'mail-hourly' ORDER BY id")
     return ScheduleList(
         schedules=[scheduler.row_to_schedule(row) for row in rows],
         time_check_enabled=scheduler.time_check_enabled(ctx),
@@ -556,6 +625,8 @@ def list_schedules(query: ListSchedules, ctx: Context) -> ScheduleList:
 
 @agent_module.command("schedules.save")
 def save_schedule(command: Schedule, ctx: Context) -> ScheduleList:
+    if command.kind == "mail-hourly":
+        raise CommandError("schedule.reserved", "That schedule belongs to the Mail agent.", 422)
     next_run = (
         scheduler.next_run_after(command, datetime.now().astimezone().replace(tzinfo=None))
         if command.enabled
@@ -572,18 +643,20 @@ def save_schedule(command: Schedule, ctx: Context) -> ScheduleList:
         int(command.enabled),
         command.token_limit,
         next_run,
+        command.context_mode,
+        command.keep_messages,
     )
     now = datetime.now(UTC).isoformat()
     with ctx.bus.unit_of_work() as work:
         if command.id is None:
             work.tx.execute(
-                "INSERT INTO schedules (title, prompt, kind, every, time, weekday, date, enabled, token_limit, next_run, created, updated)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO schedules (title, prompt, kind, every, time, weekday, date, enabled, token_limit, next_run, context_mode, keep_messages, created, updated)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (*values, now, now),
             )
         else:
             work.tx.execute(
-                "UPDATE schedules SET title = ?, prompt = ?, kind = ?, every = ?, time = ?, weekday = ?, date = ?, enabled = ?, token_limit = ?, next_run = ?, updated = ? WHERE id = ?",
+                "UPDATE schedules SET title = ?, prompt = ?, kind = ?, every = ?, time = ?, weekday = ?, date = ?, enabled = ?, token_limit = ?, next_run = ?, context_mode = ?, keep_messages = ?, updated = ? WHERE id = ?",
                 (*values, now, command.id),
             )
         work.emit("schedule.changed", {}, source="agent", trace_id=ctx.trace_id)
@@ -605,14 +678,78 @@ def run_schedule_now(command: RunSchedule, ctx: Context) -> AgentDone:
     rows = ctx.bus.db.fetch_all("SELECT * FROM schedules WHERE id = ?", (command.id,))
     if not rows:
         raise CommandError("schedule.not_found", "That schedule no longer exists.", 404)
-    session = _run_schedule(scheduler.row_to_schedule(rows[0]))
     with ctx.bus.unit_of_work() as work:
         work.tx.execute(
-            "UPDATE schedules SET last_session = ?, last_run = ? WHERE id = ?",
-            (session, datetime.now().astimezone().strftime("%Y-%m-%dT%H:%M"), command.id),
+            "UPDATE schedules SET last_run = ? WHERE id = ?",
+            (datetime.now().astimezone().strftime("%Y-%m-%dT%H:%M"), command.id),
         )
         work.emit("schedule.changed", {}, source="agent", trace_id=ctx.trace_id)
+    if _triggers:
+        _triggers.fire_schedule(uuid.uuid4().hex, command.id)
+        _triggers.tick()
     return AgentDone()
+
+
+@agent_module.query("mailAgent.get")
+def get_mail_agent(query: GetMailAgentSettings, ctx: Context) -> MailAgentSettings:
+    return MailAgentSettings(mode=mail_agent.mode(ctx))
+
+
+@agent_module.command("mailAgent.save")
+def save_mail_agent(command: MailAgentSettings, ctx: Context) -> MailAgentSettings:
+    scheduler.set_default(ctx, "mail_mode", command.mode)
+    scheduler.set_hourly(ctx, command.mode != "each")
+    with ctx.bus.unit_of_work() as work:
+        work.emit("mailAgent.changed", {}, source="agent", trace_id=ctx.trace_id)
+    if _scheduler:
+        _scheduler.poke()
+    if _triggers:
+        _triggers.wake.set()
+    return command
+
+
+@agent_module.command("mailAgent.runNow")
+def run_mail_agent(command: RunMailAgent, ctx: Context) -> MailAgentRun:
+    if _triggers is None:
+        raise CommandError("agent.not_ready", "The agent isn't ready yet.", 409)
+    outcome = _triggers.run_mail_now()
+    return MailAgentRun(outcome="started" if outcome == "started" else "nothing")
+
+
+@agent_module.query("context.get")
+def get_context(query: GetContextSettings, ctx: Context) -> ContextSettings:
+    return context.load_settings(ctx.bus.db, ctx.config)
+
+
+@agent_module.command("context.save")
+def save_context(command: ContextSettings, ctx: Context) -> ContextSettings:
+    context.save_settings(ctx.bus.db, command)
+    with ctx.bus.unit_of_work() as work:
+        work.emit("context.changed", {}, source="agent", trace_id=ctx.trace_id)
+    return command
+
+
+@agent_module.command("session.compact")
+def compact_session(command: SessionAction, ctx: Context) -> CompactResult:
+    return CompactResult(compacted=current().compact(command.id))
+
+
+@agent_module.query("triggers.list")
+def list_triggers(query: GetTriggers, ctx: Context) -> TriggerList:
+    return triggers.list_triggers(ctx)
+
+
+@agent_module.command("triggers.save")
+def save_trigger(command: SaveTrigger, ctx: Context) -> TriggerList:
+    result = triggers.save_trigger(ctx, command)
+    if _triggers:
+        _triggers.wake.set()
+    return result
+
+
+@agent_module.command("triggers.remove")
+def remove_trigger(command: RemoveTrigger, ctx: Context) -> TriggerList:
+    return triggers.remove_trigger(ctx, command.id)
 
 
 @agent_module.command("schedules.setDefaults")
@@ -620,9 +757,13 @@ def set_defaults(command: SetDefaults, ctx: Context) -> ScheduleList:
     if command.time_check_enabled is not None:
         scheduler.set_default(ctx, "time_check_enabled", command.time_check_enabled)
     if command.live_mail_enabled is not None:
-        scheduler.set_default(ctx, "live_mail_enabled", command.live_mail_enabled)
-        if _mail_agent:
-            _mail_agent.wake.set()
+        with ctx.bus.db.transaction() as tx:
+            tx.execute(
+                "UPDATE agent_triggers SET enabled = ? WHERE id = ?",
+                (int(command.live_mail_enabled), mail_agent.MAIL_TRIGGER),
+            )
+        if _triggers:
+            _triggers.wake.set()
     with ctx.bus.unit_of_work() as work:
         work.emit("schedule.changed", {}, source="agent", trace_id=ctx.trace_id)
     return _schedule_list(ctx)
@@ -631,12 +772,152 @@ def set_defaults(command: SetDefaults, ctx: Context) -> ScheduleList:
 # Background and Today
 
 
+INDEX_NAMES = {"mail": "Mail", "document": "Documents"}
+LAST_SEEN = "today_last_seen"
+DUE_LIMIT = 10
+
+
+def _index_health(info: IndexInfo) -> tuple[Any, str]:
+    counts = f"{info.indexed} of {info.total} ready"
+    if info.state == "off":
+        return "off", "Search by meaning is off"
+    if info.state == "out_of_date":
+        return "problem", f"{info.stale} built with older settings"
+    return ("working", counts) if info.state == "partial" else ("ok", counts)
+
+
+def _health(ctx: Context) -> list[HealthItem]:
+    status = cast(MailStatus, mail.get_status(GetMailStatus(), ctx))
+    mail_states: dict[str, tuple[Any, str]] = {
+        "live": ("ok", f"Up to date, {status.messages} messages"),
+        "off": ("off", "Not connected"),
+        "failed": ("problem", status.message or "It couldn't sign in"),
+        "offline": ("problem", status.message or "It can't reach the server"),
+    }
+    mail_state, mail_detail = mail_states.get(status.state, ("working", "Downloading"))
+    try:
+        gateway.resolve_provider(ctx)
+        waiting = _triggers.waiting_for_model if _triggers else None
+        model = ("problem", waiting) if waiting else ("ok", "Connected")
+    except providers.ModelNotConfigured:
+        model = ("off", "Not connected")
+    engine = semantic.engine()
+    meaning = engine.status() if engine is not None else None
+    indexes = [
+        (
+            f"index-{info.kind}",
+            f"{INDEX_NAMES[info.kind]} index",
+            _index_health(info),
+            "/settings?section=local-models",
+        )
+        for info in (meaning.indexes if meaning else [])
+    ]
+    linked = [row for row in connectors.list_mcp(ctx)]
+    broken = [row for row in linked if row["state"] != "ok"]
+    outside = (
+        ("off", "None added")
+        if not linked
+        else ("problem", f"{len(broken)} of {len(linked)} need a look")
+        if broken
+        else ("ok", f"{len(linked)} connected")
+    )
+    copies = backups.listing(ctx.config.home)
+    backup = ("ok", "Saved") if copies else ("off", "None yet")
+    failed = len(ctx.bus.failed_events())
+    listeners = ("problem", f"{failed} failed") if failed else ("ok", "None failed")
+    rows = [
+        ("mail", "Mail", (mail_state, mail_detail), "/connectors"),
+        ("connectors", "Other connectors", outside, "/connectors"),
+        ("model", "Model", model, "/settings?section=models"),
+        *indexes,
+        ("backup", "Last backup", backup, "/settings?section=home"),
+        ("events", "Background handlers", listeners, "/logs"),
+    ]
+    return [
+        HealthItem(
+            id=key,
+            label=label,
+            state=shown[0],
+            detail=shown[1],
+            link=link,
+            when=copies[0].time.isoformat() if key == "backup" and copies else None,
+        )
+        for key, label, shown, link in rows
+    ]
+
+
+@agent_module.query("cockpit.view")
+def cockpit_view(query: GetCockpit, ctx: Context) -> Cockpit:
+    rows = ctx.bus.db.fetch_all(
+        "SELECT id, title, kind, next_run FROM schedules WHERE enabled = 1 AND next_run IS NOT NULL"
+        " ORDER BY next_run LIMIT 5"
+    )
+    return Cockpit(
+        jobs=cast(JobList, list_jobs(ListJobs(), ctx)).jobs,
+        upcoming=[UpcomingRun(id=r["id"], title=r["title"], when=r["next_run"]) for r in rows],
+        health=_health(ctx),
+    )
+
+
+@agent_module.query("cockpit.events")
+def cockpit_events(query: GetCockpitEvents, ctx: Context) -> CockpitEvents:
+    return cockpit.events(query, ctx)
+
+
 @agent_module.query("jobs.list")
 def list_jobs(query: ListJobs, ctx: Context) -> JobList:
     db = ctx.bus.db
     jobs: list[Job] = []
+    syncing = cast(MailStatus, mail.get_status(GetMailStatus(), ctx))
+    if syncing.state in {"connecting", "syncing", "backfilling"}:
+        jobs.append(
+            Job(
+                id="mail-sync",
+                kind="sync",
+                title="Downloading mail",
+                status=syncing.state,
+                progress=syncing.done if syncing.total else None,
+                total=syncing.total or None,
+                link="/connectors",
+            )
+        )
+    looking = pst_search.search.status
+    if looking.state == "running":
+        jobs.append(
+            Job(
+                id="pst-search",
+                kind="pst-search",
+                title="Looking for PST files",
+                status=looking.place or "running",
+                link="/connectors",
+            )
+        )
+    for identifier, upload in pst_upload.in_progress():
+        jobs.append(
+            Job(
+                id=f"upload-{identifier}",
+                kind="pst-upload",
+                title=f"Sending {upload.name}",
+                status="running",
+                progress=upload.received,
+                total=upload.size,
+                link="/connectors",
+            )
+        )
+    reading = db.fetch_all("SELECT COUNT(*) AS n FROM documents WHERE status = 'pending'")[0]["n"]
+    if reading:
+        jobs.append(
+            Job(
+                id="documents-reading",
+                kind="reading",
+                title="Reading documents",
+                status="running",
+                total=reading,
+                link="/documents/uploaded",
+            )
+        )
     for row in db.fetch_all(
-        "SELECT * FROM pst_imports WHERE status IN ('queued', 'running', 'paused', 'failed') ORDER BY id DESC"
+        "SELECT * FROM pst_imports WHERE status IN ('queued', 'running', 'paused') ORDER BY id DESC"
     ):
         jobs.append(
             Job(
@@ -646,7 +927,7 @@ def list_jobs(query: ListJobs, ctx: Context) -> JobList:
                 status=row["status"],
                 progress=row["position"],
                 total=row["total"],
-                link="/settings?section=archive",
+                link="/connectors",
             )
         )
     engine = semantic.engine()
@@ -677,11 +958,9 @@ def list_jobs(query: ListJobs, ctx: Context) -> JobList:
                     link="/settings?section=local-models",
                 )
             )
-    waiting = db.fetch_all("SELECT COUNT(*) AS n FROM triage_queue")[0]["n"]
+    waiting = mail_agent.waiting_count(ctx)
     if waiting:
-        status = (
-            "waiting for the model" if _mail_agent and _mail_agent.waiting_for_model else "running"
-        )
+        status = "waiting for the model" if _triggers and _triggers.waiting_for_model else "running"
         jobs.append(
             Job(
                 id="triage",
@@ -708,10 +987,18 @@ def list_jobs(query: ListJobs, ctx: Context) -> JobList:
     return JobList(jobs=jobs)
 
 
+def _quiet_days(last_date: str) -> int:
+    try:
+        return max((datetime.now(UTC) - datetime.fromisoformat(last_date)).days, 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _today_thread(row: Any) -> TodayThread:
     return TodayThread(
         id=row["id"], subject=row["subject"], people=json.loads(row["participants"])[:3], importance=row["importance"],
         status=row["status"], category=row["category"], last_date=row["last_date"], why=row["why"],
+        quiet_days=_quiet_days(row["last_date"]),
     )  # fmt: skip
 
 
@@ -745,16 +1032,133 @@ def today_view(query: GetToday, ctx: Context) -> TodayView:
                 "".join(p.get("text", "") for p in last[-1]["parts"] if p.get("type") == "text")
                 or None
             )
-    verb = "needs" if len(needs) == 1 else "need"
-    brief = f"{len(needs)} {verb} you, {len(waiting)} waiting on others, {automated} automated."
+    due = _due_items(ctx)
     return TodayView(
-        brief=brief,
+        brief=_brief(_waiting_for_person(ctx), due, len(needs)),
         needs_you=[_today_thread(row) for row in needs],
         waiting=[_today_thread(row) for row in waiting],
         automated_count=automated,
         prep_session=prep_session,
         prep_text=prep_text,
+        due=due,
+        since_last_look=_since_last_look(ctx),
     )
+
+
+def _waiting_for_person(ctx: Context) -> int:
+    """Everything an agent is holding for an answer, the same as the Needs you list."""
+    return int(
+        ctx.bus.db.fetch_all(
+            "SELECT (SELECT COUNT(*) FROM tool_approvals WHERE status = 'pending')"
+            " + (SELECT COUNT(*) FROM channel_messages WHERE kind = 'ask' AND status = 'open')"
+            " + (SELECT COUNT(*) FROM tasks WHERE proposed = 1 AND status != 'done')"
+            " + (SELECT COUNT(*) FROM reminders WHERE proposed = 1 AND fired = 0)"
+            " + (SELECT COUNT(*) FROM mail_categories WHERE proposed = 1)"
+            " + (SELECT COUNT(*) FROM memory_proposals) AS n"
+        )[0]["n"]
+    )
+
+
+def _brief(waiting: int, due: list[DueItem], important: int) -> str:
+    """Built from facts with no model call, so the page never waits on one."""
+    if waiting:
+        first = (
+            f"{waiting} thing{'' if waiting == 1 else 's'} need{'s' if waiting == 1 else ''} you."
+        )
+    elif important:
+        first = f"{important} important email{'' if important == 1 else 's'} to look at."
+    else:
+        first = "Nothing needs you right now."
+    if not due:
+        return first
+    late = next((item for item in due if item.overdue), None)
+    item = late or due[0]
+    return f"{first} {item.title} is {'overdue' if late else 'due today'}."
+
+
+def _due_items(ctx: Context) -> list[DueItem]:
+    db = ctx.bus.db
+    now = datetime.now().astimezone()
+    today = now.strftime("%Y-%m-%d")
+    items: list[DueItem] = []
+    for row in db.fetch_all(
+        "SELECT title, due, thread FROM tasks WHERE proposed = 0 AND status != 'done' AND due IS NOT NULL AND due <= ? ORDER BY due",
+        (today,),
+    ):
+        link = f"/mail/thread/{row['thread']}" if row["thread"] else "/planner/tasks"
+        items.append(
+            DueItem(
+                kind="task",
+                title=row["title"],
+                when=row["due"],
+                overdue=row["due"] < today,
+                link=link,
+            )
+        )
+    for row in db.fetch_all(
+        "SELECT title, due_at, thread FROM reminders WHERE proposed = 0 AND fired = 0 AND due_at <= ? ORDER BY due_at",
+        (f"{today}T23:59",),
+    ):
+        link = f"/mail/thread/{row['thread']}" if row["thread"] else "/planner/reminders"
+        items.append(
+            DueItem(
+                kind="reminder",
+                title=row["title"],
+                when=row["due_at"],
+                overdue=row["due_at"][:10] < today,
+                link=link,
+            )
+        )
+    for row in db.fetch_all(
+        "SELECT title, due, thread FROM work_board WHERE done = 0 AND kind = 'deadline' AND due IS NOT NULL AND due <= ? ORDER BY due",
+        (today,),
+    ):
+        link = f"/mail/thread/{row['thread']}" if row["thread"] else "/today"
+        items.append(
+            DueItem(
+                kind="deadline",
+                title=row["title"],
+                when=row["due"],
+                overdue=row["due"] < today,
+                link=link,
+            )
+        )
+    items.sort(key=lambda item: (not item.overdue, item.when))
+    return items[:DUE_LIMIT]
+
+
+def _since_last_look(ctx: Context) -> SinceLastLook:
+    db = ctx.bus.db
+    rows = db.fetch_all("SELECT value FROM agent_defaults WHERE key = ?", (LAST_SEEN,))
+    since = rows[0]["value"] if rows else None
+    after = since or ""
+    counted = db.fetch_all(
+        "SELECT COUNT(*) AS mail, COALESCE(SUM(json_extract(payload, '$.rule') IS NOT NULL), 0) AS filed"
+        " FROM events WHERE type = 'mail.received' AND time > ?",
+        (after,),
+    )[0]
+    judged = db.fetch_all(
+        "SELECT COUNT(DISTINCT r.thread) AS judged, COUNT(DISTINCT CASE WHEN t.importance = 'high' THEN r.thread END) AS important"
+        " FROM triage_runs r JOIN threads t ON t.id = r.thread WHERE r.status = 'done' AND r.time > ?",
+        (after,),
+    )[0]
+    proposed = db.fetch_all(
+        "SELECT (SELECT COUNT(*) FROM tasks WHERE proposed = 1 AND created > ?) AS n", (after,)
+    )[0]["n"]
+    return SinceLastLook(
+        since=since,
+        mail=counted["mail"],
+        important=judged["important"],
+        filed=counted["filed"],
+        judged=judged["judged"],
+        proposed=proposed,
+    )
+
+
+@agent_module.command("today.markSeen")
+def mark_today_seen(command: MarkTodaySeen, ctx: Context) -> AgentDone:
+    scheduler.set_default(ctx, LAST_SEEN, datetime.now(UTC).isoformat())
+    return AgentDone()
 
 
 @agent_module.command("session.answer")

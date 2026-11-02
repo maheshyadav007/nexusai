@@ -29,14 +29,15 @@ def build_message(
     draft_marker: str | None = None,
 ) -> EmailMessage:
     message = EmailMessage()
-    message["From"] = formataddr((sender_name, profile.auth.user))
+    address = profile.address or profile.auth.user
+    message["From"] = formataddr((sender_name, address))
     if draft.to:
         message["To"] = _addresses(draft.to)
     if draft.cc:
         message["Cc"] = _addresses(draft.cc)
     message["Subject"] = draft.subject
     message["Date"] = formatdate(localtime=True)
-    message["Message-ID"] = make_msgid(domain=profile.auth.user.rsplit("@", 1)[-1])
+    message["Message-ID"] = make_msgid(domain=address.rsplit("@", 1)[-1])
     if in_reply_to:
         message["In-Reply-To"] = in_reply_to
         message["References"] = " ".join([*references, in_reply_to])
@@ -79,7 +80,9 @@ def send(
         raise SendFailed("Add at least one recipient.")
     try:
         with _connect(profile, password, timeout) as client:
-            client.send_message(message, from_addr=profile.auth.user, to_addrs=recipients)
+            client.send_message(
+                message, from_addr=profile.address or profile.auth.user, to_addrs=recipients
+            )
     except smtplib.SMTPAuthenticationError as error:
         raise SendFailed("The mail server refused the username or password.") from error
     except smtplib.SMTPRecipientsRefused as error:

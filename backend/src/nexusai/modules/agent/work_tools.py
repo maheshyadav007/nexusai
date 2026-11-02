@@ -878,8 +878,9 @@ def specs(ctx: Context, guard: Guard, wrap_untrusted: Callable[[str], str]) -> l
             engine = semantic.engine()
             kinds = {"mail": {"mail"}, "documents": {"document"}}.get(scope, {"mail", "document"})
             size = max(1, min(limit, 50))
-            if engine is None or not engine.ensure():
-                # Words still find things, and the person hears why this may miss some.
+            if engine is None or not engine.is_ready():
+                # It wasn't offered unless it was here, so it went during this run. Words still
+                # find things, and the person hears why this may miss some.
                 note = (
                     "Search by meaning isn't available yet, because its model isn't on this computer."
                     " These are keyword matches, so tell the person results may be incomplete.\n"
@@ -897,7 +898,8 @@ def specs(ctx: Context, guard: Guard, wrap_untrusted: Callable[[str], str]) -> l
                     )
                 )
             hits = engine.search(query, kinds, size)
-            lines = []
+            coverage = engine.coverage(kinds)
+            lines = [coverage] if coverage else []
             for hit in hits:
                 if hit.kind == "mail":
                     rows = db.fetch_all(
@@ -907,9 +909,11 @@ def specs(ctx: Context, guard: Guard, wrap_untrusted: Callable[[str], str]) -> l
                         f"[thread {rows[0]['thread_id']}] {rows[0]['subject']}" if rows else hit.ref
                     )
                 else:
-                    name = f"[document {hit.ref}]"
+                    name = f"[document {hit.ref}{', ' + hit.place if hit.place else ''}]"
                 lines.append(f"{name} ({hit.score:.2f}): {hit.excerpt}")
-            return wrap_untrusted("\n".join(lines) or "Nothing close in meaning was found.")
+            if not hits:
+                lines.append("Nothing close in meaning was found.")
+            return wrap_untrusted("\n".join(lines))
 
         return guard(
             tool_call_id,
@@ -1008,7 +1012,7 @@ def specs(ctx: Context, guard: Guard, wrap_untrusted: Callable[[str], str]) -> l
 
     def list_agents(tool_call_id: str) -> str:
         def work() -> str:
-            rows = db.fetch_all("SELECT * FROM schedules ORDER BY id")
+            rows = db.fetch_all("SELECT * FROM schedules WHERE kind != 'mail-hourly' ORDER BY id")
             return wrap_untrusted(
                 "\n".join(
                     f"{r['id']}: {r['title']} ({r['every']} at {r['time']},"
@@ -1187,68 +1191,128 @@ def specs(ctx: Context, guard: Guard, wrap_untrusted: Callable[[str], str]) -> l
         return guard(tool_call_id, "remove_panels", "data", summary, "", work)
 
     return [
-        (create_tasks, _NewTasks, "Add one or many tasks, when the person asks for them."),
-        (update_tasks, _ChangeTasks, "Change one or many tasks: title, due date, notes, status."),
-        (delete_tasks, _TaskIds, "Remove one or many tasks."),
-        (list_tasks, _ListTasks, "See the person's tasks, with when they were added and changed."),
-        (create_reminders, _NewReminders, "Set one or many reminders, when the person asks."),
-        (update_reminders, _ChangeReminders, "Change, reschedule or snooze one or many reminders."),
-        (delete_reminders, _ReminderIds, "Remove one or many reminders."),
-        (list_reminders, _Nothing, "See upcoming reminders."),
-        (list_mail, _ListMail, "List conversations in a mail folder or category."),
+        (
+            create_tasks,
+            _NewTasks,
+            "Add tasks the person asked for, all in one call. If they didn't ask, use propose_task.",
+        ),
+        (
+            update_tasks,
+            _ChangeTasks,
+            "Change tasks in one call: title, due date, notes, or status such as done.",
+        ),
+        (delete_tasks, _TaskIds, "Remove tasks in one call. To finish one, use update_tasks."),
+        (list_tasks, _ListTasks, "See the person's tasks, with their IDs and due dates."),
+        (
+            create_reminders,
+            _NewReminders,
+            "Set reminders the person asked for, all in one call. If they didn't ask, use "
+            "propose_reminder.",
+        ),
+        (update_reminders, _ChangeReminders, "Change, reschedule or snooze reminders in one call."),
+        (delete_reminders, _ReminderIds, "Remove reminders in one call."),
+        (list_reminders, _Nothing, "See upcoming reminders, with their IDs."),
+        (
+            list_mail,
+            _ListMail,
+            "Browse conversations in a mail folder or category, newest first. To find something "
+            "specific, search instead.",
+        ),
         (
             update_mail,
             _ChangeMail,
-            "Change many conversations in one call: category, status, flag, read, archive.",
+            "Change conversations in one call: category, status, flag, read or archive. Use a "
+            "list, so the person has one thing to approve.",
         ),
-        (trash_mail, _ThreadIds, "Move one or many conversations to Trash."),
+        (
+            trash_mail,
+            _ThreadIds,
+            "Move conversations to Trash in one call, which asks first. To clear them away "
+            "without deleting, archive with update_mail.",
+        ),
         (
             list_categories,
             _Nothing,
-            "See the mail categories, their rules and how much is in each.",
+            "See the mail categories, their rules and how much is in each. Check this before "
+            "creating one.",
         ),
         (
             create_categories,
             _NewCategories,
-            "Create one or many categories, optionally filing matching mail automatically.",
+            "Create categories in one call, optionally filing matching mail automatically. Only "
+            "when none of the existing ones fit.",
         ),
         (
             update_category,
             _ChangeCategory,
-            "Rename a category, change its Priority inbox setting, or set or clear its rule.",
+            "Change one category in place: rename it, change its Priority inbox setting, or set "
+            "or clear its rule. Prefer this to creating a new one and moving mail across.",
         ),
-        (delete_categories, _CategoryNames, "Remove one or many categories. Their mail stays."),
-        (merge_categories, _MergeCategories, "Fold categories into one, moving all their mail."),
+        (
+            delete_categories,
+            _CategoryNames,
+            "Remove categories in one call. Their mail stays, without a category.",
+        ),
+        (
+            merge_categories,
+            _MergeCategories,
+            "Fold categories into one, moving all their mail and removing the old ones.",
+        ),
         (reorder_categories, _OrderCategories, "Set the order categories appear in."),
-        (list_rules, _Nothing, "See the mail rules."),
-        (save_rule, _Rule, "Create or replace a rule that handles matching mail automatically."),
-        (delete_rules, _RuleNames, "Remove one or many mail rules."),
-        (send_mail, _SendMail, "Send an email. The person always approves it first."),
-        (list_drafts, _Nothing, "See the saved drafts."),
+        (list_rules, _Nothing, "See the mail rules. They run before any agent sees the mail."),
+        (
+            save_rule,
+            _Rule,
+            "Create or replace a rule that handles matching mail with no model involved. Good for "
+            "mail that's always handled the same way.",
+        ),
+        (delete_rules, _RuleNames, "Remove mail rules in one call."),
+        (
+            send_mail,
+            _SendMail,
+            "Send an email. The person always sees it and approves it first. To prepare one "
+            "without sending, use save_draft.",
+        ),
+        (list_drafts, _Nothing, "See the saved drafts, with their IDs."),
         (save_draft, _SaveDraft, "Create or change a draft. Nothing is sent."),
-        (delete_drafts, _DraftIds, "Remove one or many drafts."),
+        (delete_drafts, _DraftIds, "Remove drafts in one call."),
         (
             semantic_search,
             _MeaningSearch,
-            "Find mail and documents by what they're about, in any language, even with no shared words.",
+            "Find mail and documents by what they're about, in any language, even with no shared "
+            "words. Best for a topic. For an exact name or number, use search_mail.",
         ),
-        (read_database, _Query, "Answer a question from the person's data with one SELECT."),
+        (
+            read_database,
+            _Query,
+            "Answer a counting or comparing question from the person's data with one SELECT. "
+            "It can't change anything.",
+        ),
         (
             create_agent,
             _NewAgent,
-            "Create an agent that runs by itself on a schedule, with its own instructions.",
+            "Create an agent that runs by itself on a schedule, with its own instructions. Only "
+            "when the person wants something to repeat. It asks first.",
         ),
         (update_agent, _ChangeAgent, "Change, pause or resume a scheduled agent."),
-        (run_agent, _AgentId, "Run a scheduled agent now."),
-        (list_agents, _Nothing, "See the agents that run on a schedule."),
-        (remove_agents, _AgentIds, "Remove one or many scheduled agents."),
-        (list_memory, _SearchMemory, "See what's remembered."),
-        (update_memory, _ChangeMemory, "Change something remembered."),
-        (forget_memory, _MemoryPaths, "Forget one or many remembered things."),
-        (list_documents, _ListDocuments, "List documents, with their keys and folders."),
-        (update_documents, _ChangeDocuments, "Move or tag one or many documents."),
-        (delete_documents, _DocumentKeys, "Remove one or many uploaded documents."),
-        (list_panels, _Nothing, "See the panels on the Panels screen."),
-        (save_panel, _SavePanel, "Create or change a panel."),
-        (remove_panels, _PanelIds, "Remove one or many panels."),
+        (run_agent, _AgentId, "Run a scheduled agent now, in its own chat."),
+        (list_agents, _Nothing, "See the agents that run on a schedule, with their IDs."),
+        (remove_agents, _AgentIds, "Remove scheduled agents in one call."),
+        (list_memory, _SearchMemory, "See what's remembered about the person and their work."),
+        (update_memory, _ChangeMemory, "Change something remembered, when it's out of date."),
+        (forget_memory, _MemoryPaths, "Forget remembered things in one call."),
+        (
+            list_documents,
+            _ListDocuments,
+            "List documents with their keys and folders, or filter them by a query.",
+        ),
+        (update_documents, _ChangeDocuments, "Move or tag documents in one call."),
+        (
+            delete_documents,
+            _DocumentKeys,
+            "Remove uploaded documents in one call. Mail attachments stay with their mail.",
+        ),
+        (list_panels, _Nothing, "See the panels on the Panels screen, with their IDs."),
+        (save_panel, _SavePanel, "Create or change a panel, when the person asks for one."),
+        (remove_panels, _PanelIds, "Remove panels in one call."),
     ]

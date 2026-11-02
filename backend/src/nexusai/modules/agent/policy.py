@@ -96,6 +96,7 @@ FILES, COMMANDS, MAIL, CATEGORIES, PLANNER, DATA, AGENTS = (
     "Agents",
 )
 ASK: Literal["ask"] = "ask"
+CONNECTOR_PREFIX = "mcp_"
 TOOL_ENTRIES = (
     ToolEntry("list_folder", FILES, "See folders", "List what's in a folder.", "read"),
     ToolEntry("read_file", FILES, "Read files", "Open a file on this computer.", "read"),
@@ -193,6 +194,9 @@ def can_remember(tool: str, untrusted: bool) -> bool:
 
 def for_tool(permissions: Permissions, tool: str) -> Permissions:
     """The permissions a decision should see, with this tool's setting in place of its group's."""
+    if tool.startswith(CONNECTOR_PREFIX):
+        # New tools from outside ask first, until the person says otherwise.
+        return permissions.model_copy(update={"data": permissions.tools.get(tool) or ASK})
     entry = TOOLS_BY_NAME.get(tool)
     if entry is None or entry.action == "send":
         return permissions

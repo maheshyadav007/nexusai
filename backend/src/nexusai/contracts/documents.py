@@ -2,7 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-DocumentSource = Literal["upload", "email"]
+DocumentSource = Literal["upload", "email", "home"]
+ReaderKind = Literal["pdf", "image", "markdown", "code", "table", "html", "document", "other"]
 
 
 class ListDocuments(BaseModel):
@@ -31,6 +32,8 @@ class DocumentRow(BaseModel):
     status_reason: str | None = None
     # Added again with the same content, so this is the one already here.
     duplicate: bool = False
+    # The page, slide or sheet a search by meaning found it on.
+    place: str | None = None
 
 
 class DocumentLibrary(BaseModel):
@@ -43,6 +46,49 @@ class GetDocument(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     key: str = Field(max_length=64)
+
+
+class ListHomeFolder(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Relative to Home. Empty is the top, which shows only the folders that can be looked at.
+    path: str = Field(default="", max_length=4096)
+
+
+class HomeEntry(BaseModel):
+    name: str
+    # What to show, when the name on disk means nothing to a person.
+    label: str
+    path: str
+    is_folder: bool
+    size: int = 0
+    modified: str | None = None
+
+
+class HomeFolder(BaseModel):
+    path: str
+    entries: list[HomeEntry]
+
+
+class ReadDocument(BaseModel):
+    """A document from the library by its key, or any file under Home by its path."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    key: str | None = Field(default=None, max_length=64)
+    path: str | None = Field(default=None, max_length=4096)
+
+
+class DocumentReader(BaseModel):
+    name: str
+    kind: ReaderKind
+    text: str
+    status: str = "ready"
+    status_reason: str | None = None
+    url: str
+    key: str | None = None
+    # Cleaned of scripts and anything that would load from outside.
+    html: str | None = None
 
 
 class DocumentPreview(BaseModel):

@@ -38,9 +38,12 @@ def followups_part(raw: str) -> list[dict[str, Any]]:
 class UiTranslator:
     """One per run. It carries what a stream needs to keep straight across events."""
 
-    def __init__(self, *, started: bool, declined_text: str = "") -> None:
+    def __init__(
+        self, *, started: bool, declined_text: str = "", metadata: dict[str, Any] | None = None
+    ) -> None:
         self.started = started
         self.declined_text = declined_text
+        self.metadata = metadata or {}
         self.step_open = False
         self.blocks: dict[int, dict[str, Any]] = {}
         self.announced: set[str] = set()
@@ -58,7 +61,7 @@ class UiTranslator:
             return []
         self.started = True
         time = datetime.now(UTC).isoformat()
-        return [{"type": "start", "messageMetadata": {"time": time}}]
+        return [{"type": "start", "messageMetadata": {"time": time, **self.metadata}}]
 
     def feed(self, event: dict[str, Any]) -> list[dict[str, Any]]:
         method = event.get("method")
@@ -228,7 +231,7 @@ def assemble_messages(turns: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "id": f"user-{turn['id']}",
                     "role": "user",
                     "parts": [{"type": "text", "text": turn["text"]}],
-                    "metadata": {"time": turn.get("created")},
+                    "metadata": {"time": turn.get("created"), "origin": turn.get("origin")},
                 }
             )
         parts = _assemble_parts(turn["parts"])
@@ -239,7 +242,13 @@ def assemble_messages(turns: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "id": f"assistant-{turn['id']}",
                     "role": "assistant",
                     "parts": parts,
-                    "metadata": started.get("messageMetadata", {}),
+                    "metadata": {
+                        **started.get("messageMetadata", {}),
+                        "turn": turn["id"],
+                        "feedback": turn.get("feedback"),
+                        "versions": turn.get("versions"),
+                        "thread": turn.get("thread"),
+                    },
                 }
             )
     return messages

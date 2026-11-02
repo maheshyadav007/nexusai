@@ -8,8 +8,6 @@ import { Skeleton } from "@/ui/primitives/Skeleton";
 import { t } from "@/ui/strings";
 import { ChatView } from "./ChatView";
 
-const SELF_RUNNING = new Set(["mail"]);
-
 /** Loads a session once. After that the live conversation belongs to useChat. */
 export function SessionChat({ id, footer }: { id: string; footer?: ReactNode }) {
   const session = useSession(id);
@@ -19,5 +17,5 @@ export function SessionChat({ id, footer }: { id: string; footer?: ReactNode }) 
   }, [session.data, start]);
   if (session.isError) return <div className="p-4"><ErrorState title={t("sessions.error")} description={session.error.message} /></div>;
   if (!session.data || !start) return <div aria-busy className="p-4"><Skeleton className="h-6 w-full" /></div>;
-  return <ChatView key={id} id={id} initial={start.messages} active={start.active} readOnly={SELF_RUNNING.has(session.data.session.agent)} footer={footer} />;
+  return <ChatView key={id} id={id} initial={start.messages} active={start.active} footer={footer} />;
 }

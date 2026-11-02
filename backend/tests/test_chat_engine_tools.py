@@ -407,7 +407,8 @@ def test_every_powerful_tool_has_a_row_in_settings(client: TestClient) -> None:
         "save_personal_prompt",
     }
     assert built - catalog == talking
-    assert catalog <= built
+    # It isn't offered until its model has been downloaded.
+    assert catalog - {"semantic_search"} <= built
 
 
 # Counts follow events

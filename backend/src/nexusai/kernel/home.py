@@ -66,6 +66,37 @@ def write_pointer(data_dir: Path, home: Path) -> None:
     temporary.replace(data_dir / "home-pointer.json")
 
 
+def remove_pointer(data_dir: Path) -> None:
+    (data_dir / "home-pointer.json").unlink(missing_ok=True)
+
+
+def wipe(home: Path, *, keep_models: bool) -> None:
+    """Only what NexusAI made. Anything else someone keeps in this folder stays where it is.
+
+    Links are removed rather than followed, so nothing outside Home can be touched.
+    """
+    for name in SUBFOLDERS:
+        folder = home / name
+        if folder.is_symlink():
+            folder.unlink()
+        elif folder.is_dir():
+            if name == "system" and keep_models:
+                _wipe_except(folder, "models")
+            else:
+                shutil.rmtree(folder)
+    (home / "home.json").unlink(missing_ok=True)
+
+
+def _wipe_except(folder: Path, kept: str) -> None:
+    for path in folder.iterdir():
+        if path.name == kept and not path.is_symlink():
+            continue
+        if path.is_dir() and not path.is_symlink():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+
+
 def is_home(path: Path) -> bool:
     try:
         return int(json.loads((path / "home.json").read_text())["format_version"]) >= 1

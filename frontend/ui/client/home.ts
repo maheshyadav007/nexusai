@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { post } from "./api";
-import type { BackupList, ChooseHome, FolderListing, HomeCheck, HomeStatus, RecoveryKeyView } from "./contracts.generated";
+import type { BackupList, ChooseHome, FolderListing, HomeCheck, HomeStatus, RecoveryKeyView, ResetHome } from "./contracts.generated";
 
 export function useHomeStatus() {
   return useQuery({ queryKey: ["home"], queryFn: () => post<HomeStatus>("/api/home/status", {}) });
@@ -78,3 +78,6 @@ function useRecoveryChange(path: string) {
 
 export const useConfirmRecoveryKey = () => useRecoveryChange("/api/home/recovery-key/confirm");
 export const useNewRecoveryKey = () => useRecoveryChange("/api/home/recovery-key/new");
+
+/** Removes everything. The caller reloads afterwards, so nothing in memory outlives it. */
+export const useResetEverything = () => useMutation({ mutationFn: (input: ResetHome) => post<HomeStatus>("/api/home/reset", input) });

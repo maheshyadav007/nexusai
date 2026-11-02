@@ -43,6 +43,9 @@ export const useAnswerSession = () => useSessionCommand((input: { id: string; an
 export const useStopSession = () => useSessionCommand((id: string) => command("session.stop", { id }));
 export const useRenameSession = () => useSessionCommand((input: { id: string; title: string }) => command("session.rename", input));
 export const useArchiveSession = () => useSessionCommand((id: string) => command("session.archive", { id }));
+export const useSetSessionModel = () => useSessionCommand((input: { id: string; model: string | null }) => command("session.setModel", input));
+export const useChooseVersion = () => useSessionCommand((input: { id: string; turn: number }) => command("session.chooseVersion", input));
+export const useRateMessage = () => useMutation({ mutationFn: (input: { turn: number; value: "up" | "down" | null }) => command("message.rate", input) });
 
 export function useApprovals() {
   const ready = useHomeReady();

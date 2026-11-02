@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { command, query } from "./api";
-import type { SaveSemanticSettings, SemanticStatus } from "./contracts.generated";
+import type { RebuildIndex, SaveSemanticSettings, SemanticStatus } from "./contracts.generated";
 import { useHomeReady } from "./home";
 
 const KEY = ["semantic"];
@@ -23,4 +23,6 @@ export const useCancelModel = () => useSemanticCommand((id: string) => command("
 export const useRemoveModel = () => useSemanticCommand((id: string) => command("semantic.remove", { id }));
 export const useChooseModel = () => useSemanticCommand((id: string) => command("semantic.setActive", { id }));
 export const useSaveSemantic = () => useSemanticCommand((changes: SaveSemanticSettings) => command("semantic.saveSettings", changes));
+export const useRebuildIndex = () => useSemanticCommand((kind: RebuildIndex["kind"]) => command("semantic.rebuild", { kind }));
+export const useDetectModels = () => useQuery({ queryKey: ["semantic-detect"], queryFn: () => query("semantic.detect", {}), staleTime: 0 });
 export const useImportModel = () => useSemanticCommand((input: { id: string; folder: string }) => command("semantic.importFiles", input));

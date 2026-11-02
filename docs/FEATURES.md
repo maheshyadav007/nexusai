@@ -47,16 +47,17 @@ Feature set for review, grouped by how the pieces depend on each other. Context:
 | APP-8 | App lock: OS login or Windows Hello on open and after idle | Next |
 | APP-14 | Manual backup and restore of Home | Next |
 | APP-15 | Screen reader support and high-contrast theme | Next |
-| APP-13 | Retention settings and "Remove all data"; keep local mail within company policy | Next |
+| APP-16 | Reset: removes everything NexusAI made and every saved credential, and starts setup again, after typing a word to confirm. Only known folders are removed, and downloaded models can stay | MVP |
+| APP-13 | Retention settings; keep local mail within company policy | Next |
 
 ## A2. Home folder
 
-The user picks one **NexusAI Home**. Everything the app stores lives there except passwords, which stay in the OS credential store. There is one Home per user, with no separate per-project spaces. A small pointer file in the OS app-data folder records where Home is.
+The user picks one **NexusAI Home**. Everything the app stores lives there, except model and connector sign-ins and this Home's own key, which stay in the OS credential store. Mail accounts, passwords included, are in an encrypted file here. There is one Home per user, with no separate per-project spaces. A small pointer file in the OS app-data folder records where Home is.
 
 ```text
 <NexusAI Home>/
   home.json     format version and ID of this Home
-  system/       app only: nexusai.db, search indexes, attachment cache, ONNX models, mail-accounts.json, rules.json, logs
+  system/       app only: nexusai.db, search indexes, attachment cache, ONNX models, mail-accounts.enc, rules.json, logs
   prompts/      personalized and agent prompts, in markdown
   memory/       user and agent memory files, in markdown
   documents/    uploaded documents
@@ -162,10 +163,10 @@ Every data source is a connector: an MCP server with its own tools, skills and r
 
 | ID | Feature | Pri |
 |---|---|---|
-| MOD-1 | Connector system, with Mail and PST built in as in-process MCP servers, each with its own tools, skills, resources and events | MVP |
+| MOD-1 | Connector system. Email and PST are built in, and report name, status and on/off the same way MCP servers do, with their tools staying direct behind the one tool door | MVP |
 | MOD-2 | Connectors in Settings: status, sync progress, tools, skills and resources of each, on/off | MVP |
-| MOD-4 | Add any MCP server, public or internal, in Settings: by URL or local command, with sign-in details in the OS credential store, a connection test, and a public or internal label | Next |
-| MOD-7 | Connector safety: new tools start as Ask; results count as untrusted content (TOL-5); re-approve if tools or descriptions change; warning that public connectors receive real values, since masking applies only to model calls; company policy file can limit connectors to an approved list | Next |
+| MOD-4 | Add an MCP server by web address on the Connectors page or in Settings, with a token in the OS credential store, a test that lists its tools first, and a public or internal label. Local command servers and OAuth come later | Done (by address) |
+| MOD-7 | (Built, except the allowlist.) Connector safety: new tools start as Ask; results count as untrusted content (TOL-5); re-approve if tools or descriptions change; warning that public connectors receive real values, since masking applies only to model calls; company policy file can limit connectors to an approved list | Next |
 | MOD-9 | Manage skills: turn off a connector's skills, or add your own | Next |
 | MOD-5 | NexusAI as an MCP server for other agents | Later |
 
@@ -173,7 +174,7 @@ Every data source is a connector: an MCP server with its own tools, skills and r
 
 | ID | Feature | Pri |
 |---|---|---|
-| ACC-1 | Mail profiles from `mail-accounts.json` (corporate, Gmail test); passwords in the OS credential store; "Test connection" | MVP |
+| ACC-1 | Mail accounts in one encrypted file, `mail-accounts.enc` (corporate, Gmail test). Only a server name, username and password are needed, and the rest is worked out, with details to override it; "Test connection" | MVP |
 | ACC-3 | IMAP sync: newest N first, then backfill in the background; live new mail via IDLE; reconnects after sleep or network change, and resumes after restart | MVP |
 | ACC-6 | Send, reply and forward via SMTP, only after approval; Sent and Drafts folders, including agent drafts awaiting approval | MVP |
 | ACC-8 | Two-way mail state: read, flag, move, delete and drafts sync with the server | MVP |
@@ -326,7 +327,7 @@ Mail, documents and notes are not memory. Agents reach them through search.
 |---|---|---|
 | SES-1 | Several sessions running in parallel, each with its own history, scratch folder and model; limit on those running at once (default 3), extras queued | MVP |
 | SES-2 | Sessions view: status (running, waiting for approval, done, failed), current step, time and token use; open, stop, resume, rename, search, archive and delete. Work continues when the user switches away and resumes after a restart | MVP |
-| SES-7 | Long sessions compress older steps into a summary automatically before running out of context, keeping the originals in session history | MVP |
+| SES-7 | Long chats send the model only recent messages, with summarizing available automatically or on request, chosen in Settings and per schedule. Originals always stay in the chat | MVP |
 | SES-6 | Warn when two sessions change the same file outside `scratch/` | Next |
 
 ## C5. Tools & permissions
@@ -452,7 +453,8 @@ The main focus space on Today is a two-way channel between the agents and the us
 
 | ID | Feature | Pri |
 |---|---|---|
-| NTF-3 | Today: one-line brief, Needs you, Waiting, grouped automated mail, and the user channel | MVP |
+| NTF-3 | Today: greeting and one-line brief, Needs you, Due, Important mail, Waiting on others, Since you last looked, and one status line linking to the Cockpit | MVP |
+| NTF-7 | Cockpit: what's running, health of each part, what's coming up, and a filterable feed of what happened | MVP |
 | CHN-1 | User channel with Ask, Suggest and Tell from all agents and sessions, each linked to its source; reply in place, or "Open session" to continue in full | MVP |
 | CHN-3 | Asks don't hold up other work: the Mail agent uses its best guess, marks the result provisional, and updates it when answered; a session can pause until answered | MVP |
 | CHN-5 | Noise control: similar messages grouped, daily limit, respects quiet hours; only urgent asks raise a notification | MVP |
@@ -501,7 +503,8 @@ A panel is a saved live view over any data in the app: emails from a person, a t
 
 | ID | Feature | Pri |
 |---|---|---|
-| DOC-1 | Documents library across uploads and email attachments: preview, search, filter, open the source message; "From email" hides signature images | MVP |
+| DOC-1 | Documents library across uploads, email attachments and what agents made, filtered by where it came from, with a Home folder view: preview, full-page reader, search, open the source message; attachments hide signature images | MVP |
+| DOC-5 | Reads PDF, Office (including macro-enabled and old formats, best effort), HWP and HWPX, OpenDocument, RTF, Outlook and mail files, CSV and TSV, notebooks, and source code and text of any kind. Scans and pictures aren't read yet | MVP |
 | DOC-2 | Upload by drag and drop: copied to `documents/`, text extracted and indexed, usable by the agent | MVP |
 | DOC-4 | User folders and tags for documents, draggable like other folders | MVP |
 

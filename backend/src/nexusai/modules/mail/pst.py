@@ -30,6 +30,21 @@ BATCH = 200
 # PST attachments aren't copied: this marks the part numbers that read from the PST on demand.
 PST_PART_OFFSET = 100_000
 _stderr_limit = 500
+LOCKED_WORDS = (
+    "being used by another process",
+    "sharing violation",
+    "permission denied",
+    "access is denied",
+)
+
+
+def failure_message(detail: str) -> str:
+    """Outlook locks the files it has open, which is the likeliest reason and the easiest to fix."""
+    if any(word in detail.lower() for word in LOCKED_WORDS):
+        return "Outlook has this file open. Close Outlook and try again."
+    return (
+        "NexusAI couldn't read this file. Check that it's a PST archive and isn't open in Outlook."
+    )
 
 
 def worker_command(path: str, start: int) -> list[str]:
@@ -141,8 +156,7 @@ class PstRunner:
         else:
             detail = process.stderr.read()[-_stderr_limit:] if process.stderr else ""
             log.warning("pst_worker_stopped", code=process.returncode, detail=detail)
-            message = "NexusAI couldn't read this file. Check that it's a PST archive and isn't open in Outlook."
-            _set_status(ctx, import_id, "failed", message)
+            _set_status(ctx, import_id, "failed", failure_message(detail))
 
 
 def _set_status(ctx: Context, import_id: int, status: str, error: str | None) -> None:

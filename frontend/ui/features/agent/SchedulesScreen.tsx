@@ -16,9 +16,11 @@ import { Select } from "@/ui/primitives/Select";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { Switch } from "@/ui/primitives/Switch";
 import { TextLink } from "@/ui/primitives/TextLink";
+import { TriggersCard } from "./TriggersCard";
 import { t } from "@/ui/strings";
 
 const EVERY = [
+  { value: "hour", label: t("schedules.every.hour") },
   { value: "day", label: t("schedules.every.day") },
   { value: "week", label: t("schedules.every.week") },
   { value: "once", label: t("schedules.every.once") },
@@ -26,6 +28,12 @@ const EVERY = [
 const WEEKDAYS = ["schedules.day.0", "schedules.day.1", "schedules.day.2", "schedules.day.3", "schedules.day.4", "schedules.day.5", "schedules.day.6"] as const;
 
 const HOURS_NOT_SET = "08:00";
+const MEMORY_DEFAULT = "default";
+const MEMORY = [
+  { value: MEMORY_DEFAULT, label: t("schedules.context.default") },
+  { value: "trim", label: t("context.mode.trim") },
+  { value: "auto_compact", label: t("context.mode.auto_compact") },
+];
 const PREP_TIME = "06:00";
 
 type Saved = Omit<Schedule, "id"> & { id?: number | null };
@@ -39,6 +47,8 @@ function ScheduleForm({ initial, action, onSaved }: { initial?: ScheduleRow; act
   const [weekday, setWeekday] = useState(String(initial?.weekday ?? 0));
   const [date, setDate] = useState(initial?.date ?? "");
   const [limit, setLimit] = useState(String(initial?.token_limit ?? 0));
+  const [memory, setMemory] = useState<string>(initial?.context_mode ?? MEMORY_DEFAULT);
+  const [keep, setKeep] = useState(initial?.keep_messages === null || initial?.keep_messages === undefined ? "" : String(initial.keep_messages));
   const isPrep = initial?.kind === "daily-prep";
   const values: Saved = {
     ...(initial ? { id: initial.id ?? null, kind: initial.kind ?? "prompt", enabled: initial.enabled ?? true } : {}),
@@ -49,6 +59,8 @@ function ScheduleForm({ initial, action, onSaved }: { initial?: ScheduleRow; act
     weekday: Number(weekday),
     date: date || null,
     token_limit: Number(limit) || 0,
+    context_mode: memory === MEMORY_DEFAULT ? null : (memory as NonNullable<Schedule["context_mode"]>),
+    keep_messages: keep === "" ? null : Number(keep),
   };
   return (
     <form
@@ -75,6 +87,10 @@ function ScheduleForm({ initial, action, onSaved }: { initial?: ScheduleRow; act
         <Field label={t("schedules.time")}>{({ invalid, ...control }) => <Input type="time" invalid={invalid} value={time} onChange={(event) => setTime(event.target.value)} {...control} />}</Field>
         {every === "week" ? <Field label={t("schedules.weekday")}>{({ invalid, id }) => <Select id={id} invalid={invalid} value={weekday} options={WEEKDAYS.map((key, index) => ({ value: String(index), label: t(key) }))} onChange={setWeekday} />}</Field> : null}
         {every === "once" ? <Field label={t("schedules.date")}>{({ invalid, ...control }) => <Input type="date" invalid={invalid} value={date} onChange={(event) => setDate(event.target.value)} {...control} />}</Field> : null}
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <Field label={t("schedules.context")}>{({ invalid, id }) => <Select id={id} invalid={invalid} value={memory} options={MEMORY} onChange={setMemory} />}</Field>
+        {memory !== "auto_compact" ? <Field label={t("schedules.keep")} hint={t("context.keep.hint")}>{({ invalid, ...control }) => <Input type="number" min={0} invalid={invalid} value={keep} onChange={(event) => setKeep(event.target.value)} {...control} />}</Field> : null}
       </div>
       <Field label={t("schedules.limit")} hint={t("schedules.limit.hint")}>{({ invalid, ...control }) => <Input type="number" min={0} invalid={invalid} value={limit} onChange={(event) => setLimit(event.target.value)} {...control} />}</Field>
       <div><Button type="submit" variant="primary" loading={save.isPending} disabled={!title.trim() || (!isPrep && !prompt.trim()) || (every === "once" && !date)}>{action}</Button></div>
@@ -142,6 +158,7 @@ export function SchedulesScreen() {
           ) : null}
         </div>
       </Card>
+      <TriggersCard />
       <ul aria-label={t("nav.schedules")} className="flex flex-col gap-2">
         {rows.map((row) => <ScheduleItem key={row.id} row={row} />)}
       </ul>

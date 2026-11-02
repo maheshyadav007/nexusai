@@ -115,6 +115,8 @@ class CreateSession(BaseModel):
     title: str | None = Field(default=None, max_length=200)
     context: list[str] = Field(default_factory=list, max_length=20)
     agent: Literal["session", "interview"] = "session"
+    # Empty means the model chosen in Settings.
+    model: str | None = Field(default=None, max_length=128)
 
 
 class SessionRow(BaseModel):
@@ -130,6 +132,7 @@ class SessionRow(BaseModel):
     created: str
     updated: str
     archived: bool
+    model: str | None = None
 
 
 class ListSessions(BaseModel):
@@ -156,6 +159,29 @@ class RenameSession(BaseModel):
 
     id: str = Field(max_length=64)
     title: str = Field(min_length=1, max_length=200)
+
+
+class SetSessionModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(max_length=64)
+    model: str | None = Field(default=None, max_length=128)
+
+
+class ChooseVersion(BaseModel):
+    """Which answer to keep going from, after trying a message again."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(max_length=64)
+    turn: int
+
+
+class RateMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    turn: int
+    value: Literal["up", "down"] | None = None
 
 
 class SessionView(BaseModel):
@@ -285,8 +311,8 @@ class SessionChat(BaseModel):
 
     id: str = Field(max_length=64)
     text: str = Field(min_length=1, max_length=200000)
-    # Replaces the person's nth message, and everything after it.
-    edit_index: int | None = Field(default=None, ge=0)
+    # Asks the latest message again, keeping the answer it already has.
+    retry: bool = False
 
 
 MemoryLevel = Literal["user", "agent"]
@@ -507,7 +533,19 @@ class ThreadSummary(BaseModel):
 
 class Job(BaseModel):
     id: str
-    kind: Literal["sync", "pst", "triage", "session", "schedule", "model", "index"]
+    kind: Literal[
+        "sync",
+        "pst",
+        "pst-search",
+        "pst-upload",
+        "triage",
+        "session",
+        "schedule",
+        "trigger",
+        "model",
+        "index",
+        "reading",
+    ]
     title: str
     status: str
     progress: int | None = None
@@ -517,6 +555,109 @@ class Job(BaseModel):
 
 class ListJobs(BaseModel):
     pass
+
+
+class UpcomingRun(BaseModel):
+    id: int
+    title: str
+    when: str
+
+
+class HealthItem(BaseModel):
+    id: str
+    label: str
+    state: Literal["ok", "working", "problem", "off"]
+    detail: str
+    link: str | None = None
+    when: str | None = None
+
+
+ContextMode = Literal["trim", "auto_compact"]
+TriggerEvent = Literal["mail.received", "mail.urgent"]
+
+
+class Trigger(BaseModel):
+    """Something that starts an agent. The built-in one looks after new mail."""
+
+    id: str
+    title: str
+    kind: Literal["mail", "custom"]
+    event: str
+    prompt: str = ""
+    enabled: bool = True
+    token_limit: int = 0
+    context_mode: ContextMode | None = None
+    keep_messages: int | None = None
+    session: str | None = None
+
+
+class TriggerChoice(BaseModel):
+    event: str
+    label: str
+
+
+class GetTriggers(BaseModel):
+    pass
+
+
+class TriggerList(BaseModel):
+    triggers: list[Trigger]
+    events: list[TriggerChoice]
+
+
+class SaveTrigger(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str | None = Field(default=None, max_length=64)
+    title: str = Field(min_length=1, max_length=200)
+    # Only from this list, because an event an agent can cause could set off a loop.
+    event: TriggerEvent = "mail.urgent"
+    prompt: str = Field(default="", max_length=20000)
+    enabled: bool = True
+    token_limit: int = Field(default=0, ge=0)
+    context_mode: ContextMode | None = None
+    keep_messages: int | None = Field(default=None, ge=0, le=1000)
+
+
+class RemoveTrigger(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(max_length=64)
+
+
+class GetCockpit(BaseModel):
+    pass
+
+
+class Cockpit(BaseModel):
+    """What's going on in the app, right now."""
+
+    jobs: list[Job]
+    upcoming: list[UpcomingRun]
+    health: list[HealthItem]
+
+
+class GetCockpitEvents(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    filter: Literal["all", "agents", "mail", "indexing", "problems"] = "all"
+    before: int | None = None
+    limit: int = Field(default=50, ge=1, le=200)
+
+
+class CockpitEvent(BaseModel):
+    seq: int
+    time: str
+    type: str
+    group: str
+    title: str
+    detail: str | None = None
+    link: str | None = None
+    problem: bool = False
+
+
+class CockpitEvents(BaseModel):
+    events: list[CockpitEvent]
 
 
 class JobList(BaseModel):
@@ -552,17 +693,83 @@ class GetQuietHours(BaseModel):
     pass
 
 
+class ContextProfile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: ContextMode = "trim"
+    keep_messages: int = Field(default=40, ge=0, le=1000)
+    trim_saved_history: bool = False
+
+
+class CompactSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    trigger_tokens: int = Field(default=15000, ge=1000)
+    keep_messages: int = Field(default=12, ge=0, le=1000)
+    summarize_up_to_tokens: int = Field(default=4000, ge=500)
+
+
+class ToolResultSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    clear_after_tokens: int = Field(default=100000, ge=1000)
+    keep_recent: int = Field(default=3, ge=0, le=100)
+
+
+class ContextSettings(BaseModel):
+    """How much of a conversation the model is sent. The chat always shows all of it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    chat: ContextProfile
+    triggered: ContextProfile
+    compact: CompactSettings
+    tool_results: ToolResultSettings
+
+
+class GetContextSettings(BaseModel):
+    pass
+
+
+class CompactResult(BaseModel):
+    compacted: bool
+
+
+MailMode = Literal["each", "hourly", "both"]
+
+
+class MailAgentSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: MailMode = "each"
+
+
+class GetMailAgentSettings(BaseModel):
+    pass
+
+
+class RunMailAgent(BaseModel):
+    pass
+
+
+class MailAgentRun(BaseModel):
+    outcome: Literal["started", "nothing"]
+
+
 class Schedule(BaseModel):
     id: int | None = None
     title: str = Field(min_length=1, max_length=200)
     prompt: str = Field(default="", max_length=20000)
-    kind: Literal["prompt", "daily-prep"] = "prompt"
-    every: Literal["once", "day", "week"] = "day"
+    kind: Literal["prompt", "daily-prep", "mail-hourly"] = "prompt"
+    every: Literal["once", "hour", "day", "week"] = "day"
     time: str = Field(default="08:00", pattern=r"^\d{2}:\d{2}$")
     weekday: int = Field(default=0, ge=0, le=6)
     date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     enabled: bool = True
     token_limit: int = Field(default=0, ge=0)
+    # Empty means the default for events and schedules.
+    context_mode: ContextMode | None = None
+    keep_messages: int | None = Field(default=None, ge=0, le=1000)
 
 
 class ScheduleRow(Schedule):
@@ -611,6 +818,25 @@ class TodayThread(BaseModel):
     category: str | None
     last_date: str
     why: str | None
+    # How long since anyone wrote, for mail that's waiting on someone else.
+    quiet_days: int = 0
+
+
+class DueItem(BaseModel):
+    kind: Literal["task", "reminder", "deadline"]
+    title: str
+    when: str
+    overdue: bool
+    link: str
+
+
+class SinceLastLook(BaseModel):
+    since: str | None
+    mail: int
+    important: int
+    filed: int
+    judged: int
+    proposed: int
 
 
 class TodayView(BaseModel):
@@ -620,6 +846,12 @@ class TodayView(BaseModel):
     automated_count: int
     prep_session: str | None
     prep_text: str | None
+    due: list[DueItem] = Field(default_factory=list)
+    since_last_look: SinceLastLook | None = None
+
+
+class MarkTodaySeen(BaseModel):
+    pass
 
 
 class GetToday(BaseModel):

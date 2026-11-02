@@ -1,5 +1,6 @@
-import { BackgroundScreen } from "@/ui/features/agent/BackgroundScreens";
+import { redirect } from "next/navigation";
 
+// It became part of the Cockpit, and old links should still get somewhere.
 export default function Page() {
-  return <BackgroundScreen />;
+  redirect("/cockpit");
 }

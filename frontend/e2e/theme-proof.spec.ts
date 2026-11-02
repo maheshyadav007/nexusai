@@ -11,7 +11,7 @@ test.beforeAll(async ({ request }) => {
   await request.post("/api/commands/onboarding.finish", { data: {} });
 });
 
-const SCREENS = ["/today", "/settings", "/settings?section=profile", "/settings?section=preferences", "/settings?section=accounts", "/settings?section=rules", "/settings?section=models", "/settings?section=home", "/settings?section=network", "/settings?section=about", "/logs", "/mail/inbox", "/mail/sent", "/mail/drafts", "/mail/categories", "/mail/archive", "/search", "/documents/all", "/documents/uploaded", "/documents/from-email", "/panels", "/agent/sessions", "/settings?section=archive", "/gallery", "/gallery/shell"];
+const SCREENS = ["/today", "/settings", "/settings?section=profile", "/settings?section=preferences", "/connectors", "/cockpit", "/settings?section=rules", "/settings?section=models", "/settings?section=home", "/settings?section=network", "/settings?section=about", "/logs", "/mail/inbox", "/mail/sent", "/mail/drafts", "/mail/categories", "/mail/archive", "/search", "/documents/all", "/documents/uploaded", "/documents/from-email", "/documents/home", "/panels", "/agent/sessions", "/gallery", "/gallery/shell"];
 
 for (const path of SCREENS) {
   test(`${path} loads with no browser errors`, async ({ page }) => {
@@ -244,10 +244,10 @@ test("the sidebar can be reordered, hidden and reset, by keyboard and buttons", 
   await nav.getByRole("button", { name: "Customize sidebar" }).click();
   const editor = page.getByRole("dialog");
   await editor.getByRole("button", { name: "Move Mail down" }).click();
-  await expect.poll(firstSection).toBe("Documents");
+  await expect.poll(firstSection).toBe("Agent");
 
   // The keyboard route on the drag handle.
-  await editor.getByRole("button", { name: "Drag Documents" }).focus();
+  await editor.getByRole("button", { name: "Drag Agent", exact: true }).focus();
   // At a person's pace: the drag library measures positions between key presses.
   await page.keyboard.press("Space");
   await page.waitForTimeout(200);
@@ -269,6 +269,19 @@ test("the sidebar can be reordered, hidden and reset, by keyboard and buttons", 
   await page.keyboard.press("Escape");
   await expect(nav.getByRole("link", { name: "Drafts" })).toBeVisible();
   await expect.poll(firstSection).toBe("Mail");
+});
+
+test("the reset dialog says what goes, and won't run until the word is typed", async ({ page }) => {
+  await page.goto("/settings?section=reset");
+  await page.getByRole("button", { name: "Reset NexusAI" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("This permanently removes");
+  await expect(dialog.getByRole("checkbox", { name: "Keep downloaded search models" })).toBeChecked();
+  const action = dialog.getByRole("button", { name: "Remove everything" });
+  await expect(action).toBeDisabled();
+  await dialog.getByRole("textbox", { name: "Type RESET to confirm" }).fill("reset");
+  await expect(action).toBeDisabled();
+  await page.keyboard.press("Escape");
 });
 
 test("logs show live, filter, open a trace, and never hold a secret", async ({ page, request }) => {

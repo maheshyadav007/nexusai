@@ -137,15 +137,31 @@ def test_the_same_question_asked_twice_gets_asked_twice(client: TestClient, scri
     assert last_tool_result(script) == "They answered: No"
 
 
-def test_the_mail_agent_cannot_be_messaged(
+def test_the_mail_agent_can_be_messaged_and_still_cannot_send(
     client: TestClient, script: Script, fake: FakeMail
 ) -> None:
     connect(client, fake)
     script.replies = [triage_reply()]
     fake.state.deliver(make_mail(subject="Mail for the agent"))
     triaged(client, "Mail for the agent")
-    refused = client.post("/api/sessions/chat", json={"id": "mail-agent", "text": "hi"})
-    assert (refused.status_code, refused.json()["code"]) == (409, "session.not_chattable")
+    wait(lambda: status(client, "mail-agent") == "done", "the run to finish")
+    triggered = {tool.name for tool in script.requests[-1].tools}
+    assert "ask_user" not in triggered
+    script.replies = [[TextChunk("Because it asks you something.")]]
+    parts = chat(client, "mail-agent", "Why did you file that?")
+    assert "Because it asks you something." in "".join(p.get("delta", "") for p in parts)
+    typed = {tool.name for tool in script.requests[-1].tools}
+    assert {"search_mail", "draft_reply", "ask_user"} <= typed
+    assert "record_triage" not in typed
+    assert "record_triage" in triggered
+    assert not typed & {"send_mail", "run_command", "write_file", "delete_file", "update_mail"}
+
+
+def test_other_sessions_cant_record_a_judgement(client: TestClient, script: Script) -> None:
+    session = new_session(client)
+    script.replies = [[TextChunk("One.")]]
+    chat(client, session, "First")
+    assert "record_triage" not in {tool.name for tool in script.requests[-1].tools}
 
 
 # Follow-ups and times
@@ -188,40 +204,110 @@ def test_a_reopened_session_keeps_follow_ups_and_times(client: TestClient, scrip
     assert [p["text"] for p in assistant["parts"] if p["type"] == "text"] == ["Done."]
 
 
-# Editing
+# Trying again
 
 
-def test_editing_a_message_goes_back_to_before_it(client: TestClient, script: Script) -> None:
-    session = new_session(client)
-    script.replies = [[TextChunk("One.")], [TextChunk("Two.")], [TextChunk("Edited.")]]
-    chat(client, session, "First")
-    chat(client, session, "Second")
-    chat(client, session, "Second, changed", edit_index=1)
-    sent = [message.text for message in script.requests[-1].messages]
-    assert "First" in sent
-    assert "Second" not in sent
-    assert "Second, changed" in sent
-    said = [m["parts"][0]["text"] for m in view(client, session)["messages"] if m["role"] == "user"]
-    assert said == ["First", "Second, changed"]
+def said_and_answered(client: TestClient, session: str) -> list[str]:
+    return [
+        part["text"]
+        for message in view(client, session)["messages"]
+        for part in message["parts"]
+        if part["type"] == "text"
+    ]
 
 
-def test_editing_the_first_message_starts_over(client: TestClient, script: Script) -> None:
+def texts_sent(script: Script) -> list[str]:
+    return [message.text for message in script.requests[-1].messages]
+
+
+def test_a_message_sent_again_is_just_a_new_message(client: TestClient, script: Script) -> None:
     session = new_session(client)
     script.replies = [[TextChunk("One.")], [TextChunk("Two.")]]
     chat(client, session, "First")
-    chat(client, session, "Better first", edit_index=0)
-    sent = [message.text for message in script.requests[-1].messages]
-    assert "First" not in sent
-    assert "Better first" in sent
-    assert len(view(client, session)["messages"]) == 2
+    chat(client, session, "First")
+    assert said_and_answered(client, session) == ["First", "One.", "First", "Two."]
+    assert texts_sent(script) == ["First", "One.", "First"]
 
 
-def test_editing_a_message_that_is_gone_is_refused(client: TestClient, script: Script) -> None:
+def test_trying_again_keeps_both_answers(client: TestClient, script: Script) -> None:
+    session = new_session(client)
+    script.replies = [[TextChunk("One.")], [TextChunk("Two.")], [TextChunk("Again.")]]
+    chat(client, session, "First")
+    chat(client, session, "Second")
+    parts = chat(client, session, "Second", retry=True)
+    assert texts_sent(script) == ["First", "One.", "Second"]
+    assert said_and_answered(client, session) == ["First", "One.", "Second", "Again."]
+    versions = next(p for p in parts if p["type"] == "start")["messageMetadata"]["versions"]
+    assert versions["current"] == 1
+    assert len(versions["turns"]) == 2
+    assert view(client, session)["messages"][-1]["metadata"]["versions"] == versions
+
+
+def test_trying_the_first_message_again_starts_clean(client: TestClient, script: Script) -> None:
+    session = new_session(client)
+    script.replies = [[TextChunk("One.")], [TextChunk("Two.")], [TextChunk("Next.")]]
+    chat(client, session, "First")
+    chat(client, session, "First", retry=True)
+    assert texts_sent(script) == ["First"]
+    chat(client, session, "Then")
+    assert texts_sent(script) == ["First", "Two.", "Then"]
+
+
+def test_the_next_message_follows_the_answer_on_screen(client: TestClient, script: Script) -> None:
+    session = new_session(client)
+    script.replies = [[TextChunk("One.")], [TextChunk("Two.")], [TextChunk("Next.")]]
+    chat(client, session, "First")
+    latest = chat(client, session, "First", retry=True)
+    turns = next(p for p in latest if p["type"] == "start")["messageMetadata"]["versions"]["turns"]
+    shown = client.post(
+        "/api/commands/session.chooseVersion", json={"id": session, "turn": turns[0]}
+    ).json()
+    assert [p["text"] for p in shown["messages"][-1]["parts"] if p["type"] == "text"] == ["One."]
+    assert shown["messages"][-1]["metadata"]["versions"]["current"] == 0
+    chat(client, session, "Then")
+    assert texts_sent(script) == ["First", "One.", "Then"]
+    assert said_and_answered(client, session) == ["First", "One.", "Then", "Next."]
+
+
+def test_trying_again_keeps_what_was_attached(client: TestClient, script: Script) -> None:
+    session = new_session(client, context=["text:The attached words"])
+    script.replies = [[TextChunk("One.")], [TextChunk("Two.")]]
+    chat(client, session, "First")
+    chat(client, session, "First", retry=True)
+    assert "The attached words" in "\n".join(texts_sent(script))
+
+
+def test_trying_again_with_nothing_said_is_refused(client: TestClient, script: Script) -> None:
+    session = new_session(client)
+    refused = client.post("/api/sessions/chat", json={"id": session, "text": "x", "retry": True})
+    assert refused.status_code == 404
+
+
+def test_an_answer_can_be_rated(client: TestClient, script: Script) -> None:
     session = new_session(client)
     script.replies = [[TextChunk("One.")]]
     chat(client, session, "First")
-    refused = client.post("/api/sessions/chat", json={"id": session, "text": "x", "edit_index": 5})
-    assert refused.status_code == 404
+    metadata = view(client, session)["messages"][-1]["metadata"]
+    assert metadata["feedback"] is None
+    rate = {"turn": metadata["turn"]}
+    assert client.post("/api/commands/message.rate", json={**rate, "value": "down"}).is_success
+    assert view(client, session)["messages"][-1]["metadata"]["feedback"] == "down"
+    assert client.post("/api/commands/message.rate", json={**rate, "value": None}).is_success
+    assert view(client, session)["messages"][-1]["metadata"]["feedback"] is None
+
+
+# Choosing a model
+
+
+def test_a_session_uses_its_own_model(client: TestClient, script: Script) -> None:
+    session = new_session(client, model="gpt-chosen")
+    assert view(client, session)["session"]["model"] == "gpt-chosen"
+    script.replies = [[TextChunk("One.")], [TextChunk("Two.")]]
+    chat(client, session, "First")
+    assert script.requests[-1].model == "gpt-chosen"
+    client.post("/api/commands/session.setModel", json={"id": session, "model": None})
+    chat(client, session, "Second")
+    assert script.requests[-1].model != "gpt-chosen"
 
 
 # Tools

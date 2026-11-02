@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSession } from "@/ui/client/sessions";
-import { FinalPrompt } from "@/ui/features/assistant/ChatView";
+import { CompactAction, FinalPrompt } from "@/ui/features/assistant/ChatView";
 import { SessionChat } from "@/ui/features/assistant/SessionChat";
 import { Icon } from "@/ui/icons";
 import { StatusDot } from "@/ui/primitives/StatusDot";
@@ -31,7 +31,10 @@ export function AgentScreen({ id }: { id: string }) {
             </p>
           ) : null}
         </nav>
-        <FinalPrompt session={id} />
+        <div className="flex shrink-0 items-center gap-1">
+          <CompactAction session={id} wide />
+          <FinalPrompt session={id} />
+        </div>
         </div>
         {row?.untrusted ? <p className="text-sm text-ink-muted">{t("sessions.untrusted")}</p> : null}
       </header>

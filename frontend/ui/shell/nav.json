@@ -1,5 +1,10 @@
 {
-  "top": [{ "id": "today", "labelKey": "nav.today", "icon": "today", "href": "/today" }],
+  "top": [
+    { "id": "today", "labelKey": "nav.today", "icon": "today", "href": "/today" },
+    { "id": "cockpit", "labelKey": "nav.cockpit", "icon": "cockpit", "href": "/cockpit" },
+    { "id": "connectors", "labelKey": "nav.connectors", "icon": "connectors", "href": "/connectors" },
+    { "id": "documents", "labelKey": "nav.documents", "icon": "documents", "href": "/documents" }
+  ],
   "sections": [
     {
       "id": "mail",
@@ -14,22 +19,12 @@
       ]
     },
     {
-      "id": "documents",
-      "labelKey": "nav.documents",
-      "items": [
-        { "id": "documents-all", "labelKey": "nav.documents.all", "icon": "all", "href": "/documents/all" },
-        { "id": "documents-uploaded", "labelKey": "nav.documents.uploaded", "icon": "uploaded", "href": "/documents/uploaded" },
-        { "id": "documents-email", "labelKey": "nav.documents.fromEmail", "icon": "fromEmail", "href": "/documents/from-email" }
-      ]
-    },
-    {
       "id": "agent",
       "labelKey": "nav.agent",
       "items": [
         { "id": "sessions", "labelKey": "nav.sessions", "icon": "sessions", "href": "/agent/sessions" },
         { "id": "channel", "labelKey": "nav.channel", "icon": "channel", "href": "/agent/channel" },
         { "id": "memory", "labelKey": "nav.memory", "icon": "memory", "href": "/agent/memory" },
-        { "id": "background", "labelKey": "nav.background", "icon": "background", "href": "/agent/background" },
         { "id": "activity", "labelKey": "nav.activity", "icon": "activity", "href": "/agent/activity" },
         { "id": "schedules", "labelKey": "nav.schedules", "icon": "schedules", "href": "/agent/schedules" }
       ]

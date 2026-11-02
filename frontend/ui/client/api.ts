@@ -70,7 +70,49 @@ import type {
   SessionContext,
   SetDailyCap,
   SetDefaults,
+  AddConnector,
+  GetTriggers,
+  ProbeServer,
+  RemoveTrigger,
+  SaveTrigger,
+  ServerProbe,
+  TriggerList,
+  MarkTodaySeen,
+  DocumentReader,
+  HomeFolder,
+  ListHomeFolder,
+  ReadDocument,
+  DetectModels,
+  ModelDetection,
+  RebuildIndex,
+  ChooseVersion,
+  Connectors,
+  ConnectorAction,
+  ConnectorTest,
+  FindPst,
+  GetConnectors,
+  GetMailPresets,
+  GetPstSearch,
+  MailPresets,
+  PstSearchStatus,
+  PstUploadStarted,
+  SetConnectorEnabled,
+  StartPstUpload,
+  TestConnector,
+  Cockpit,
+  CockpitEvents,
+  GetCockpit,
+  GetCockpitEvents,
+  CompactResult,
+  ContextSettings,
+  GetContextSettings,
+  GetMailAgentSettings,
+  MailAgentRun,
+  MailAgentSettings,
+  RunMailAgent,
+  RateMessage,
   SetSessionContext,
+  SetSessionModel,
   SetTopicMuted,
   SnoozeReminder,
   SummarizeThread,
@@ -260,6 +302,27 @@ interface Commands {
   "thread.summarize": [SummarizeThread, ThreadSummary];
   "triage.existing": [TriageExisting, TriageEstimate];
   "session.setContext": [SetSessionContext, AgentDone];
+  "session.setModel": [SetSessionModel, AgentDone];
+  "mail.accounts.probe": [ProbeServer, ServerProbe];
+  "triggers.save": [SaveTrigger, TriggerList];
+  "triggers.remove": [RemoveTrigger, TriggerList];
+  "today.markSeen": [MarkTodaySeen, AgentDone];
+  "semantic.rebuild": [RebuildIndex, SemanticStatus];
+  "connectors.test": [TestConnector, ConnectorTest];
+  "connectors.add": [AddConnector, Connectors];
+  "connectors.refresh": [ConnectorAction, Connectors];
+  "connectors.approve": [ConnectorAction, Connectors];
+  "connectors.remove": [ConnectorAction, Connectors];
+  "connectors.setEnabled": [SetConnectorEnabled, Connectors];
+  "pst.find": [FindPst, PstSearchStatus];
+  "pst.findStop": [GetPstSearch, PstSearchStatus];
+  "pst.uploadStart": [StartPstUpload, PstUploadStarted];
+  "session.compact": [SessionAction, CompactResult];
+  "mailAgent.save": [MailAgentSettings, MailAgentSettings];
+  "mailAgent.runNow": [RunMailAgent, MailAgentRun];
+  "context.save": [ContextSettings, ContextSettings];
+  "session.chooseVersion": [ChooseVersion, SessionView];
+  "message.rate": [RateMessage, AgentDone];
   "usage.setCap": [SetDailyCap, UsageView];
   "quietHours.save": [QuietHours, QuietHours];
   "sendChecks.save": [SendCheckSettings, SendCheckSettings];
@@ -295,6 +358,17 @@ interface Queries {
   "panels.board": [GetPanelBoard, PanelBoard];
   "panels.results": [GetPanelResults, PanelResults];
   "sessions.list": [ListSessions, SessionList];
+  "semantic.detect": [DetectModels, ModelDetection];
+  "homeFiles.list": [ListHomeFolder, HomeFolder];
+  "documents.read": [ReadDocument, DocumentReader];
+  "triggers.list": [GetTriggers, TriggerList];
+  "connectors.list": [GetConnectors, Connectors];
+  "mail.presets": [GetMailPresets, MailPresets];
+  "pst.search": [GetPstSearch, PstSearchStatus];
+  "cockpit.view": [GetCockpit, Cockpit];
+  "cockpit.events": [GetCockpitEvents, CockpitEvents];
+  "mailAgent.get": [GetMailAgentSettings, MailAgentSettings];
+  "context.get": [GetContextSettings, ContextSettings];
   "session.get": [SessionAction, SessionView];
   "approvals.list": [ListApprovals, ApprovalList];
   "modelCall.get": [GetModelCall, ModelCallView];

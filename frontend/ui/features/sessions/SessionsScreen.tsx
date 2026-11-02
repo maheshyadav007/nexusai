@@ -37,7 +37,7 @@ function SessionGroup({ title, rows }: { title: string; rows: readonly SessionRo
               <Link href={`/agent/sessions/${session.id}`} data-testid="session-row" className="focus-ring flex items-center gap-3 px-2 py-2 transition-colors duration-fast hover:bg-surface-raised">
                 <StatusDot tone={state.tone} />
                 <span className="min-w-0 flex-1 truncate text-md text-ink-primary">{session.title}</span>
-                <span className={`shrink-0 text-sm ${waiting ? "font-medium text-accent-default" : "text-ink-muted"}`}>{session.agent === "mail" ? t("sessions.selfRunningLabel") : t(state.label)}</span>
+                <span className={`shrink-0 text-sm ${waiting ? "font-medium text-accent-default" : "text-ink-muted"}`}>{t(state.label)}</span>
                 <span className="shrink-0 text-sm tabular-nums text-ink-muted">{format(session.updated)}</span>
               </Link>
             </li>

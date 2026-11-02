@@ -101,7 +101,7 @@ test("a reply shows formatted, with copy, a time and clickable next steps", asyn
   await expect(page.getByRole("list", { name: "Suggested next steps" })).toHaveCount(0);
 });
 
-test("a message can be copied and edited, and the conversation goes back to it", async ({ page, context }) => {
+test("a message can be copied, and Edit puts it back in the box as a new message", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await openFresh(page);
   await say(page, "Hello first");
@@ -113,13 +113,83 @@ test("a message can be copied and edited, and the conversation goes back to it",
   await mine.getByRole("button", { name: "Copy" }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("Hello first");
   await mine.getByRole("button", { name: "Edit" }).click();
-  await page.getByRole("textbox", { name: "Edit" }).fill("Hello edited");
-  await page.getByTestId("user-message-edit").getByRole("button", { name: "Send" }).click();
-  await expect(page.getByTestId("user-message")).toHaveCount(1);
-  await expect(page.getByTestId("user-message")).toContainText("Hello edited");
-  await expect(page.getByTestId("agent-message")).toHaveCount(1);
+  const box = page.getByRole("textbox", { name: "Message the agent" });
+  await expect(box).toHaveValue("Hello first");
+  await expect(box).toBeFocused();
+  await box.fill("Hello edited");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByTestId("user-message")).toHaveCount(3);
+  await expect(page.getByTestId("user-message").last()).toContainText("Hello edited");
+  await expect(page.getByTestId("agent-message")).toHaveCount(3);
   await page.reload();
-  await expect(page.getByTestId("user-message")).toContainText("Hello edited");
+  await expect(page.getByTestId("user-message")).toHaveCount(3);
+});
+
+test("the message box starts at two lines and grows", async ({ page }) => {
+  await openFresh(page);
+  const box = page.getByRole("textbox", { name: "Message the agent" });
+  const empty = (await box.boundingBox())?.height ?? 0;
+  const line = await box.evaluate((node) => Number.parseFloat(getComputedStyle(node).lineHeight));
+  expect(empty).toBeGreaterThanOrEqual(line * 2);
+  await box.fill("one\ntwo\nthree\nfour\nfive");
+  expect((await box.boundingBox())?.height ?? 0).toBeGreaterThan(empty);
+});
+
+test("an answer can be tried again, and both answers stay", async ({ page }) => {
+  await openFresh(page);
+  await say(page, "Hello version");
+  const answer = page.getByTestId("agent-message");
+  await expect(answer).toContainText("Hello from");
+  await expect(answer.getByRole("button", { name: "Copy" })).toHaveCount(1);
+  await answer.hover();
+  await answer.getByRole("button", { name: "Try again" }).click();
+  await expect(page.getByTestId("versions")).toContainText("2/2");
+  await expect(page.getByTestId("user-message")).toHaveCount(1);
+  await answer.hover();
+  await answer.getByRole("button", { name: "Previous answer" }).click();
+  await expect(page.getByTestId("versions")).toContainText("1/2");
+  await page.reload();
+  await expect(page.getByTestId("versions")).toContainText("1/2");
+});
+
+test("an answer can be rated, and the rating stays", async ({ page }) => {
+  await openFresh(page);
+  await say(page, "Hello rating");
+  const answer = page.getByTestId("agent-message");
+  await expect(answer).toContainText("Hello from");
+  await answer.hover();
+  await answer.getByRole("button", { name: "Good answer" }).click();
+  await expect(answer.getByRole("button", { name: "Good answer" })).toHaveAttribute("aria-pressed", "true");
+  await page.reload();
+  await expect(page.getByTestId("agent-message").getByRole("button", { name: "Good answer" })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("each chat can use its own model, and the list opens where it fits", async ({ page }) => {
+  await openFresh(page);
+  const picker = page.getByTestId("model-picker").getByRole("combobox");
+  const opener = await picker.boundingBox();
+  await picker.click();
+  const list = page.getByRole("listbox");
+  await expect(list).toBeVisible();
+  const opened = await list.boundingBox();
+  // The box sits at the bottom of the screen, so the list has to open upward.
+  expect((opened?.y ?? 0) + (opened?.height ?? 0)).toBeLessThanOrEqual(opener?.y ?? 0);
+  await page.getByRole("option").nth(1).click();
+  await expect(picker).not.toContainText("(default)");
+  await page.reload();
+  await expect(page.getByTestId("model-picker").getByRole("combobox")).not.toContainText("(default)");
+});
+
+test("files can be attached from the box, and the chat carries them", async ({ page }) => {
+  await openFresh(page);
+  await page.getByTestId("attach").click();
+  await page.getByTestId("attach-input").setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("Plain words") });
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("context-chip")).toContainText("notes.txt");
+  await expect(page.getByTestId("context-chip")).not.toContainText("Reading");
+  await say(page, "Hello attached");
+  await expect(page.getByTestId("agent-message")).toContainText("Hello from");
+  await expect(page.getByTestId("context-chip")).toHaveCount(0);
 });
 
 test("work folds behind a thinking line that opens to each step", async ({ page }) => {
@@ -236,11 +306,64 @@ test("a session waiting on you is first in the list and says so at the top", asy
   await expect(page.getByTestId("session-status")).toContainText("Done");
 });
 
-test("the Mail agent's record can't be messaged", async ({ page }) => {
-  await page.request.post(CONTROL, { data: { subject: unique("Readonly"), body: "Please review." } });
+test("new mail appears live in the Mail agent's chat, as a message and a judgement", async ({ page }) => {
   await page.goto("/agent/sessions/mail-agent");
-  await expect(page.getByText("This agent works by itself")).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByRole("textbox", { name: "Message the agent" })).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "Message the agent" })).toBeVisible();
+  const subject = unique("Live trigger");
+  await page.request.post(CONTROL, { data: { subject, body: "Please review." } });
+  const message = page.getByTestId("user-message").filter({ hasText: subject });
+  await expect(message).toContainText("Triage it.", { timeout: 20_000 });
+  await expect(message.getByTestId("message-origin")).toContainText("From new mail");
+  await expect(page.getByTestId("triage-card").last()).toBeVisible();
+  await noViolations(page);
+  await page.getByRole("textbox", { name: "Message the agent" }).fill("Hello mail agent");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByTestId("user-message").last()).toContainText("Hello mail agent");
+  await expect(page.getByTestId("agent-message").last()).toContainText("Hello from");
+});
+
+test("Today leads with the day, and has one line on how the app is doing", async ({ page }) => {
+  await page.goto("/today");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Good (morning|afternoon|evening)/);
+  await expect(page.getByTestId("today-brief")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Ask the agent to do something" })).toHaveCount(0);
+  await page.getByTestId("today-status").click();
+  await expect(page).toHaveURL(/\/cockpit$/);
+});
+
+test("the Cockpit shows health, what's running and what happened", async ({ page }) => {
+  const subject = unique("Cockpit");
+  await page.goto("/cockpit");
+  await expect(page.getByRole("heading", { level: 1, name: "Cockpit" })).toBeVisible();
+  await expect(page.getByTestId("health-mail")).toContainText("Mail");
+  await page.request.post(CONTROL, { data: { subject, body: "Please review." } });
+  await expect(page.getByTestId("cockpit-event").filter({ hasText: `New mail: ${subject}` })).toBeVisible({ timeout: 20_000 });
+  await page.getByRole("radio", { name: "Problems" }).click();
+  await expect(page.getByTestId("cockpit-event").filter({ hasText: subject })).toHaveCount(0);
+  await noViolations(page);
+});
+
+test("a trigger can be added from the Schedules page, and runs in its own chat", async ({ page }) => {
+  await page.goto("/agent/schedules");
+  const title = unique("Watch");
+  await page.getByRole("textbox", { name: "Trigger name" }).last().fill(title);
+  await page.getByRole("textbox", { name: "What should the agent do then?" }).last().fill("Hello from the trigger");
+  await page.getByRole("button", { name: "Add trigger" }).click();
+  const row = page.getByTestId("trigger").filter({ hasText: title });
+  await expect(row).toBeVisible();
+  await expect(page.getByTestId("trigger").filter({ hasText: "Mail agent, on new mail" })).toBeVisible();
+  await noViolations(page);
+  await row.getByRole("switch").click();
+  await expect(row.getByRole("switch")).not.toBeChecked();
+});
+
+test("the Mail agent's timing and how much a chat remembers are set in Settings", async ({ page }) => {
+  await page.goto("/settings?section=mail-agent");
+  await expect(page.getByRole("heading", { name: "Mail agent" })).toBeVisible();
+  await page.getByRole("button", { name: "Run now" }).click();
+  await expect(page.getByText(/Nothing new|is running/).first()).toBeVisible();
+  await page.goto("/settings?section=context");
+  await expect(page.getByTestId("context-settings").getByRole("combobox").first()).toContainText("Keep the latest messages");
 });
 
 test("mail has folders, a reading pane, and categories people make", async ({ page }) => {

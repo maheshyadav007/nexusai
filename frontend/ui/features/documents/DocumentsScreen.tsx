@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useRef, useState, type DragEvent } from "react";
 import { ApiRequestError } from "@/ui/client/api";
 import { documentUrl, useDocument, useDocuments, useReadAgain, useRemoveDocument, useSaveFolders, useUpdateDocument, useUpload } from "@/ui/client/documents";
@@ -17,6 +18,7 @@ import { IconButton } from "@/ui/primitives/IconButton";
 import { Input } from "@/ui/primitives/Input";
 import { Presence, Rise } from "@/ui/primitives/Motion";
 import { BareInput, Pressable } from "@/ui/primitives/Pressable";
+import { Segmented } from "@/ui/primitives/Segmented";
 import { Select } from "@/ui/primitives/Select";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { Sortable } from "@/ui/primitives/Sortable";
@@ -24,10 +26,11 @@ import { StatusDot } from "@/ui/primitives/StatusDot";
 import { TextLink } from "@/ui/primitives/TextLink";
 import { useToast } from "@/ui/primitives/Toast";
 import { t, type StringKey } from "@/ui/strings";
+import { HomeFolderView } from "./HomeFolderView";
 
-export type DocumentView = "all" | "uploaded" | "from-email";
+export type DocumentView = "all" | "uploaded" | "from-email" | "home";
 
-const VIEWS: Readonly<Record<DocumentView, { title: StringKey; source: "upload" | "email" | null }>> = {
+const VIEWS: Readonly<Record<Exclude<DocumentView, "home">, { title: StringKey; source: "upload" | "email" | null }>> = {
   all: { title: "nav.documents.all", source: null },
   uploaded: { title: "nav.documents.uploaded", source: "upload" },
   "from-email": { title: "nav.documents.fromEmail", source: "email" },
@@ -154,6 +157,7 @@ function Preview({ documentKey, folders, onClose }: { documentKey: string | null
       {row ? (
         <div className="flex flex-col gap-4">
           {row.risky ? <p className="text-md text-status-danger">{t("documents.risky")}</p> : <a className="focus-ring self-start rounded-sm text-md text-accent-default underline underline-offset-2" href={documentUrl(row.key)}>{t("documents.download")}</a>}
+          {row.risky ? null : <TextLink className="self-start text-md" href={`/documents/view?key=${encodeURIComponent(row.key)}`}>{t("documents.openFull")}</TextLink>}
           {row.thread_id ? <TextLink className="self-start text-md" href={`/mail/all/${row.thread_id}`}>{t("documents.openMessage")}</TextLink> : null}
           {row.risky ? null : <div><AskAgent context={[`document:${row.key}`]} title={row.name} /></div>}
           <Field label={t("documents.folder")}>{({ invalid, id }) => <Select id={id} invalid={invalid} value={folder} options={[{ value: NO_FOLDER, label: t("documents.noFolder") }, ...folders.map((value) => ({ value, label: value }))]} onChange={(next) => save({ folder: next === NO_FOLDER ? null : next })} />}</Field>
@@ -230,7 +234,33 @@ function Folders({ folders, current, onChoose }: { folders: readonly string[]; c
   );
 }
 
+function ViewFilter({ view }: { view: DocumentView }) {
+  const router = useRouter();
+  const options: readonly { value: DocumentView; label: string }[] = [
+    { value: "all", label: t("documents.view.all") },
+    { value: "from-email", label: t("documents.view.email") },
+    { value: "uploaded", label: t("documents.view.uploaded") },
+    { value: "home", label: t("documents.view.home") },
+  ];
+  return <Segmented label={t("documents.view")} hideLabel value={view} options={options} onChange={(next) => router.push(`/documents/${next}`)} />;
+}
+
 export function DocumentsScreen({ view }: { view: DocumentView }) {
+  if (view === "home") {
+    return (
+      <div className="mx-auto flex max-w-page flex-col gap-4 p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="font-serif text-display text-ink-primary">{t("nav.documents")}</h1>
+          <ViewFilter view={view} />
+        </div>
+        <HomeFolderView />
+      </div>
+    );
+  }
+  return <Library view={view} />;
+}
+
+function Library({ view }: { view: Exclude<DocumentView, "home"> }) {
   const config = VIEWS[view];
   const [query, setQuery] = useState("");
   const [folder, setFolder] = useState(ALL_FOLDERS);
@@ -241,7 +271,10 @@ export function DocumentsScreen({ view }: { view: DocumentView }) {
   const folders = library.data?.folders ?? [];
   return (
     <div className="mx-auto flex max-w-page flex-col gap-4 p-6">
-      <h1 className="font-serif text-display text-ink-primary">{t(config.title)}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="font-serif text-display text-ink-primary">{t(config.title)}</h1>
+        <ViewFilter view={view} />
+      </div>
       {view !== "from-email" ? <UploadZone /> : null}
       <div className="flex items-start gap-6">
         <Folders folders={folders} current={folder} onChoose={setFolder} />
@@ -255,9 +288,10 @@ export function DocumentsScreen({ view }: { view: DocumentView }) {
             {documents.map((document) => (
               <li key={document.key}>
                 <Pressable data-testid="document-row" onClick={() => setOpen(document.key)} className="focus-ring flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors duration-fast hover:bg-surface-sunken">
-                  <Icon name={document.source === "email" ? "fromEmail" : "documents"} className="h-4 w-4 shrink-0 text-ink-muted" />
+                  <Icon name={document.source === "email" ? "fromEmail" : document.source === "home" ? "agent" : "documents"} className="h-4 w-4 shrink-0 text-ink-muted" />
                   <span className="min-w-0 flex-1 truncate text-md text-ink-primary">{document.name}</span>
                   {document.risky ? <Badge tone="danger">{t("documents.riskyBadge")}</Badge> : <StatusBadge status={document.status} />}
+                  {document.place ? <span data-testid="document-place"><Badge>{document.place}</Badge></span> : null}
                   {document.folder ? <Badge>{document.folder}</Badge> : null}
                   {(document.tags ?? []).map((tag) => (
                     <Badge key={tag}>{tag}</Badge>

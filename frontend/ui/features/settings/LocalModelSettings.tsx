@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { ApiRequestError } from "@/ui/client/api";
-import { useCancelModel, useChooseModel, useDownloadModel, useImportModel, useRemoveModel, useSaveSemantic, useSemantic } from "@/ui/client/semantic";
+import type { IndexInfo } from "@/ui/client/contracts.generated";
+import { useDateTime } from "@/ui/client/format";
+import { useCancelModel, useChooseModel, useDetectModels, useDownloadModel, useImportModel, useRebuildIndex, useRemoveModel, useSaveSemantic, useSemantic } from "@/ui/client/semantic";
 import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
 import { ErrorState } from "@/ui/primitives/ErrorState";
@@ -12,11 +14,80 @@ import { Progress } from "@/ui/primitives/Progress";
 import { Select } from "@/ui/primitives/Select";
 import { SettingRow } from "@/ui/primitives/SettingRow";
 import { Skeleton } from "@/ui/primitives/Skeleton";
-import { Switch } from "@/ui/primitives/Switch";
-import { t } from "@/ui/strings";
+import { t, type StringKey } from "@/ui/strings";
 
 const megabytes = (bytes: number) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(bytes / 1024 ** 2);
 const percent = (done: number, total: number) => (total ? Math.min(100, Math.round((done / total) * 100)) : 0);
+const gigabytes = (bytes: number) => new Intl.NumberFormat(undefined, { style: "unit", unit: "gigabyte", maximumFractionDigits: 0 }).format(bytes / 1024 ** 3);
+
+const INDEX_NAME: Readonly<Record<IndexInfo["kind"], StringKey>> = { mail: "semantic.index.mail", document: "semantic.index.document" };
+const INDEX_STATE: Readonly<Record<IndexInfo["state"], StringKey>> = {
+  off: "semantic.index.off",
+  current: "semantic.index.current",
+  partial: "semantic.index.partial",
+  out_of_date: "semantic.index.outOfDate",
+};
+
+/** Exactly what each index was built with, and a way to build it again when that's changed. */
+function IndexVersions() {
+  const semantic = useSemantic();
+  const rebuild = useRebuildIndex();
+  const format = useDateTime();
+  return (
+    <ul className="flex flex-col gap-3">
+      {(semantic.data?.indexes ?? []).map((index) => {
+        const settings = index.build_settings as { label?: string; revision?: string; chunk_chars?: number; overlap_chars?: number; most_chunks?: number; quantization?: string; extractor?: number };
+        return (
+          <li key={index.kind} data-testid={`index-${index.kind}`} className="flex flex-col gap-1 rounded-md border border-line-subtle p-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-md text-ink-primary">{t(INDEX_NAME[index.kind])}</span>
+              <span className="text-sm text-ink-secondary">{t(INDEX_STATE[index.state])}</span>
+            </div>
+            <p className="text-sm tabular-nums text-ink-muted">{t("semantic.indexed", { done: index.indexed, total: index.total })}</p>
+            <dl className="grid gap-x-3 text-sm tabular-nums text-ink-muted md:grid-cols-2">
+              <div><dt className="inline">{t("semantic.version.model")} </dt><dd className="inline text-ink-secondary">{settings.label}</dd></div>
+              <div><dt className="inline">{t("semantic.version.revision")} </dt><dd className="inline text-ink-secondary">{settings.revision?.slice(0, 8)}</dd></div>
+              <div><dt className="inline">{t("semantic.version.chunks")} </dt><dd className="inline text-ink-secondary">{t("semantic.version.chunksValue", { size: settings.chunk_chars ?? 0, overlap: settings.overlap_chars ?? 0, most: settings.most_chunks ?? 0 })}</dd></div>
+              <div><dt className="inline">{t("semantic.version.quantization")} </dt><dd className="inline text-ink-secondary">{settings.quantization}</dd></div>
+              {settings.extractor ? <div><dt className="inline">{t("semantic.version.extractor")} </dt><dd className="inline text-ink-secondary">{settings.extractor}</dd></div> : null}
+              {index.built ? <div><dt className="inline">{t("semantic.version.built")} </dt><dd className="inline text-ink-secondary">{format(index.built)}</dd></div> : null}
+              <div><dt className="inline">{t("semantic.version.id")} </dt><dd className="inline break-all text-ink-secondary">{index.fingerprint}</dd></div>
+            </dl>
+            {index.state === "out_of_date" ? <p className="text-sm text-status-warning">{t("semantic.index.stale", { count: index.stale ?? 0 })}</p> : null}
+            {index.state !== "off" ? <div className="pt-1"><Button loading={rebuild.isPending} onClick={() => rebuild.mutate(index.kind)}>{t("semantic.index.rebuild")}</Button></div> : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Setup: what this computer has and suits, and the choice to download it or not. */
+export function SearchModelChoice() {
+  const semantic = useSemantic();
+  const detection = useDetectModels();
+  const choose = useChooseModel();
+  const found = detection.data;
+  const status = semantic.data;
+  if (!found || !status) return <Skeleton className="h-6 w-full" />;
+  const model = status.models.find((row) => row.active) ?? status.models[0];
+  if (!model) return null;
+  const reasons: Readonly<Record<typeof found.reason, StringKey>> = { already_here: "semantic.detect.alreadyHere", small_computer: "semantic.detect.small", best: "semantic.detect.best" };
+  return (
+    <div data-testid="search-choice" className="flex flex-col gap-3">
+      <dl className="flex flex-col gap-1 rounded-md bg-surface-sunken p-3 text-sm text-ink-secondary">
+        <div className="flex justify-between gap-3"><dt>{t("semantic.detect.memory")}</dt><dd className="tabular-nums">{gigabytes(found.memory_bytes)}</dd></div>
+        <div className="flex justify-between gap-3"><dt>{t("semantic.detect.free")}</dt><dd className="tabular-nums">{gigabytes(found.free_bytes)}</dd></div>
+        <div className="flex justify-between gap-3"><dt>{t("semantic.detect.source")}</dt><dd>{t(found.reachable ? "semantic.detect.reachable" : "semantic.detect.unreachable")}</dd></div>
+      </dl>
+      <p data-testid="search-recommendation" className="text-md text-ink-primary">{t(reasons[found.reason], { name: status.models.find((row) => row.id === found.recommended)?.label ?? "" })}</p>
+      <SettingRow label={t("semantic.choose")} description={t("semantic.choose.note")} wide>
+        <Select label={t("semantic.choose")} value={model.id} options={status.models.map((row) => ({ value: row.id, label: row.label }))} onChange={(id) => choose.mutate(id)} />
+      </SettingRow>
+      <p className="text-sm text-ink-muted">{t("semantic.skip.note")}</p>
+    </div>
+  );
+}
 
 /** Used in setup and in Settings, so the two can't drift apart. */
 export function LocalModelSettings({ brief = false }: { brief?: boolean }) {
@@ -66,15 +137,11 @@ export function LocalModelSettings({ brief = false }: { brief?: boolean }) {
             <p className="text-sm tabular-nums text-ink-muted">{t("semantic.indexed", { done: status.indexed ?? 0, total: status.total ?? 0 })}</p>
           </div>
         ) : null}
+        {brief ? null : <IndexVersions />}
         {brief && model.state !== "failed" ? null : (
           <ExpandRow label={t("semantic.more")} title={t("semantic.more")} defaultOpen={model.state === "failed"}>
             <SettingRow label={t("semantic.choose")} description={t("semantic.choose.note")}>
               <Select compact label={t("semantic.choose")} value={model.id} options={status.models.map((row) => ({ value: row.id, label: row.label }))} onChange={(id) => choose.mutate(id)} />
-            </SettingRow>
-            <SettingRow label={t("semantic.auto")} description={t("semantic.auto.note")}>
-              <div className="flex justify-end">
-                <Switch label={t("semantic.auto")} hideLabel checked={status.auto_download ?? true} onChange={(auto_download) => save.mutate({ auto_download })} />
-              </div>
             </SettingRow>
             <form
               className="flex flex-col gap-2"

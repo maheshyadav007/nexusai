@@ -106,7 +106,7 @@ def create_fake() -> FastAPI:
             def event(kind: str, **fields: Any) -> str:
                 return f"data: {json.dumps({'type': kind, **fields})}\n\n"
 
-            if "You triage one mail conversation" in body.get("instructions", ""):
+            if "call record_triage" in said:
                 urgent = "urgent" in said.lower()
                 reply = {
                     "category": "Action",
@@ -125,7 +125,15 @@ def create_fake() -> FastAPI:
                     "memory": "Remember this person." if "remember" in said.lower() else None,
                     "question": "Is this urgent for you?" if "question" in said.lower() else None,
                 }
-                yield event("response.output_text.delta", delta=json.dumps(reply))
+                yield event(
+                    "response.output_item.done",
+                    item={
+                        "type": "function_call",
+                        "call_id": f"triage-{uuid.uuid4().hex}",
+                        "name": "record_triage",
+                        "arguments": json.dumps(reply),
+                    },
+                )
             elif "Summarize a mail conversation" in body.get("instructions", ""):
                 yield event("response.output_text.delta", delta="They want the numbers by Friday.")
             elif last.get("type") == "function_call_output":

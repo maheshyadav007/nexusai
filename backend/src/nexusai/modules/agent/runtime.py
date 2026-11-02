@@ -12,18 +12,26 @@ from typing import Any
 
 import structlog
 from langchain.agents import create_agent
-from langchain.agents.middleware import SummarizationMiddleware
+from langchain_core.messages import HumanMessage, RemoveMessage
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.errors import GraphRecursionError
+from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.types import Command
 
-from nexusai.contracts.agent import ApprovalList, SessionRow, SessionView, ToolApproval
+from nexusai.contracts.agent import (
+    ApprovalList,
+    ContextProfile,
+    SessionRow,
+    SessionView,
+    ToolApproval,
+)
 from nexusai.contracts.documents import GetDocument
 from nexusai.kernel.database import Migration, StandardErrorsConnection, connect_raw
 from nexusai.kernel.home import scratch_folder
 from nexusai.kernel.module import CommandError, Context
 from nexusai.modules.agent import (
     channel,
+    context,
     gateway,
     guard,
     memory,
@@ -33,8 +41,11 @@ from nexusai.modules.agent import (
     tools,
     ui_stream,
 )
+from nexusai.modules.agent.context import PERSON, TurnRequest
+from nexusai.modules.agent.gateway import Layer
 from nexusai.modules.agent.model import GatewayChatModel
-from nexusai.modules.mail import store
+from nexusai.modules.mail import accounts, store
+from nexusai.modules.semantic import module as semantic
 
 log = structlog.get_logger()
 MIGRATION = Migration(
@@ -57,9 +68,36 @@ ALTER TABLE agent_turns ADD COLUMN created TEXT;
 ALTER TABLE agent_turns ADD COLUMN checkpoint TEXT;
 """,
 )
+RETRY_MIGRATION = Migration(
+    "agent_turns_retry_001",
+    """
+ALTER TABLE agent_turns ADD COLUMN retry_of INTEGER;
+ALTER TABLE agent_turns ADD COLUMN chosen INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE agent_turns ADD COLUMN end_checkpoint TEXT;
+ALTER TABLE agent_turns ADD COLUMN attached TEXT NOT NULL DEFAULT '';
+ALTER TABLE agent_turns ADD COLUMN last_call INTEGER;
+ALTER TABLE agent_sessions ADD COLUMN model TEXT;
+CREATE TABLE message_feedback (turn INTEGER PRIMARY KEY, value TEXT NOT NULL, time TEXT NOT NULL);
+""",
+)
+TRIGGER_MIGRATION = Migration(
+    "agent_turns_trigger_001",
+    """
+ALTER TABLE agent_turns ADD COLUMN origin TEXT NOT NULL DEFAULT 'person';
+ALTER TABLE agent_turns ADD COLUMN model_text TEXT;
+ALTER TABLE agent_turns ADD COLUMN task TEXT NOT NULL DEFAULT '';
+ALTER TABLE agent_turns ADD COLUMN target TEXT;
+ALTER TABLE agent_turns ADD COLUMN context TEXT;
+""",
+)
 FINISHED = {"done", "failed", "stopped"}
-# Agents that work by themselves, with nobody on the other end of a message box.
-NOT_CHATTABLE = {"mail"}
+ORIGIN_NOTES = {
+    PERSON: "The person sent this message, and they're there to reply.",
+    "mail": "New mail arrived, and this run started by itself. Nobody is waiting in the chat.",
+    "mail-hourly": "The hourly check started this run by itself. Nobody is waiting in the chat.",
+    "schedule": "A schedule came due, and this run started by itself. Nobody is waiting in the chat.",
+    "event": "Something happened that the person asked to hear about, and this run started by itself. Nobody is waiting in the chat.",
+}
 RESUMABLE = {"queued", "running"}
 KEEPALIVE_SECONDS = 15
 TITLE_LENGTH = 60
@@ -116,6 +154,9 @@ class SessionRuntime:
         )
         self.saver = SqliteSaver(self.connection)
         self.closing = False
+        # Set by what hands out triggered work, which needs to know when a run is over.
+        self.on_turn_end: Any = None
+        self.on_hold: Any = None
 
     def close(self) -> None:
         self.closing = True
@@ -164,14 +205,20 @@ class SessionRuntime:
             raise CommandError("session.not_found", "That session no longer exists.", 404)
         return _row(rows[0])
 
-    def create(self, title: str | None, context: list[str], agent: str = "session") -> SessionRow:
+    def create(
+        self,
+        title: str | None,
+        context: list[str],
+        agent: str = "session",
+        model: str | None = None,
+    ) -> SessionRow:
         session = uuid.uuid4().hex
         scratch_folder(self.ctx.config.home, session)
         now = _now()
         with self.ctx.bus.unit_of_work() as work:
             work.tx.execute(
-                "INSERT INTO agent_sessions (id, title, agent, status, created, updated, context) VALUES (?, ?, ?, 'done', ?, ?, ?)",
-                (session, title or "New session", agent, now, now, json.dumps(context)),
+                "INSERT INTO agent_sessions (id, title, agent, status, created, updated, context, model) VALUES (?, ?, ?, 'done', ?, ?, ?, ?)",
+                (session, title or "New session", agent, now, now, json.dumps(context), model),
             )
             work.emit(
                 "session.changed", {"id": session}, source="agent", trace_id=self.ctx.trace_id
@@ -181,7 +228,10 @@ class SessionRuntime:
     def view(self, session: str) -> SessionView:
         row = self.row(session)
         turns = self.db.fetch_all(
-            "SELECT * FROM agent_turns WHERE session = ? ORDER BY id", (session,)
+            "SELECT t.*, f.value AS feedback FROM agent_turns t"
+            " LEFT JOIN message_feedback f ON f.turn = t.id"
+            " WHERE t.session = ? AND t.chosen = 1 ORDER BY t.id",
+            (session,),
         )
         assembled = []
         active = False
@@ -194,6 +244,7 @@ class SessionRuntime:
                         "id": turn["id"],
                         "text": turn["text"],
                         "created": turn["created"],
+                        "origin": turn["origin"],
                         "parts": [],
                     }
                 )
@@ -207,8 +258,13 @@ class SessionRuntime:
                     "text": turn["text"],
                     "created": turn["created"],
                     "parts": [json.loads(p["part"]) for p in parts],
+                    "feedback": turn["feedback"],
+                    "origin": turn["origin"],
+                    "thread": _thread_of(turn["target"]),
                 }
             )
+        if assembled:
+            assembled[-1]["versions"] = self._versions(session, assembled[-1]["id"])
         return SessionView(
             session=row, messages=ui_stream.assemble_messages(assembled), active=active
         )
@@ -239,69 +295,193 @@ class SessionRuntime:
         found = self.saver.get_tuple({"configurable": {"thread_id": session}})
         return str(found.config["configurable"]["checkpoint_id"]) if found else None
 
-    def send(self, session: str, text: str, edit_index: int | None = None) -> int:
+    def _versions(self, session: str, turn: int) -> dict[str, Any] | None:
+        """The other answers to this message, once it has been tried again."""
+        rows = self.db.fetch_all(
+            "SELECT COALESCE(retry_of, id) AS root FROM agent_turns WHERE id = ?", (turn,)
+        )
+        if not rows:
+            return None
+        found = self.db.fetch_all(
+            "SELECT id FROM agent_turns WHERE session = ? AND (id = ? OR retry_of = ?) ORDER BY id",
+            (session, rows[0]["root"], rows[0]["root"]),
+        )
+        turns = [row["id"] for row in found]
+        return {"turns": turns, "current": turns.index(turn)} if len(turns) > 1 else None
+
+    def _last_chosen(self, session: str) -> Any | None:
+        rows = self.db.fetch_all(
+            "SELECT * FROM agent_turns WHERE session = ? AND chosen = 1 ORDER BY id DESC LIMIT 1",
+            (session,),
+        )
+        return rows[0] if rows else None
+
+    def send(self, session: str, text: str, retry: bool = False) -> int:
+        return self.dispatch(TurnRequest(session, text), retry)
+
+    def dispatch(self, request: TurnRequest, retry: bool = False) -> int:
+        """The one way an agent starts, for a typed message, an event or the clock."""
+        session = request.session
         row = self.row(session)
-        if row.agent in NOT_CHATTABLE:
-            raise CommandError(
-                "session.not_chattable", "This agent works by itself, so it can't be messaged.", 409
-            )
         with self.lock:
             if self.active_turn(session) is not None:
                 raise CommandError(
                     "session.busy", "This session is still working. Wait for it, or stop it.", 409
                 )
-            start_from: str | None = None
-            replacing = False
-            if edit_index is not None:
-                start_from = self._forget_from(session, edit_index)
-                replacing = True
-            checkpoint = start_from if replacing else self._latest_checkpoint(session)
+            last = self._last_chosen(session)
+            retry_of: int | None = None
+            messages: list[Any] = []
+            if retry:
+                if last is None:
+                    raise CommandError("session.no_message", "There's nothing to try again.", 404)
+                retry_of = int(last["retry_of"] or last["id"])
+                request = TurnRequest(
+                    session,
+                    last["text"],
+                    last["origin"],
+                    last["model_text"],
+                    last["task"],
+                    json.loads(last["target"]) if last["target"] else None,
+                    json.loads(last["context"]) if last["context"] else None,
+                )
+                attached = last["attached"]
+                start_from = last["checkpoint"]
+                checkpoint = start_from
+                # It was the first message, so there's nothing earlier to go back to.
+                if start_from is None:
+                    messages.append(RemoveMessage(id=REMOVE_ALL_MESSAGES))
+            else:
+                attached = self.context_text(session)
+                # Always from the end of the answer on screen. That may not be the newest thing
+                # saved, after going back to an earlier answer or holding a run for the model.
+                start_from = last["end_checkpoint"] if last else None
+                checkpoint = start_from or self._latest_checkpoint(session)
+                if last is None and checkpoint is not None:
+                    messages.append(RemoveMessage(id=REMOVE_ALL_MESSAGES))
+                    checkpoint = None
             with self.db.transaction() as tx:
+                if retry_of is not None:
+                    tx.execute(
+                        "UPDATE agent_turns SET chosen = 0 WHERE session = ? AND (id = ? OR retry_of = ?)",
+                        (session, retry_of, retry_of),
+                    )
                 cursor = tx.execute(
-                    "INSERT INTO agent_turns (session, text, created, checkpoint) VALUES (?, ?, ?, ?)",
-                    (session, text, _now(), checkpoint),
+                    "INSERT INTO agent_turns (session, text, created, checkpoint, retry_of, attached,"
+                    " origin, model_text, task, target, context)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        session,
+                        request.text,
+                        _now(),
+                        checkpoint,
+                        retry_of,
+                        attached,
+                        request.origin,
+                        request.model_text,
+                        request.task,
+                        json.dumps(request.target) if request.target else None,
+                        json.dumps(request.context) if request.context else None,
+                    ),
                 )
                 turn = int(cursor.lastrowid or 0)
         values: dict[str, Any] = {"status": "queued", "error": None}
+        text = request.text
         if row.title == "New session":
             values["title"] = (
                 text.strip().splitlines()[0][:TITLE_LENGTH] if text.strip() else row.title
             )
         self._set(session, **values)
-        attached = self.context_text(session)
-        payload = {"messages": [{"role": "user", "content": attached + text}]}
+        with self.ctx.bus.unit_of_work() as work:
+            work.emit(
+                "agent.triggered",
+                {"session": session, "turn": turn, "origin": request.origin},
+                source="agent",
+                trace_id=self.ctx.trace_id,
+            )
+        told = attached + (request.model_text or text)
+        payload = {"messages": [*messages, HumanMessage(content=told)]}
         self._submit(session, turn, payload, start_from)
         return turn
 
-    def run_scheduled(self, title: str, prompt: str, agent: str, token_limit: int = 0) -> str:
-        session = self.create(title, [], agent)
-        gateway.set_run_limit(self.db, session.id, token_limit)
-        self.send(session.id, prompt)
-        return session.id
+    def compact(self, session: str) -> bool:
+        """When asked, summarizes what's older than the messages kept. The chat shows it all still."""
+        row = self.row(session)
+        with self.lock:
+            if self.active_turn(session) is not None:
+                raise CommandError(
+                    "session.busy", "This session is still working. Wait for it, or stop it.", 409
+                )
+            last = self._last_chosen(session)
+            if last is None:
+                return False
+            agent = self._agent(session, row, tools.RunControl())
+            model = GatewayChatModel(
+                ctx=self.ctx,
+                agent=row.agent,
+                session=session,
+                layers=prompts_builder.build_layers(self.ctx.config, row.agent),
+                model_override=row.model,
+            )
+            config: dict[str, Any] = {"configurable": {"thread_id": session, "checkpoint_ns": ""}}
+            if last["end_checkpoint"]:
+                config["configurable"]["checkpoint_id"] = last["end_checkpoint"]
+            messages = agent.get_state(config).values.get("messages", [])
+            settings = context.load_settings(self.db, self.ctx.config)
+            update = context.compact_now(model, settings, messages)
+            if update is None:
+                return False
+            saved = agent.update_state(config, update, as_node=context.COMPACT_AS_NODE)
+            with self.db.transaction() as tx:
+                tx.execute(
+                    "UPDATE agent_turns SET end_checkpoint = ? WHERE id = ?",
+                    (saved["configurable"]["checkpoint_id"], last["id"]),
+                )
+        with self.ctx.bus.unit_of_work() as work:
+            work.emit(
+                "session.compacted",
+                {"session": session},
+                source="agent",
+                trace_id=self.ctx.trace_id,
+            )
+        return True
 
-    def _forget_from(self, session: str, index: int) -> str | None:
-        """Editing a message goes back to just before it. What the tools did stays done."""
-        said = self.db.fetch_all(
-            "SELECT id, checkpoint FROM agent_turns WHERE session = ? AND text != '' ORDER BY id",
-            (session,),
+    def choose_version(self, session: str, turn: int) -> None:
+        row = self.db.fetch_all(
+            "SELECT COALESCE(retry_of, id) AS root FROM agent_turns WHERE id = ? AND session = ?",
+            (turn, session),
         )
-        if index >= len(said):
-            raise CommandError("session.no_message", "That message no longer exists.", 404)
-        target = said[index]
-        with self.db.transaction() as tx:
-            tx.execute(
-                "DELETE FROM agent_parts WHERE turn IN"
-                " (SELECT id FROM agent_turns WHERE session = ? AND id >= ?)",
-                (session, target["id"]),
+        if not row:
+            raise CommandError("session.no_message", "That answer no longer exists.", 404)
+        with self.lock:
+            if self.active_turn(session) is not None:
+                raise CommandError(
+                    "session.busy", "This session is still working. Wait for it, or stop it.", 409
+                )
+            with self.db.transaction() as tx:
+                tx.execute(
+                    "UPDATE agent_turns SET chosen = (id = ?) WHERE session = ? AND (id = ? OR retry_of = ?)",
+                    (turn, session, row[0]["root"], row[0]["root"]),
+                )
+
+    def rate(self, turn: int, value: str | None) -> None:
+        """Only recorded for now. Nothing changes how the agent behaves because of it."""
+        if not self.db.fetch_all("SELECT 1 FROM agent_turns WHERE id = ?", (turn,)):
+            raise CommandError("session.no_message", "That answer no longer exists.", 404)
+        with self.ctx.bus.unit_of_work() as work:
+            if value is None:
+                work.tx.execute("DELETE FROM message_feedback WHERE turn = ?", (turn,))
+            else:
+                work.tx.execute(
+                    "INSERT INTO message_feedback (turn, value, time) VALUES (?, ?, ?)"
+                    " ON CONFLICT (turn) DO UPDATE SET value = excluded.value, time = excluded.time",
+                    (turn, value, _now()),
+                )
+            work.emit(
+                "message.rated",
+                {"turn": turn, "value": value},
+                source="agent",
+                trace_id=self.ctx.trace_id,
             )
-            tx.execute(
-                "DELETE FROM agent_turns WHERE session = ? AND id >= ?", (session, target["id"])
-            )
-        checkpoint = target["checkpoint"]
-        if checkpoint is None:
-            # It was the first message, so there's nothing earlier to go back to.
-            self.saver.delete_thread(session)
-        return str(checkpoint) if checkpoint else None
 
     def answer(self, session: str, answer: str) -> None:
         """From the question's card, or typed into the message box while it waits."""
@@ -314,30 +494,63 @@ class SessionRuntime:
     def _submit(self, session: str, turn: int, payload: Any, checkpoint: str | None = None) -> None:
         self.pool.submit(self._run, session, turn, payload, checkpoint)
 
+    def _capabilities(self) -> str:
+        """So the agent plans around what's there, rather than finding out from a refused tool."""
+        _, accounts_found = accounts.read_accounts(self.ctx.config)
+        engine = semantic.engine()
+        status = engine.status() if engine is not None else None
+        if status is None or not status.ready:
+            meaning = (
+                "Search by meaning is off, so search by keyword. Say results may be incomplete."
+            )
+        else:
+            parts = [f"{index.indexed} of {index.total} {index.kind}s" for index in status.indexes]
+            meaning = f"Search by meaning is on, covering {' and '.join(parts)} so far."
+        mail = "Mail is connected." if accounts_found else "No mail account is connected yet."
+        return f"Available right now:\n- {mail}\n- {meaning}"
+
     def _agent(self, session: str, row: SessionRow, control: tools.RunControl) -> Any:
         config = self.ctx.config
         latest = self.db.fetch_all(
-            "SELECT text FROM agent_turns WHERE session = ? ORDER BY id DESC LIMIT 1", (session,)
+            "SELECT text, task, origin, context, target FROM agent_turns WHERE session = ? ORDER BY id DESC LIMIT 1",
+            (session,),
         )
+        turn = latest[0] if latest else None
+        origin = turn["origin"] if turn else PERSON
+        task = turn["task"] if turn else ""
         recalled = memory.relevant(
             config.home,
             row.agent,
-            latest[0]["text"] if latest else "",
+            f"{turn['text']}\n{task}" if turn else "",
             config.agent.memory_max_chars,
         )
         layers = prompts_builder.build_layers(
-            config, row.agent, memory=recalled, scratch=str(config.home / "scratch" / session)
+            config,
+            row.agent,
+            memory=recalled,
+            capabilities=self._capabilities(),
+            scratch=str(config.home / "scratch" / session),
         )
-        model = GatewayChatModel(ctx=self.ctx, agent=row.agent, session=session, layers=layers)
-        summarizer = SummarizationMiddleware(
-            model=model.model_copy(update={"agent": "compress"}),
-            trigger=("tokens", config.agent.compress_after_chars // 4),
-            keep=("messages", 12),
+        now = datetime.now().astimezone()
+        note = ORIGIN_NOTES.get(origin, ORIGIN_NOTES["schedule"])
+        layers.append(
+            Layer("This run", f"{note}\nNow: {now.strftime('%A %d %B %Y %H:%M')} ({now.tzname()})")
         )
+        model = GatewayChatModel(
+            ctx=self.ctx, agent=row.agent, session=session, layers=layers, model_override=row.model
+        )
+        settings = context.load_settings(self.db, config)
+        own = json.loads(turn["context"]) if turn and turn["context"] else None
+        profile: ContextProfile = context.profile_for(settings, origin, own)
         return create_agent(
             model,
-            tools.build_tools(self.ctx, session, control),
-            middleware=[summarizer],
+            tools.build_tools(
+                self.ctx,
+                session,
+                control,
+                tools.allowed_for(row.agent, origin, bool(turn and turn["target"])),
+            ),
+            middleware=context.middleware(model, settings, profile, task),
             checkpointer=self.saver,
         )
 
@@ -350,7 +563,15 @@ class SessionRuntime:
         started = bool(
             self.db.fetch_all("SELECT 1 FROM agent_parts WHERE turn = ? LIMIT 1", (turn,))
         )
-        translator = ui_stream.UiTranslator(started=started, declined_text=tools.DENIED)
+        translator = ui_stream.UiTranslator(
+            started=started,
+            declined_text=tools.DENIED,
+            metadata={
+                "turn": turn,
+                "versions": self._versions(session, turn),
+                "thread": self._turn_thread(turn),
+            },
+        )
         self._append(turn, translator.start())
         self._set(session, status="running", step=None)
         configurable = {"thread_id": session}
@@ -383,11 +604,11 @@ class SessionRuntime:
         except (
             providers.ModelUnavailable,
             providers.ModelNotConfigured,
-            providers.ModelFlagged,
             gateway.DailyCapReached,
-            guard.DamagedToken,
-            guard.GuardBlocked,
         ) as error:
+            if not self._hold(session, turn, str(error)):
+                self._finish(session, turn, translator, "failed", str(error), "error")
+        except (providers.ModelFlagged, guard.DamagedToken, guard.GuardBlocked) as error:
             self._finish(session, turn, translator, "failed", str(error), "error")
         except gateway.RunLimitReached as error:
             self._finish(session, turn, translator, "stopped", str(error), "error")
@@ -414,6 +635,38 @@ class SessionRuntime:
             with self.lock:
                 self.live.pop(session, None)
 
+    def _hold(self, session: str, turn: int, why: str) -> bool:
+        """With no model, a triggered run takes itself back and waits in line, leaving no trace.
+
+        There's nobody to tell, and it starts over from the same place when the model returns.
+        A person gets the error in the chat instead, so they know.
+        """
+        rows = self.db.fetch_all("SELECT origin FROM agent_turns WHERE id = ?", (turn,))
+        if not rows or rows[0]["origin"] == PERSON or self.on_hold is None:
+            return False
+        with self.db.transaction() as tx:
+            tx.execute(
+                "UPDATE trigger_runs SET status = 'pending', turn = NULL, session = NULL WHERE turn = ?",
+                (turn,),
+            )
+            tx.execute("DELETE FROM agent_parts WHERE turn = ?", (turn,))
+            tx.execute("DELETE FROM agent_turns WHERE id = ?", (turn,))
+        self.notifier.wake(turn)
+        self._set(session, status="done", step=None)
+        with self.ctx.bus.unit_of_work() as work:
+            work.emit(
+                "agent.held",
+                {"session": session, "turn": turn},
+                source="agent",
+                trace_id=self.ctx.trace_id,
+            )
+        self.on_hold(why)
+        return True
+
+    def _turn_thread(self, turn: int) -> int | None:
+        rows = self.db.fetch_all("SELECT target FROM agent_turns WHERE id = ?", (turn,))
+        return _thread_of(rows[0]["target"]) if rows else None
+
     def _record_usage(self, session: str) -> None:
         totals = self.db.fetch_all(
             "SELECT COALESCE(SUM(input_tokens), 0) AS i, COALESCE(SUM(output_tokens), 0) AS o FROM model_calls WHERE session = ?",
@@ -438,9 +691,17 @@ class SessionRuntime:
         else:
             parts.append({"type": "finish"})
         self._append(turn, parts)
+        with self.db.transaction() as tx:
+            tx.execute(
+                "UPDATE agent_turns SET end_checkpoint = ?,"
+                " last_call = (SELECT MAX(id) FROM model_calls WHERE session = ?) WHERE id = ?",
+                (self._latest_checkpoint(session), session, turn),
+            )
         self._close_turn(turn)
         self._record_usage(session)
         self._set(session, status=status, error=error, step=None)
+        if self.on_turn_end is not None:
+            self.on_turn_end(turn, error)
 
     def _announce_approvals(self, turn: int, pending: list[Any]) -> None:
         parts = []
@@ -612,9 +873,10 @@ class SessionRuntime:
             has_checkpoint = (
                 self.saver.get_tuple({"configurable": {"thread_id": row["id"]}}) is not None
             )
-            turn_text = self.db.fetch_all("SELECT text FROM agent_turns WHERE id = ?", (turn,))[0][
-                "text"
-            ]
+            said = self.db.fetch_all(
+                "SELECT text, model_text FROM agent_turns WHERE id = ?", (turn,)
+            )[0]
+            turn_text = said["model_text"] or said["text"]
             payload = (
                 None if has_checkpoint else {"messages": [{"role": "user", "content": turn_text}]}
             )
@@ -656,6 +918,10 @@ class SessionRuntime:
             remove()
 
 
+def _thread_of(target: str | None) -> int | None:
+    return json.loads(target).get("thread") if target else None
+
+
 def _row(row: Any) -> SessionRow:
     return SessionRow(
         id=row["id"],
@@ -670,6 +936,7 @@ def _row(row: Any) -> SessionRow:
         created=row["created"],
         updated=row["updated"],
         archived=bool(row["archived"]),
+        model=row["model"],
     )
 
 

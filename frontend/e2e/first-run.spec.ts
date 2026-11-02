@@ -38,13 +38,13 @@ test("a new person goes from landing through setup into the app, and setup resum
   await expect(page.getByRole("heading", { name: "Tell NexusAI about you" })).toBeVisible();
   // How it looks is chosen here too, and takes effect right away.
   await expect(page.getByRole("radiogroup", { name: "Theme" })).toBeVisible();
-  await page.getByRole("textbox", { name: "Name" }).fill("Asha Rao");
+  await page.getByRole("textbox", { name: "Name", exact: true }).fill("Asha Rao");
   await noViolations(page);
   await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(page.getByRole("heading", { name: "Connect your mail" })).toBeVisible();
   await noViolations(page);
-  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Skip for now" }).click();
 
   // Closing midway resumes at the same step.
   await expect(page.getByRole("heading", { name: "Connect a model" })).toBeVisible();
@@ -56,20 +56,28 @@ test("a new person goes from landing through setup into the app, and setup resum
   await page.getByRole("button", { name: "Back" }).click();
   await expect(page.getByRole("heading", { name: "Connect your mail" })).toBeVisible();
   await page.getByRole("button", { name: "Back" }).click();
-  await expect(page.getByRole("textbox", { name: "Name" })).toHaveValue("Asha Rao");
+  await expect(page.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Asha Rao");
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("heading", { name: "Connect your mail" })).toBeVisible();
-  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Skip for now" }).click();
 
   await page.getByRole("button", { name: "Continue" }).click();
-  // Getting there starts the download, and the next step doesn't wait for it. Downloads are blocked
-  // in this test environment, so this also shows what a blocked corporate network sees.
+  // Nothing downloads until asked. Downloads are blocked in this test environment, so this also
+  // shows what a blocked corporate network sees, and skipping still moves on.
   await expect(page.getByRole("heading", { name: "Find things by what they're about" })).toBeVisible();
+  await expect(page.getByTestId("search-recommendation")).toContainText("recommended");
+  await expect(page.getByTestId("search-choice")).toContainText("Can't be reached");
+  await expect(page.getByTestId("local-model").getByRole("alert")).toHaveCount(0);
+  await page.getByTestId("local-model").getByRole("button", { name: /Download/ }).click();
   await expect(page.getByTestId("local-model").getByRole("alert")).toContainText(/mirror/);
   await expect(page.getByLabel("Download from your company's mirror")).toBeVisible();
   await noViolations(page);
-  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Skip for now" }).click();
   await expect(page.getByRole("heading", { name: "What may the agent do?" })).toBeVisible();
+  // Passing a step without doing it doesn't count as finishing it.
+  await expect(page.getByTestId("step-skipped").filter({ hasText: "Mail" })).toContainText("Skipped");
+  await expect(page.getByTestId("step-skipped").filter({ hasText: "Search" })).toBeVisible();
+  await expect(page.getByTestId("step-done").filter({ hasText: "Recovery key" })).toBeVisible();
   await expect(page.getByRole("radio", { name: /Balanced/ })).toBeChecked();
   await noViolations(page);
   await page.getByRole("button", { name: "Enter NexusAI" }).click();

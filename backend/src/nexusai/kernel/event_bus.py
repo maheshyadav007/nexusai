@@ -5,7 +5,7 @@ import sqlite3
 import threading
 import time
 import uuid
-from collections.abc import AsyncGenerator, Callable, Iterator
+from collections.abc import AsyncGenerator, Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -236,6 +236,37 @@ class EventBus:
             sql += " LIMIT ?"
             params = (since, limit)
         return [_row_to_event(row) for row in self.db.fetch_all(sql, params)]
+
+    def newest_events(self, since: int, limit: int) -> list[AppEvent]:
+        """The latest after a position, oldest first, so a long log shows what just happened."""
+        rows = self.db.fetch_all(
+            "SELECT * FROM events WHERE seq > ? ORDER BY seq DESC LIMIT ?", (since, limit)
+        )
+        return [_row_to_event(row) for row in reversed(rows)]
+
+    def recent_events(self, types: Sequence[str], before: int | None, limit: int) -> list[AppEvent]:
+        """The newest of these kinds, working backward from a position."""
+        marks = ", ".join("?" for _ in types)
+        rows = self.db.fetch_all(
+            f"SELECT * FROM events WHERE type IN ({marks}) AND seq < ? ORDER BY seq DESC LIMIT ?",  # noqa: S608
+            (*types, before if before is not None else self.latest_seq() + 1, limit),
+        )
+        return [_row_to_event(row) for row in rows]
+
+    def prune(self, before: str) -> int:
+        """Drops old events, but never one that a running listener hasn't handled yet."""
+        names = [listener.name for listener in self._listeners]
+        marks = ", ".join("?" for _ in names)
+        with self.db.transaction() as tx:
+            handled = tx.execute(
+                f"SELECT COALESCE(MIN(seq), 0) FROM event_cursors WHERE listener IN ({marks})",  # noqa: S608
+                names,
+            ).fetchone()[0]
+            return int(
+                tx.execute(
+                    "DELETE FROM events WHERE time < ? AND seq <= ?", (before, handled)
+                ).rowcount
+            )
 
     def failed_events(self) -> list[FailedEvent]:
         rows = self.db.fetch_all(

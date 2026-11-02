@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { command, query } from "./api";
-import type { QuietHours, Schedule, SaveMemory, SavePrompt, SaveReminder, SaveTask, SendCheckSettings, SetSessionContext, GuardRules, SaveModelProvider, ListProviderModels } from "./contracts.generated";
+import type { ContextSettings, SaveTrigger, GetCockpitEvents, MailAgentSettings, QuietHours, Schedule, SaveMemory, SavePrompt, SaveReminder, SaveTask, SendCheckSettings, SetSessionContext, GuardRules, SaveModelProvider, ListProviderModels } from "./contracts.generated";
 import { useHomeReady } from "./home";
 import { useCategories } from "./mail";
 import { useApprovals } from "./sessions";
@@ -44,7 +44,20 @@ export const useRemoveSchedule = () => useCommand(["schedules"], (id: number) =>
 export const useRunSchedule = () => useCommand(["schedules"], (id: number) => command("schedules.runNow", { id }));
 export const useSetDefaults = () => useCommand(["schedules"], (input: { time_check_enabled?: boolean; live_mail_enabled?: boolean }) => command("schedules.setDefaults", input));
 
+export const useMailAgent = () => useReady(["mail-agent"], () => query("mailAgent.get", {}));
+export const useSaveMailAgent = () => useCommand(["mail-agent"], (input: MailAgentSettings) => command("mailAgent.save", input));
+export const useRunMailAgent = () => useCommand(["sessions"], () => command("mailAgent.runNow", {}));
+export const useContextSettings = () => useReady(["context"], () => query("context.get", {}));
+export const useSaveContextSettings = () => useCommand(["context"], (input: ContextSettings) => command("context.save", input));
+export const useCompactSession = () => useCommand(["session"], (id: string) => command("session.compact", { id }));
+
+export const useMarkTodaySeen = () => useMutation({ mutationFn: () => command("today.markSeen", {}) });
+export const useTriggers = () => useReady(["triggers"], () => query("triggers.list", {}));
+export const useSaveTrigger = () => useCommand(["triggers"], (input: SaveTrigger) => command("triggers.save", input));
+export const useRemoveTrigger = () => useCommand(["triggers"], (id: string) => command("triggers.remove", { id }));
 export const useJobs = () => useReady(["jobs"], () => query("jobs.list", {}));
+export const useCockpit = () => useReady(["cockpit"], () => query("cockpit.view", {}));
+export const useCockpitEvents = (filter: NonNullable<GetCockpitEvents["filter"]>) => useReady(["cockpit-events", filter], () => query("cockpit.events", { filter }));
 export const useActivity = () => useReady(["activity"], () => query("activity.list", {}));
 export const useUndo = () => useCommand(["activity"], (id: number) => command("activity.undo", { id }));
 

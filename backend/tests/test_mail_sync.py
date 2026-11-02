@@ -107,13 +107,15 @@ def test_plain_connections_only_to_this_computer(client: TestClient, fake: FakeM
     assert "encrypted" in refused.json()["message"]
 
 
-def test_the_password_goes_to_the_secret_store_not_the_profile(
+def test_the_account_is_saved_encrypted_and_the_password_never_comes_back(
     client: TestClient, fake: FakeMail, config: Config
 ) -> None:
     connect(client, fake)
-    saved = (config.home / "system" / "mail-accounts.json").read_text()
+    saved = (config.home / "system" / "mail-accounts.enc").read_text()
     assert PASSWORD not in saved
-    assert USER in saved
+    assert USER not in saved
+    assert "127.0.0.1" not in saved
+    assert not (config.home / "system" / "mail-accounts.json").exists()
     assert client.post("/api/queries/mail.accounts").json()["accounts"][0]["has_password"] is True
     assert PASSWORD not in client.post("/api/queries/mail.accounts").text
 

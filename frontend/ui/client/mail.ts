@@ -143,3 +143,11 @@ export const useUpdateCategory = () => useCategoryCommand((input: UpdateCategory
 export const useReorderCategories = () => useCategoryCommand((names: string[]) => command("categories.reorder", { names }));
 export const useRemoveCategory = () => useCategoryCommand((name: string) => command("categories.remove", { name }));
 export const useDecideCategory = () => useCategoryCommand((input: { name: string; accept: boolean }) => command("categories.decide", input));
+
+export function useMailPresets() {
+  const ready = useHomeReady();
+  return useQuery({ queryKey: ["mail-presets"], queryFn: () => query("mail.presets", {}), enabled: ready, staleTime: Infinity });
+}
+
+/** From only a server name, the likely ports and sending server. */
+export const useProbeServer = () => useMutation({ mutationFn: (server: string) => command("mail.accounts.probe", { server }) });

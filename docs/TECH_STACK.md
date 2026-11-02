@@ -61,7 +61,7 @@ Status legend: **In use** (in the repo today) · **Decided** (agreed, not built 
 | Zod | Decided | Validates theme files and API responses in the UI. |
 | Preload + `contextBridge` typed IPC | Decided | `contextIsolation: true`, `nodeIntegration: false`; the UI only sees a small typed API. |
 | electron-builder | Decided | One config produces macOS `.dmg` and Windows installers. Windows: **per-user NSIS** installer (no admin needed). |
-| Credentials | Decided | OS credential store through Python `keyring`. |
+| Credentials | Decided | Mail accounts: one encrypted file in Home (AES-GCM, key derived from the Home's key). Home's key and model and connector sign-ins: OS credential store through Python `keyring`. |
 | Auto-update (`electron-updater`) | Decided | Details depend on where corporate builds are hosted. |
 
 ### Agent runtime
@@ -100,7 +100,7 @@ Status legend: **In use** (in the repo today) · **Decided** (agreed, not built 
 
 | Choice | Status | Notes |
 |---|---|---|
-| **IMAP + SMTP, profile-based config** | Decided | `mail-accounts.json` with named profiles (corporate server, Gmail test account). Corporate login is plain username + password over TLS (no custom root certificate). Passwords in the OS credential store, never in the file. |
+| **IMAP + SMTP, profile-based config** | Decided | `mail-accounts.enc`, an encrypted file with named profiles (corporate server, Gmail test account) and their passwords. Corporate login is plain username + password over TLS (no custom root certificate). |
 | `imapclient` | In use | IMAP with IDLE, on a dedicated worker thread. Replaced `aioimaplib` because it's simpler and mature. Works against Gmail; confirm against the corporate server. |
 | Python `email` package | Decided | Parses raw messages (MIME, attachments, headers). |
 | `smtplib` (standard library) | In use | SMTP sending. Replaced `aiosmtplib`, because handlers already run on worker threads. |

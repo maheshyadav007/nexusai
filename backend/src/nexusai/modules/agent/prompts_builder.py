@@ -4,7 +4,6 @@ import os
 import platform
 import shutil
 import sys
-from datetime import datetime
 from importlib import resources
 from pathlib import Path
 
@@ -24,14 +23,12 @@ def system_context(config: Config) -> str:
     shell = "PowerShell" if sys.platform == "win32" else os.environ.get("SHELL", "/bin/zsh")
     tools = [name for name in TOOLS_TO_REPORT if shutil.which(name)]
     home = config.home
-    now = datetime.now().astimezone()
     return "\n".join(
         [
             "This computer:",
             f"- {platform.system()} {platform.release()}, {platform.machine()}",
             f"- Shell: {shell}",
             f"- Installed: {', '.join(tools) or 'unknown'}",
-            f"- Now: {now.strftime('%A %d %B %Y %H:%M')} ({now.tzname()})",
             f"- NexusAI Home: {home}",
             f"- File tools reach {home}/scratch, memory, documents and artifacts by default.",
         ]
@@ -54,14 +51,21 @@ def agent_prompt(home: Path, agent: str) -> str:
     return f"{base}\n\n{added.read_text('utf-8').strip()}" if added.exists() else base
 
 
-def build_layers(config: Config, agent: str, memory: str = "", **values: str) -> list[Layer]:
+def build_layers(
+    config: Config, agent: str, memory: str = "", capabilities: str = "", **values: str
+) -> list[Layer]:
     home = config.home
     # Only the known fields are filled in, so braces in someone's own prompt stay as written.
     text = agent_prompt(home, agent)
     for name, value in values.items():
         text = text.replace(f"{{{name}}}", value)
     layers = [
-        Layer("System prompt", packaged("system.md").format(system_context=system_context(config))),
+        Layer(
+            "System prompt",
+            packaged("system.md")
+            .format(system_context=system_context(config), capabilities=capabilities)
+            .strip(),
+        ),
         Layer("Agent prompt", text),
     ]
     personal = personal_prompts(home)

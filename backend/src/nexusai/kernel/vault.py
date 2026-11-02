@@ -149,6 +149,14 @@ def new_recovery_key(home: Path, store: SecretStore) -> str:
     return recovery
 
 
+def forget(home: Path, store: SecretStore) -> None:
+    """For a reset: removes this Home's keys from the credential store."""
+    found = _read(home)
+    if found:
+        store.delete(_key_name(found["id"]))
+        store.delete(_pending_name(found["id"]))
+
+
 def encrypt_existing(path: Path, key: str) -> bool:
     """A database from before encryption is rewritten in place. Returns whether it was."""
     if not path.exists():

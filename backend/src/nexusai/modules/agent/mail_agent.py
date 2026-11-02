@@ -1,18 +1,20 @@
-"""Judges every email that escapes the fixed rules, and keeps going when the model is away."""
+"""Judges every email that escapes the fixed rules, as a run in the Mail agent's own chat."""
 
 import json
 import re
-import threading
+import uuid
 from datetime import UTC, datetime
-from typing import Any
+from importlib import resources
+from typing import Any, Literal
 
 import structlog
 
 from nexusai.contracts.agent import ThreadRuns, ThreadSummary, TriageEstimate, TriageRun
-from nexusai.contracts.events import AppEvent
 from nexusai.kernel.database import Migration
+from nexusai.kernel.home import scratch_folder
 from nexusai.kernel.module import CommandError, Context
 from nexusai.modules.agent import channel, gateway, guard, memory, prompts_builder, providers
+from nexusai.modules.agent.context import TurnRequest
 from nexusai.modules.agent.gateway import Layer
 from nexusai.modules.agent.providers import Message
 from nexusai.modules.mail import accounts
@@ -31,11 +33,27 @@ CREATE INDEX triage_runs_thread ON triage_runs (thread, id);
 CREATE TABLE thread_summaries (thread INTEGER PRIMARY KEY, text TEXT NOT NULL, covered INTEGER NOT NULL, updated TEXT NOT NULL);
 """,
 )
+TRIGGER_MIGRATION = Migration(
+    "agent_triggers_001",
+    """
+CREATE TABLE trigger_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, trigger TEXT NOT NULL, event TEXT NOT NULL, time TEXT NOT NULL, status TEXT NOT NULL,
+  message INTEGER, thread INTEGER, answer TEXT, schedule INTEGER, session TEXT, turn INTEGER, error TEXT, UNIQUE (trigger, event));
+CREATE INDEX trigger_runs_status ON trigger_runs (status, trigger, id);
+CREATE INDEX trigger_runs_turn ON trigger_runs (turn);
+INSERT INTO trigger_runs (trigger, event, time, status, message, thread, answer)
+  SELECT 'mail-received', 'earlier-' || message, added, 'pending', message, thread, answer FROM triage_queue;
+DROP TABLE triage_queue;
+ALTER TABLE triage_runs ADD COLUMN turn INTEGER;
+""",
+)
 SESSION_ID = "mail-agent"
+MAIL_TRIGGER = "mail-received"
 IMPORTANCE = {"low", "normal", "high"}
 STATUSES = {"waiting_on_you", "waiting_on_others", "resolved", "fyi"}
-PARSE_ATTEMPTS = 2
 APPROX_TOKENS_PER_MESSAGE = 1200
+MailMode = Literal["each", "hourly", "both"]
+UNREADABLE = "The agent didn't record a judgement, so this stays uncategorized."
 
 
 def _now() -> str:
@@ -43,22 +61,31 @@ def _now() -> str:
 
 
 def enabled(ctx: Context) -> bool:
-    rows = ctx.bus.db.fetch_all("SELECT value FROM agent_defaults WHERE key = 'live_mail_enabled'")
-    return not rows or rows[0]["value"] == "1"
+    rows = ctx.bus.db.fetch_all("SELECT enabled FROM agent_triggers WHERE id = ?", (MAIL_TRIGGER,))
+    return not rows or bool(rows[0]["enabled"])
 
 
-def enqueue(ctx: Context, message: int, thread: int, answer: str | None = None) -> None:
+def mode(ctx: Context) -> MailMode:
+    rows = ctx.bus.db.fetch_all("SELECT value FROM agent_defaults WHERE key = 'mail_mode'")
+    return "each" if not rows else rows[0]["value"]
+
+
+def enqueue(
+    ctx: Context, message: int, thread: int, answer: str | None = None, event: str | None = None
+) -> None:
+    """Replaying an event can't judge a message twice, because each event only counts once."""
     with ctx.bus.db.transaction() as tx:
         tx.execute(
-            "INSERT INTO triage_queue (message, thread, added, answer) VALUES (?, ?, ?, ?)"
-            " ON CONFLICT (message) DO UPDATE SET answer = excluded.answer",
-            (message, thread, _now(), answer),
+            "INSERT OR IGNORE INTO trigger_runs (trigger, event, time, status, message, thread, answer)"
+            " VALUES (?, ?, ?, 'pending', ?, ?, ?)",
+            (MAIL_TRIGGER, event or uuid.uuid4().hex, _now(), message, thread, answer),
         )
 
 
-def _ensure_session(ctx: Context) -> None:
-    """One entry in Sessions. Each email is a run inside it."""
+def ensure_session(ctx: Context) -> None:
+    """One chat for this agent. Each email is a message and a reply inside it."""
     now = _now()
+    scratch_folder(ctx.config.home, SESSION_ID)
     with ctx.bus.db.transaction() as tx:
         tx.execute(
             "INSERT OR IGNORE INTO agent_sessions (id, title, agent, status, untrusted, created, updated)"
@@ -67,27 +94,9 @@ def _ensure_session(ctx: Context) -> None:
         )
 
 
-def _record_turn(ctx: Context, text: str, reply: str) -> None:
-    identifier = "run"
-    with ctx.bus.db.transaction() as tx:
-        cursor = tx.execute(
-            "INSERT INTO agent_turns (session, text, closed) VALUES (?, ?, 1)", (SESSION_ID, text)
-        )
-        turn = cursor.lastrowid
-        for part in (
-            {"type": "start-step"},
-            {"type": "text-start", "id": identifier},
-            {"type": "text-delta", "id": identifier, "delta": reply},
-            {"type": "text-end", "id": identifier},
-        ):
-            tx.execute(
-                "INSERT INTO agent_parts (turn, part) VALUES (?, ?)", (turn, json.dumps(part))
-            )
-
-
 def _thread_text(
     ctx: Context, thread: int, limit_messages: int, limit_chars: int
-) -> tuple[str, str]:
+) -> tuple[str, str, str]:
     """Recent messages within a size limit, plus the stored summary if there is one."""
     rows = ctx.bus.db.fetch_all(
         "SELECT from_name, from_addr, date, subject, clean_text, encrypted FROM messages WHERE thread_id = ?"
@@ -104,138 +113,146 @@ def _thread_text(
         blocks.append(block[:limit_chars])
         used += len(block)
     subject = rows[0]["subject"] if rows else ""
+    sender = (rows[0]["from_name"] or rows[0]["from_addr"]) if rows else ""
     summary = ctx.bus.db.fetch_all("SELECT text FROM thread_summaries WHERE thread = ?", (thread,))
     note = f"Summary of the earlier conversation:\n{summary[0]['text']}\n\n" if summary else ""
-    return subject, f"{note}" + "\n\n".join(reversed(blocks))
-
-
-def _parse(text: str) -> dict[str, Any] | None:
-    match = re.search(r"\{.*\}", text, flags=re.S)
-    if not match:
-        return None
-    try:
-        parsed = json.loads(match.group(0))
-    except ValueError:
-        return None
-    return parsed if isinstance(parsed, dict) else None
+    return subject, sender, f"{note}" + "\n\n".join(reversed(blocks))
 
 
 def _strings(value: Any) -> list[str]:
     return [str(item) for item in value] if isinstance(value, list) else []
 
 
-class MailAgent:
+def _template(name: str, **values: Any) -> str:
+    """Our own wording, filled in here. What came from outside is only ever put in, never read."""
+    text = resources.files(__package__).joinpath("prompts", "triggers", f"{name}.md")
+    filled = text.read_text("utf-8").strip()
+    for key, value in values.items():
+        filled = filled.replace(f"{{{key}}}", str(value))
+    return filled
+
+
+def next_turn(
+    ctx: Context, origin: str, own: dict[str, Any] | None = None
+) -> tuple[TurnRequest, list[int]] | None:
+    """The next conversation with mail waiting. A burst is one judgement, on its latest state."""
+    db = ctx.bus.db
+    config = ctx.config.agent
+    while True:
+        first = db.fetch_all(
+            "SELECT thread FROM trigger_runs WHERE trigger = ? AND status = 'pending' ORDER BY id LIMIT 1",
+            (MAIL_TRIGGER,),
+        )
+        if not first:
+            return None
+        thread = first[0]["thread"]
+        rows = db.fetch_all(
+            "SELECT id, message, answer FROM trigger_runs WHERE trigger = ? AND status = 'pending' AND thread = ?"
+            " ORDER BY id LIMIT ?",
+            (MAIL_TRIGGER, thread, config.triage_batch),
+        )
+        subject, sender, text = _thread_text(
+            ctx, thread, config.max_recent_thread_messages, config.max_thread_chars
+        )
+        if text:
+            break
+        # The conversation has gone, so there's nothing left to judge.
+        settle(ctx, [row["id"] for row in rows], "skipped")
+    answers = [row["answer"] for row in rows if row["answer"]]
+    shown_subject = subject or "no subject"
+    if answers:
+        shown = _template("mail-answer", subject=shown_subject, answer=" ".join(answers))
+        told = _template("mail-answer-model")
+    elif len(rows) > 1:
+        shown = _template("mail-many", count=len(rows), sender=sender, subject=shown_subject)
+        told = _template("mail-model")
+    else:
+        shown = _template("mail-one", sender=sender, subject=shown_subject)
+        told = _template("mail-model")
+    task = f"<untrusted>\nSubject: {subject}\n\n{text}\n</untrusted>"
+    board = db.fetch_all(
+        "SELECT kind, title, due FROM work_board WHERE thread = ? AND done = 0 ORDER BY id",
+        (thread,),
+    )
+    if board:
+        lines = "\n".join(f"- {r['kind']}: {r['title']} (due {r['due']})" for r in board)
+        task += f"\n\nAlready on the work board for this conversation:\n<untrusted>\n{lines}\n</untrusted>"
+    known = db.fetch_all("SELECT name FROM mail_categories WHERE proposed = 0 ORDER BY name")
+    if known:
+        task += "\n\nCategories that exist: " + ", ".join(row["name"] for row in known)
+    if answers:
+        task += "\n\nThe person answered your earlier question: " + " ".join(answers)
+    target = {
+        "thread": thread,
+        "subject": subject,
+        "messages": [{"message": r["message"], "answer": r["answer"]} for r in rows],
+    }
+    request = TurnRequest(SESSION_ID, shown, origin, told, task, target, own)
+    return request, [row["id"] for row in rows]
+
+
+def digest_turn(ctx: Context, since: str) -> TurnRequest | None:
+    """What came in over the last hour. Nothing new means no run, so no model call and no message."""
+    rows = ctx.bus.db.fetch_all(
+        "SELECT r.thread, r.summary, t.subject, t.importance FROM triage_runs r"
+        " JOIN threads t ON t.id = r.thread WHERE r.status = 'done' AND r.time > ? ORDER BY r.id",
+        (since,),
+    )
+    if not rows:
+        return None
+    lines = "\n".join(
+        f"- [thread {r['thread']}] {r['importance']}: {r['subject']}: {r['summary']}" for r in rows
+    )
+    task = f"{prompts_builder.packaged('mail-digest.md')}\n\n<untrusted>\n{lines}\n</untrusted>"
+    return TurnRequest(
+        SESSION_ID,
+        _template("mail-digest", count=len(rows)),
+        "mail-hourly",
+        _template("mail-digest-model"),
+        task,
+    )
+
+
+def settle(ctx: Context, runs: list[int], status: str, error: str | None = None) -> None:
+    with ctx.bus.db.transaction() as tx:
+        for run in runs:
+            tx.execute(
+                "UPDATE trigger_runs SET status = ?, error = ? WHERE id = ?", (status, error, run)
+            )
+
+
+def after_turn(ctx: Context, turn: int, runs: list[Any], error: str | None) -> None:
+    """A run that ended without a judgement leaves that mail uncategorized, and says why."""
+    judged = ctx.bus.db.fetch_all("SELECT 1 FROM triage_runs WHERE turn = ? LIMIT 1", (turn,))
+    if judged or not runs:
+        settle(ctx, [run["id"] for run in runs], "done")
+        return
+    reason = error or UNREADABLE
+    Triage(ctx)._failed(runs[0]["thread"], runs, reason)
+    settle(ctx, [run["id"] for run in runs], "failed", reason)
+
+
+def record(ctx: Context, session: str, fields: dict[str, Any]) -> str:
+    """What the record_triage tool does. It only reaches the email this run was started for."""
+    rows = ctx.bus.db.fetch_all(
+        "SELECT id, target FROM agent_turns WHERE session = ? AND closed = 0 ORDER BY id DESC LIMIT 1",
+        (session,),
+    )
+    target = json.loads(rows[0]["target"]) if rows and rows[0]["target"] else None
+    if not target or "thread" not in target:
+        return "There's no new email in hand to judge in this run."
+    turn = rows[0]["id"]
+    if ctx.bus.db.fetch_all("SELECT 1 FROM triage_runs WHERE turn = ? LIMIT 1", (turn,)):
+        return "This email is already judged."
+    Triage(ctx)._apply(target["thread"], target["messages"], target["subject"], fields, turn)
+    return f"Filed as {fields.get('category') or 'uncategorized'}, {fields.get('importance', 'normal')} importance."
+
+
+class Triage:
+    """Applies what the agent decided about one conversation."""
+
     def __init__(self, ctx: Context) -> None:
         self.ctx = ctx
-        self.config = ctx.config.agent
-        self.wake = threading.Event()
-        self.stopping = threading.Event()
-        self.waiting_for_model: str | None = None
-        self.thread = threading.Thread(target=self._loop, daemon=True, name="mail-agent")
-
-    def start(self) -> None:
-        _ensure_session(self.ctx)
-        self.thread.start()
-        self.wake.set()
-
-    def stop(self) -> None:
-        self.stopping.set()
-        self.wake.set()
-        self.thread.join(timeout=10)
-
-    def _loop(self) -> None:
-        # A single email starts at once. Anything arriving during a run waits for the next one.
-        while not self.stopping.is_set():
-            self.wake.wait()
-            self.wake.clear()
-            while not self.stopping.is_set() and enabled(self.ctx):
-                try:
-                    worked = self._run_once()
-                except (
-                    providers.ModelUnavailable,
-                    providers.ModelNotConfigured,
-                    gateway.DailyCapReached,
-                ) as error:
-                    # Mail keeps working. Queued triage carries on when the model is back.
-                    self.waiting_for_model = str(error)
-                    log.info("triage_waiting", kind=type(error).__name__)
-                    # Connecting a model wakes this, so nobody waits out the timer.
-                    self.wake.wait(self.config.triage_retry_seconds)
-                    self.wake.clear()
-                    continue
-                except Exception:
-                    log.exception("triage_failed")
-                    self.stopping.wait(self.config.triage_retry_seconds)
-                    continue
-                self.waiting_for_model = None
-                if not worked:
-                    break
-
-    def _run_once(self) -> bool:
-        db = self.ctx.bus.db
-        pending = db.fetch_all(
-            "SELECT * FROM triage_queue ORDER BY added, message LIMIT ?",
-            (self.config.triage_batch,),
-        )
-        if not pending:
-            return False
-        # A burst is grouped by conversation: one judgement per thread, on its latest state.
-        by_thread: dict[int, list[Any]] = {}
-        for row in pending:
-            by_thread.setdefault(row["thread"], []).append(row)
-        for thread, rows in by_thread.items():
-            self._triage_thread(thread, rows)
-        return True
-
-    def _clear(self, rows: list[Any]) -> None:
-        with self.ctx.bus.db.transaction() as tx:
-            for row in rows:
-                tx.execute("DELETE FROM triage_queue WHERE message = ?", (row["message"],))
-
-    def _triage_thread(self, thread: int, rows: list[Any]) -> None:
-        ctx = self.ctx
-        subject, text = _thread_text(
-            ctx, thread, self.config.max_recent_thread_messages, self.config.max_thread_chars
-        )
-        if not text:
-            self._clear(rows)
-            return
-        task = f"<untrusted>\nSubject: {subject}\n\n{text}\n</untrusted>"
-        answers = [row["answer"] for row in rows if row["answer"]]
-        if answers:
-            task += "\n\nThe person answered your earlier question: " + " ".join(answers)
-        recalled = memory.relevant(ctx.config.home, "mail", text, self.config.memory_max_chars)
-        layers = prompts_builder.build_layers(ctx.config, "mail", memory=recalled)
-        known = [
-            row["name"]
-            for row in ctx.bus.db.fetch_all(
-                "SELECT name FROM mail_categories WHERE proposed = 0 ORDER BY name"
-            )
-        ]
-        if known:
-            layers.append(Layer("Categories that exist", ", ".join(known)))
-        parsed = None
-        try:
-            for _ in range(PARSE_ATTEMPTS):
-                result = gateway.call_model(
-                    ctx,
-                    agent="mail",
-                    session=SESSION_ID,
-                    layers=layers,
-                    messages=[Message("user", task)],
-                )
-                parsed = _parse(result.text)
-                if parsed:
-                    break
-        except (providers.ModelFlagged, guard.GuardBlocked) as error:
-            self._failed(thread, rows, str(error))
-            return
-        if parsed is None:
-            self._failed(
-                thread, rows, "The agent's answer couldn't be read, so this stays uncategorized."
-            )
-            return
-        self._apply(thread, rows, subject, parsed, result.call_id)
 
     def _failed(self, thread: int, rows: list[Any], error: str) -> None:
         """A flagged email stays uncategorized, and shows why."""
@@ -246,7 +263,6 @@ class MailAgent:
                     "INSERT INTO triage_runs (message, thread, time, status, error) VALUES (?, ?, ?, 'failed', ?)",
                     (row["message"], thread, _now(), error),
                 )
-                work.tx.execute("DELETE FROM triage_queue WHERE message = ?", (row["message"],))
             work.tx.execute(
                 "UPDATE threads SET why = ? WHERE id = ? AND COALESCE(category_source, '') != 'user'",
                 (message, thread),
@@ -263,12 +279,15 @@ class MailAgent:
                 source="agent",
                 trace_id=self.ctx.trace_id,
             )
-        _record_turn(self.ctx, f"Triage failed for conversation {thread}", error)
 
     def _apply(
-        self, thread: int, rows: list[Any], subject: str, parsed: dict[str, Any], call_id: int
+        self, thread: int, rows: list[Any], subject: str, parsed: dict[str, Any], turn: int
     ) -> None:
         ctx = self.ctx
+        calls = ctx.bus.db.fetch_all(
+            "SELECT MAX(id) AS id FROM model_calls WHERE session = ?", (SESSION_ID,)
+        )
+        call_id = calls[0]["id"]
         importance = (
             parsed.get("importance") if parsed.get("importance") in IMPORTANCE else "normal"
         )
@@ -288,8 +307,8 @@ class MailAgent:
         with ctx.bus.unit_of_work() as work:
             for row in rows:
                 work.tx.execute(
-                    "INSERT INTO triage_runs (message, thread, time, status, summary, reason, facts, suggested_action, provisional, call_id)"
-                    " VALUES (?, ?, ?, 'done', ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO triage_runs (message, thread, time, status, summary, reason, facts, suggested_action, provisional, call_id, turn)"
+                    " VALUES (?, ?, ?, 'done', ?, ?, ?, ?, ?, ?, ?)",
                     (
                         row["message"],
                         thread,
@@ -300,10 +319,10 @@ class MailAgent:
                         action,
                         int(provisional),
                         call_id,
+                        turn,
                     ),
                 )
                 work.tx.execute("UPDATE messages SET why = ? WHERE id = ?", (why, row["message"]))
-                work.tx.execute("DELETE FROM triage_queue WHERE message = ?", (row["message"],))
             # What the person chose stays, and so does what their rule filed.
             work.tx.execute(
                 "UPDATE threads SET category = ?, category_source = 'agent', why = ? WHERE id = ? AND COALESCE(category_source, '') NOT IN ('user', 'rule')",
@@ -352,7 +371,6 @@ class MailAgent:
                 urgent=importance == "high",
                 triage_message=latest,
             )
-        _record_turn(ctx, f"Triage: {subject}", f"{summary}\n\n{reason}".strip())
 
     def _note_category(self, category: str | None) -> None:
         """A name the agent came up with appears in the sidebar, marked as the agent's."""
@@ -491,15 +509,23 @@ def thread_runs(ctx: Context, thread: int) -> ThreadRuns:
     )  # fmt: skip
 
 
+def waiting_count(ctx: Context) -> int:
+    rows = ctx.bus.db.fetch_all(
+        "SELECT COUNT(*) AS n FROM trigger_runs WHERE trigger = ? AND status IN ('pending', 'running')",
+        (MAIL_TRIGGER,),
+    )
+    return int(rows[0]["n"])
+
+
 def estimate(ctx: Context) -> TriageEstimate:
     account = accounts.current_account(ctx.config)
     rows = ctx.bus.db.fetch_all(
         "SELECT COUNT(*) AS n FROM messages m WHERE m.account = ? AND m.folder_role = 'inbox' AND m.rule IS NULL"
         " AND NOT EXISTS (SELECT 1 FROM triage_runs r WHERE r.message = m.id)"
-        " AND NOT EXISTS (SELECT 1 FROM triage_queue q WHERE q.message = m.id)",
+        " AND NOT EXISTS (SELECT 1 FROM trigger_runs q WHERE q.message = m.id AND q.status IN ('pending', 'running'))",
         (account,),
     )
-    queued = ctx.bus.db.fetch_all("SELECT COUNT(*) AS n FROM triage_queue")[0]["n"]
+    queued = waiting_count(ctx)
     return TriageEstimate(
         untriaged=rows[0]["n"],
         queued=queued,
@@ -515,7 +541,7 @@ def queue_existing(ctx: Context) -> None:
         (account,),
     )
     for row in rows:
-        enqueue(ctx, row["id"], row["thread_id"])
+        enqueue(ctx, row["id"], row["thread_id"], event=f"existing-{row['id']}")
 
 
 def summary_view(ctx: Context, thread: int) -> ThreadSummary:
@@ -577,10 +603,3 @@ def summarize(ctx: Context, thread: int) -> ThreadSummary:
         )
         work.emit("summary.ready", {"thread_id": thread}, source="agent", trace_id=ctx.trace_id)
     return summary_view(ctx, thread)
-
-
-def on_needs_triage(event: AppEvent, ctx: Context, agent: MailAgent | None) -> None:
-    if enabled(ctx):
-        enqueue(ctx, int(event.payload["message_id"]), int(event.payload["thread_id"]))
-        if agent:
-            agent.wake.set()

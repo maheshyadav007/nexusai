@@ -154,7 +154,7 @@ test("a schedule is created and runs on demand", async ({ page }) => {
   await expect(page.getByTestId("schedule").filter({ hasText: "Daily prep" })).toBeVisible();
 
   const title = unique("Weekly note");
-  await page.getByRole("textbox", { name: "Name" }).fill(title);
+  await page.getByRole("textbox", { name: "Name", exact: true }).fill(title);
   await page.getByRole("textbox", { name: "What should the agent do?" }).fill("Say hello");
   await page.getByRole("button", { name: "Create schedule" }).click();
   const row = page.getByTestId("schedule").filter({ hasText: title });
@@ -180,7 +180,7 @@ test("a schedule is created and runs on demand", async ({ page }) => {
 });
 
 test("agent screens open cleanly and memory proposals are decided", async ({ page }) => {
-  for (const path of ["/agent/background", "/agent/activity", "/agent/channel"]) {
+  for (const path of ["/cockpit", "/agent/activity", "/agent/channel"]) {
     await page.goto(path);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await noViolations(page);
@@ -244,7 +244,9 @@ test("the new settings sections save, and the guard masks a sample", async ({ pa
 
 test("a send warns about a missing attachment, and can be undone", async ({ page }) => {
   await page.goto("/settings?section=send-checks");
+  const saved = page.waitForResponse("**/api/commands/sendChecks.save");
   await page.getByRole("spinbutton", { name: "Seconds to undo a send" }).fill("3");
+  await saved;
   await page.reload();
   await expect(page.getByRole("spinbutton", { name: "Seconds to undo a send" })).toHaveValue("3");
 
@@ -264,16 +266,17 @@ test("a send warns about a missing attachment, and can be undone", async ({ page
   await expect(page.getByRole("textbox", { name: "Message" })).toHaveValue("See the attached report.");
 });
 
-test("typing on Today starts a session and sends it", async ({ page }) => {
+test("the chat opens from Today, starts a session and sends it", async ({ page }) => {
   await page.goto("/today");
-  await page.getByRole("textbox", { name: "Ask the agent to do something" }).fill("Hello from Today");
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByTestId("assistant-pill").click();
   const dock = page.getByTestId("assistant-dock");
+  await dock.getByRole("button", { name: "New chat" }).click();
+  await dock.getByRole("textbox", { name: "Message the agent" }).fill("Hello from Today");
+  await dock.getByRole("button", { name: "Send" }).click();
   await expect(dock.getByTestId("agent-message")).toContainText("Hello from gpt-best");
   await page.reload();
   await expect(page.getByTestId("assistant-dock").getByTestId("agent-message")).toContainText("Hello from gpt-best");
-  await expect(page.getByTestId("user-message")).toContainText("Hello from Today");
-  await expect(page.getByTestId("agent-message")).toHaveCount(1);
+  await expect(page.getByTestId("assistant-dock").getByTestId("user-message").last()).toContainText("Hello from Today");
 });
 
 test("only the app's own pages get through to the backend", async ({ page, request }) => {

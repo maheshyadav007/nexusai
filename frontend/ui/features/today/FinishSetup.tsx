@@ -64,7 +64,7 @@ export function FinishSetup() {
   const create = useCreateSession();
   const assistant = useAssistant();
   const items: readonly Item[] = [
-    { id: "mail", title: "finish.mail.title", detail: "finish.mail.detail", done: Boolean(mail.data?.account), href: "/settings?section=accounts" },
+    { id: "mail", title: "finish.mail.title", detail: "finish.mail.detail", done: Boolean(mail.data?.account), href: "/connectors" },
     { id: "model", title: "finish.model.title", detail: "finish.model.detail", done: Boolean(model.data?.connected), href: "/settings?section=models" },
     { id: "search", title: "finish.search.title", detail: "finish.search.detail", done: Boolean(semantic.data?.ready), href: "/settings?section=local-models" },
     {
@@ -75,7 +75,7 @@ export function FinishSetup() {
       run: () => create.mutate({ title: t("setup.interview.label"), agent: "interview" }, { onSuccess: (row) => assistant.openSession(row.id) }),
     },
     { id: "priorities", title: "finish.priorities.title", detail: "finish.priorities.detail", done: Boolean(prompts.data?.prompts.some((prompt) => prompt.kind === "personal" && prompt.content.trim() && prompt.content.trim() !== prompt.starter?.trim())), href: "/agent/memory" },
-    { id: "archive", title: "finish.archive.title", detail: "finish.archive.detail", done: Boolean(imports.data?.imports.length), href: "/settings?section=archive" },
+    { id: "archive", title: "finish.archive.title", detail: "finish.archive.detail", done: Boolean(imports.data?.imports.length), href: "/connectors" },
   ];
   const done = items.filter((item) => item.done).length;
   const showing = onboarding.data && !onboarding.data.checklist_dismissed && done < items.length;

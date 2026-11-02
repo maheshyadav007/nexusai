@@ -9,6 +9,7 @@ interface Start {
   text?: string;
   context?: readonly string[];
   title?: string;
+  model?: string | null;
 }
 
 interface Assistant {
@@ -68,9 +69,9 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   }, [open, pinned, session, restored]);
 
   const start = useCallback(
-    ({ text, context, title }: Start) => {
+    ({ text, context, title, model }: Start) => {
       setOpen(true);
-      const input = { ...(context ? { context: context as CreateSession["context"] } : {}), ...(title ? { title } : {}) };
+      const input = { ...(context ? { context: context as CreateSession["context"] } : {}), ...(title ? { title } : {}), ...(model ? { model } : {}) };
       mutate(input, {
         onSuccess: (row) => {
           if (text) leaveFirstMessage(row.id, text);

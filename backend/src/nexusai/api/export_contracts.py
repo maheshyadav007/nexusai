@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from nexusai.contracts import agent as agent_contracts
+from nexusai.contracts import connectors as connectors_contracts
 from nexusai.contracts import documents as documents_contracts
 from nexusai.contracts import mail as mail_contracts
 from nexusai.contracts import panels as panels_contracts
@@ -25,6 +26,7 @@ from nexusai.contracts.home import (
     HomeCheck,
     HomeStatus,
     RecoveryKeyView,
+    ResetHome,
     RestoreBackup,
     UnlockHome,
 )
@@ -97,6 +99,7 @@ MAIL_MODELS: list[type[BaseModel]] = [
         agent_contracts,
         planner_contracts,
         semantic_contracts,
+        connectors_contracts,
     )
     for value in vars(module).values()
     if isinstance(value, type) and issubclass(value, BaseModel) and value is not BaseModel
@@ -137,6 +140,7 @@ MODELS: list[type[BaseModel]] = [
     BackupList,
     BackupRow,
     RecoveryKeyView,
+    ResetHome,
     RestoreBackup,
     UnlockHome,
     HomeStatus,

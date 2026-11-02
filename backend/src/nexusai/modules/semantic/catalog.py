@@ -1,9 +1,15 @@
 """The local models NexusAI knows, pinned to exact files so what runs is what was checked."""
 
+import hashlib
+import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 DIMENSIONS = 384
+QUANTIZATION = "int8"
+# Raised when the way vectors are made changes, so what's there shows as out of date.
+PIPELINE_VERSION = 1
 
 
 @dataclass(frozen=True)
@@ -85,6 +91,27 @@ MODELS = (
 )
 BY_ID = {model.id: model for model in MODELS}
 DEFAULT = MODELS[0].id
+
+
+def build_settings(model: CatalogModel, **chunking: int) -> dict[str, Any]:
+    """Everything that decides what a vector means. Different settings need different vectors."""
+    return {
+        "model": model.id,
+        "label": model.label,
+        "repo": model.repo,
+        "revision": model.revision,
+        "files": {item.name: item.sha256 for item in model.files},
+        "dimensions": DIMENSIONS,
+        "quantization": QUANTIZATION,
+        "query_prefix": model.query_prefix,
+        "passage_prefix": model.passage_prefix,
+        "pipeline": PIPELINE_VERSION,
+        **chunking,
+    }
+
+
+def fingerprint_of(settings: dict[str, Any]) -> str:
+    return hashlib.sha256(json.dumps(settings, sort_keys=True).encode()).hexdigest()[:16]
 
 
 def folder(home: Path, model: CatalogModel) -> Path:

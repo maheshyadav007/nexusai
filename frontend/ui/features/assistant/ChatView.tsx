@@ -2,35 +2,46 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ApiRequestError } from "@/ui/client/api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ApiRequestError, query } from "@/ui/client/api";
+import { useEvents } from "@/ui/client/events";
 import { useTimeOnly } from "@/ui/client/format";
-import { groupApprovals, takeFirstMessage, useAnswerSession, useApprovals, useModelCall, useStopSession } from "@/ui/client/sessions";
-import { useChannel, useDismissChannel, useSessionContext, useSetContext } from "@/ui/client/work";
+import { groupApprovals, takeFirstMessage, useAnswerSession, useApprovals, useChooseVersion, useModelCall, useRateMessage, useSession, useSetSessionModel, useStopSession } from "@/ui/client/sessions";
+import { useChannel, useCompactSession, useDismissChannel, useSessionContext, useSetContext } from "@/ui/client/work";
 import { Icon } from "@/ui/icons";
 import { Button } from "@/ui/primitives/Button";
 import { Dialog } from "@/ui/primitives/Dialog";
 import { ErrorState } from "@/ui/primitives/ErrorState";
+import { IconButton } from "@/ui/primitives/IconButton";
 import { Presence, Rise, RiseButton, Swap } from "@/ui/primitives/Motion";
-import { BareTextarea, Pressable } from "@/ui/primitives/Pressable";
+import { Pressable } from "@/ui/primitives/Pressable";
 import { Skeleton } from "@/ui/primitives/Skeleton";
+import { useToast } from "@/ui/primitives/Toast";
 import { Tooltip } from "@/ui/primitives/Tooltip";
-import { t } from "@/ui/strings";
-import { AnsweredQuestion, ApprovalGroupCard, MailCard, QuestionCard, ResultCard } from "./Cards";
+import { t, type StringKey } from "@/ui/strings";
+import { AnsweredQuestion, ApprovalGroupCard, MailCard, QuestionCard, ResultCard, TriageCard } from "./Cards";
+import { AttachedChips, AttachMenu, ModelPicker, useAttachedReading, type Attached } from "./ChatControls";
 import { Composer } from "./Composer";
 import { Markdown } from "./Markdown";
-import { failureOf, followUpsOf, isFinished, mergeResults, textOf, timeOf, toBlocks, toolName, type ToolPart } from "./parts";
+import { factsOf, failureOf, followUpsOf, isFinished, mergeResults, textOf, timeOf, toBlocks, toolName, type ToolPart, type Versions } from "./parts";
 import { ThinkingTrace } from "./ThinkingTrace";
 
 const COPIED_MS = 1500;
 // Near enough to the end to keep following what arrives.
 const FOLLOW_WITHIN_PX = 96;
 const ANSWER_PREFIX = "They answered: ";
+// Written the way the person would say it, with a small line saying what really sent it.
+const ORIGIN_LABEL: Readonly<Record<string, StringKey>> = {
+  mail: "chat.origin.mail",
+  "mail-hourly": "chat.origin.hourly",
+  schedule: "chat.origin.schedule",
+  event: "chat.origin.event",
+};
 
-function ActionButton({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
+function ActionButton({ label, hint, pressed, disabled, onClick, children }: { label: string; hint?: string; pressed?: boolean; disabled?: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <Tooltip content={label}>
-      <Pressable aria-label={label} onClick={onClick} className="inline-flex h-5 w-5 items-center justify-center rounded-sm text-ink-muted transition-colors duration-fast hover:bg-surface-sunken hover:text-ink-primary">
+    <Tooltip content={hint ?? label}>
+      <Pressable aria-label={label} {...(pressed === undefined ? {} : { "aria-pressed": pressed })} disabled={disabled} onClick={onClick} className={`inline-flex h-5 w-5 items-center justify-center rounded-sm transition-colors duration-fast hover:bg-surface-sunken hover:text-ink-primary disabled:cursor-not-allowed disabled:text-ink-faint ${pressed ? "text-ink-primary" : "text-ink-muted"}`}>
         {children}
       </Pressable>
     </Tooltip>
@@ -61,53 +72,62 @@ function MessageTime({ value }: { value: string | null }) {
   return value ? <time dateTime={value} className="text-sm tabular-nums text-ink-faint">{format(value)}</time> : null;
 }
 
-function UserMessage({ message, canEdit, onEdit }: { message: UIMessage; canEdit: boolean; onEdit: (text: string) => void }) {
+function UserMessage({ message, onEdit }: { message: UIMessage; onEdit: (text: string) => void }) {
   const text = textOf(message);
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(text);
-  if (editing) {
-    return (
-      <form
-        data-testid="user-message-edit"
-        className="flex flex-col gap-2 rounded-lg border border-line-strong bg-surface-raised p-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          setEditing(false);
-          if (draft.trim() && draft !== text) onEdit(draft.trim());
-        }}
-      >
-        <BareTextarea aria-label={t("chat.edit")} autoFocus value={draft} onChange={(event) => setDraft(event.target.value)} className="grow-field focus-ring w-full resize-none bg-transparent text-md text-ink-primary" />
-        <p className="text-sm text-ink-muted">{t("chat.edit.note")}</p>
-        <div className="flex justify-end gap-2">
-          <Button variant="quiet" onClick={() => setEditing(false)}>
-            {t("home.picker.cancel")}
-          </Button>
-          <Button type="submit" variant="primary" disabled={!draft.trim()}>
-            {t("chat.edit.save")}
-          </Button>
-        </div>
-      </form>
-    );
-  }
+  const { origin } = factsOf(message);
+  const source = origin ? ORIGIN_LABEL[origin] : undefined;
   return (
     <Rise as="article" data-testid="user-message" className="group flex flex-col items-end gap-1">
       <div className="max-w-full whitespace-pre-wrap break-words rounded-lg bg-surface-sunken px-3 py-2 text-md text-ink-primary">{text}</div>
+      {source ? <p data-testid="message-origin" className="text-sm text-ink-muted">{t(source)}</p> : null}
       <div className="flex items-center gap-1 opacity-0 transition-opacity duration-fast focus-within:opacity-100 group-hover:opacity-100">
         <MessageTime value={timeOf(message)} />
         <CopyAction text={text} label={t("chat.copy")} />
-        {canEdit ? (
-          <ActionButton
-            label={t("chat.edit")}
-            onClick={() => {
-              setDraft(text);
-              setEditing(true);
-            }}
-          >
-            <Icon name="edit" className="h-3 w-3" />
-          </ActionButton>
-        ) : null}
+        <ActionButton label={t("chat.edit")} onClick={() => onEdit(text)}>
+          <Icon name="edit" className="h-3 w-3" />
+        </ActionButton>
       </div>
     </Rise>
+  );
+}
+
+function Rating({ turn, initial }: { turn: number; initial: "up" | "down" | null | undefined }) {
+  const rate = useRateMessage();
+  const [value, setValue] = useState(initial ?? null);
+  const choose = (choice: "up" | "down") => {
+    const before = value;
+    const next = value === choice ? null : choice;
+    setValue(next);
+    rate.mutate({ turn, value: next }, { onError: () => setValue(before) });
+  };
+  return (
+    <>
+      <ActionButton label={t("chat.like")} pressed={value === "up"} onClick={() => choose("up")}>
+        <Icon name="like" className="h-3 w-3" />
+      </ActionButton>
+      <ActionButton label={t("chat.dislike")} pressed={value === "down"} onClick={() => choose("down")}>
+        <Icon name="dislike" className="h-3 w-3" />
+      </ActionButton>
+    </>
+  );
+}
+
+function VersionSwitcher({ versions, disabled, onChoose }: { versions: Versions; disabled: boolean; onChoose: (turn: number) => void }) {
+  const { turns, current } = versions;
+  const go = (index: number) => {
+    const turn = turns[index];
+    if (turn !== undefined) onChoose(turn);
+  };
+  return (
+    <span data-testid="versions" className="flex items-center text-sm tabular-nums text-ink-muted">
+      <ActionButton label={t("chat.version.previous")} disabled={disabled || current === 0} onClick={() => go(current - 1)}>
+        <Icon name="previous" className="h-3 w-3" />
+      </ActionButton>
+      {t("chat.version.count", { current: current + 1, total: turns.length })}
+      <ActionButton label={t("chat.version.next")} disabled={disabled || current === turns.length - 1} onClick={() => go(current + 1)}>
+        <Icon name="chevronRight" className="h-3 w-3" />
+      </ActionButton>
+    </span>
   );
 }
 
@@ -139,7 +159,7 @@ function QuestionPart({ part, session }: { part: ToolPart; session: string }) {
   );
 }
 
-function AssistantMessage({ message, session, running, isLast, onFollowUp, showFollowUps }: { message: UIMessage; session: string; running: boolean; isLast: boolean; onFollowUp: (text: string) => void; showFollowUps: boolean }) {
+function AssistantMessage({ message, session, running, isLast, onFollowUp, showFollowUps, canRetry, onRetry, onChooseVersion }: { message: UIMessage; session: string; running: boolean; isLast: boolean; onFollowUp: (text: string) => void; showFollowUps: boolean; canRetry: boolean; onRetry: () => void; onChooseVersion: (turn: number) => void }) {
   const approvals = useApprovals();
   const pending = useMemo(() => new Map((approvals.data?.approvals ?? []).filter((item) => item.session === session).map((item) => [item.tool_call_id, item])), [approvals.data, session]);
   const blocks = toBlocks(message, new Set(pending.keys()));
@@ -149,6 +169,7 @@ function AssistantMessage({ message, session, running, isLast, onFollowUp, showF
   const failure = failureOf(message);
   const followUps = followUpsOf(message);
   const settled = !running || !isLast;
+  const { turn, feedback, versions, thread } = factsOf(message);
   return (
     <article data-testid="agent-message" className="group flex flex-col gap-3">
       {merged.map((block) => {
@@ -159,14 +180,22 @@ function AssistantMessage({ message, session, running, isLast, onFollowUp, showF
         const name = toolName(part);
         if (name === "ask_user") return <QuestionPart key={block.key} part={part} session={session} />;
         if (name === "send_mail") return <MailCard key={block.key} part={part} approval={pending.get(part.toolCallId)} />;
+        if (name === "record_triage") return <TriageCard key={block.key} part={part} thread={thread} />;
         // The first of a group speaks for the rest.
         const group = groups.find((items) => items.some((item) => item.tool_call_id === part.toolCallId));
         return group?.[0]?.tool_call_id === part.toolCallId ? <ApprovalGroupCard key={block.key} approvals={group} /> : null;
       })}
       {failure ? <ErrorState title={t("sessions.failed")} description={failure} /> : null}
-      {settled && text ? (
+      {settled && !pending.size && merged.length + (failure ? 1 : 0) > 0 ? (
         <div className="flex items-center gap-1 opacity-0 transition-opacity duration-fast focus-within:opacity-100 group-hover:opacity-100">
-          <CopyAction text={text} label={t("chat.copy")} />
+          {text ? <CopyAction text={text} label={t("chat.copy")} /> : null}
+          {turn !== undefined ? <Rating turn={turn} initial={feedback} /> : null}
+          {canRetry ? (
+            <ActionButton label={t("chat.retry")} hint={t("chat.retry.hint")} onClick={onRetry}>
+              <Icon name="retry" className="h-3 w-3" />
+            </ActionButton>
+          ) : null}
+          {versions && isLast ? <VersionSwitcher versions={versions} disabled={!canRetry} onChoose={onChooseVersion} /> : null}
           <MessageTime value={timeOf(message)} />
         </div>
       ) : null}
@@ -186,23 +215,17 @@ function AssistantMessage({ message, session, running, isLast, onFollowUp, showF
   );
 }
 
-function ContextChips({ id }: { id: string }) {
-  const context = useSessionContext(id);
-  const setContext = useSetContext();
-  const items = context.data?.items ?? [];
-  if (!items.length) return null;
-  return (
-    <ul aria-label={t("sessions.context")} className="flex flex-wrap items-center gap-1">
-      {items.map((item) => (
-        <li key={item.ref} data-testid="context-chip" className="flex max-w-full items-center gap-1 rounded-md border border-line-subtle bg-surface-raised py-px pl-2 pr-1 text-sm text-ink-secondary">
-          <span className="min-w-0 truncate">{item.label}</span>
-          <Pressable aria-label={t("sessions.context.remove", { label: item.label })} onClick={() => setContext.mutate({ id, context: items.filter((other) => other.ref !== item.ref).map((other) => other.ref) })} className="focus-ring rounded-sm p-px text-ink-muted transition-colors duration-fast hover:text-ink-primary">
-            <Icon name="close" className="h-3 w-3" />
-          </Pressable>
-        </li>
-      ))}
-    </ul>
-  );
+/** Summarizes older messages now, for the model. The chat keeps showing all of them. */
+export function CompactAction({ session, wide = false }: { session: string; wide?: boolean }) {
+  const toast = useToast();
+  const compact = useCompactSession();
+  const run = () =>
+    compact.mutate(session, {
+      onSuccess: (result) => toast({ title: t(result.compacted ? "chat.compact.done" : "chat.compact.nothing") }),
+      onError: (error) => toast({ title: error instanceof ApiRequestError ? error.detail.message : t("chat.compact.failed") }),
+    });
+  if (wide) return <Button variant="quiet" loading={compact.isPending} onClick={run}>{t("chat.compact")}</Button>;
+  return <IconButton icon="compact" label={t("chat.compact")} disabled={compact.isPending} onClick={run} />;
 }
 
 export function FinalPrompt({ session }: { session: string }) {
@@ -229,26 +252,31 @@ export function FinalPrompt({ session }: { session: string }) {
 }
 
 /** The one conversation view: the dock, the session page and setup all use it. */
-export function ChatView({ id, initial, active, readOnly = false, footer }: { id: string; initial: UIMessage[]; active: boolean; readOnly?: boolean; footer?: React.ReactNode }) {
-  const editIndex = useRef<number | null>(null);
+export function ChatView({ id, initial, active, footer }: { id: string; initial: UIMessage[]; active: boolean; footer?: React.ReactNode }) {
   const transport = useMemo(
     () =>
       new DefaultChatTransport<UIMessage>({
         api: "/api/sessions/chat",
         // The backend keeps the history, so it only needs what was just typed.
-        prepareSendMessagesRequest: ({ messages }) => {
+        prepareSendMessagesRequest: ({ messages, trigger }) => {
           const last = messages[messages.length - 1];
           const text = last?.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n") ?? "";
-          const body = { id, text, ...(editIndex.current === null ? {} : { edit_index: editIndex.current }) };
-          editIndex.current = null;
-          return { body };
+          return { body: { id, text, ...(trigger === "regenerate-message" ? { retry: true } : {}) } };
         },
       }),
     [id],
   );
   const chat = useChat({ id, transport, messages: initial, resume: active });
-  const { sendMessage, setMessages, messages, status } = chat;
+  const { sendMessage, setMessages, regenerate, resumeStream, messages, status } = chat;
   const stop = useStopSession();
+  const session = useSession(id);
+  const setModel = useSetSessionModel();
+  const chooseVersion = useChooseVersion();
+  const context = useSessionContext(id);
+  const setContext = useSetContext();
+  const attached: readonly Attached[] = context.data?.items ?? [];
+  const reading = useAttachedReading(attached);
+  const editor = useRef<HTMLTextAreaElement>(null);
   const answer = useAnswerSession();
   const approvals = useApprovals();
   const [text, setText] = useState("");
@@ -267,6 +295,32 @@ export function ChatView({ id, initial, active, readOnly = false, footer }: { id
   }, [id, sendMessage]);
 
   const working = status === "submitted" || status === "streaming";
+
+  // An event or the clock can start a run while this is open. It appears here as it happens.
+  const { subscribe } = useEvents();
+  const busy = useRef(working);
+  const behind = useRef(false);
+  const catchUp = useCallback(async () => {
+    behind.current = false;
+    const view = await query("session.get", { id });
+    setMessages(view.messages as unknown as UIMessage[]);
+    if (view.active) void resumeStream();
+  }, [id, resumeStream, setMessages]);
+  useEffect(() => {
+    busy.current = working;
+    if (!working && behind.current) void catchUp();
+  }, [working, catchUp]);
+  useEffect(
+    () =>
+      subscribe((event) => {
+        const started = event.type === "agent.triggered" && event.payload.origin !== "person";
+        if (!(started || event.type === "agent.held") || event.payload.session !== id) return;
+        if (busy.current) behind.current = true;
+        else void catchUp();
+      }),
+    [subscribe, id, catchUp],
+  );
+
   const tools = messages.flatMap((message) => message.parts.filter((part) => part.type.startsWith("tool-"))) as unknown as ToolPart[];
   const asking = tools.some((part) => toolName(part) === "ask_user" && !isFinished(part));
   const deciding = (approvals.data?.approvals ?? []).some((item) => item.session === id);
@@ -284,16 +338,22 @@ export function ChatView({ id, initial, active, readOnly = false, footer }: { id
       setText("");
       return;
     }
-    if (working) return;
+    if (working || reading.size) return;
     say(words);
     following.current = true;
     setText("");
   };
-  const edit = (index: number, words: string) => {
-    const before = messages.slice(0, index).filter((message) => message.role === "user").length;
-    editIndex.current = before;
-    setMessages(messages.slice(0, index));
-    say(words);
+  // Only fills the box. Sending it is a new message, and nothing earlier changes.
+  const edit = (words: string) => {
+    setText(words);
+    requestAnimationFrame(() => {
+      editor.current?.focus();
+      editor.current?.setSelectionRange(words.length, words.length);
+    });
+  };
+  const attach = (items: readonly Attached[]) => {
+    const refs = attached.map((item) => item.ref);
+    setContext.mutate({ id, context: [...refs, ...items.map((item) => item.ref).filter((ref) => !refs.includes(ref))] });
   };
   const lastAssistant = messages.findLastIndex((message) => message.role === "assistant");
 
@@ -313,9 +373,9 @@ export function ChatView({ id, initial, active, readOnly = false, footer }: { id
         >
           {messages.map((message, index) =>
             message.role === "user" ? (
-              <UserMessage key={message.id} message={message} canEdit={!readOnly && !working} onEdit={(words) => edit(index, words)} />
+              <UserMessage key={message.id} message={message} onEdit={edit} />
             ) : (
-              <AssistantMessage key={message.id} message={message} session={id} running={working && !waiting} isLast={index === messages.length - 1} showFollowUps={index === lastAssistant && !working && !readOnly} onFollowUp={say} />
+              <AssistantMessage key={message.id} message={message} session={id} running={working && !waiting} isLast={index === messages.length - 1} showFollowUps={index === lastAssistant && !working} onFollowUp={say} canRetry={index === lastAssistant && !working} onRetry={() => void regenerate()} onChooseVersion={(turn) => chooseVersion.mutate({ id, turn }, { onSuccess: (view) => setMessages(view.messages as unknown as UIMessage[]) })} />
             ),
           )}
           {status === "submitted" && messages[messages.length - 1]?.role === "user" ? (
@@ -341,12 +401,9 @@ export function ChatView({ id, initial, active, readOnly = false, footer }: { id
           ) : null}
         </Presence>
       </div>
-      {readOnly ? (
-        <p className="border-t border-line-subtle p-4 text-sm text-ink-muted">{t("sessions.selfRunning")}</p>
-      ) : (
-        <div className="flex flex-col gap-2 p-3">
-          <ContextChips id={id} />
-          {chat.error ? <ErrorState title={t("sessions.failed")} description={chat.error.message} /> : null}
+      <div className="flex flex-col gap-2 p-3">
+          <AttachedChips items={attached} reading={reading} onRemove={(ref) => setContext.mutate({ id, context: attached.filter((item) => item.ref !== ref).map((item) => item.ref) })} />
+        {chat.error ? <ErrorState title={t("sessions.failed")} description={chat.error.message} /> : null}
           <Composer
             value={text}
             onChange={setText}
@@ -355,12 +412,15 @@ export function ChatView({ id, initial, active, readOnly = false, footer }: { id
             onStop={() => stop.mutate(id)}
             stopping={stop.isPending}
             disabled={deciding && !asking}
+            holdSend={reading.size > 0}
             placeholder={t(asking ? "chat.placeholder.answer" : deciding ? "chat.placeholder.decide" : "sessions.prompt.placeholder")}
             label={t("sessions.prompt")}
+            inputRef={editor}
+            leading={<AttachMenu onAttach={attach} />}
+            trailing={<ModelPicker value={session.data?.session.model ?? null} onChange={(model) => setModel.mutate({ id, model })} />}
           />
           {footer}
-        </div>
-      )}
+      </div>
     </div>
   );
 }

@@ -94,7 +94,7 @@ Core modules (mail, PST, files, notes) ship **inside the app** as in-process MCP
 **Decided: IMAP for reading, SMTP for sending, configured as named profiles.** The corporate server's IMAP address and port go in a config file. The same app can switch to a **test Gmail account**, so features can be built and demoed on macOS outside the corporate network and then run unchanged against the corporate server.
 
 ```jsonc
-// mail-accounts.json (in the app's user-data folder; never committed)
+// What's kept for each account, in system/mail-accounts.enc in Home, encrypted; never committed
 {
   "activeProfile": "gmail-test",
   "profiles": {
@@ -114,7 +114,7 @@ Core modules (mail, PST, files, notes) ship **inside the app** as in-process MCP
 }
 ```
 
-- **Passwords are never stored in the file.** They go into the OS credential store (Electron `safeStorage`: Windows DPAPI / macOS Keychain), entered once in the app.
+- **Servers, usernames and passwords are saved together in one encrypted file** in Home, `system/mail-accounts.enc`, sealed with a key made from the Home's own key. It needs no fingerprint or credential prompt to read, and it moves with the Home: the recovery key that opens the Home opens this too.
 - **Use a separate test Gmail account**, never forward corporate mail into it.
 - Settings → Modules → Mail shows the profiles, connection status and a "Test connection" button. Several profiles can later be active at once.
 - `auth.type` can grow to `oauth2` later (Gmail or corporate SSO) without changing the rest.
@@ -248,7 +248,7 @@ The agent talks to models through one **model provider interface**, so models ca
 
 | Area | Feature | When |
 |---|---|---|
-| **Mail** | IMAP + SMTP account profiles from config (corporate + Gmail test), passwords in OS credential store | MVP |
+| **Mail** | IMAP + SMTP accounts (corporate + Gmail test) in one encrypted file in Home. Only a server name, username and password are asked for | MVP |
 | | PST import with progress, resumable; history indexed for search, not classified | MVP |
 | | Rule filters (built-in header rules + user rules) before the agent | MVP |
 | | Agent triage of new mail using system + personal prompt | MVP |

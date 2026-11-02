@@ -398,6 +398,15 @@ def disconnect(command: DisconnectModel, ctx: Context) -> ModelStatus:
     return _status(ctx)
 
 
+def _forget(ctx: Context) -> None:
+    store = secret_store(ctx.config.secrets_test_file)
+    store.delete(TOKENS)
+    store.delete(LITELLM_KEY)
+
+
+models_module.on_reset.append(_forget)
+
+
 @models_module.query("models.list")
 def list_models(query: ListModels, ctx: Context) -> AvailableModels:
     pairs = _with_token(ctx, lambda client, token: client.list_models(token))

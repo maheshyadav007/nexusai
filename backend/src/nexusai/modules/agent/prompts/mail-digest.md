@@ -1,0 +1,1 @@
+Write a short digest of what you handled over the last hour, for the person to read in under a minute. Lead with anything high importance and what it needs from them, then one line on the rest grouped by kind. Don't repeat every summary. If nothing needs them, say so plainly.
