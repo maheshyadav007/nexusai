@@ -2,22 +2,34 @@
 
 import json
 import re
+import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 import httpx
+import structlog
 
 from nexusai.kernel.config import Config
 from nexusai.kernel.module import Context
 from nexusai.modules.models import module as models
 from nexusai.modules.models.chatgpt import ChatGptError, SignInRequired
 
+log = structlog.get_logger()
+
 FLAGGED = re.compile(r"flagged|content.?filter|policy violation|content.?policy|moderation", re.I)
 JSON_TOOL_NOTE = (
     "To use a tool, reply with only a JSON object: "
-    '{"tool": "<name>", "arguments": {...}}. Available tools:\n'
+    '{"tool": "<name>", "arguments": {...}}. Put every field inside arguments, and write line'
+    " breaks inside text as \\n. Available tools:\n"
 )
+# Models name the parts of a tool call in different ways. A bare "name" could be any JSON,
+# so only "tool", the word we asked for, counts for a tool we didn't offer.
+OFFERED_NAME_KEYS = ("tool", "name", "tool_name", "function")
+ARGUMENT_KEYS = ("arguments", "args", "parameters", "input")
+THINKING = re.compile(r"<think>.*?</think>", re.S)
+JSON_START = re.compile(r"[{\[]")
+OPENING_FENCE = re.compile(r"```(?:json)?\s*$")
 
 
 class ModelUnavailable(Exception):
@@ -170,19 +182,61 @@ def _arguments(text: str) -> dict[str, Any]:
     return parsed if isinstance(parsed, dict) else {}
 
 
-def _json_tool_call(text: str) -> ToolCall | None:
-    """For servers without tool calling: the tool call comes back as plain JSON."""
-    stripped = text.strip()
-    if stripped.startswith("```"):
-        stripped = re.sub(r"^```(?:json)?\s*|\s*```$", "", stripped)
-    try:
-        parsed = json.loads(stripped)
-    except ValueError:
+def _json_values(text: str) -> Iterator[tuple[int, Any]]:
+    """Each JSON object or list in the text, and where it starts. Line breaks in strings are fine."""
+    decoder = json.JSONDecoder(strict=False)
+    position = 0
+    while found := JSON_START.search(text, position):
+        try:
+            value, position = decoder.raw_decode(text, found.start())
+        except ValueError:
+            position = found.start() + 1
+            continue
+        yield found.start(), value
+
+
+def _json_call(value: Any, tools: list[ToolSpec]) -> ToolCall | None:
+    if not isinstance(value, dict):
         return None
-    if not isinstance(parsed, dict) or not isinstance(parsed.get("tool"), str):
+    offered = {tool.name: tool for tool in tools}
+    name = next((value[key] for key in OFFERED_NAME_KEYS if isinstance(value.get(key), str)), None)
+    if name is None or (name not in offered and not isinstance(value.get("tool"), str)):
         return None
-    arguments = parsed.get("arguments")
-    return ToolCall("json-call", parsed["tool"], arguments if isinstance(arguments, dict) else {})
+    given: Any = next((value[key] for key in ARGUMENT_KEYS if key in value), {})
+    if isinstance(given, str):
+        given = next((v for _, v in _json_values(given)), {})
+    arguments = dict(given) if isinstance(given, dict) else {}
+    # Some models put fields beside "arguments". The tool's own fields are kept wherever they are.
+    spec = offered.get(name)
+    fields = spec.parameters.get("properties", {}) if spec else {}
+    for key, field_value in value.items():
+        if key in fields and key not in arguments:
+            arguments[key] = field_value
+    return ToolCall(f"json-call-{uuid.uuid4().hex[:12]}", name, arguments)
+
+
+def _json_tool_calls(text: str, tools: list[ToolSpec]) -> tuple[str, list[ToolCall]]:
+    """For servers without tool calling: what the model said first, and the tool calls it wrote.
+
+    Anything after a call is dropped, since the model hasn't seen the result yet.
+    """
+    stripped = THINKING.sub("", text).strip()
+    first: int | None = None
+    calls: list[ToolCall] = []
+    for start, value in _json_values(stripped):
+        found = [
+            call
+            for item in (value if isinstance(value, list) else [value])
+            if (call := _json_call(item, tools))
+        ]
+        if found and first is None:
+            first = start
+        calls += found
+    if first is not None:
+        return OPENING_FENCE.sub("", stripped[:first]).strip(), calls
+    if '"tool"' in stripped:
+        log.warning("model_reply_not_a_tool_call", start=stripped[:300])
+    return stripped, []
 
 
 def _chat_messages(request: ModelRequest, native_tools: bool) -> list[dict[str, Any]]:
@@ -215,8 +269,10 @@ def _chat_messages(request: ModelRequest, native_tools: bool) -> list[dict[str, 
                     for c in message.tool_calls
                 ]
             else:
-                call = message.tool_calls[0]
-                entry["content"] = json.dumps({"tool": call.name, "arguments": call.arguments})
+                entry["content"] = "\n".join(
+                    json.dumps({"tool": call.name, "arguments": call.arguments})
+                    for call in message.tool_calls
+                )
         output.append(entry)
     return output
 
@@ -305,9 +361,10 @@ class OpenAiCompatibleProvider:
         for slot in calls.values():
             yield ToolCall(slot["id"], slot["name"], _arguments(slot["arguments"]))
         if text_seen:
-            whole = "".join(text_seen)
-            call_found = _json_tool_call(whole)
-            yield call_found if call_found else TextChunk(whole)
+            said, found = _json_tool_calls("".join(text_seen), request.tools)
+            if said:
+                yield TextChunk(said)
+            yield from found
 
 
 def active_provider(ctx: Context) -> tuple[ModelProvider, str]:

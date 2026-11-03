@@ -1,6 +1,6 @@
 "use client";
 
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { command, query } from "./api";
 import type { Importance, Draft, ListThreads, MailProfile, MoveThread, RuleSet, SaveCategory, SearchMail, SetThreadStatus, UpdateCategory } from "./contracts.generated";
 import { useHomeReady } from "./home";
@@ -69,7 +69,19 @@ export function useRemoveAccount() {
   });
 }
 
-const PAGE_SIZE = 100;
+export const PAGE_SIZE = 100;
+
+/** One page of a list by where it starts, so a scrollbar can jump anywhere and only what's on screen reloads. */
+export function useThreadPages(folder: FolderRole, category: string | null, location: string | null, pages: readonly number[]) {
+  const ready = useHomeReady();
+  return useQueries({
+    queries: pages.map((page) => ({
+      queryKey: ["threads", folder, category, location, "page", page],
+      queryFn: () => query("threads.list", { folder, category, location, offset: page * PAGE_SIZE, limit: PAGE_SIZE }),
+      enabled: ready,
+    })),
+  });
+}
 
 export function useThreads(folder: FolderRole, category: string | null, location: string | null = null) {
   const ready = useHomeReady();

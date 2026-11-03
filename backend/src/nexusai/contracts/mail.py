@@ -250,6 +250,8 @@ class ListThreads(BaseModel):
     location: str | None = Field(default=None, max_length=500)
     category: str | None = Field(default=None, max_length=64)
     before: str | None = Field(default=None, max_length=64, description="Paging cursor")
+    # For jumping to a place in the list, which a scrollbar can do.
+    offset: int = Field(default=0, ge=0)
     limit: int = Field(default=100, ge=1, le=500)
 
 
@@ -277,6 +279,8 @@ class ThreadList(BaseModel):
     threads: list[ThreadRow]
     next_before: str | None
     categories: list[str]
+    # How many conversations the whole list has, however many came in this page.
+    total: int
 
 
 class GetThread(BaseModel):

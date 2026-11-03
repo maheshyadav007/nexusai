@@ -25,6 +25,7 @@ from nexusai.modules.mail.imap import (
     READ,
     ConnectionFailed,
     DeleteRefused,
+    Fetched,
     Folder,
     FolderStatus,
     ImapSession,
@@ -125,11 +126,11 @@ class MailSync:
             )[0]["n"]
         )
 
-    def _note_progress(self) -> None:
-        """How much of what's wanted is here, counting each email once."""
+    def _note_progress(self, downloading: int = 0) -> None:
+        """How much of what's wanted is here, counting each email once, and what's on its way."""
         settings = self._settings()
         budget = settings["history_budget"] if settings else None
-        pulled = self._pulled()
+        pulled = self._pulled() + downloading
         wanted = self.status.server_total if budget is None else pulled + budget
         self.status.total = max(min(wanted, self.status.server_total), pulled)
         self.status.done = pulled
@@ -614,6 +615,18 @@ class MailSync:
                 )
         return [uid for uid in uids if uid not in copies]
 
+    def _download(self, session: MailSession, uids: list[int]) -> list[Fetched]:
+        """A few at a time, so a large batch shows its progress as it comes."""
+        every = self.config.progress_every
+        if len(uids) <= every:
+            return session.fetch(uids)
+        fetched: list[Fetched] = []
+        self._note_progress()
+        for start in range(0, len(uids), every):
+            fetched += session.fetch(uids[start : start + every])
+            self._note_progress(downloading=len(fetched))
+        return fetched
+
     def _ingest(
         self, session: MailSession, folder: Folder, uids: list[int], *, live: bool, advance: bool
     ) -> int:
@@ -621,7 +634,7 @@ class MailSync:
         if not uids:
             return 0
         wanted = self._note_copies(session, folder, uids)
-        fetched = session.fetch(wanted)
+        fetched = self._download(session, wanted)
         rules = load_rules(self.ctx.config.home)
         prepared = []
         for item in fetched:

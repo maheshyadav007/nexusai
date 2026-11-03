@@ -688,6 +688,7 @@ def list_threads(
     before: str | None,
     limit: int,
     location: str | None = None,
+    offset: int = 0,
 ) -> ThreadList:
     # A folder on the server is asked for by name, and the rest go by what kind of folder it is.
     where = ["account = ?", IN_LOCATION if location else FOLDER_FILTERS[folder]]
@@ -695,6 +696,10 @@ def list_threads(
     if category:
         where.append(IN_CATEGORY)
         params += [category, category]
+    total = db.fetch_all(
+        f"SELECT COUNT(*) AS n FROM threads WHERE {' AND '.join(where)}",  # noqa: S608
+        params,
+    )[0]["n"]
     if before:
         date, _, identifier = before.rpartition("|")
         where.append("(last_date, id) < (?, ?)")
@@ -703,8 +708,8 @@ def list_threads(
         "SELECT *, (SELECT COALESCE(NULLIF(m.from_name, ''), m.from_addr) FROM messages m"  # noqa: S608
         " WHERE m.thread_id = threads.id ORDER BY m.date DESC LIMIT 1) AS sender_name"
         f" FROM threads WHERE {' AND '.join(where)}"
-        " ORDER BY last_date DESC, id DESC LIMIT ?",
-        (*params, limit + 1),
+        " ORDER BY last_date DESC, id DESC LIMIT ? OFFSET ?",
+        (*params, limit + 1, offset),
     )
     page = rows[:limit]
     categories = db.fetch_all(
@@ -716,6 +721,7 @@ def list_threads(
         threads=[row_of(row) for row in page],
         next_before=f"{page[-1]['last_date']}|{page[-1]['id']}" if len(rows) > limit else None,
         categories=[row["category"] for row in categories],
+        total=total,
     )
 
 
@@ -946,12 +952,14 @@ def _ranked_matches(
     where = ["mail_search MATCH ?", *conditions]
     values = [match, *params]
     if not by_relevance:
-        # Only a person to look for, so there are no words to rank: newest first.
-        return db.fetch_all(
-            f"SELECT m.id AS message, m.thread_id AS thread FROM {source}"  # noqa: S608
+        # Only a person to look for, so there are no words to rank: newest first. Old mail can be
+        # downloaded after new, so the order they came in isn't their date order.
+        found = db.fetch_all(
+            f"SELECT m.id AS message, m.thread_id AS thread, m.date AS date FROM {source}"  # noqa: S608
             f" WHERE {' AND '.join(where)} ORDER BY mail_search.rowid DESC LIMIT ?",
             (*values, SEARCH_CANDIDATES),
         )
+        return sorted(found, key=lambda row: row["date"], reverse=True)
     floor = db.fetch_all(
         f"SELECT mail_search.rowid AS id FROM {source} WHERE {' AND '.join(where)}"  # noqa: S608
         " ORDER BY mail_search.rowid DESC LIMIT 1 OFFSET ?",

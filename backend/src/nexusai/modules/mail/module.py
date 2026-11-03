@@ -569,7 +569,14 @@ def mail_presets(query: GetMailPresets, ctx: Context) -> MailPresets:
 def list_threads(query: ListThreads, ctx: Context) -> ThreadList:
     account = accounts.current_account(ctx.config)
     return store.list_threads(
-        ctx.bus.db, account, query.folder, query.category, query.before, query.limit, query.location
+        ctx.bus.db,
+        account,
+        query.folder,
+        query.category,
+        query.before,
+        query.limit,
+        query.location,
+        query.offset,
     )
 
 

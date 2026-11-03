@@ -18,6 +18,7 @@ from nexusai.api.app import create_app
 from nexusai.kernel.config import Config, SystemMail, SystemModel, load_config
 from nexusai.modules.mail import store
 from nexusai.modules.mail.parse import parse_message
+from nexusai.modules.mail.pop3 import Pop3Session
 from test_mail_sync import status, threads, wait
 
 
@@ -383,3 +384,24 @@ def test_hand_entered_model_server_can_be_plain_http(config: Config, model_url: 
         assert test.post("/api/commands/models.provider.save", json=body).status_code == 200
         body["base_url"] = "ftp://llm.example/v1"
         assert test.post("/api/commands/models.provider.save", json=body).status_code == 422
+
+
+def test_download_progress_moves_during_a_batch(
+    client: TestClient, pop3: FakePop3, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for number in range(35):
+        pop3.state.deliver(make_mail(f"Mail {number}"))
+    seen: list[tuple[int, int]] = []
+    real = Pop3Session.fetch
+
+    def noting(session: Pop3Session, uids: list[int]) -> Any:
+        found = real(session, uids)
+        seen.append((len(uids), status(client)["total"]))
+        return found
+
+    monkeypatch.setattr(Pop3Session, "fetch", noting)
+    connect(client)
+    wait(lambda: len(threads(client)) == 35, "all the mail")
+    # Ten at a time, and the total is known from the start.
+    assert [count for count, _ in seen[:4]] == [10, 10, 10, 5]
+    assert {total for _, total in seen[:4]} == {35}

@@ -23,7 +23,7 @@ from nexusai.modules.agent.providers import (
     ToolSpec,
     Usage,
     _chat_messages,
-    _json_tool_call,
+    _json_tool_calls,
     _responses_input,
 )
 from nexusai.modules.notifications.module import notifications_module
@@ -308,10 +308,67 @@ def test_json_fallback_for_servers_without_tool_calling() -> None:
     assert "read" in messages[0]["content"] and "JSON" in messages[0]["content"]
     assert messages[1]["content"] == '{"tool": "read", "arguments": {"a": 1}}'
     assert messages[2] == {"role": "user", "content": "Tool result:\nres"}
-    call = _json_tool_call('```json\n{"tool": "read", "arguments": {"a": 1}}\n```')
-    assert call and call.name == "read" and call.arguments == {"a": 1}
-    assert _json_tool_call("Just words") is None
-    assert _json_tool_call('{"answer": 1}') is None
+
+
+READ = ToolSpec("read", "Reads", {"properties": {"a": {}, "summary": {}}})
+
+
+@pytest.mark.parametrize(
+    ("reply", "said", "calls"),
+    [
+        ('{"tool": "read", "arguments": {"a": 1}}', "", [("read", {"a": 1})]),
+        ('```json\n{"tool": "read", "arguments": {"a": 1}}\n```', "", [("read", {"a": 1})]),
+        # Fields of the tool beside arguments are kept, and anything else is left out.
+        (
+            '{"tool": "read", "arguments": {"a": 1}, "summary": "S", "reason": "R"}',
+            "",
+            [("read", {"a": 1, "summary": "S"})],
+        ),
+        ('{"tool": "read", "a": 1}', "", [("read", {"a": 1})]),
+        ('Let me look.\n{"tool": "read", "arguments": {}}', "Let me look.", [("read", {})]),
+        ('Looking.\n```json\n{"tool": "read", "arguments": {}}\n```', "Looking.", [("read", {})]),
+        ('{"tool": "read", "arguments": {}}\nIt says hello.', "", [("read", {})]),
+        ('<think>Hm {"a"}</think>\n{"tool": "read", "arguments": {}}', "", [("read", {})]),
+        ('{"tool": "read", "arguments": {"a": "one\ntwo"}}', "", [("read", {"a": "one\ntwo"})]),
+        ('{"tool": "read", "arguments": "{\\"a\\": 1}"}', "", [("read", {"a": 1})]),
+        ('{"name": "read", "args": {"a": 1}}', "", [("read", {"a": 1})]),
+        (
+            '{"tool": "read", "arguments": {"a": 1}}\n{"tool": "read", "arguments": {"a": 2}}',
+            "",
+            [("read", {"a": 1}), ("read", {"a": 2})],
+        ),
+        ('[{"tool": "read", "arguments": {}}]', "", [("read", {})]),
+        # A tool we didn't offer still goes through when named plainly, so the model is told.
+        ('{"tool": "other", "arguments": {}}', "", [("other", {})]),
+        ("Just words", "Just words", []),
+        ('{"answer": 1}', '{"answer": 1}', []),
+        ('{"name": "Priya"} is who wrote', '{"name": "Priya"} is who wrote', []),
+    ],
+)
+def test_tool_calls_written_as_text(reply: str, said: str, calls: list[Any]) -> None:
+    text, found = _json_tool_calls(reply, [READ])
+    assert text == said
+    assert [(call.name, call.arguments) for call in found] == calls
+    assert len({call.id for call in found}) == len(found)
+
+
+def test_several_calls_are_all_replayed_to_a_server_without_tool_calling() -> None:
+    request = ModelRequest(
+        "m",
+        "i",
+        [
+            Message(
+                "assistant",
+                "",
+                tool_calls=[ToolCall("a", "read", {"a": 1}), ToolCall("b", "read", {"a": 2})],
+            )
+        ],
+        [READ],
+    )
+    assert _chat_messages(request, native_tools=False)[1]["content"].splitlines() == [
+        '{"tool": "read", "arguments": {"a": 1}}',
+        '{"tool": "read", "arguments": {"a": 2}}',
+    ]
 
 
 def sse(*events: str) -> Any:

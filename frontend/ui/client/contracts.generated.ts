@@ -100,6 +100,7 @@ export type Category = string | null;
  * Paging cursor
  */
 export type Before = string | null;
+export type Offset = number;
 export type Limit = number;
 export type SenderName = string | null;
 export type Id2 = number;
@@ -120,6 +121,7 @@ export type Importance = "low" | "normal" | "high";
 export type Threads = ThreadRow[];
 export type NextBefore = string | null;
 export type Categories = string[];
+export type Total3 = number;
 export type Id3 = number;
 export type Index = number;
 export type Filename = string;
@@ -493,7 +495,7 @@ export type Id13 = number;
 export type Name14 = string;
 export type Path = string;
 export type Status2 = "queued" | "running" | "paused" | "done" | "failed";
-export type Total3 = number;
+export type Total4 = number;
 export type Position = number;
 export type Imported = number;
 export type Duplicates = number;
@@ -1003,7 +1005,7 @@ export type Kind9 =
 export type Title6 = string;
 export type Status11 = string;
 export type Progress = number | null;
-export type Total4 = number | null;
+export type Total5 = number | null;
 export type Link = string | null;
 export type Label5 = string;
 export type Value5 = string;
@@ -1424,7 +1426,7 @@ export type Active2 = boolean;
 export type Kind14 = "mail" | "document";
 export type State7 = "off" | "current" | "partial" | "out_of_date";
 export type Indexed = number;
-export type Total5 = number;
+export type Total6 = number;
 export type Stale = number;
 export type Fingerprint = string;
 export type Built = string | null;
@@ -1433,7 +1435,7 @@ export type Active3 = string;
 export type Ready = boolean;
 export type Mirror = string | null;
 export type Indexed1 = number;
-export type Total6 = number;
+export type Total7 = number;
 export type Indexing = boolean;
 export type Indexes = IndexInfo[];
 export type OnThisComputer = string[];
@@ -2312,6 +2314,7 @@ export interface ListThreads {
   location?: Location;
   category?: Category;
   before?: Before;
+  offset?: Offset;
   limit?: Limit;
 }
 /**
@@ -2345,6 +2348,7 @@ export interface ThreadList {
   threads: Threads;
   next_before: NextBefore;
   categories: Categories;
+  total: Total3;
   [k: string]: unknown;
 }
 /**
@@ -2780,7 +2784,7 @@ export interface PstImport {
   name: Name14;
   path: Path;
   status: Status2;
-  total: Total3;
+  total: Total4;
   position: Position;
   imported: Imported;
   duplicates: Duplicates;
@@ -3881,7 +3885,7 @@ export interface Job {
   title: Title6;
   status: Status11;
   progress?: Progress;
-  total?: Total4;
+  total?: Total5;
   link?: Link;
   [k: string]: unknown;
 }
@@ -4745,7 +4749,7 @@ export interface IndexInfo {
   kind: Kind14;
   state: State7;
   indexed: Indexed;
-  total: Total5;
+  total: Total6;
   stale?: Stale;
   fingerprint: Fingerprint;
   build_settings: BuildSettings;
@@ -4767,7 +4771,7 @@ export interface SemanticStatus {
   ready: Ready;
   mirror?: Mirror;
   indexed?: Indexed1;
-  total?: Total6;
+  total?: Total7;
   indexing?: Indexing;
   indexes?: Indexes;
   [k: string]: unknown;

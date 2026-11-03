@@ -32,7 +32,7 @@ The app has only ever been run for real on one Mac, so these come from reading t
 
 ## POP3 and company servers
 
-POP3 and the system settings are tested against fake servers only, and haven't met the real company servers yet.
+The app has connected to the real company servers, and the first feedback came from there. Most of the automated tests still use fake servers.
 
 | Problem | What happens | How we'll solve it |
 |---|---|---|
@@ -43,6 +43,7 @@ POP3 and the system settings are tested against fake servers only, and haven't m
 | Other mail clients can clash | Servers lock a POP3 mailbox while it's open, so Outlook may fail during a check, and we wait and retry if it's the other way round | Check on the real server, and lengthen the gap if it happens |
 | A server without `UIDL` can't sync | We use it to tell which mail is new, and every modern server has it. Without it, the app keeps retrying | Say so plainly if it's ever seen |
 | A company certificate fails | Certificates are checked by default, and a private one fails with a message naming the setting | Set `NEXUSAI_MAIL_VERIFY_CERT=false` for now, then add the company's certificate |
+| Replies from the company model aren't checked yet | Tool calls written as text are now read in more forms, but this was tested with made-up replies shaped like the reported one, not the real model. Replies that still can't be read are logged as `model_reply_not_a_tool_call` | Check on the company server, and add any new form it uses |
 | Password in the clear | SMTP on port 25 without TLS sends the password unencrypted if the server asks for one | Use TLS once the servers allow it |
 | API key in a plain file | `.env` holds the model key unencrypted, though it isn't committed or passed to the agent's commands | Move it with the other secrets to the OS credential store |
 | A proxy can catch internal addresses | With `HTTP_PROXY` set, calls to the model server go through the proxy, and may fail | List the server in `NO_PROXY` for now, then bypass the proxy for private addresses |
@@ -86,6 +87,7 @@ POP3 and the system settings are tested against fake servers only, and haven't m
 
 | Problem | What happens | How we'll solve it |
 |---|---|---|
+| Mail agent judges one conversation per call | Each call repeats the instructions. On the real account it used about 5,170 input tokens per email, so reading 400 costs about 2M | Judge about 10 in a call, once `make eval-mail` shows the quality holds |
 | Reply-all on a broadcast | It still prefills everyone, which could be thousands of people | Warn above a set number of recipients, and suggest replying to the sender only |
 | Older threads keep old categories | For example, a Suki confirmation is still in Promotions and an Adobe thread in Updates | Offer a one-time pass over the person's own conversations, with the token cost shown first |
 | Suggestions list is slow | It's the slowest query behind Today, at about 0.9 seconds | Cache the sender counts and refresh them when mail changes |

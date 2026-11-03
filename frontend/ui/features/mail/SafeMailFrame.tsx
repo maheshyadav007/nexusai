@@ -15,7 +15,7 @@ function document(html: string, showRemote: boolean, hideQuotes: boolean): strin
   const body = html.replace(BLOCKED, showRemote ? ' src="$1"' : ` src="${CLEAR_PIXEL}" data-blocked-src="$1"`);
   // System colors, because mail is written for a light page whatever the app's theme. The font is
   // only for mail that doesn't choose one, and it comes first so the sender's styling wins.
-  const css = `:root{color-scheme:light}html{overflow-x:auto}body{margin:0;background:Canvas;color:CanvasText;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;overflow-wrap:anywhere}img{max-width:100%;height:auto}img[data-blocked-src]{background:color-mix(in srgb,CanvasText 10%,Canvas);min-width:16px;min-height:16px}table{max-width:100%}${hideQuotes ? "blockquote,.gmail_quote,#divRplyFwdMsg{display:none}" : ""}`;
+  const css = `:root{color-scheme:light}html{overflow-x:auto;scrollbar-width:thin;scrollbar-color:color-mix(in srgb,CanvasText 40%,Canvas) transparent}body{margin:0;background:Canvas;color:CanvasText;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;overflow-wrap:anywhere}img{max-width:100%;height:auto}img[data-blocked-src]{background:color-mix(in srgb,CanvasText 10%,Canvas);min-width:16px;min-height:16px}table{max-width:100%}${hideQuotes ? "blockquote,.gmail_quote,#divRplyFwdMsg{display:none}" : ""}`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${policy}"><base target="_blank"><style>${css}</style></head><body>${body}</body></html>`;
 }
 

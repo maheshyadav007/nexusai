@@ -25,6 +25,7 @@ class MailConfig:
     connect_timeout_seconds: float
     initial_batch: int
     backfill_batch: int
+    progress_every: int
     flag_window: int
     suggested_pull: int
     check_every_seconds: float

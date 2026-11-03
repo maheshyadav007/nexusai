@@ -10,6 +10,7 @@
     "dev": "next dev -p 4000",
     "prebuild": "npm run theme",
     "build": "next build",
+    "start": "next start -p 4000",
     "typecheck": "npm run theme && tsc --noEmit",
     "check:hardcode": "node scripts/check-no-hardcode.mjs ui app",
     "check:boundaries": "node scripts/check-boundaries.mjs ui",

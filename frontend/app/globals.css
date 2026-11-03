@@ -8,6 +8,11 @@ body {
   @apply bg-surface-page font-sans text-ink-primary antialiased;
 }
 
+* {
+  scrollbar-width: thin;
+  scrollbar-color: theme("colors.line.strong") transparent;
+}
+
 @layer components {
   .nx-progress {
     @apply block h-1 w-full appearance-none overflow-hidden rounded-full bg-surface-sunken;

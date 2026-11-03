@@ -37,6 +37,8 @@ test_instructions = "You are NexusAI's connection test. Reply briefly."
 connect_timeout_seconds = 30
 initial_batch = 200
 backfill_batch = 100
+# How many emails come down between progress updates.
+progress_every = 10
 flag_window = 500
 # How many emails the connect form suggests downloading. New mail always comes down.
 suggested_pull = 5000

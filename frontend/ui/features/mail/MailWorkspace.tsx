@@ -3,7 +3,7 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useParams, usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useGetMoreFromFolder, useMailAccounts, useMailFolders, useSearch, useThreads, type FolderRole } from "@/ui/client/mail";
+import { useGetMoreFromFolder, useMailAccounts, useMailFolders, useSearch, useThreadPages, PAGE_SIZE, type FolderRole } from "@/ui/client/mail";
 import type { IconName } from "@/ui/icons";
 import { Button } from "@/ui/primitives/Button";
 import { Dialog } from "@/ui/primitives/Dialog";
@@ -16,7 +16,8 @@ import { Composer } from "./Composer";
 import { NoAccount, SyncNotice } from "./MailList";
 import { ThreadRowView } from "./ThreadRowView";
 
-const ROW_ESTIMATE = 72;
+const ROW_ESTIMATE = 107;
+const FIRST_PAGE = [0];
 
 const FOLDERS: Readonly<Record<string, { title: StringKey; icon: IconName; empty: StringKey; role: FolderRole }>> = {
   priority: { title: "nav.priority", icon: "priority", empty: "mail.empty.priority", role: "priority" },
@@ -64,36 +65,54 @@ function FilteredList({ text, role, category, location, base, title }: { text: s
 }
 
 function ThreadList({ title, role, category, location, base, icon, empty }: { title: string; role: FolderRole; category: string | null; location: string | null; base: string; icon: IconName; empty: StringKey }) {
-  const threads = useThreads(role, category, location);
   const scroller = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
-  const rows = threads.data?.pages.flatMap((page) => page.threads) ?? [];
-  const virtual = useVirtualizer({ count: rows.length, getScrollElement: () => scroller.current, estimateSize: () => ROW_ESTIMATE, overscan: 10 });
+  const [rowHeight, setRowHeight] = useState(ROW_ESTIMATE);
+  const [first] = useThreadPages(role, category, location, FIRST_PAGE);
+  const count = first?.data?.total ?? 0;
+  const virtual = useVirtualizer({
+    count,
+    getScrollElement: () => scroller.current,
+    estimateSize: () => rowHeight,
+    overscan: 10,
+    measureElement: (element) => {
+      const height = element.getBoundingClientRect().height;
+      if (element.getAttribute("data-index") === "0" && height) setRowHeight(height);
+      return height;
+    },
+  });
   const items = virtual.getVirtualItems();
-  const last = items[items.length - 1];
-  const { hasNextPage, isFetchingNextPage, fetchNextPage } = threads;
-  useEffect(() => {
-    if (last && last.index >= rows.length - 1 && hasNextPage && !isFetchingNextPage) void fetchNextPage();
-  }, [last, rows.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
+  const wanted = [...new Set(items.map((item) => Math.floor(item.index / PAGE_SIZE)))];
+  const pages = useThreadPages(role, category, location, wanted);
+  const rowAt = (index: number) => pages[wanted.indexOf(Math.floor(index / PAGE_SIZE))]?.data?.threads[index % PAGE_SIZE];
+  // The real height is known once a row has been drawn, and the rest should expect the same.
+  useEffect(() => virtual.measure(), [rowHeight, virtual]);
   // Virtual rows are placed by live measurements, which only a style can carry.
   const total = { height: virtual.getTotalSize() };
   return (
     <>
-      {threads.isPending ? (
+      {first?.isPending ? (
         <div aria-busy className="flex flex-col gap-3 p-3">
           <Skeleton className="h-6 w-full" />
           <Skeleton className="h-6 w-full" />
         </div>
       ) : null}
-      {threads.isError ? <div className="p-3"><ErrorState title={t("mail.list.error")} onRetry={() => void threads.refetch()} /></div> : null}
-      {threads.isSuccess && rows.length === 0 ? <div className="p-3"><EmptyState icon={icon} title={t(empty)} /></div> : null}
+      {first?.isError ? <div className="p-3"><ErrorState title={t("mail.list.error")} onRetry={() => void first.refetch()} /></div> : null}
+      {first?.isSuccess && count === 0 ? <div className="p-3"><EmptyState icon={icon} title={t(empty)} /></div> : null}
       <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
         <ul aria-label={title} {...{ style: total }} className="relative w-full">
           {items.map((item) => {
-            const thread = rows[item.index];
-            if (!thread) return null;
-            const href = `${base}/${thread.id}`;
+            const thread = rowAt(item.index);
             const place = { transform: `translateY(${item.start}px)` };
+            if (!thread) {
+              return (
+                <li key={`waiting-${item.index}`} {...{ style: { ...place, height: item.size } }} className="absolute left-0 top-0 flex w-full flex-col justify-center gap-2 border-b border-line-subtle p-3">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-full" />
+                </li>
+              );
+            }
+            const href = `${base}/${thread.id}`;
             return (
               <li key={thread.id} data-index={item.index} ref={virtual.measureElement} {...{ style: place }} data-testid="thread-row" className="absolute left-0 top-0 w-full">
                 <ThreadRowView thread={thread} href={href} active={pathname === href} />

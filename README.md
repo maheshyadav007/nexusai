@@ -18,7 +18,8 @@ Needs [`uv`](https://docs.astral.sh/uv/) and Node 22.
 
 ```sh
 make setup
-make dev      # then open http://127.0.0.1:4000
+make start    # for using the app, then open http://127.0.0.1:4000
+make dev      # for working on the code. Pages compile as they're opened, so clicks are slower
 make check    # lint, types, boundaries, no-hardcoding, tests
 ```
 
@@ -26,7 +27,7 @@ On Windows, which usually has no `make`, install [uv](https://docs.astral.sh/uv/
 
 ```sh
 node scripts/dev.mjs setup
-node scripts/dev.mjs       # then open http://127.0.0.1:4000
+node scripts/dev.mjs start # then open http://127.0.0.1:4000
 ```
 
 ### Company install
