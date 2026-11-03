@@ -17,9 +17,9 @@ import { PageHeader } from "@/ui/primitives/PageHeader";
 import { Select } from "@/ui/primitives/Select";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { Switch } from "@/ui/primitives/Switch";
-import { TextLink } from "@/ui/primitives/TextLink";
 import { Pipelines } from "@/ui/features/cockpit/Pipelines";
 import { TriggersCard } from "./TriggersCard";
+import { SessionLink } from "@/ui/features/assistant/SessionLink";
 import { t } from "@/ui/strings";
 
 const EVERY = [
@@ -123,7 +123,7 @@ function ScheduleItem({ row }: { row: ScheduleRow }) {
         }
         aside={
           <span className="flex shrink-0 items-center gap-2">
-            {row.last_session ? <TextLink className="text-sm" href={`/agent/sessions/${row.last_session}`}>{t("schedules.lastRun")}</TextLink> : null}
+            {row.last_session ? <SessionLink className="text-sm" session={row.last_session}>{t("schedules.lastRun")}</SessionLink> : null}
             <Button variant="quiet" loading={run.isPending} onClick={() => row.id != null && run.mutate(row.id)}>{t("schedules.runNow")}</Button>
             <Switch label={t("rules.enabled")} hideLabel checked={row.enabled ?? true} onChange={(enabled) => save.mutate({ id: row.id ?? null, title: row.title, prompt: row.prompt ?? "", kind: row.kind ?? "prompt", every: row.every ?? "day", time: row.time ?? HOURS_NOT_SET, weekday: row.weekday ?? 0, date: row.date ?? null, enabled, token_limit: row.token_limit ?? 0 })} />
           </span>

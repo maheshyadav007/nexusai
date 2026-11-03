@@ -11,7 +11,7 @@ import { PageHeader } from "@/ui/primitives/PageHeader";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { StatusDot } from "@/ui/primitives/StatusDot";
 import { Tabs } from "@/ui/primitives/Tabs";
-import { TextLink } from "@/ui/primitives/TextLink";
+import { SessionLink } from "@/ui/features/assistant/SessionLink";
 import { t, type StringKey } from "@/ui/strings";
 
 export function ActivityScreen() {
@@ -63,7 +63,7 @@ function AgentCard({ agent }: { agent: AgentEntry }) {
       <p className="flex flex-wrap items-center gap-2 text-sm tabular-nums text-ink-muted">
         {agent.last_run ? t("agents.last", { when: relative(agent.last_run) }) : agent.state === "finished" ? null : t("agents.never")}
         {agent.tokens ? <span>· {t("agents.tokens", { count: agent.tokens.toLocaleString() })}</span> : null}
-        {agent.session ? <TextLink className="text-sm" href={`/agent/sessions/${agent.session}`}>{t("agents.open")}</TextLink> : null}
+        {agent.session ? <SessionLink className="text-sm" session={agent.session}>{t("agents.open")}</SessionLink> : null}
       </p>
     </li>
   );

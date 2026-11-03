@@ -349,6 +349,7 @@ class SessionChat(BaseModel):
     text: str = Field(min_length=1, max_length=200000)
     # Asks the latest message again, keeping the answer it already has.
     retry: bool = False
+    acknowledge_managed: bool = False
 
 
 MemoryLevel = Literal["user", "agent"]

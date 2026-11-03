@@ -25,3 +25,11 @@ Run frontend types, theme, boundary and hardcoding checks; backend checks and fo
 - Backend formatting, lint, types and dependency boundaries passed. Full regression run: 773 passed, 1 skipped; one legacy connector test still sent a manual message into the now-protected Mail chat. Updated it to dispatch an internal Mail run and verified it passes. Nine managed-chat tests also pass, including explicit questions and approvals.
 - Isolated Home with a fake model: checked Settings horizontal group dividers, Email connection drill-in, quiet task rows and completion, attached/full chat and draft preservation, New chat reset, email-click minimization (including the selected email), explicit reopening while reading, protected Mail chat, and Cockpit at full and narrowed widths.
 - Pending brief and Inbox review fixes remain marked for confirmation on real scheduled runs. The default hourly schedule already worked; a new-Home regression test now covers it.
+
+## Follow-up refinements, 2026-11-04
+
+- Managed chats now show a grey, locked composer and a short warning. Still proceed explicitly unlocks new messages for that chat in the current browser session; Lock input reverses this. Each request carries acknowledgement. Retry/version changes and other history-editing controls remain protected. Questions and approvals stay available.
+- Session rows and agent conversation actions open the right panel. Ordinary deep links resolve there too. Full page is entered through the panel’s expand control and preserves the current conversation/draft. The panel grew from 440 px to 480 px, capped at the viewport width. Today now also stacks its columns when the panel leaves less room.
+- Documents uses one aligned file list with search, a folder filter and a separate folder-management dialog. File metadata sits below each name.
+- Finished email summaries and morning briefs retain a thin static AI-colored outline with an inset title; generation keeps its separate animation.
+- Verified the locked/acknowledged composer, panel/full transitions, deep-link entry, Documents and folder dialog, summary styling in an isolated Home. 66 chat/backend regression tests and 19 frontend unit tests passed, along with frontend types, theme, boundaries and hardcoding checks.

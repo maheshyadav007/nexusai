@@ -534,7 +534,9 @@ def create_app(config: Config | None = None) -> FastAPI:
             return _error(409, "home.not_ready", "Choose a NexusAI Home first.")
         try:
             sessions = agent.current()
-            turn = await asyncio.to_thread(sessions.send, body.id, body.text, body.retry)
+            turn = await asyncio.to_thread(
+                sessions.send, body.id, body.text, body.retry, body.acknowledge_managed
+            )
         except CommandError as error:
             return _error(error.status, error.code, error.message)
         stream = sessions.stream_turn(turn, request.is_disconnected)

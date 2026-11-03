@@ -29,7 +29,7 @@ import { Sortable } from "@/ui/primitives/Sortable";
 import { StatusDot } from "@/ui/primitives/StatusDot";
 import { TextLink } from "@/ui/primitives/TextLink";
 import { useToast } from "@/ui/primitives/Toast";
-import { t, type StringKey } from "@/ui/strings";
+import { t, tn, type StringKey } from "@/ui/strings";
 import { HomeFolderView } from "./HomeFolderView";
 
 export type DocumentView = "all" | "uploaded" | "from-email" | "home";
@@ -148,7 +148,7 @@ function Folders({ folders, current, onChoose }: { folders: readonly string[]; c
     </Pressable>
   );
   return (
-    <nav aria-label={t("documents.folders")} className="flex w-sidebar shrink-0 flex-col gap-2">
+    <nav aria-label={t("documents.folders")} className="flex min-w-0 flex-col gap-3">
       {row(ALL_FOLDERS, t("documents.allFolders"))}
       <Sortable label={t("documents.folders")} items={folders.map((folder) => ({ id: folder, label: folder, content: row(folder, folder) }))} onReorder={(ids) => save.mutate(ids)} />
       <form
@@ -196,17 +196,21 @@ function LibraryRow({ document, list, onOpen, format }: { document: DocumentRow;
   return (
     <li>
       <ContextMenu items={actions}>
-        <Pressable data-testid="document-row" onClick={onOpen} className="focus-ring flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors duration-fast hover:bg-surface-sunken">
+        <Pressable data-testid="document-row" onClick={onOpen} className="focus-ring flex w-full items-center gap-3 border-b border-line-subtle px-2 py-3 text-left transition-colors duration-fast hover:bg-surface-sunken/40">
           <Icon name={document.source === "email" ? "fromEmail" : document.source === "home" ? "agent" : "documents"} className="h-4 w-4 shrink-0 text-ink-muted" />
-          <span className="min-w-0 flex-1 truncate text-md text-ink-primary">{document.name}</span>
-          {document.risky ? <Badge tone="danger">{t("documents.riskyBadge")}</Badge> : <StatusBadge status={document.status} />}
-          {document.place ? <span data-testid="document-place"><Badge>{document.place}</Badge></span> : null}
-          {document.folder ? <Badge>{document.folder}</Badge> : null}
-          {(document.tags ?? []).map((tag) => (
-            <Badge key={tag}>{tag}</Badge>
-          ))}
-          <span className="shrink-0 text-sm tabular-nums text-ink-muted">{sizeOf(document.size)}</span>
-          <span className="shrink-0 text-sm tabular-nums text-ink-muted">{format(document.date)}</span>
+          <span className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className="truncate text-md text-ink-primary">{document.name}</span>
+            <span className="flex flex-wrap items-center gap-2 text-sm text-ink-muted">
+              <span>{sizeOf(document.size)}</span>
+              {document.place ? <span data-testid="document-place">{document.place}</span> : null}
+              {document.folder ? <span className="flex items-center gap-1"><Icon name="folder" className="h-3 w-3" />{document.folder}</span> : null}
+              {(document.tags ?? []).map((tag) => <span key={tag}>{tag}</span>)}
+            </span>
+          </span>
+          <span className="flex shrink-0 flex-col items-end gap-1">
+            {document.risky ? <Badge tone="danger">{t("documents.riskyBadge")}</Badge> : <StatusBadge status={document.status} />}
+            <span className="text-sm tabular-nums text-ink-muted">{format(document.date)}</span>
+          </span>
         </Pressable>
       </ContextMenu>
     </li>
@@ -230,19 +234,23 @@ function Library({ view }: { view: Exclude<DocumentView, "home"> }) {
         <ViewFilter view={view} />
       </div>
       {view !== "from-email" ? <UploadZone /> : null}
-      <div className="flex items-start gap-6">
-        <Folders folders={folders} current={folder} onChoose={setFolder} />
-        <div className="flex min-w-0 flex-1 flex-col gap-3">
-          {query.trim() ? <MeaningNotice /> : null}
-          <Input aria-label={t("documents.search")} placeholder={t("documents.search")} value={query} onChange={(event) => setQuery(event.target.value)} />
+      <section aria-label={t(config.title)} className="flex min-w-0 flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-3 border-b border-line-subtle pb-4">
+          <div className="min-w-0 flex-1"><Input aria-label={t("documents.search")} placeholder={t("documents.search")} value={query} onChange={(event) => setQuery(event.target.value)} /></div>
+          <Select quiet label={t("documents.folders")} value={folder} options={[{ value: ALL_FOLDERS, label: t("documents.allFolders") }, ...folders.map((name) => ({ value: name, label: name }))]} onChange={setFolder} />
+          <Dialog title={t("documents.manageFolders")} trigger={<Button variant="quiet"><Icon name="folder" className="h-3 w-3" />{t("documents.manageFolders")}</Button>}>
+            <Folders folders={folders} current={folder} onChoose={setFolder} />
+          </Dialog>
+        </div>
+        <div className="flex items-baseline justify-between gap-3"><h2 className="text-md font-medium text-ink-primary">{folder === ALL_FOLDERS ? t("documents.allFiles") : folder}</h2>{library.isSuccess ? <p className="text-sm tabular-nums text-ink-muted">{tn("documents.fileCount", documents.length)}</p> : null}</div>
+        {query.trim() ? <MeaningNotice /> : null}
           {library.isPending ? <Skeleton className="h-6 w-full" /> : null}
           {library.isError ? <ErrorState title={t("documents.error")} onRetry={() => void library.refetch()} /> : null}
           {library.isSuccess && documents.length === 0 ? <EmptyState icon="documents" title={t(query ? "documents.none" : "documents.empty")} /> : null}
           <ul aria-label={t(config.title)} className="flex flex-col gap-px">
             {documents.map((document) => <LibraryRow key={document.key} document={document} list={list} onOpen={() => preview.show({ key: document.key }, list)} format={format} />)}
           </ul>
-        </div>
-      </div>
+      </section>
     </div>
   );
 }

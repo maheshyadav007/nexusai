@@ -399,9 +399,9 @@ function MorningBrief() {
     if (next === "down") setTelling(true);
   };
   return (
-    <section aria-label={t("today.prep")} data-testid="morning-brief" className="ai-surface flex flex-col gap-3 rounded-lg p-5">
+    <fieldset aria-label={t("today.prep")} data-testid="morning-brief" className="ai-result flex min-w-0 flex-col gap-3 rounded-lg p-5">
+      <legend className="px-2 text-sm font-medium text-ink-secondary">{t("today.prep")}</legend>
       <header className="flex items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-lg font-medium text-ink-primary"><Icon name="thinking" className="h-4 w-4 text-accent-default" />{t("today.prep")}</h2>
         {data.prep_at ? <span className="text-sm tabular-nums text-ink-muted">{t("today.brief.when", { when: format(data.prep_at) })}</span> : null}
       </header>
       <div data-testid="today-prep" className="text-md text-ink-primary"><Markdown text={data.prep_text} /></div>
@@ -424,7 +424,7 @@ function MorningBrief() {
           <div><Button type="submit" thinking loading={react.isPending} disabled={!comment.trim() || comment.trim() === said}>{t("today.brief.send")}</Button></div>
         </form>
       ) : said ? <p data-testid="brief-said" className="text-sm text-ink-secondary">{said}</p> : null}
-    </section>
+    </fieldset>
   );
 }
 
@@ -539,7 +539,7 @@ export function TodayScreen() {
   const cockpit = useCockpit();
   const due = today.data?.due ?? [];
   return (
-    <div className="mx-auto flex max-w-page flex-col gap-6 p-6">
+    <div className="today-container mx-auto flex max-w-page flex-col gap-6 p-6">
       <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div className="flex min-w-0 flex-col gap-1">
           <h1 className="font-serif text-display text-ink-primary">{greeting}</h1>
@@ -557,8 +557,8 @@ export function TodayScreen() {
       {today.isError ? <ErrorState title={t("today.error")} onRetry={() => void today.refetch()} /> : null}
       {today.isPending ? <Skeleton className="h-6 w-full" /> : null}
       {today.data && noMail ? <EmptyState icon="today" title={t("today.empty.title")} description={t("today.empty.description")} action={<TextLink href="/connectors">{t("mail.noAccount.action")}</TextLink>} /> : null}
-      <div className="grid items-start gap-6 lg:grid-cols-3">
-        <div className="flex min-w-0 flex-col gap-6 lg:col-span-2">
+      <div className="today-columns grid items-start gap-6">
+        <div className="flex min-w-0 flex-col gap-6">
           <WaitingOnYou />
           {today.data && !noMail ? <ThreadList id="today-important" icon="priority" title={t("today.importantMail")} hint={t("today.important.hint")} urgent threads={today.data.needs_you} empty={t("today.needsYou.empty")} /> : null}
           {today.data?.follow_ups?.length ? <ThreadList chase icon="followUp" title={t("today.followUps")} threads={today.data.follow_ups} empty="" /> : null}

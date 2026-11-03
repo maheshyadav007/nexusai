@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useRef } from "react";
+import { useAssistant } from "@/ui/features/assistant/AssistantProvider";
 import { isManagedSession, useSession } from "@/ui/client/sessions";
 import { CompactAction, FinalPrompt } from "@/ui/features/assistant/ChatView";
 import { ChatViewActions } from "@/ui/features/assistant/ChatViewActions";
@@ -10,7 +13,24 @@ import { StatusDot } from "@/ui/primitives/StatusDot";
 import { t } from "@/ui/strings";
 import { SESSION_STATES } from "./SessionsScreen";
 
+export function PanelEntry({ id }: { id: string | null }) {
+  const assistant = useAssistant();
+  const opened = useRef(false);
+  useEffect(() => {
+    if (opened.current || !assistant.ready) return;
+    opened.current = true;
+    if (id) assistant.openSession(id);
+    else assistant.openDraft();
+  }, [assistant, id]);
+  return null;
+}
+
 export function AgentScreen({ id }: { id: string }) {
+  const full = useSearchParams().get("view") === "full";
+  return full ? <FullAgentScreen id={id} /> : <PanelEntry id={id} />;
+}
+
+function FullAgentScreen({ id }: { id: string }) {
   const session = useSession(id);
   const row = session.data?.session;
   const state = row ? SESSION_STATES[row.status] : undefined;

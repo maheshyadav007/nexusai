@@ -22,6 +22,7 @@ const READING = /^\/(mail\/.+|search)\/\d+$/;
 interface Assistant {
   /** Whether it's on screen right now. */
   open: boolean;
+  ready: boolean;
   /** Tucked away to the edge, ready to come out, because what's open needs the room. */
   tucked: boolean;
   /** Out from the edge for now, and goes back when the person's done. */
@@ -133,7 +134,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
             setSession(row.id);
             if (pathname.startsWith("/agent/sessions/")) {
               setOpen(false);
-              router.replace(`/agent/sessions/${row.id}`);
+              router.replace(`/agent/sessions/${row.id}?view=full`);
             }
             setStarting(false);
             startLock.current = false;
@@ -151,6 +152,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const value = useMemo<Assistant>(
     () => ({
       open,
+      ready: restored,
       tucked: false,
       peeking: false,
       setNeedsRoom,
@@ -165,12 +167,12 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       setOpen,
       setPinned: () => undefined,
       openSession: (id) => {
-        if (pathname.startsWith("/agent/sessions/")) keepOpen.current = true;
+        if (pathname.startsWith("/agent/sessions/")) { keepOpen.current = true; router.push(returnTo); }
         setSession(id);
         setOpen(true);
       },
       openDraft: () => {
-        if (pathname.startsWith("/agent/sessions/")) keepOpen.current = true;
+        if (pathname.startsWith("/agent/sessions/")) { keepOpen.current = true; router.push(returnTo); }
         setSession(null);
         setOpen(true);
       },
@@ -183,7 +185,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       },
       start,
     }),
-    [open, setOpen, setNeedsRoom, pinned, returnTo, draftRevision, pathname, session, starting, startingTitle, startingText, startError, start],
+    [open, restored, setOpen, setNeedsRoom, pinned, returnTo, draftRevision, pathname, router, session, starting, startingTitle, startingText, startError, start],
   );
   return <AssistantContext value={value}>{children}</AssistantContext>;
 }

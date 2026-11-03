@@ -1508,5 +1508,14 @@
   "chat.managed.badge": "Agent chat",
   "cockpit.attentionCount.one": "{count} needs attention",
   "cockpit.attentionCount.other": "{count} need attention",
-  "cockpit.repeats": "Repeated {count} times"
+  "cockpit.repeats": "Repeated {count} times",
+  "chat.managed.warning": "This chat is used by an agent. Sending messages here can affect its future runs.",
+  "chat.managed.unlocked": "Messaging unlocked. Your messages will become part of this agent’s history.",
+  "chat.managed.proceed": "Still proceed",
+  "chat.managed.lock": "Lock input",
+  "documents.manageFolders": "Manage folders",
+  "documents.allFiles": "Files",
+  "chat.managed.placeholder": "Agent chat locked",
+  "documents.fileCount.one": "{count} file",
+  "documents.fileCount.other": "{count} files"
 }

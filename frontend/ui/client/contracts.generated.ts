@@ -907,6 +907,7 @@ export type Id29 = number;
 export type Id30 = string;
 export type Text3 = string;
 export type Retry = boolean;
+export type AcknowledgeManaged = boolean;
 export type Path8 = string;
 export type Level2 = "user" | "agent";
 export type Agent4 = string | null;
@@ -3630,6 +3631,7 @@ export interface SessionChat {
   id: Id30;
   text: Text3;
   retry?: Retry;
+  acknowledge_managed?: AcknowledgeManaged;
   [k: string]: unknown;
 }
 /**

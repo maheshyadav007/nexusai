@@ -13,7 +13,7 @@ import { Input, Textarea } from "@/ui/primitives/Input";
 import { Select } from "@/ui/primitives/Select";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { Switch } from "@/ui/primitives/Switch";
-import { TextLink } from "@/ui/primitives/TextLink";
+import { SessionLink } from "@/ui/features/assistant/SessionLink";
 import { t } from "@/ui/strings";
 
 const MEMORY_DEFAULT = "default";
@@ -96,7 +96,7 @@ function TriggerRow({ trigger, label }: { trigger: Trigger; label: string }) {
         meta={label}
         aside={
           <span className="flex shrink-0 items-center gap-2">
-            {trigger.session ? <TextLink className="text-sm" href={`/agent/sessions/${trigger.session}`}>{t("triggers.chat")}</TextLink> : null}
+            {trigger.session ? <SessionLink className="text-sm" session={trigger.session}>{t("triggers.chat")}</SessionLink> : null}
             <Switch label={t("rules.enabled")} hideLabel checked={trigger.enabled ?? true} onChange={toggle} />
           </span>
         }

@@ -279,6 +279,7 @@ export function FinalPrompt({ session }: { session: string }) {
 
 /** The one conversation view: the dock, the session page and setup all use it. */
 export function ChatView({ id, initial, active, footer }: { id: string; initial: UIMessage[]; active: boolean; footer?: React.ReactNode }) {
+  const [acknowledged, setAcknowledged] = useChatDraft(`managed-warning:${id}`, false);
   const transport = useMemo(
     () =>
       new DefaultChatTransport<UIMessage>({
@@ -287,10 +288,10 @@ export function ChatView({ id, initial, active, footer }: { id: string; initial:
         prepareSendMessagesRequest: ({ messages, trigger }) => {
           const last = messages[messages.length - 1];
           const text = last?.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n") ?? "";
-          return { body: { id, text, ...(trigger === "regenerate-message" ? { retry: true } : {}) } };
+          return { body: { id, text, acknowledge_managed: acknowledged, ...(trigger === "regenerate-message" ? { retry: true } : {}) } };
         },
       }),
-    [id],
+    [id, acknowledged],
   );
   const chat = useChat({ id, transport, messages: initial, resume: active });
   const { sendMessage, setMessages, regenerate, resumeStream, messages, status } = chat;
@@ -368,7 +369,7 @@ export function ChatView({ id, initial, active, footer }: { id: string; initial:
       setText("");
       return;
     }
-    if (managed || working || reading.size) return;
+    if ((managed && !acknowledged) || working || reading.size) return;
     say(words);
     following.current = true;
     setText("");
@@ -441,21 +442,25 @@ export function ChatView({ id, initial, active, footer }: { id: string; initial:
       <div className="flex flex-col gap-2 p-3">
           {!managed ? <AttachedChips items={attached} reading={reading} onRemove={(ref) => setContext.mutate({ id, context: attached.filter((item) => item.ref !== ref).map((item) => item.ref) })} /> : null}
         {chat.error ? <ErrorState title={t("sessions.failed")} description={chat.error.message} /> : null}
-          {!managed || asking ? <Composer
+          <div className={managed && !acknowledged && !asking ? "opacity-50" : ""}><Composer
             value={text}
             onChange={setText}
             onSubmit={submit}
             busy={working && !asking}
             onStop={() => stop.mutate(id)}
             stopping={stop.isPending}
-            disabled={deciding && !asking}
+            disabled={(managed && !acknowledged && !asking) || (deciding && !asking)}
             holdSend={reading.size > 0}
-            placeholder={t(asking ? "chat.placeholder.answer" : deciding ? "chat.placeholder.decide" : "sessions.prompt.placeholder")}
+            placeholder={t(asking ? "chat.placeholder.answer" : managed && !acknowledged ? "chat.managed.placeholder" : deciding ? "chat.placeholder.decide" : "sessions.prompt.placeholder")}
             label={t("sessions.prompt")}
             inputRef={editor}
-            leading={!managed ? <AttachMenu onAttach={attach} /> : null}
+            leading={!managed ? <AttachMenu onAttach={attach} /> : !acknowledged && !asking ? <Icon name="lockedChat" className="h-4 w-4 text-ink-muted" /> : null}
             trailing={!managed ? <ModelPicker value={session.data?.session.model ?? null} onChange={(model) => setModel.mutate({ id, model })} /> : null}
-          /> : null}
+          /></div>
+          {managed && !asking ? <div data-testid="managed-chat-notice" className="flex items-start justify-between gap-3 px-1">
+            <p className="text-sm text-ink-muted">{t(acknowledged ? "chat.managed.unlocked" : "chat.managed.warning")}</p>
+            <Button variant="quiet" className="shrink-0 py-px" onClick={() => { setAcknowledged(!acknowledged); if (!acknowledged) requestAnimationFrame(() => editor.current?.focus()); }}>{t(acknowledged ? "chat.managed.lock" : "chat.managed.proceed")}</Button>
+          </div> : null}
           {footer}
       </div>
     </div>

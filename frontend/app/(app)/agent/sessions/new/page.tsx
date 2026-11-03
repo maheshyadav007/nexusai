@@ -1,5 +1,6 @@
+import { Suspense } from "react";
 import { NewSessionScreen } from "@/ui/features/sessions/NewSessionScreen";
 
 export default function Page() {
-  return <NewSessionScreen />;
+  return <Suspense fallback={null}><NewSessionScreen /></Suspense>;
 }

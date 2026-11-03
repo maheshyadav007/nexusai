@@ -339,7 +339,7 @@ class SessionRuntime:
         return rows[0] if rows else None
 
     def require_personal(self, session: str) -> SessionRow:
-        """Managed histories only change through their triggers, questions and approvals."""
+        """History-changing controls are reserved for personal chats."""
         row = self.row(session)
         if row.agent != "session":
             raise CommandError(
@@ -349,8 +349,12 @@ class SessionRuntime:
             )
         return row
 
-    def send(self, session: str, text: str, retry: bool = False) -> int:
-        self.require_personal(session)
+    def send(
+        self, session: str, text: str, retry: bool = False, acknowledge_managed: bool = False
+    ) -> int:
+        # Acknowledging the composer warning allows a new message, never rewriting a run.
+        if retry or not acknowledge_managed:
+            self.require_personal(session)
         return self.dispatch(TurnRequest(session, text), retry)
 
     def dispatch(self, request: TurnRequest, retry: bool = False) -> int:

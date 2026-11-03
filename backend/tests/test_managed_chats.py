@@ -156,3 +156,29 @@ def test_managed_chat_can_approve_an_explicit_action(client: TestClient, script:
     assert (
         run.ctx.config.home / "prompts" / "personal" / "about-me.md"
     ).read_text() == "I work in design."
+
+
+@pytest.mark.parametrize("agent", ["mail", "daily-prep", "scheduled", "interview"])
+def test_warning_acknowledgement_allows_new_messages_but_never_rewrites(
+    client: TestClient, agent: str
+) -> None:
+    run = current()
+    session = run.create("Managed", [], agent).id
+    response = client.post(
+        "/api/sessions/chat",
+        json={
+            "id": session,
+            "text": "I understand this affects future runs.",
+            "acknowledge_managed": True,
+        },
+    )
+    assert response.status_code == 200
+    wait(lambda: run.row(session).status == "done", "acknowledged message")
+    assert "I understand this affects future runs." in str(run.view(session).messages)
+    before = run.view(session).model_dump()
+    for extra in ({}, {"acknowledge_managed": True, "retry": True}):
+        response = client.post(
+            "/api/sessions/chat", json={"id": session, "text": "Change it", **extra}
+        )
+        assert response.status_code == 409
+    assert run.view(session).model_dump() == before

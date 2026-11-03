@@ -115,9 +115,12 @@ function SummaryBlock({ id, pending, phase, error, retry }: { id: number; pendin
   const data = summary.data;
   if (!data?.text && !pending && !error) return null;
   return (
-    <section aria-label={t("summary.title")}>
+    <section aria-label={t("summary.title")} className="flex flex-col gap-2">
       {pending ? <GenerationSurface phase={phase} label={t("generation.summary")} placeholder={!data?.text} /> : null}
-      {data?.text ? <p data-testid="summary-text" className="whitespace-pre-wrap rounded-md bg-surface-sunken p-3 text-md text-ink-primary">{data.text}</p> : null}
+      {data?.text ? <fieldset data-testid="summary-result" className="ai-result min-w-0 rounded-md px-4 pb-3">
+        <legend className="px-2 text-sm font-medium text-ink-secondary">{t("summary.title")}</legend>
+        <p data-testid="summary-text" className="whitespace-pre-wrap text-md text-ink-primary">{data.text}</p>
+      </fieldset> : null}
       {error ? <ErrorState title={t("generation.summaryFailed")} description={error} onRetry={retry} /> : null}
       {data?.text && data.new_messages ? <p className="text-sm text-ink-secondary">{tn("summary.new", data.new_messages)}</p> : null}
     </section>

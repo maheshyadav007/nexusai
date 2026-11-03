@@ -250,3 +250,18 @@ svg.lucide {
   .cockpit-columns { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
   .cockpit-aside { @apply border-l border-t-0 pl-5 pt-0; }
 }
+
+/* A finished AI result keeps a quiet, static identity. Only generation animates. */
+.ai-result {
+  border: 1px solid transparent;
+  box-shadow: 0 0 0 1px theme(colors.ai.three / 10%), 0 0 10px theme(colors.ai.two / 7%);
+  background:
+    linear-gradient(theme(colors.surface.page), theme(colors.surface.page)) padding-box,
+    linear-gradient(110deg, theme(colors.ai.one / 45%), theme(colors.ai.two / 45%), theme(colors.ai.three / 45%), theme(colors.ai.four / 45%)) border-box;
+}
+.ai-result legend { background: theme(colors.surface.page); color: theme(colors.ink.secondary); }
+
+.today-container { container: today / inline-size; }
+@container today (min-width: 48rem) {
+  .today-columns { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+}

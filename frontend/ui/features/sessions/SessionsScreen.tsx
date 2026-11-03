@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useDateTime } from "@/ui/client/format";
-import { isManagedSession, useArchiveSession, useCreateSession, useSessions } from "@/ui/client/sessions";
+import { isManagedSession, useArchiveSession, useSessions } from "@/ui/client/sessions";
+import { useAssistant } from "@/ui/features/assistant/AssistantProvider";
+import { Pressable } from "@/ui/primitives/Pressable";
 import { Button } from "@/ui/primitives/Button";
 import { ContextMenu } from "@/ui/primitives/ContextMenu";
 import { EmptyState } from "@/ui/primitives/EmptyState";
@@ -26,7 +26,7 @@ export const SESSION_STATES: Readonly<Record<string, { label: StringKey; tone: "
 
 function SessionGroup({ title, rows }: { title: string; rows: readonly SessionRow[] }) {
   const format = useDateTime();
-  const router = useRouter();
+  const assistant = useAssistant();
   const archive = useArchiveSession();
   return (
     <section aria-label={title || t("nav.sessions")} className="flex flex-col gap-1">
@@ -37,14 +37,14 @@ function SessionGroup({ title, rows }: { title: string; rows: readonly SessionRo
           const waiting = session.status === "waiting";
           return (
             <li key={session.id} className="border-b border-line-subtle">
-              <ContextMenu items={[{ id: "open", label: t("menu.open"), onSelect: () => router.push(`/agent/sessions/${session.id}`) }, ...(!isManagedSession(session) ? [{ id: "archive", label: t("menu.archive"), icon: "archive" as const, onSelect: () => archive.mutate(session.id) }] : [])]}>
-              <Link href={`/agent/sessions/${session.id}`} data-testid="session-row" className="focus-ring flex items-center gap-3 px-2 py-2 transition-colors duration-fast hover:bg-surface-raised">
+              <ContextMenu items={[{ id: "open", label: t("menu.open"), onSelect: () => assistant.openSession(session.id) }, ...(!isManagedSession(session) ? [{ id: "archive", label: t("menu.archive"), icon: "archive" as const, onSelect: () => archive.mutate(session.id) }] : [])]}>
+              <Pressable onClick={() => assistant.openSession(session.id)} data-testid="session-row" className="focus-ring flex w-full items-center gap-3 px-2 py-2 text-left transition-colors duration-fast hover:bg-surface-raised">
                 <StatusDot tone={state.tone} />
                 <span className="min-w-0 flex-1 truncate text-md text-ink-primary">{session.title}</span>
                 {isManagedSession(session) ? <span className="shrink-0 text-sm text-ink-muted">{t("chat.managed.badge")}</span> : null}
                 <span className={`shrink-0 text-sm ${waiting ? "font-medium text-accent-default" : "text-ink-muted"}`}>{t(state.label)}</span>
                 <span className="shrink-0 text-sm tabular-nums text-ink-muted">{format(session.updated)}</span>
-              </Link>
+              </Pressable>
               </ContextMenu>
             </li>
           );
@@ -55,10 +55,9 @@ function SessionGroup({ title, rows }: { title: string; rows: readonly SessionRo
 }
 
 export function SessionsScreen() {
-  const router = useRouter();
+  const assistant = useAssistant();
   const [search, setSearch] = useState("");
   const sessions = useSessions(search);
-  const create = useCreateSession();
   const rows = sessions.data?.sessions ?? [];
   const waiting = rows.filter((row) => row.status === "waiting");
   const others = rows.filter((row) => row.status !== "waiting");
@@ -66,7 +65,7 @@ export function SessionsScreen() {
     <div className="mx-auto flex max-w-content flex-col gap-4 p-6">
       <header className="flex items-center justify-between gap-3">
         <h1 className="font-serif text-display text-ink-primary">{t("nav.sessions")}</h1>
-        <Button variant="primary" loading={create.isPending} onClick={() => create.mutate({}, { onSuccess: (session) => router.push(`/agent/sessions/${session.id}`) })}>
+        <Button variant="primary" onClick={assistant.newChat}>
           {t("sessions.new")}
         </Button>
       </header>
