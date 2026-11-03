@@ -4,6 +4,22 @@ from pydantic import BaseModel, ConfigDict, Field
 
 GuardAction = Literal["mask", "block"]
 
+GenerationPhase = Literal["idle", "queued", "generating", "done", "failed", "stopped"]
+
+
+class GetGeneration(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    trace_id: str | None = Field(default=None, max_length=128)
+    session: str | None = Field(default=None, max_length=64)
+
+
+class GenerationState(BaseModel):
+    call_id: int = 0
+    trace_id: str | None = None
+    session: str | None = None
+    phase: GenerationPhase = "idle"
+
 
 class GuardRule(BaseModel):
     model_config = ConfigDict(extra="forbid")

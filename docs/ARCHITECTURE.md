@@ -347,3 +347,9 @@ A daily schedule writes the brief from what's on the person's plate, and it show
 
 Prompts can only change from a session that read mail if the person approves the exact words, and that approval can't extend to the rest of the session.
 
+
+## AI generation feedback
+
+System preparation uses neutral spinners and skeletons. AI identity rims stay still. The model gateway records and emits `generation.changed` for queued, generating and terminal phases, scoped to the request trace and session. Only generating moves the coloured light across an output surface; rate-limit waits keep a static rim. `generation.get` supplies a snapshot when a view opens or reconnects, and startup clears interrupted calls.
+
+Summaries reserve their output card immediately, draft replies prepare an editable recipient/subject form before calling the model, and Ask agent opens its neutral shell before session loading completes. Chat, compaction, schedules and Mail agent views use the same generation state. Cached replies and opening a chat alone never show generation. Reduced motion keeps the status text and static colours without the moving light.

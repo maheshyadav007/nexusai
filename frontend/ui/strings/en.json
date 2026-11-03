@@ -1460,5 +1460,19 @@
   "home.picker.goTo": "Type a path and press Enter",
   "home.picker.new": "New folder",
   "home.picker.newName": "Folder name",
-  "home.picker.create": "Create"
+  "home.picker.create": "Create",
+  "generation.preparing": "Preparing…",
+  "generation.queued": "Waiting for model…",
+  "generation.summary": "Writing summary…",
+  "generation.reply": "Writing reply…",
+  "generation.answer": "Generating response…",
+  "generation.compact": "Compacting conversation…",
+  "generation.opening": "Opening conversation…",
+  "generation.summaryFailed": "Couldn’t write the summary.",
+  "generation.replyFailed": "Couldn’t write the reply.",
+  "generation.failed": "Couldn’t finish. Try again.",
+  "generation.ready": "Ready to continue.",
+  "generation.runQueued": "Queued to run…",
+  "generation.tools": "Working on your request…",
+  "gallery.generation": "System loading and AI generation"
 }

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ApiRequestError } from "@/ui/client/api";
 import type { ContextProfile, ContextSettings, MailAgentSettings } from "@/ui/client/contracts.generated";
 import { useContextSettings, useMailAgent, useRunMailAgent, useSaveContextSettings, useSaveMailAgent } from "@/ui/client/work";
+import { SessionGeneration } from "@/ui/features/agent/SessionGeneration";
 import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
 import { Input } from "@/ui/primitives/Input";
@@ -62,6 +63,7 @@ export function MailAgentCard() {
         {settings.data ? <Select label={t("agentRuns.mail.when")} value={settings.data.mode ?? "both"} options={options} onChange={(mode) => save.mutate({ mode: mode as Mode })} /> : <Skeleton className="h-6 w-full" />}
       </SettingRow>
       <LearnEmails />
+      <SessionGeneration session="mail-agent" />
       <div className="mt-3">
         <Button
           loading={run.isPending}

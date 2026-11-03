@@ -6,7 +6,7 @@ import { useModelStatus } from "@/ui/client/models";
 import { useDismissChecklist, useOnboarding } from "@/ui/client/onboarding";
 import { usePstImports } from "@/ui/client/documents";
 import { useSemantic } from "@/ui/client/semantic";
-import { useCreateSession, useSessions } from "@/ui/client/sessions";
+import { useSessions } from "@/ui/client/sessions";
 import { usePrompts } from "@/ui/client/work";
 import { useAssistant } from "@/ui/features/assistant/AssistantProvider";
 import { Icon } from "@/ui/icons";
@@ -61,7 +61,6 @@ export function FinishSetup() {
   const sessions = useSessions("");
   const prompts = usePrompts();
   const imports = usePstImports();
-  const create = useCreateSession();
   const assistant = useAssistant();
   const items: readonly Item[] = [
     { id: "mail", title: "finish.mail.title", detail: "finish.mail.detail", done: Boolean(mail.data?.account), href: "/connectors" },
@@ -72,7 +71,7 @@ export function FinishSetup() {
       title: "finish.interview.title",
       detail: "finish.interview.detail",
       done: Boolean(sessions.data?.sessions.some((row) => row.agent === "interview")),
-      run: () => create.mutate({ title: t("setup.interview.label"), agent: "interview" }, { onSuccess: (row) => assistant.openSession(row.id) }),
+      run: () => assistant.start({ title: t("setup.interview.label"), agent: "interview" }),
     },
     { id: "priorities", title: "finish.priorities.title", detail: "finish.priorities.detail", done: Boolean(prompts.data?.prompts.some((prompt) => prompt.kind === "personal" && prompt.content.trim() && prompt.content.trim() !== prompt.starter?.trim())), href: "/agent/memory" },
     { id: "archive", title: "finish.archive.title", detail: "finish.archive.detail", done: Boolean(imports.data?.imports.length), href: "/connectors" },

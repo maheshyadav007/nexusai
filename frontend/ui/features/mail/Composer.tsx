@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { GenerationPhase } from "@/ui/client/generation";
 import { ApiRequestError } from "@/ui/client/api";
 import type { Draft, Recipient } from "@/ui/client/contracts.generated";
 import { query } from "@/ui/client/api";
@@ -9,6 +10,7 @@ import type { SendProblem } from "@/ui/client/contracts.generated";
 import { Button } from "@/ui/primitives/Button";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Field } from "@/ui/primitives/Field";
+import { GenerationSurface } from "@/ui/primitives/GenerationSurface";
 import { Input, Textarea } from "@/ui/primitives/Input";
 import { useToast } from "@/ui/primitives/Toast";
 import { t } from "@/ui/strings";
@@ -24,7 +26,7 @@ function parse(text: string): { people: Recipient[]; bad: string[] } {
 
 const messageOf = (error: unknown) => (error instanceof ApiRequestError ? error.detail.message : t("settings.models.error"));
 
-export function Composer({ initial, dropped = [], onDone }: { initial: Draft; dropped?: readonly string[]; onDone: () => void }) {
+export function Composer({ initial, dropped = [], onDone, generation, generated, generationFailed = false }: { initial: Draft; dropped?: readonly string[]; onDone: () => void; generation?: GenerationPhase | undefined; generated?: { body: string; id: number | null } | null; generationFailed?: boolean }) {
   const toast = useToast();
   const [to, setTo] = useState(format(initial.to));
   const [cc, setCc] = useState(format(initial.cc));
@@ -35,6 +37,12 @@ export function Composer({ initial, dropped = [], onDone }: { initial: Draft; dr
   const send = useSendMail();
   const remove = useRemoveDraft();
   const [id, setId] = useState(initial.id ?? null);
+  useEffect(() => {
+    if (!generated) return;
+    setBody(generated.body);
+    if (generated.id !== null) setId(generated.id);
+  }, [generated]);
+  const generating = generation !== undefined;
   const [problems, setProblems] = useState<SendProblem[]>([]);
   const [countdown, setCountdown] = useState<number | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -105,7 +113,7 @@ export function Composer({ initial, dropped = [], onDone }: { initial: Draft; dr
         <Field label={t("mail.bcc")}>{({ invalid, ...control }) => <Input invalid={invalid} spellCheck={false} value={bcc} onChange={(event) => setBcc(event.target.value)} {...control} />}</Field>
       </div>
       <Field label={t("mail.subject")}>{({ invalid, ...control }) => <Input invalid={invalid} value={subject} onChange={(event) => setSubject(event.target.value)} {...control} />}</Field>
-      <Field label={t("mail.body")}>{({ invalid, ...control }) => <Textarea invalid={invalid} rows={8} value={body} onChange={(event) => setBody(event.target.value)} {...control} />}</Field>
+      {generating ? <div className="flex flex-col gap-2"><p className="text-md text-ink-primary">{t("mail.body")}</p><GenerationSurface phase={generation} label={t("generation.reply")} placeholder /></div> : <Field label={t("mail.body")}>{({ invalid, ...control }) => <Textarea invalid={invalid} rows={8} value={body} onChange={(event) => setBody(event.target.value)} {...control} />}</Field>}
       {problems.length ? (
         <div role="alert" data-testid="send-checks" className="flex flex-col items-start gap-2 rounded-md border border-status-warning p-3">
           {problems.map((problem) => <p key={problem.check} className="text-md text-ink-primary">{problem.message}</p>)}
@@ -121,11 +129,12 @@ export function Composer({ initial, dropped = [], onDone }: { initial: Draft; dr
       {send.isError ? <ErrorState title={t("mail.sendFailed")} description={messageOf(send.error)} /> : null}
       {save.isError ? <ErrorState title={t("mail.saveFailed")} description={messageOf(save.error)} /> : null}
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" variant="primary" loading={send.isPending} disabled={noRecipients || bad.length > 0 || countdown !== null}>
+        <Button type="submit" variant="primary" loading={send.isPending} disabled={generating || generationFailed || noRecipients || bad.length > 0 || countdown !== null}>
           {t("mail.send")}
         </Button>
         <Button
           loading={save.isPending}
+          disabled={generating || generationFailed}
           onClick={() =>
             save.mutate(draft(), {
               onSuccess: (saved) => {
@@ -139,6 +148,7 @@ export function Composer({ initial, dropped = [], onDone }: { initial: Draft; dr
         </Button>
         <Button
           variant="quiet"
+          disabled={generating}
           onClick={() => {
             if (id) remove.mutate(id);
             onDone();

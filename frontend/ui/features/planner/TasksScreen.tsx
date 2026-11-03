@@ -35,7 +35,7 @@ type View = "open" | "suggested" | "done";
 const fields = (task: Task) => ({ id: task.id, title: task.title, notes: task.notes, status: task.status, due: task.due ?? null, thread: task.thread ?? null, proposed: task.proposed });
 
 const today = () => new Date().toLocaleDateString("sv-SE");
-const inDays = (days: number) => new Date(Date.now() + days * 86_400_000).toLocaleDateString("sv-SE");
+const inDays = (days: number) => { const date = new Date(); date.setDate(date.getDate() + days); return date.toLocaleDateString("sv-SE"); };
 
 function bucket(task: Task): StringKey {
   if (!task.due) return "tasks.group.noDate";
@@ -68,6 +68,7 @@ function TaskRow({ task }: { task: Task }) {
       <ContextMenu items={[{ id: "done", label: t(done ? "menu.markOpen" : "menu.markDone"), onSelect: () => update({ status: done ? "todo" : "done" }) }, { id: "remove", label: t("menu.remove"), icon: "trash", danger: true, onSelect: () => remove.mutate(task.id) }]}>
       <div>
       <ExpandRow
+        variant="plain"
         testid="task"
         label={t("tasks.details", { title: task.title })}
         leading={task.proposed ? <Icon name="thinking" className="h-4 w-4 shrink-0 text-accent-default" /> : <Check task={task} onChange={(next) => update({ status: next ? "done" : "todo" })} />}
@@ -114,6 +115,7 @@ function TaskRow({ task }: { task: Task }) {
             <IconButton icon="trash" label={t("tasks.remove", { title: task.title })} onClick={() => remove.mutate(task.id)} />
           </div>
         </div>
+        {save.isError || remove.isError ? <ErrorState title={t("planner.saveFailed")} description={save.error?.message ?? remove.error?.message ?? ""} /> : null}
       </ExpandRow>
       </div>
       </ContextMenu>
@@ -141,18 +143,20 @@ export function TasksScreen() {
     <div className="mx-auto flex max-w-reading flex-col gap-5 p-6">
       <PageHeader title={t("nav.tasks")} summary={tasks.data ? tn("tasks.summary", open.length) : undefined} />
       <form
-        className="flex items-center gap-2 rounded-lg border border-line-subtle bg-surface-raised p-2 transition-colors duration-fast focus-within:border-line-strong"
+        className="flex flex-wrap items-center gap-2 border-b border-line-strong py-3 transition-colors duration-fast focus-within:border-accent-default"
         onSubmit={(event) => {
           event.preventDefault();
           add();
         }}
       >
+        <Icon name="add" className="h-4 w-4 text-ink-muted" />
         <BareInput aria-label={t("tasks.new")} placeholder={t("tasks.new.placeholder")} value={title} onChange={(event) => setTitle(event.target.value)} className="min-w-0 flex-1 bg-transparent px-2 py-1 text-md text-ink-primary outline-none placeholder:text-ink-muted" />
         <BareInput aria-label={t("tasks.due")} type="date" value={due} onChange={(event) => setDue(event.target.value)} className="focus-ring rounded-md bg-transparent px-2 py-1 text-sm text-ink-secondary" />
-        <Button type="submit" variant="primary" loading={save.isPending} disabled={!title.trim()}>
+        <Button type="submit" variant="quiet" loading={save.isPending} disabled={!title.trim()}>
           {t("tasks.add")}
         </Button>
       </form>
+      {save.isError ? <ErrorState title={t("planner.saveFailed")} description={save.error.message} /> : null}
       <Segmented
         hideLabel
         label={t("tasks.show")}
@@ -168,18 +172,20 @@ export function TasksScreen() {
       {tasks.isError ? <ErrorState title={t("tasks.error")} onRetry={() => void tasks.refetch()} /> : null}
       {tasks.isSuccess && shown.length === 0 ? <EmptyState icon="tasks" title={t(view === "open" ? "tasks.empty" : view === "suggested" ? "tasks.empty.suggested" : "tasks.empty.done")} /> : null}
       <div className="flex flex-col gap-5">
+        <Presence>
         {groups.map((group) => (
-          <section key={group.key ?? "all"} {...(group.key ? { "aria-label": t(group.key) } : {})} className="flex flex-col gap-2">
+          <Rise as="section" settle="position" key={group.key ?? "all"} {...(group.key ? { "aria-label": t(group.key) } : {})} className="flex flex-col gap-2">
             {group.key ? <h2 className={`text-sm ${group.key === "tasks.group.overdue" ? "text-accent-default" : "text-ink-muted"}`}>{t(group.key)}</h2> : null}
-            <ul aria-label={group.key ? t(group.key) : t("nav.tasks")} className="flex flex-col gap-2">
+            <ul aria-label={group.key ? t(group.key) : t("nav.tasks")} className="flex flex-col">
               <Presence>
                 {group.rows.map((task) => (
                   <TaskRow key={task.id} task={task} />
                 ))}
               </Presence>
             </ul>
-          </section>
+          </Rise>
         ))}
+        </Presence>
       </div>
     </div>
   );

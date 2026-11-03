@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { ErrorBoundary } from "@/ui/primitives/ErrorBoundary";
 import { Card } from "@/ui/primitives/Card";
 import { Dialog } from "@/ui/primitives/Dialog";
-import { ActiveMark } from "@/ui/primitives/Motion";
+import { ActiveMark, Rise } from "@/ui/primitives/Motion";
 import { t, type StringKey } from "@/ui/strings";
 import { ConnectorsContent } from "@/ui/features/connectors/ConnectorsScreen";
 import { CategorySettings } from "./CategorySettings";
@@ -54,9 +54,9 @@ function SettingsBody({ overPage = false }: { overPage?: boolean }) {
   const requested = useSearchParams().get("section");
   const current = SECTIONS.find((section) => section.id === requested) ?? (SECTIONS[0] as (typeof SECTIONS)[number]);
   return (
-      <div className={`flex items-start gap-6 ${overPage ? "min-h-0 flex-1" : ""}`}>
-        <nav aria-label={t("settings.title")} className={`w-rail-wide shrink-0 ${overPage ? "h-full overflow-y-auto" : "sticky top-0"}`}>
-          <div className="flex flex-col gap-4">
+      <div className={`flex items-stretch gap-0 ${overPage ? "min-h-0 flex-1" : ""}`}>
+        <nav aria-label={t("settings.title")} className={`w-rail-wide shrink-0 border-r border-line-strong bg-surface-sunken/40 p-3 ${overPage ? "h-full overflow-y-auto" : "sticky top-0"}`}>
+          <div className="flex flex-col gap-5">
             {[...new Set(SECTIONS.map((section) => section.group))].map((group) => (
               <div key={group}>
                 <p className="mb-1 px-3 text-sm text-ink-muted">{t(group)}</p>
@@ -68,9 +68,9 @@ function SettingsBody({ overPage = false }: { overPage?: boolean }) {
                         replace={overPage}
                         scroll={!overPage}
                         aria-current={section.id === current.id ? "page" : undefined}
-                        className={`focus-ring relative block rounded-md px-3 py-1 text-md transition-colors duration-fast ${section.id === current.id ? "text-ink-primary" : "text-ink-secondary hover:bg-surface-raised hover:text-ink-primary"}`}
+                        className={`focus-ring relative block rounded-md px-3 py-1 text-md transition-colors duration-fast ${section.id === current.id ? "font-medium text-accent-default" : "text-ink-secondary hover:bg-surface-raised hover:text-ink-primary"}`}
                       >
-                        {section.id === current.id ? <ActiveMark group="settings-active" /> : null}
+                        {section.id === current.id ? <ActiveMark group="settings-active" className="absolute inset-0 rounded-md border border-line-subtle bg-surface-raised shadow-raised" /> : null}
                         <span className="relative">{t(section.label)}</span>
                       </Link>
                     </li>
@@ -80,9 +80,9 @@ function SettingsBody({ overPage = false }: { overPage?: boolean }) {
             ))}
           </div>
         </nav>
-        <div className={`min-w-0 flex-1 ${overPage ? "h-full overflow-y-auto" : ""}`}>
+        <div className={`min-w-0 flex-1 pl-6 ${overPage ? "h-full overflow-y-auto" : ""}`}>
           <ErrorBoundary key={current.id}>
-            <div className="animate-rise">{current.content()}</div>
+            <Rise key={current.id}>{current.content()}</Rise>
           </ErrorBoundary>
         </div>
       </div>

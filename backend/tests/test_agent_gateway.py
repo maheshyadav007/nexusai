@@ -45,6 +45,7 @@ def ctx(config: Config) -> Iterator[Context]:
         [
             guard.MIGRATION,
             gateway.MIGRATION,
+            gateway.GENERATION_MIGRATION,
             gateway.RUN_LIMIT_MIGRATION,
             gateway.RUN_LIMIT_SINCE_MIGRATION,
             *notifications_module.migrations,
@@ -618,3 +619,42 @@ def test_calls_a_minute_are_kept_to_the_limit() -> None:
         assert clock[0] >= 1060.0
     finally:
         gateway.time = original
+
+
+def test_generation_lifecycle_is_scoped_and_contains_no_prompt(
+    ctx: Context, provider: FakeProvider
+) -> None:
+    from nexusai.contracts.agent import GetGeneration
+
+    provider.script = [TextChunk("Private reply"), Usage(1, 2)]
+    call_model(ctx, agent="summary", session="chat-one", layers=[Layer("S", SECRET)], messages=[])
+    events = [e for e in ctx.bus.events_since(0) if e.type == "generation.changed"]
+    assert [e.payload["phase"] for e in events] == ["queued", "generating", "done"]
+    assert SECRET not in str([e.payload for e in events])
+    assert "Private reply" not in str([e.payload for e in events])
+    assert gateway.generation_state(ctx, GetGeneration(session="chat-one")).phase == "done"
+    assert gateway.generation_state(ctx, GetGeneration(trace_id=ctx.trace_id)).phase == "done"
+    assert gateway.generation_state(ctx, GetGeneration(session="other")).phase == "idle"
+
+
+def test_generation_stops_on_unexpected_provider_failure(
+    ctx: Context, provider: FakeProvider
+) -> None:
+    from nexusai.contracts.agent import GetGeneration
+
+    provider.script = [RuntimeError("connection lost")]
+    with pytest.raises(RuntimeError, match="connection lost"):
+        call_model(ctx, agent="a", session=None, layers=[], messages=[])
+    assert gateway.generation_state(ctx, GetGeneration(trace_id=ctx.trace_id)).phase == "failed"
+    assert ctx.bus.db.fetch_all("SELECT status FROM model_calls")[0]["status"] == "failed"
+
+
+def test_closing_a_stream_ends_the_generation_glow(ctx: Context, provider: FakeProvider) -> None:
+    from nexusai.contracts.agent import GetGeneration
+
+    provider.script = [TextChunk("first"), TextChunk("second")]
+    stream = gateway.stream_model(ctx, agent="a", session="chat", layers=[], messages=[])
+    next(stream)
+    assert gateway.generation_state(ctx, GetGeneration(session="chat")).phase == "generating"
+    stream.close()
+    assert gateway.generation_state(ctx, GetGeneration(session="chat")).phase == "stopped"

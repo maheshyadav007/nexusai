@@ -7,6 +7,7 @@ import { useThreads } from "@/ui/client/mail";
 import { useConfirmNote, useKnowledge, useMailAgent, useMailPreview, useReadMore, useRemoveNote, useSaveMailAgent } from "@/ui/client/work";
 import { Icon } from "@/ui/icons";
 import { Badge } from "@/ui/primitives/Badge";
+import { SessionGeneration } from "@/ui/features/agent/SessionGeneration";
 import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
 import { CodeView } from "@/ui/primitives/CodeView";
@@ -123,6 +124,7 @@ export function AgentKnows() {
           <p data-testid="knows-reading" className="text-sm tabular-nums text-ink-muted">
             {reading ? t("knows.reading", { done: data.learning_done, total: data.learning_total }) : t("knows.read", { judged: data.judged, left: data.conversations_unread })}
           </p>
+          <SessionGeneration session="mail-agent" />
           <Notes notes={data.notes} />
           {data.conversations_unread && !reading ? (
             <div><Button loading={readMore.isPending} onClick={() => readMore.mutate(READ_MORE_BATCH)}>{t("knows.readMore", { count: READ_MORE_BATCH })}</Button></div>

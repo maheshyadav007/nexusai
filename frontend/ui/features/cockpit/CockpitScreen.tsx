@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import type { GetCockpitEvents, Job } from "@/ui/client/contracts.generated";
 import { usePausePst, useStopFindPst } from "@/ui/client/documents";
 import { useEvents } from "@/ui/client/events";
-import { useDateTime } from "@/ui/client/format";
+import { useRelativeTime, useDateTime } from "@/ui/client/format";
 import { useCancelModel } from "@/ui/client/semantic";
 import { useStopSession } from "@/ui/client/sessions";
 import { useCockpit, useCockpitEvents, useStopPipeline, useTriageEstimate, useTriageExisting } from "@/ui/client/work";
@@ -15,6 +15,8 @@ import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
+import { ExpandRow } from "@/ui/primitives/ExpandRow";
+import { Presence, Rise } from "@/ui/primitives/Motion";
 import { PageHeader } from "@/ui/primitives/PageHeader";
 import { Progress } from "@/ui/primitives/Progress";
 import { Segmented } from "@/ui/primitives/Segmented";
@@ -32,6 +34,7 @@ const MODEL_PREFIX = "model-";
 const MAIL_PIPELINE = "mail-sync";
 // A busy moment can bring many events a second, and reading the list once covers them all.
 const REFRESH_MS = 1000;
+const FEED_PREVIEW = 8;
 
 function JobRow({ job }: { job: Job }) {
   const stop = useStopSession();
@@ -43,7 +46,7 @@ function JobRow({ job }: { job: Job }) {
   const importing = job.kind === "pst" && job.status !== "paused" ? Number(job.id.slice(PST_PREFIX.length)) : null;
   const model = job.kind === "model" ? job.id.slice(MODEL_PREFIX.length) : null;
   return (
-    <li data-testid="job" className="flex flex-col gap-2 rounded-md border border-line-subtle p-3">
+    <Rise as="li" settle="position" data-testid="job" className="flex flex-col gap-2 border-b border-line-subtle py-3">
       <div className="flex items-center justify-between gap-3 text-md">
         <Link href={job.link ?? "/cockpit"} className="focus-ring min-w-0 truncate rounded-sm text-ink-primary underline-offset-2 hover:underline">
           {job.title}
@@ -59,52 +62,44 @@ function JobRow({ job }: { job: Job }) {
       </div>
       {job.progress != null && job.total ? <Progress label={job.title} value={job.progress} max={job.total} /> : null}
       {job.progress != null && job.total ? <p className="text-sm tabular-nums text-ink-muted">{t("cockpit.progress", { done: job.progress, total: job.total })}</p> : null}
-    </li>
+    </Rise>
   );
 }
 
 function RunningNow() {
   const cockpit = useCockpit();
-  const format = useDateTime();
-  const estimate = useTriageEstimate();
-  const triage = useTriageExisting();
-  const jobs = cockpit.data?.jobs ?? [];
-  const upcoming = cockpit.data?.upcoming ?? [];
-  const untriaged = estimate.data?.untriaged ?? 0;
+  // Mail sync has its own controls under Background; do not list it twice.
+  const jobs = (cockpit.data?.jobs ?? []).filter((job) => job.kind !== "sync");
   return (
     <section aria-label={t("cockpit.running")} className="flex flex-col gap-3">
       <h2 className="text-lg font-medium text-ink-primary">{t("cockpit.running")}</h2>
       {cockpit.isPending ? <Skeleton className="h-6 w-full" /> : null}
       {cockpit.isError ? <ErrorState title={t("cockpit.error")} onRetry={() => void cockpit.refetch()} /> : null}
-      {cockpit.isSuccess && !jobs.length ? <EmptyState icon="cockpit" title={t("activity.idle")} /> : null}
-      <ul className="flex flex-col gap-2">
-        {jobs.map((job) => (
-          <JobRow key={job.id} job={job} />
-        ))}
-      </ul>
-      {upcoming.length ? (
-        <>
-          <div className="flex items-baseline justify-between gap-3">
-            <h3 className="text-md font-medium text-ink-primary">{t("cockpit.upcoming")}</h3>
-            <TextLink className="text-sm" href="/agent/schedules">{t("cockpit.upcoming.all")}</TextLink>
-          </div>
-          <ul data-testid="upcoming" className="flex flex-col border-t border-line-subtle">
-            {upcoming.map((run) => (
-              <li key={run.id} className="flex items-baseline justify-between gap-3 border-b border-line-subtle py-2 text-md">
-                <span className="min-w-0 truncate text-ink-primary">{run.title}</span>
-                <span className="shrink-0 text-sm tabular-nums text-ink-muted">{format(run.when)}</span>
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : null}
-      {untriaged > 0 ? (
-        <Card title={t("background.older")} description={tn("background.older.description", untriaged, { tokens: (estimate.data?.approx_tokens ?? 0).toLocaleString() })}>
-          <Button loading={triage.isPending} onClick={() => triage.mutate(true)}>{t("background.older.action")}</Button>
-        </Card>
-      ) : null}
+      {cockpit.isSuccess && !jobs.length ? <p className="py-3 text-md text-ink-muted">{t("cockpit.quiet")}</p> : null}
+      <ul className="flex flex-col"><Presence>{jobs.map((job) => <JobRow key={job.id} job={job} />)}</Presence></ul>
     </section>
   );
+}
+
+function Upcoming() {
+  const cockpit = useCockpit();
+  const format = useDateTime();
+  const upcoming = cockpit.data?.upcoming ?? [];
+  return <section aria-label={t("cockpit.upcoming")} className="flex flex-col gap-3">
+    <div className="flex items-baseline justify-between gap-3"><h2 className="text-lg font-medium text-ink-primary">{t("cockpit.upcoming")}</h2><TextLink className="text-sm" href="/agent/schedules">{t("cockpit.upcoming.all")}</TextLink></div>
+    {!upcoming.length ? <p className="text-sm text-ink-muted">{t("cockpit.noUpcoming")}</p> : null}
+    <ul data-testid="upcoming" className="flex flex-col"><Presence>{upcoming.map((run) => <Rise as="li" settle="position" key={run.id} className="flex flex-col gap-1 border-b border-line-subtle py-3"><span className="text-md text-ink-primary">{run.title}</span><span className="text-sm tabular-nums text-ink-muted">{format(run.when)}</span></Rise>)}</Presence></ul>
+  </section>;
+}
+
+function Maintenance() {
+  const estimate = useTriageEstimate();
+  const triage = useTriageExisting();
+  const untriaged = estimate.data?.untriaged ?? 0;
+  return <ExpandRow variant="plain" label={t("cockpit.maintenance")} title={t("cockpit.maintenance")} meta={t("cockpit.maintenance.hint")}>
+    <Pipelines />
+    {untriaged > 0 ? <Card title={t("background.older")} description={tn("background.older.description", untriaged, { tokens: (estimate.data?.approx_tokens ?? 0).toLocaleString() })}><Button loading={triage.isPending} onClick={() => triage.mutate(true)}>{t("background.older.action")}</Button></Card> : null}
+  </ExpandRow>;
 }
 
 function Health() {
@@ -114,7 +109,7 @@ function Health() {
   return (
     <section aria-label={t("cockpit.health")} className="flex flex-col gap-3">
       <h2 className="text-lg font-medium text-ink-primary">{t("cockpit.health")}</h2>
-      <ul data-testid="health" className="grid gap-px md:grid-cols-2">
+      <ul data-testid="health" className="flex flex-col">
         {items.map((item) => (
           <li key={item.id} data-testid={`health-${item.id}`}>
             <Link href={item.link ?? "/cockpit"} className="focus-ring flex items-start gap-2 rounded-md p-2 transition-colors duration-fast hover:bg-surface-sunken">
@@ -124,8 +119,9 @@ function Health() {
                 <span className="truncate text-sm tabular-nums text-ink-muted">{item.when ? format(item.when) : item.detail}</span>
               </span>
             </Link>
-          </li>
+          </Rise>
         ))}
+        </Presence>
       </ul>
     </section>
   );
@@ -134,8 +130,11 @@ function Health() {
 function Feed() {
   const [filter, setFilter] = useState<Filter>("all");
   const feed = useCockpitEvents(filter);
+  const [expanded, setExpanded] = useState(false);
+  const relative = useRelativeTime();
   const format = useDateTime();
-  const rows = feed.data?.events ?? [];
+  const all = feed.data?.events ?? [];
+  const rows = expanded ? all : all.slice(0, FEED_PREVIEW);
   const options: readonly { value: Filter; label: string }[] = [
     { value: "all", label: t("cockpit.filter.all") },
     { value: "agents", label: t("cockpit.filter.agents") },
@@ -147,13 +146,14 @@ function Feed() {
     <section aria-label={t("cockpit.events")} className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-medium text-ink-primary">{t("cockpit.events")}</h2>
-        <Segmented label={t("cockpit.filter")} hideLabel value={filter} options={options} onChange={setFilter} />
+        <Segmented label={t("cockpit.filter")} hideLabel value={filter} options={options} onChange={(next) => { setFilter(next); setExpanded(false); }} />
       </div>
       {feed.isError ? <ErrorState title={t("cockpit.error")} onRetry={() => void feed.refetch()} /> : null}
       {feed.isSuccess && !rows.length ? <EmptyState icon="activity" title={t("cockpit.events.none")} /> : null}
       <ul className="flex flex-col border-t border-line-subtle">
+        <Presence>
         {rows.map((row) => (
-          <li key={row.seq} data-testid="cockpit-event" className="flex items-start justify-between gap-3 border-b border-line-subtle py-2">
+          <Rise as="li" settle="position" key={row.seq} data-testid="cockpit-event" className="flex items-start justify-between gap-3 border-b border-line-subtle py-2">
             <span className="flex min-w-0 items-start gap-2">
               {row.problem ? <span className="pt-1"><StatusDot tone="failed" /></span> : null}
               <span className="flex min-w-0 flex-col">
@@ -165,10 +165,12 @@ function Feed() {
                 {row.detail ? <span className="break-words text-sm text-ink-muted">{row.detail}</span> : null}
               </span>
             </span>
-            <time dateTime={row.time} className="shrink-0 text-sm tabular-nums text-ink-muted">{format(row.time)}</time>
-          </li>
+            <time dateTime={row.time} title={format(row.time)} className="shrink-0 text-sm tabular-nums text-ink-muted">{relative(row.time)}</time>
+          </Rise>
         ))}
+        </Presence>
       </ul>
+      {all.length > FEED_PREVIEW ? <div><Button variant="quiet" onClick={() => setExpanded((value) => !value)}>{t(expanded ? "cockpit.less" : "cockpit.more")}</Button></div> : null}
       <p className="text-sm">
         <TextLink href="/logs">{t("cockpit.events.everything")}</TextLink>
       </p>
@@ -180,6 +182,10 @@ function Feed() {
 export function CockpitScreen() {
   const client = useQueryClient();
   const { subscribe } = useEvents();
+  const cockpit = useCockpit();
+  const health = cockpit.data?.health ?? [];
+  const problems = health.filter((item) => item.state === "problem");
+  const running = (cockpit.data?.jobs ?? []).filter((job) => job.kind !== "sync").length;
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const stop = subscribe(() => {
@@ -195,12 +201,24 @@ export function CockpitScreen() {
     };
   }, [client, subscribe]);
   return (
-    <div className="mx-auto flex max-w-reading flex-col gap-6 p-6">
-      <PageHeader title={t("nav.cockpit")} summary={t("cockpit.description")} />
-      <Health />
-      <RunningNow />
-      <Pipelines />
-      <Feed />
+    <div className="mx-auto flex max-w-page flex-col gap-5 p-6">
+      <PageHeader title={t("nav.cockpit")} summary={t("cockpit.overview")} />
+      {cockpit.data ? <div data-testid="cockpit-overview" className="flex flex-wrap items-center gap-5 border-y border-line-subtle py-4">
+        <span className="flex items-center gap-2 text-md text-ink-primary"><StatusDot tone={problems.length ? "failed" : "done"} />{t(problems.length ? "cockpit.attentionCount" : "cockpit.healthy", { count: problems.length })}</span>
+        <span className="text-sm tabular-nums text-ink-muted">{t("cockpit.runningCount", { count: running })}</span>
+        <span className="text-sm tabular-nums text-ink-muted">{t("cockpit.upcomingCount", { count: cockpit.data.upcoming.length })}</span>
+      </div> : null}
+      {problems.length ? <Rise className="flex flex-col gap-2 border-l border-status-warning pl-4"><h2 className="text-md font-medium text-ink-primary">{t("cockpit.attention")}</h2>{problems.map((item) => <TextLink key={item.id} href={item.link ?? "/logs"}>{item.label}: {item.detail}</TextLink>)}</Rise> : null}
+      <div className="grid items-start gap-6 lg:grid-cols-3">
+        <div className="flex min-w-0 flex-col gap-6 lg:col-span-2">
+          <Rise className="flex flex-col gap-4"><RunningNow /><Maintenance /></Rise>
+          <Rise><Feed /></Rise>
+        </div>
+        <aside className="flex min-w-0 flex-col gap-6 border-t border-line-subtle pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
+          <Rise><Upcoming /></Rise>
+          <ExpandRow variant="plain" label={t("cockpit.health")} title={t("cockpit.health")} meta={t("cockpit.health.hint")} defaultOpen={problems.length > 0}><Health /></ExpandRow>
+        </aside>
+      </div>
     </div>
   );
 }

@@ -618,6 +618,12 @@ export type Panels = Panel[];
 export type Limit3 = number;
 export type Threads2 = ThreadRow[];
 export type Documents1 = DocumentRow[];
+export type TraceId = string | null;
+export type Session = string | null;
+export type CallId = number;
+export type TraceId1 = string | null;
+export type Session1 = string | null;
+export type Phase = "idle" | "queued" | "generating" | "done" | "failed" | "stopped";
 export type Name21 = string;
 export type Kind2 = string;
 export type Pattern = string;
@@ -643,7 +649,7 @@ export type Real = string;
 export type Masked1 = string;
 export type Id17 = number;
 export type Time = string;
-export type Session = string | null;
+export type Session2 = string | null;
 export type Agent = string;
 export type Provider = string;
 export type Model = string;
@@ -653,7 +659,7 @@ export type Layers = PromptLayerView[];
 export type Status6 = string;
 export type Error1 = string | null;
 export type Id18 = number | null;
-export type Session1 = string | null;
+export type Session3 = string | null;
 export type Agent1 = string;
 export type InputTokens1 = number;
 export type OutputTokens1 = number;
@@ -847,7 +853,7 @@ export type Language = string;
 export type Content = string;
 export type Location2 = string | null;
 export type Id25 = number;
-export type Session2 = string;
+export type Session4 = string;
 export type SessionTitle = string;
 export type ToolCallId = string;
 export type Tool = string;
@@ -892,7 +898,7 @@ export type Id27 = string;
 export type Answer = string;
 export type Id28 = number;
 export type Time3 = string;
-export type Session3 = string | null;
+export type Session5 = string | null;
 export type Summary2 = string;
 export type Undoable1 = boolean;
 export type Undone = boolean;
@@ -937,7 +943,7 @@ export type Content4 = string;
 export type Id33 = number;
 export type Kind7 = "ask" | "suggest" | "tell";
 export type Agent7 = string;
-export type Session4 = string | null;
+export type Session6 = string | null;
 export type Thread = number | null;
 export type Text5 = string;
 export type Options = string[];
@@ -982,7 +988,7 @@ export type Facts = string[];
 export type SuggestedAction = string | null;
 export type Provisional = boolean;
 export type Error3 = string | null;
-export type CallId = number | null;
+export type CallId1 = number | null;
 export type Thread3 = number;
 export type Runs = TriageRun[];
 export type Confirm = boolean;
@@ -1054,7 +1060,7 @@ export type Enabled2 = boolean;
 export type TokenLimit = number;
 export type ContextMode = ("trim" | "auto_compact") | null;
 export type KeepMessages = number | null;
-export type Session5 = string | null;
+export type Session7 = string | null;
 export type Event1 = string;
 export type Label7 = string;
 export type Triggers = Trigger[];
@@ -1305,7 +1311,7 @@ export type Important = number;
 export type Filed1 = number;
 export type Judged = number;
 export type Proposed1 = number;
-export type Session6 = string;
+export type Session8 = string;
 export type Rating = ("up" | "down") | null;
 export type Comment = string;
 export type Day = string;
@@ -1321,7 +1327,7 @@ export type When3 = string;
 export type NextRun2 = string | null;
 export type NextCondition = string | null;
 export type LastRun2 = string | null;
-export type Session7 = string | null;
+export type Session9 = string | null;
 export type Tokens = number;
 export type Agents = AgentEntry[];
 export type Brief = string;
@@ -1494,14 +1500,14 @@ export type Id74 = string;
 export type Enabled8 = boolean;
 export type Code = string;
 export type Message5 = string;
-export type TraceId = string | null;
+export type TraceId2 = string | null;
 export type Id75 = string;
 export type Seq1 = number;
 export type Type2 = string;
 export type Version = number;
 export type Time11 = string;
 export type Source10 = string;
-export type TraceId1 = string;
+export type TraceId3 = string;
 export type CauseId = string | null;
 export type Depth = number;
 export type Events2 = AppEvent[];
@@ -1641,7 +1647,7 @@ export type Proxy = string | null;
 export type EventCount = number;
 export type FailedEvents = number;
 export type Report = string;
-export type TraceId2 = string;
+export type TraceId4 = string;
 export type Lines = {
   [k: string]: unknown;
 }[];
@@ -1775,6 +1781,8 @@ export interface Contracts {
   ResetPanelBoard?: ResetPanelBoard;
   GetPanelResults?: GetPanelResults;
   PanelResults?: PanelResults;
+  GetGeneration?: GetGeneration;
+  GenerationState?: GenerationState;
   GuardRule?: GuardRule;
   GuardRules?: GuardRules;
   GetGuardRules?: GetGuardRules;
@@ -3170,6 +3178,25 @@ export interface PanelResults {
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "GetGeneration".
+ */
+export interface GetGeneration {
+  trace_id?: TraceId;
+  session?: Session;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "GenerationState".
+ */
+export interface GenerationState {
+  call_id?: CallId;
+  trace_id?: TraceId1;
+  session?: Session1;
+  phase?: Phase;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "GuardRule".
  */
 export interface GuardRule {
@@ -3238,7 +3265,7 @@ export interface PromptLayerView {
 export interface ModelCallView {
   id: Id17;
   time: Time;
-  session: Session;
+  session: Session2;
   agent: Agent;
   provider: Provider;
   model: Model;
@@ -3255,7 +3282,7 @@ export interface ModelCallView {
  */
 export interface GetModelCall {
   id?: Id18;
-  session?: Session1;
+  session?: Session3;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -3441,7 +3468,7 @@ export interface ApprovalPreview {
 export interface ToolApproval {
   preview?: ApprovalPreview | null;
   id: Id25;
-  session: Session2;
+  session: Session4;
   session_title: SessionTitle;
   tool_call_id: ToolCallId;
   tool: Tool;
@@ -3565,7 +3592,7 @@ export interface AnswerSession {
 export interface ActivityRow {
   id: Id28;
   time: Time3;
-  session: Session3;
+  session: Session5;
   summary: Summary2;
   undoable: Undoable1;
   undone: Undone;
@@ -3718,7 +3745,7 @@ export interface ChannelMessage {
   id: Id33;
   kind: Kind7;
   agent: Agent7;
-  session: Session4;
+  session: Session6;
   thread: Thread;
   text: Text5;
   options: Options;
@@ -3844,7 +3871,7 @@ export interface TriageRun {
   suggested_action: SuggestedAction;
   provisional: Provisional;
   error: Error3;
-  call_id: CallId;
+  call_id: CallId1;
   [k: string]: unknown;
 }
 /**
@@ -4044,7 +4071,7 @@ export interface Trigger {
   token_limit?: TokenLimit;
   context_mode?: ContextMode;
   keep_messages?: KeepMessages;
-  session?: Session5;
+  session?: Session7;
   [k: string]: unknown;
 }
 /**
@@ -4416,7 +4443,7 @@ export interface SinceLastLook {
  * via the `definition` "ReactToBrief".
  */
 export interface ReactToBrief {
-  session: Session6;
+  session: Session8;
   rating?: Rating;
   comment?: Comment;
 }
@@ -4452,7 +4479,7 @@ export interface AgentEntry {
   next_run?: NextRun2;
   next_condition?: NextCondition;
   last_run?: LastRun2;
-  session?: Session7;
+  session?: Session9;
   tokens?: Tokens;
   [k: string]: unknown;
 }
@@ -4994,7 +5021,7 @@ export interface SetConnectorEnabled {
 export interface ApiError {
   code: Code;
   message: Message5;
-  trace_id?: TraceId;
+  trace_id?: TraceId2;
   [k: string]: unknown;
 }
 /**
@@ -5010,7 +5037,7 @@ export interface AppEvent {
   version: Version;
   time: Time11;
   source: Source10;
-  trace_id: TraceId1;
+  trace_id: TraceId3;
   cause_id?: CauseId;
   depth?: Depth;
   payload: Payload;
@@ -5575,7 +5602,7 @@ export interface GetDiagnostics {
  * via the `definition` "GetTrace".
  */
 export interface GetTrace {
-  trace_id: TraceId2;
+  trace_id: TraceId4;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema

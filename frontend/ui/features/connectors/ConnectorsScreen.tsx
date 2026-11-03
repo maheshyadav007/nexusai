@@ -1,12 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ApiRequestError } from "@/ui/client/api";
 import { useAddConnector, useApproveConnector, useConnectors, useRefreshConnector, useRemoveConnector, useSetConnectorEnabled, useTestConnector } from "@/ui/client/connectors";
 import type { AddConnector, Connector, ConnectorTool } from "@/ui/client/contracts.generated";
 import { usePermissions, useSavePermissions } from "@/ui/client/sessions";
 import { PstImportCard } from "@/ui/features/mail/PstImportCard";
 import { AccountSettings } from "@/ui/features/settings/AccountSettings";
+import { Icon } from "@/ui/icons";
+import { Rise } from "@/ui/primitives/Motion";
+import { Pressable } from "@/ui/primitives/Pressable";
 import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
 import { Dialog } from "@/ui/primitives/Dialog";
@@ -40,7 +44,9 @@ export function EmailConnector() {
   return (
     <div className="flex flex-col gap-4">
       <AccountSettings />
-      <PstImportCard />
+      <ExpandRow variant="plain" label={t("connections.archives")} title={t("connections.archives")} meta={t("connections.archives.hint")}>
+        <PstImportCard />
+      </ExpandRow>
     </div>
   );
 }
@@ -76,6 +82,7 @@ function ServerRow({ connector }: { connector: Connector }) {
   const state = connector.state;
   return (
     <ExpandRow
+      variant="plain"
       label={t("connectors.open", { name: connector.name })}
       testid="connector"
       leading={<StatusDot tone={TONES[state]} />}
@@ -183,11 +190,38 @@ function OtherConnectors() {
 
 /** Used on its own page and in Settings, so the two can't drift apart. */
 export function ConnectorsContent() {
+  const requested = useSearchParams().get("connector");
+  const [view, setView] = useState<"overview" | "email" | "mcp">(requested === "email" || requested === "mcp" ? requested : "overview");
+  const connectors = useConnectors();
+  const all = connectors.data?.connectors ?? [];
+  const mail = all.find((item) => item.kind === "email");
+  const servers = all.filter((item) => item.kind === "mcp");
+  if (view !== "overview") return (
+    <Rise key={view} className="flex flex-col gap-4">
+      <div className="flex items-center gap-2 text-md">
+        <Button variant="quiet" onClick={() => setView("overview")}><Icon name="chevronLeft" className="h-3 w-3" />{t("connections.back")}</Button>
+        <span className="text-ink-muted">/</span><h2 className="font-medium text-ink-primary">{t(view === "email" ? "connections.email" : "connections.mcp")}</h2>
+      </div>
+      {view === "email" ? <EmailConnector /> : <OtherConnectors />}
+    </Rise>
+  );
   return (
-    <div className="flex flex-col gap-4">
-      <EmailConnector />
-      <OtherConnectors />
-    </div>
+    <Rise className="flex flex-col gap-5">
+      <p className="text-md text-ink-secondary">{t("connections.choose")}</p>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Pressable data-testid="connection-email" onClick={() => setView("email")} className="group flex flex-col items-start gap-4 rounded-lg border border-line-subtle bg-surface-raised p-5 text-left transition-colors duration-fast hover:border-line-strong">
+          <span className="flex w-full items-center justify-between"><Icon name="inbox" className="h-5 w-5 text-ink-secondary" /><Icon name="chevronRight" className="h-3 w-3 text-ink-muted" /></span>
+          <span className="flex flex-col gap-1"><span className="text-lg font-medium text-ink-primary">{t("connections.email")}</span><span className="text-sm text-ink-secondary">{t("connections.email.hint")}</span></span>
+          <span className="flex items-center gap-2 text-sm text-ink-muted"><StatusDot tone={mail ? TONES[mail.state] : "idle"} />{mail ? t(STATE_LABEL[mail.state] ?? "connectors.state.off") : t("connections.email.empty")}</span>
+        </Pressable>
+        <Pressable data-testid="connection-mcp" onClick={() => setView("mcp")} className="group flex flex-col items-start gap-4 rounded-lg border border-line-subtle bg-surface-raised p-5 text-left transition-colors duration-fast hover:border-line-strong">
+          <span className="flex w-full items-center justify-between"><Icon name="connectors" className="h-5 w-5 text-ink-secondary" /><Icon name="chevronRight" className="h-3 w-3 text-ink-muted" /></span>
+          <span className="flex flex-col gap-1"><span className="text-lg font-medium text-ink-primary">{t("connections.mcp")}</span><span className="text-sm text-ink-secondary">{t("connections.mcp.hint")}</span></span>
+          <span className="text-sm tabular-nums text-ink-muted">{tn("connections.count", servers.length)}</span>
+        </Pressable>
+      </div>
+      {connectors.isError ? <ErrorState title={t("connectors.error")} onRetry={() => void connectors.refetch()} /> : null}
+    </Rise>
   );
 }
 

@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { EVENTS_URL, latestSeq } from "./api";
 import type { AppEvent } from "./contracts.generated";
 import { useHomeStatus } from "./home";
+import type { GenerationState } from "./contracts.generated";
 
 /** Which saved query goes out of date when an event happens. Screens never poll. */
 const INVALIDATES: Record<string, readonly string[]> = {
@@ -100,6 +101,15 @@ export function EventsProvider({ children }: { children: ReactNode }) {
       source.onerror = () => setConnected(false);
       source.onmessage = (message) => {
         const event = JSON.parse(message.data as string) as AppEvent;
+        if (event.type === "generation.changed") {
+          const state = event.payload as GenerationState;
+          for (const key of [state.trace_id ? ["generation", "trace", state.trace_id] : null, state.session ? ["generation", "session", state.session] : null]) {
+            if (!key) continue;
+            // A snapshot taken before this event mustn't replace a newer phase when it arrives.
+            void client.cancelQueries({ queryKey: key });
+            client.setQueryData<GenerationState>(key, (previous) => (previous?.call_id ?? 0) > (state.call_id ?? 0) ? previous : state);
+          }
+        }
         // This event carries the new list and counts, so nothing has to go and ask.
         if (event.type === "semantic.changed") {
           void client.cancelQueries({ queryKey: ["semantic"] });

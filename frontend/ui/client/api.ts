@@ -1,4 +1,6 @@
 import type {
+  GetGeneration,
+  GenerationState,
   AgentRegistry,
   BriefReacted,
   ListAgents,
@@ -371,6 +373,7 @@ interface Commands {
 }
 
 interface Queries {
+  "generation.get": [GetGeneration, GenerationState];
   "settings.get": [GetSettings, Settings];
   "models.status": [GetModelStatus, ModelStatus];
   "models.list": [ListModels, AvailableModels];
@@ -448,12 +451,12 @@ export class ApiRequestError extends Error {
   }
 }
 
-export async function post<T>(path: string, body: unknown): Promise<T> {
+export async function post<T>(path: string, body: unknown, traceId?: string): Promise<T> {
   let response: Response;
   try {
     response = await fetch(path, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(traceId ? { "x-trace-id": traceId } : {}) },
       body: JSON.stringify(body ?? {}),
     });
   } catch {
@@ -467,8 +470,8 @@ export async function post<T>(path: string, body: unknown): Promise<T> {
   return (await response.json()) as T;
 }
 
-export function command<K extends keyof Commands>(name: K, input: Commands[K][0]): Promise<Commands[K][1]> {
-  return post(`/api/commands/${name}`, input);
+export function command<K extends keyof Commands>(name: K, input: Commands[K][0], traceId?: string): Promise<Commands[K][1]> {
+  return post(`/api/commands/${name}`, input, traceId);
 }
 
 export function query<K extends keyof Queries>(name: K, input: Queries[K][0]): Promise<Queries[K][1]> {

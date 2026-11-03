@@ -32,10 +32,12 @@ from nexusai.contracts.agent import (
     DraftedReply,
     DraftThreadReply,
     DueItem,
+    GenerationState,
     GetAgentKnowledge,
     GetCockpit,
     GetCockpitEvents,
     GetContextSettings,
+    GetGeneration,
     GetGuardRules,
     GetMailAgentSettings,
     GetModelCall,
@@ -170,6 +172,7 @@ agent_module = Module(
     migrations=[
         guard.MIGRATION,
         gateway.MIGRATION,
+        gateway.GENERATION_MIGRATION,
         gateway.RUN_LIMIT_MIGRATION,
         gateway.RUN_LIMIT_SINCE_MIGRATION,
         policy.MIGRATION,
@@ -209,6 +212,11 @@ _runtime_lock = threading.Lock()
 def _startup(ctx: Context) -> None:
     global _runtime, _triggers, _scheduler
     guard.load_rules(ctx.config.home)
+    # A process that ended cannot still be generating; resumed sessions start a new call.
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "UPDATE model_generation SET phase = 'stopped' WHERE phase IN ('queued', 'generating')"
+        )
     with _runtime_lock:
         _runtime = runtime.SessionRuntime(ctx)
         _runtime.resume_after_restart()
@@ -696,6 +704,11 @@ def triage_existing(command: TriageExisting, ctx: Context) -> TriageEstimate:
 @agent_module.query("thread.summary")
 def thread_summary(query: SummarizeThread, ctx: Context) -> ThreadSummary:
     return mail_agent.summary_view(ctx, query.id)
+
+
+@agent_module.query("generation.get")
+def get_generation(query: GetGeneration, ctx: Context) -> GenerationState:
+    return gateway.generation_state(ctx, query)
 
 
 @agent_module.command("thread.summarize")

@@ -86,7 +86,8 @@
     "normal": "200ms",
     "slow": "320ms",
     "press": "0.98",
-    "easing": "cubic-bezier(0.22, 1, 0.36, 1)"
+    "easing": "cubic-bezier(0.22, 1, 0.36, 1)",
+    "generation": "4800ms"
   },
   "glass": {
     "opacity": "94%",

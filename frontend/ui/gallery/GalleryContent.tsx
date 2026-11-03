@@ -11,6 +11,7 @@ import { Dialog } from "@/ui/primitives/Dialog";
 import { Divider } from "@/ui/primitives/Divider";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
+import { GenerationSurface } from "@/ui/primitives/GenerationSurface";
 import { Field } from "@/ui/primitives/Field";
 import { IconButton } from "@/ui/primitives/IconButton";
 import { Input, Textarea } from "@/ui/primitives/Input";
@@ -45,6 +46,15 @@ export function GalleryContent() {
         <h1 className="font-serif text-display text-ink-primary">{t("gallery.title")}</h1>
         <TextLink href="/gallery/shell">{t("gallery.shell")}</TextLink>
       </header>
+      <section id="ai-feedback" className="scroll-mt-4">
+        <Card title={t("gallery.generation")}>
+          <div className="grid gap-4 md:grid-cols-3">
+            <GenerationSurface phase="preparing" label={t("generation.summary")} placeholder />
+            <GenerationSurface phase="queued" label={t("generation.summary")} placeholder />
+            <GenerationSurface phase="generating" label={t("generation.summary")} placeholder />
+          </div>
+        </Card>
+      </section>
       <AppearanceSettings />
       <Card title={t("gallery.actions")}>
         <div className="flex flex-wrap items-center gap-3">

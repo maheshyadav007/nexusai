@@ -80,6 +80,7 @@ function ReminderRow({ reminder }: { reminder: Reminder }) {
   return (
     <Rise as="li" settle="position">
       <ExpandRow
+        variant="plain"
         testid="reminder"
         label={t("reminders.details", { title: reminder.title })}
         leading={
@@ -119,7 +120,7 @@ function ReminderRow({ reminder }: { reminder: Reminder }) {
       >
         <Field label={t("reminders.what")}>{({ invalid, ...control }) => <Input invalid={invalid} value={title} onChange={(event) => setTitle(event.target.value)} onBlur={() => title.trim() && title !== reminder.title && update({ title: title.trim() })} {...control} />}</Field>
         <div className="grid gap-3 md:grid-cols-2">
-          <Field label={t("reminders.when")}>{({ invalid, ...control }) => <Input className="py-1" type="datetime-local" invalid={invalid} value={reminder.when.slice(0, 16)} onChange={(event) => event.target.value && update({ when: event.target.value })} {...control} />}</Field>
+          <Field label={t("reminders.when")}>{({ invalid, ...control }) => <Input className="py-1" type="datetime-local" invalid={invalid} value={local(new Date(reminder.when))} onChange={(event) => event.target.value && update({ when: event.target.value })} {...control} />}</Field>
           <Field label={t("reminders.repeat")}>{({ id }) => <Select compact id={id} value={reminder.repeat} options={REPEATS} onChange={(repeat) => update({ repeat: repeat as Repeat })} />}</Field>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -132,6 +133,7 @@ function ReminderRow({ reminder }: { reminder: Reminder }) {
             <IconButton icon="trash" label={t("tasks.remove", { title: reminder.title })} onClick={() => remove.mutate(reminder.id)} />
           </div>
         </div>
+        {save.isError || snooze.isError || remove.isError ? <ErrorState title={t("planner.saveFailed")} description={save.error?.message ?? snooze.error?.message ?? remove.error?.message ?? ""} /> : null}
       </ExpandRow>
     </Rise>
   );
@@ -149,7 +151,7 @@ export function RemindersScreen() {
     <div className="mx-auto flex max-w-reading flex-col gap-5 p-6">
       <PageHeader title={t("nav.reminders")} summary={reminders.data ? tn("reminders.summary", rows.length) : undefined} />
       <form
-        className="flex flex-col gap-2 rounded-lg border border-line-subtle bg-surface-raised p-3 transition-colors duration-fast focus-within:border-line-strong"
+        className="flex flex-col gap-3 border-b border-line-strong py-3 transition-colors duration-fast focus-within:border-accent-default"
         onSubmit={(event) => {
           event.preventDefault();
           save.mutate({ title: title.trim(), when, repeat }, { onSuccess: () => { setTitle(""); setWhen(""); setRepeat("none"); } });
@@ -157,39 +159,42 @@ export function RemindersScreen() {
       >
         <BareInput aria-label={t("reminders.what")} placeholder={t("reminders.what.placeholder")} value={title} onChange={(event) => setTitle(event.target.value)} className="bg-transparent px-1 py-1 text-md text-ink-primary outline-none placeholder:text-ink-muted" />
         <div className="flex flex-wrap items-center gap-2">
-          {QUICK_TIMES.map(({ key, when: pick }) => {
+          {title.trim() ? QUICK_TIMES.map(({ key, when: pick }) => {
             const value = local(pick());
             return (
               <Pressable key={key} type="button" aria-pressed={when === value} onClick={() => setWhen(value)} className={`focus-ring rounded-full border px-3 py-1 text-sm transition-colors duration-fast ${when === value ? "border-accent-default text-accent-default" : "border-line-subtle text-ink-secondary hover:border-line-strong hover:text-ink-primary"}`}>
                 {t(key)}
               </Pressable>
             );
-          })}
+          }) : null}
           <BareInput aria-label={t("reminders.when")} type="datetime-local" value={when} onChange={(event) => setWhen(event.target.value)} className="focus-ring rounded-md bg-transparent px-1 py-1 text-sm text-ink-secondary" />
           <div className="ml-auto flex items-center gap-2">
             <Select quiet label={t("reminders.repeat")} value={repeat} options={REPEATS} onChange={(value) => setRepeat(value as Repeat)} />
-            <Button type="submit" variant="primary" loading={save.isPending} disabled={!title.trim() || !when}>
+            <Button type="submit" variant="quiet" loading={save.isPending} disabled={!title.trim() || !when}>
               {t("reminders.add")}
             </Button>
           </div>
         </div>
       </form>
+      {save.isError ? <ErrorState title={t("planner.saveFailed")} description={save.error.message} /> : null}
       {reminders.isPending ? <Skeleton className="h-6 w-full" /> : null}
       {reminders.isError ? <ErrorState title={t("reminders.error")} onRetry={() => void reminders.refetch()} /> : null}
       {reminders.isSuccess && rows.length === 0 ? <EmptyState icon="reminders" title={t("reminders.empty")} /> : null}
       <div className="flex flex-col gap-5">
+        <Presence>
         {groups.map((group) => (
-          <section key={group.key} aria-label={t(group.key)} className="flex flex-col gap-2">
+          <Rise as="section" settle="position" key={group.key} aria-label={t(group.key)} className="flex flex-col gap-2">
             <h2 className={`text-sm ${group.key === "reminders.group.past" ? "text-accent-default" : "text-ink-muted"}`}>{t(group.key)}</h2>
-            <ul aria-label={t(group.key)} className="flex flex-col gap-2">
+            <ul aria-label={t(group.key)} className="flex flex-col">
               <Presence>
                 {group.rows.map((reminder) => (
                   <ReminderRow key={reminder.id} reminder={reminder} />
                 ))}
               </Presence>
             </ul>
-          </section>
+          </Rise>
         ))}
+        </Presence>
       </div>
     </div>
   );

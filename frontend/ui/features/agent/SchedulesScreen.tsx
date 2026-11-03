@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Schedule, ScheduleRow } from "@/ui/client/contracts.generated";
 import { useDateTime, useRelativeTime } from "@/ui/client/format";
 import { useRemoveSchedule, useRunSchedule, useSaveSchedule, useSchedules, useSetDefaults } from "@/ui/client/work";
+import { SessionGeneration } from "@/ui/features/agent/SessionGeneration";
 import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
 import { ContextMenu } from "@/ui/primitives/ContextMenu";
@@ -138,6 +139,7 @@ function ScheduleItem({ row }: { row: ScheduleRow }) {
           <IconButton icon="trash" label={t("tasks.remove", { title: row.title })} onClick={() => row.id != null && remove.mutate(row.id)} />
         </div>
       </ExpandRow>
+      <SessionGeneration session={row.last_session} />
       </div>
       </ContextMenu>
     </li>

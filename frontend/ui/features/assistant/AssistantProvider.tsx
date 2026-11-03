@@ -1,8 +1,8 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { usePathname } from "next/navigation";
-import { createContext, use, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { createContext, use, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import appConfig from "@/app.config.json";
 import type { CreateSession } from "@/ui/client/contracts.generated";
 import { query } from "@/ui/client/api";
@@ -13,6 +13,7 @@ interface Start {
   context?: readonly string[];
   title?: string;
   model?: string | null;
+  agent?: "session" | "interview";
 }
 
 // An open conversation or document needs the room, so an unpinned chat tucks away for it.
@@ -29,8 +30,12 @@ interface Assistant {
   setNeedsRoom: (needed: boolean) => void;
   /** Attached to the right edge, with the page beside it instead of under it. */
   pinned: boolean;
+  returnTo: string;
   session: string | null;
   starting: boolean;
+  startingTitle: string | null;
+  startingText: string | null;
+  startError: string | null;
   setOpen: (open: boolean) => void;
   setPinned: (pinned: boolean) => void;
   openSession: (id: string) => void;
@@ -58,29 +63,39 @@ function remembered(): { open: boolean; pinned: boolean; session: string | null 
 
 export function AssistantProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  // What the person left it as. Tucking away is on top of this, so it comes back as it was.
+  const router = useRouter();
   const [wanted, setWanted] = useState(false);
-  const [peeking, setPeeking] = useState(false);
-  const [needsRoom, setNeedsRoom] = useState(false);
-  const [pinned, setPinned] = useState(false);
-  const makingRoom = !pinned && (needsRoom || READING.test(pathname));
-  const open = makingRoom ? peeking : wanted;
-  const setOpen = useCallback((next: boolean) => (makingRoom ? setPeeking(next) : setWanted(next)), [makingRoom]);
+  const [returnTo, setReturnTo] = useState("/today");
+  const lastPath = useRef(pathname);
+  const keepOpen = useRef(false);
+  const open = wanted;
+  const setOpen = useCallback((next: boolean) => setWanted(next), []);
+  // Opening content makes room for reading. Explicitly docking from full page wins once.
   useEffect(() => {
-    if (!makingRoom) setPeeking(false);
-  }, [makingRoom]);
+    if (pathname.startsWith("/agent/sessions/")) return;
+    setReturnTo(pathname);
+    if (pathname !== lastPath.current && READING.test(pathname) && !keepOpen.current) setWanted(false);
+    keepOpen.current = false;
+    lastPath.current = pathname;
+  }, [pathname]);
+  const setNeedsRoom = useCallback((needed: boolean) => { if (needed) setWanted(false); }, []);
+  // Floating view is disabled; the panel is always attached to the right edge.
+  const pinned = true;
   const [session, setSession] = useState<string | null>(null);
   const create = useCreateSession();
   const { mutate } = create;
   const client = useQueryClient();
   const [starting, setStarting] = useState(false);
+  const [startingTitle, setStartingTitle] = useState<string | null>(null);
+  const [startingText, setStartingText] = useState<string | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
+  const startLock = useRef(false);
 
   // Saving waits until it's been read, or the empty start would overwrite what was there.
   const [restored, setRestored] = useState(false);
   useEffect(() => {
     const saved = remembered();
-    setWanted(saved.open);
-    setPinned(saved.pinned);
+    setWanted(saved.open && !READING.test(pathname));
     setSession(saved.session);
     setRestored(true);
   }, []);
@@ -94,11 +109,18 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   }, [wanted, pinned, session, restored]);
 
   const start = useCallback(
-    ({ text, context, title, model }: Start) => {
+    ({ text, context, title, model, agent }: Start) => {
+      if (startLock.current) return;
+      startLock.current = true;
       setStarting(true);
-      const input = { ...(context ? { context: context as CreateSession["context"] } : {}), ...(title ? { title } : {}), ...(model ? { model } : {}) };
+      setStartingTitle(title ?? null);
+      setStartingText(text ?? null);
+      setStartError(null);
+      setSession(null);
+      setOpen(true);
+      const input = { ...(agent ? { agent } : {}), ...(context ? { context: context as CreateSession["context"] } : {}), ...(title ? { title } : {}), ...(model ? { model } : {}) };
       mutate(input, {
-        // The chat and what's attached are read first, so the panel never opens onto something empty.
+        // The shell is already visible; fill it once the session and its context are ready.
         onSuccess: (row) => {
           if (text) leaveFirstMessage(row.id, text);
           void Promise.allSettled([
@@ -106,37 +128,51 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
             client.prefetchQuery({ queryKey: ["session-context", row.id], queryFn: () => query("session.context", { id: row.id }) }),
           ]).then(() => {
             setSession(row.id);
-            setOpen(true);
+            if (pathname.startsWith("/agent/sessions/")) {
+              setOpen(false);
+              router.replace(`/agent/sessions/${row.id}`);
+            }
             setStarting(false);
+            startLock.current = false;
           });
         },
-        onError: () => setStarting(false),
+        onError: (error) => {
+          setStarting(false);
+          startLock.current = false;
+          setStartError(error.message);
+        },
       });
     },
-    [client, mutate, setOpen],
+    [client, mutate, setOpen, pathname, router],
   );
   const value = useMemo<Assistant>(
     () => ({
       open,
-      tucked: makingRoom && !peeking,
-      peeking: makingRoom && peeking,
+      tucked: false,
+      peeking: false,
       setNeedsRoom,
       pinned,
+      returnTo,
       session,
       starting,
+      startingTitle,
+      startingText,
+      startError,
       setOpen,
-      setPinned,
+      setPinned: () => undefined,
       openSession: (id) => {
+        if (pathname.startsWith("/agent/sessions/")) keepOpen.current = true;
         setSession(id);
         setOpen(true);
       },
       newChat: () => {
         setSession(null);
+        setStartError(null);
         setOpen(true);
       },
       start,
     }),
-    [open, makingRoom, peeking, setOpen, pinned, session, starting, start],
+    [open, setOpen, setNeedsRoom, pinned, returnTo, pathname, session, starting, startingTitle, startingText, startError, start],
   );
   return <AssistantContext value={value}>{children}</AssistantContext>;
 }

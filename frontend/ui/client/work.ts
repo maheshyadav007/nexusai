@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { command, query } from "./api";
 import type { ContextSettings, SaveTrigger, GetCockpitEvents, MailAgentSettings, QuietHours, Schedule, SaveMemory, SavePrompt, SaveReminder, SaveTask, SendCheckSettings, SetSessionContext, GuardRules, SaveModelProvider, ListProviderModels } from "./contracts.generated";
 import { useHomeReady } from "./home";
+import { useGenerationCommand } from "./generation";
 import { useCategories } from "./mail";
 import { useApprovals } from "./sessions";
 
@@ -31,7 +32,23 @@ export const useAgentChannel = () => useReady(["agent-channel"], () => query("ag
 export const useMuteTopic = () => useCommand(["agent-channel"], (input: { topic: string; muted: boolean }) => command("agentChannel.setMuted", input));
 
 export const useTasks = (includeDone: boolean) => useReady(["tasks", includeDone], () => query("tasks.list", { include_done: includeDone }));
-export const useSaveTask = () => useCommand(["tasks"], (input: SaveTask) => command("tasks.save", input));
+export function useSaveTask() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SaveTask) => command("tasks.save", input),
+    onMutate: async (input) => {
+      await client.cancelQueries({ queryKey: ["tasks"] });
+      const previous = client.getQueriesData<{ tasks: import("./contracts.generated").Task[] }>({ queryKey: ["tasks"] });
+      if (input.id) client.setQueriesData<{ tasks: import("./contracts.generated").Task[] }>({ queryKey: ["tasks"] }, (data) => data ? { ...data, tasks: data.tasks.map((task) => task.id === input.id ? { ...task, ...input, id: task.id } : task) } : data);
+      return { previous };
+    },
+    onError: (_error, _input, saved) => saved?.previous.forEach(([key, value]) => client.setQueryData(key, value)),
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: ["tasks"] });
+      void client.invalidateQueries({ queryKey: ["today"] });
+    },
+  });
+}
 export const useRemoveTask = () => useCommand(["tasks"], (id: number) => command("tasks.remove", { id }));
 export const useReminders = () => useReady(["reminders"], () => query("reminders.list", {}));
 export const useSaveReminder = () => useCommand(["reminders"], (input: SaveReminder) => command("reminders.save", input));
@@ -58,7 +75,14 @@ export const useAgents = () => useReady(["agents"], () => query("agents.registry
 export const useRunMailAgent = () => useCommand(["sessions"], () => command("mailAgent.runNow", {}));
 export const useContextSettings = () => useReady(["context"], () => query("context.get", {}));
 export const useSaveContextSettings = () => useCommand(["context"], (input: ContextSettings) => command("context.save", input));
-export const useCompactSession = () => useCommand(["session"], (id: string) => command("session.compact", { id }));
+export function useCompactSession() {
+  const client = useQueryClient();
+  return useGenerationCommand(async (id: string, trace: string) => {
+    const result = await command("session.compact", { id }, trace);
+    void client.invalidateQueries({ queryKey: ["session", id] });
+    return result;
+  });
+}
 
 export const useMarkTodaySeen = () => useMutation({ mutationFn: () => command("today.markSeen", {}) });
 export const useTriggers = () => useReady(["triggers"], () => query("triggers.list", {}));
@@ -97,8 +121,15 @@ export const useRemoveMemory = () => useCommand(["memory"], (path: string) => co
 export const useDecideMemory = () => useCommand(["memory"], (input: { id: number; accept: boolean }) => command("memory.decide", input));
 
 export const useThreadSummary = (id: number) => useReady(["summary", id], () => query("thread.summary", { id }));
-export const useDraftReply = () => useMutation({ mutationFn: (id: number) => command("thread.draftReply", { id }) });
-export const useSummarize = () => useCommand(["summary"], (id: number) => command("thread.summarize", { id }));
+export const useDraftReply = () => useGenerationCommand((id: number, trace: string) => command("thread.draftReply", { id }, trace));
+export function useSummarize() {
+  const client = useQueryClient();
+  return useGenerationCommand(async (id: number, trace: string) => {
+    const result = await command("thread.summarize", { id }, trace);
+    client.setQueryData(["summary", id], result);
+    return result;
+  });
+}
 export const useThreadRuns = (thread: number, enabled: boolean) => useQuery({ queryKey: ["runs", thread], queryFn: () => query("triage.runs", { thread }), enabled, staleTime: 0 });
 export const useTriageEstimate = () => useReady(["triage-estimate"], () => query("triage.estimate", {}));
 export const useTriageExisting = () => useCommand(["triage-estimate", "jobs"], (confirm: boolean) => command("triage.existing", { confirm }));

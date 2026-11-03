@@ -1,31 +1,30 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import light from "@/ui/theme/themes/nexus-light.json";
 import { useSessions } from "@/ui/client/sessions";
 import { useWaitingCount } from "@/ui/client/work";
 import { Icon } from "@/ui/icons";
-import { IconButton } from "@/ui/primitives/IconButton";
+import { Skeleton } from "@/ui/primitives/Skeleton";
+import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Presence, readSpace, RiseButton, Room, SlidePanel, Swap } from "@/ui/primitives/Motion";
 import { Pressable } from "@/ui/primitives/Pressable";
 import { Select } from "@/ui/primitives/Select";
 import { StatusDot } from "@/ui/primitives/StatusDot";
-import { Tooltip } from "@/ui/primitives/Tooltip";
 import { t, tn } from "@/ui/strings";
 import { useAssistant } from "./AssistantProvider";
 import { AttachedChips, AttachMenu, ModelPicker, useAttachedReading, type Attached } from "./ChatControls";
-import { CompactAction } from "./ChatView";
+import { ChatViewActions } from "./ChatViewActions";
 import { Composer } from "./Composer";
 import { SessionChat } from "./SessionChat";
 
 const STARTERS = ["chat.starter.today", "chat.starter.mail", "chat.starter.reminder"] as const;
 const MAIL_AGENT = "mail-agent";
 
-function NewChat() {
+export function NewChat() {
   const assistant = useAssistant();
-  const [text, setText] = useState("");
+  const [text, setText] = useState(assistant.startError ? assistant.startingText ?? "" : "");
   const [model, setModel] = useState<string | null>(null);
   const [attached, setAttached] = useState<readonly Attached[]>([]);
   const reading = useAttachedReading(attached);
@@ -67,6 +66,8 @@ function NewChat() {
 const TITLE_LENGTH = 60;
 
 const GAP = readSpace(light.space["4"]);
+// Retained for a future floating presentation; no control enables it today.
+const FLOATING_VIEW_ENABLED = false;
 const FLOATING_HEIGHT = readSpace(light.layout.dockHeight);
 const SMALL_SCREEN = readSpace(light.layout.page);
 
@@ -90,58 +91,30 @@ function Panel() {
   const options = chats.map((row) => ({ value: row.id, label: row.status === "waiting" ? t("chat.waitingLabel", { title: row.title }) : row.title }));
   // Only one panel ever exists, so pinning moves it instead of restarting the conversation.
   // Out from the edge it sits against that edge, so the pointer that called it is already on it.
-  const attached = (assistant.pinned || assistant.peeking) && width >= SMALL_SCREEN;
+  const attached = !FLOATING_VIEW_ENABLED || (assistant.pinned && width >= SMALL_SCREEN);
   const place = attached ? { top: 0, right: 0, bottom: 0, borderRadius: 0 } : { top: Math.max(GAP, height - GAP - FLOATING_HEIGHT), right: GAP, bottom: GAP, borderRadius: GAP - 2 };
-  // Out from the edge, it goes back when the person's done with it, unless they're mid-thought.
-  // Its input focuses itself on opening, so focus only counts once they've used it.
-  const used = useRef(false);
-  const panel = useRef<HTMLElement>(null);
-  const { peeking, setOpen } = assistant;
-  useEffect(() => {
-    if (!peeking) return;
-    // The pointer that called it never crossed into it, so the panel's own leave event can't be trusted.
-    const moved = (event: PointerEvent) => {
-      const node = panel.current;
-      if (!node || event.clientX >= node.getBoundingClientRect().left || node.querySelector("textarea")?.value) return;
-      if (!used.current || !node.contains(document.activeElement)) setOpen(false);
-    };
-    window.addEventListener("pointermove", moved);
-    return () => window.removeEventListener("pointermove", moved);
-  }, [peeking, setOpen]);
   return (
     <SlidePanel
       attached={attached}
       place={place}
-      ref={panel}
-      onPointerDown={() => {
-        used.current = true;
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Escape" && assistant.peeking) assistant.setOpen(false);
-        else used.current = true;
-      }}
       aria-label={t("chat.title")}
       data-testid="assistant-dock"
       data-pinned={assistant.pinned && attached}
-      className={`fixed z-40 flex w-dock max-w-full flex-col overflow-hidden border border-line-subtle bg-surface-page ${attached ? `border-y-0 border-r-0 ${assistant.peeking ? "shadow-overlay" : ""}` : "shadow-overlay"}`}
+      className={`fixed z-40 flex w-dock max-w-full flex-col overflow-hidden border border-line-subtle bg-surface-page ${attached ? "border-y-0 border-r-0" : "shadow-overlay"}`}
     >
       <header className="flex h-topbar shrink-0 items-center gap-1 border-b border-line-subtle px-2">
         <div className="min-w-0 flex-1">
           {assistant.session && options.length ? <Select quiet label={t("chat.switch")} value={assistant.session} options={options} onChange={assistant.openSession} /> : <p className="px-2 text-md font-medium text-ink-primary">{t("chat.title")}</p>}
         </div>
-        <IconButton icon="newChat" label={t("chat.new")} onClick={assistant.newChat} />
-        {assistant.session ? <CompactAction session={assistant.session} /> : null}
-        {assistant.session ? (
-          <Tooltip content={t("chat.expand")}>
-            <Link href={`/agent/sessions/${assistant.session}`} aria-label={t("chat.expand")} className="focus-ring inline-flex rounded-md p-2 text-ink-secondary transition-colors duration-fast hover:bg-surface-sunken hover:text-ink-primary">
-              <Icon name="openFull" />
-            </Link>
-          </Tooltip>
-        ) : null}
-        <IconButton icon={assistant.pinned ? "unpin" : "pin"} label={t(assistant.pinned ? "chat.unpin" : "chat.pin")} aria-pressed={assistant.pinned} onClick={() => assistant.setPinned(!assistant.pinned)} />
-        <IconButton icon="minimize" label={t("chat.minimize")} onClick={() => assistant.setOpen(false)} />
+        <ChatViewActions session={assistant.session} />
       </header>
-      <div key={assistant.session ?? "new"} className="flex min-h-0 flex-1 animate-fade flex-col">{assistant.session ? <SessionChat id={assistant.session} /> : <NewChat />}</div>
+      <div key={assistant.session ?? "new"} className="flex min-h-0 flex-1 animate-fade flex-col">{assistant.starting ? (
+        <div aria-busy className="flex flex-col gap-3 p-4">
+          <p role="status" className="flex items-center gap-2 text-md text-ink-muted"><Icon name="loading" className="h-4 w-4 animate-spin motion-reduce:animate-none" />{t("generation.opening")}</p>
+          {assistant.startingTitle ? <p className="text-md text-ink-primary">{assistant.startingTitle}</p> : null}
+          <Skeleton className="h-4 w-3/4" /><Skeleton className="h-4 w-1/2" />
+        </div>
+      ) : assistant.session ? <SessionChat id={assistant.session} /> : <><NewChat />{assistant.startError ? <div className="p-3"><ErrorState title={t("sessions.failed")} description={assistant.startError} /></div> : null}</>}</div>
     </SlidePanel>
   );
 }
@@ -151,7 +124,7 @@ export function AssistantRoom() {
   const assistant = useAssistant();
   const pathname = usePathname();
   const { width } = useWindowSize();
-  const showing = assistant.open && assistant.pinned && width >= SMALL_SCREEN && !pathname.startsWith("/agent/sessions/");
+  const showing = assistant.open && width >= SMALL_SCREEN && !pathname.startsWith("/agent/sessions/");
   return <Room width={showing ? light.layout.dock : null} />;
 }
 
@@ -161,7 +134,6 @@ export function AssistantDock() {
   const pathname = usePathname();
   const sessions = useSessions("");
   const waiting = useWaitingCount();
-  const { width } = useWindowSize();
   const running = sessions.data?.running ?? 0;
   // The session page already is this conversation, and two live views of one chat would fight.
   if (pathname.startsWith("/agent/sessions/")) return null;
@@ -169,8 +141,6 @@ export function AssistantDock() {
     <Presence>
       {assistant.open ? (
         <Panel key="panel" />
-      ) : assistant.tucked && width >= SMALL_SCREEN ? (
-        <Pressable key="aura" data-testid="assistant-aura" data-waiting={waiting > 0} aria-label={t("chat.openFromEdge")} onMouseEnter={() => assistant.setOpen(true)} onClick={() => assistant.setOpen(true)} className="assistant-aura focus-ring fixed bottom-0 right-0 top-0 z-40 w-aura" />
       ) : (
         <RiseButton key="pill" onClick={() => assistant.setOpen(true)} data-testid="assistant-pill" className="ai-glow focus-ring fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full px-4 py-2 text-md font-medium text-ink-primary shadow-overlay">
           <Icon name="chat" />

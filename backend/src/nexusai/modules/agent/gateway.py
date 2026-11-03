@@ -10,7 +10,15 @@ from datetime import UTC, datetime
 
 import structlog
 
-from nexusai.contracts.agent import ModelCallView, PromptLayerView, UsageRow, UsageView
+from nexusai.contracts.agent import (
+    GenerationPhase,
+    GenerationState,
+    GetGeneration,
+    ModelCallView,
+    PromptLayerView,
+    UsageRow,
+    UsageView,
+)
 from nexusai.contracts.notifications import NotificationRequested
 from nexusai.kernel.database import Database, Migration
 from nexusai.kernel.module import Context
@@ -20,11 +28,9 @@ from nexusai.modules.agent.providers import (
     Chunk,
     Message,
     ModelFlagged,
-    ModelNotConfigured,
     ModelProvider,
     ModelRateLimited,
     ModelRequest,
-    ModelUnavailable,
     ReasoningChunk,
     TextChunk,
     ToolCall,
@@ -47,6 +53,38 @@ CREATE TABLE model_limits (id INTEGER PRIMARY KEY CHECK (id = 1), daily_cap INTE
 """,
 )
 NEAR_CAP_SHARE = 0.8
+
+GENERATION_MIGRATION = Migration(
+    "model_generation_001",
+    """
+CREATE TABLE model_generation (
+  call_id INTEGER PRIMARY KEY, trace_id TEXT NOT NULL, session TEXT, phase TEXT NOT NULL);
+CREATE INDEX model_generation_trace ON model_generation (trace_id, call_id);
+CREATE INDEX model_generation_session ON model_generation (session, call_id);
+""",
+)
+
+
+def generation_state(ctx: Context, query: GetGeneration) -> GenerationState:
+    if not query.trace_id and not query.session:
+        return GenerationState()
+    field, value = ("trace_id", query.trace_id) if query.trace_id else ("session", query.session)
+    rows = ctx.bus.db.fetch_all(
+        f"SELECT * FROM model_generation WHERE {field} = ? ORDER BY call_id DESC LIMIT 1",
+        (value,),
+    )
+    return GenerationState.model_validate(dict(rows[0])) if rows else GenerationState()
+
+
+def _generation(ctx: Context, call_id: int, session: str | None, phase: GenerationPhase) -> None:
+    state = GenerationState(call_id=call_id, trace_id=ctx.trace_id, session=session, phase=phase)
+    with ctx.bus.unit_of_work() as work:
+        work.tx.execute(
+            "INSERT INTO model_generation VALUES (?, ?, ?, ?)"
+            " ON CONFLICT(call_id) DO UPDATE SET phase = excluded.phase",
+            (call_id, ctx.trace_id, session, phase),
+        )
+        work.emit("generation.changed", state.model_dump(), source="agent", trace_id=ctx.trace_id)
 
 
 RUN_LIMIT_MIGRATION = Migration(
@@ -198,12 +236,19 @@ PACER_CHECK_SECONDS = 1.0
 pacer = CallPacer()
 
 
-def _within_limits(ctx: Context, provider: ModelProvider, request: ModelRequest) -> Iterator[Chunk]:
+def _within_limits(
+    ctx: Context,
+    provider: ModelProvider,
+    request: ModelRequest,
+    phase: Callable[[GenerationPhase], None],
+) -> Iterator[Chunk]:
     """Waits its turn, and tries again if told to slow down before anything came back."""
     config = ctx.config.agent
     for attempt in range(config.rate_limit_retries + 1):
+        phase("queued")
         pacer.take_turn(config.model_calls_per_minute, config.rate_limit_longest_wait)
         try:
+            phase("generating")
             yield from provider.stream(request)
             return
         except ModelRateLimited as error:
@@ -289,8 +334,16 @@ def stream_model(
                 (status, error, usage.input_tokens, usage.output_tokens, call_id),
             )
 
+    last_phase: GenerationPhase | None = None
+
+    def phase(value: GenerationPhase) -> None:
+        nonlocal last_phase
+        if last_phase != value:
+            _generation(ctx, call_id, session, value)
+            last_phase = value
+
     try:
-        for chunk in _within_limits(ctx, provider, request):
+        for chunk in _within_limits(ctx, provider, request, phase):
             if isinstance(chunk, TextChunk):
                 text = restorer.feed(chunk.text)
                 if text:
@@ -311,15 +364,18 @@ def stream_model(
             yield TextChunk(text)
         for call in raw_calls:
             yield ToolCall(call.id, call.name, guard.restore_arguments(call.arguments))
-    except (ModelUnavailable, ModelFlagged, ModelNotConfigured, guards.DamagedToken) as error:
+    except Exception as error:
         status = "flagged" if isinstance(error, ModelFlagged) else "failed"
         finish(status, str(error))
+        phase("failed")
         log.info("model_call_failed", agent=agent, kind=type(error).__name__)
         raise
     except GeneratorExit:
         finish("stopped", None)
+        phase("stopped")
         raise
     finish("done", None)
+    phase("done")
     _warn_near_cap(ctx, cap)
     log.info("model_call", agent=agent, provider=provider.name, tokens=usage.output_tokens)
     yield usage

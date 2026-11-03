@@ -1,4 +1,4 @@
-import { Activity, AlarmClock, Archive, ArrowDown, ArrowUp, Bell, Bot, Brain, BrainCircuit, CalendarDays, Check, ChevronDown, Volume2, VolumeX, Info, ChevronLeft, ChevronRight, CircleAlert, Clock, Copy, CornerDownRight, File, FileText, Flag, FoldVertical, Folder, FolderOpen, Gauge, GripVertical, Inbox, LayoutPanelTop, ListChecks, Loader, MailOpen, Mails, Maximize2, MessageCircle, MessagesSquare, Minus, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Paperclip, PenLine, Pencil, Plug, Plus, Repeat, Reply, ReplyAll, RotateCcw, ScrollText, Search, Send, Settings, ShieldCheck, SlidersHorizontal, Square, SquarePen, Star, Sun, Tags, Terminal, ThumbsDown, ThumbsUp, Trash2, Upload, WifiOff, X } from "lucide-react";
+import { Activity, AlarmClock, Archive, ArrowDown, ArrowUp, Bell, Bot, Brain, BrainCircuit, CalendarDays, Check, ChevronDown, Volume2, VolumeX, Info, ChevronLeft, ChevronRight, CircleAlert, Clock, Copy, CornerDownRight, File, FileText, Flag, FoldVertical, Folder, FolderOpen, Gauge, GripVertical, Inbox, LayoutPanelTop, ListChecks, Loader, MailOpen, Mails, Maximize2, MessageCircle, MessagesSquare, Minus, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Paperclip, PenLine, Pencil, Plug, Plus, Repeat, Reply, ReplyAll, RotateCcw, ScrollText, Search, Send, Settings, ShieldCheck, SlidersHorizontal, Square, Star, Sun, Tags, Terminal, ThumbsDown, ThumbsUp, Trash2, Upload, WifiOff, X } from "lucide-react";
 
 // Features name an icon by what it's for, so one change here updates every use.
 export const ICONS = {
@@ -21,7 +21,7 @@ export const ICONS = {
   stop: Square,
   minimize: Minus,
   openFull: Maximize2,
-  newChat: SquarePen,
+  newChat: Plus,
   chat: MessageCircle,
   followUp: CornerDownRight,
   file: File,

@@ -5,12 +5,14 @@ import { useEffect, useRef, useState } from "react";
 import { ApiRequestError } from "@/ui/client/api";
 import type { Importance, Draft, MessageView } from "@/ui/client/contracts.generated";
 import { useDateTime } from "@/ui/client/format";
+import type { GenerationPhase } from "@/ui/client/generation";
 import { useCategories, useMoveThread, useReplyDraft, useSetCategory, useSetImportance, useSetFlag, useSetRead, useSetStatus, useThread, type ThreadStatus } from "@/ui/client/mail";
 import { useDraftReply, useSummarize, useThreadRuns, useThreadSummary } from "@/ui/client/work";
 import { AskAgent } from "@/ui/features/agent/AskAgent";
 import { Icon } from "@/ui/icons";
 import { Avatar } from "@/ui/primitives/Avatar";
 import { Button } from "@/ui/primitives/Button";
+import { GenerationSurface } from "@/ui/primitives/GenerationSurface";
 import { Dialog } from "@/ui/primitives/Dialog";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
@@ -19,7 +21,6 @@ import { Pressable } from "@/ui/primitives/Pressable";
 import { Select } from "@/ui/primitives/Select";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { TextLink } from "@/ui/primitives/TextLink";
-import { useToast } from "@/ui/primitives/Toast";
 import { t, tn } from "@/ui/strings";
 import { Composer } from "./Composer";
 import { SafeMailFrame } from "./SafeMailFrame";
@@ -98,26 +99,27 @@ function Body({ message }: { message: MessageView }) {
 
 const DRAFT_PARAM = "draft";
 
-function SummaryAction({ id }: { id: number }) {
+function SummaryAction({ id, pending, run }: { id: number; pending: boolean; run: () => void }) {
   const summary = useThreadSummary(id);
-  const summarize = useSummarize();
   const data = summary.data;
   if (data?.text && !data.new_messages) return null;
   return (
-    <Button variant="ai" thinking loading={summarize.isPending} onClick={() => summarize.mutate(id)}>
+    <Button variant="ai" loading={pending} onClick={run}>
       {t(data?.text ? "summary.update" : "summary.summarize")}
     </Button>
   );
 }
 
-function SummaryBlock({ id }: { id: number }) {
+function SummaryBlock({ id, pending, phase, error, retry }: { id: number; pending: boolean; phase: GenerationPhase; error: string | null; retry: () => void }) {
   const summary = useThreadSummary(id);
   const data = summary.data;
-  if (!data?.text) return null;
+  if (!data?.text && !pending && !error) return null;
   return (
-    <section aria-label={t("summary.title")} className="flex w-full flex-col gap-1 rounded-md bg-surface-sunken p-3">
-      <p data-testid="summary-text" className="whitespace-pre-wrap text-md text-ink-primary">{data.text}</p>
-      {data.new_messages ? <p className="text-sm text-ink-secondary">{tn("summary.new", data.new_messages)}</p> : null}
+    <section aria-label={t("summary.title")}>
+      {pending ? <GenerationSurface phase={phase} label={t("generation.summary")} placeholder={!data?.text} /> : null}
+      {data?.text ? <p data-testid="summary-text" className="whitespace-pre-wrap rounded-md bg-surface-sunken p-3 text-md text-ink-primary">{data.text}</p> : null}
+      {error ? <ErrorState title={t("generation.summaryFailed")} description={error} onRetry={retry} /> : null}
+      {data?.text && data.new_messages ? <p className="text-sm text-ink-secondary">{tn("summary.new", data.new_messages)}</p> : null}
     </section>
   );
 }
@@ -208,10 +210,10 @@ export function ThreadScreen({ id, onLeave, folder: backTo }: { id: number; onLe
   const categories = useCategories();
   const replyDraft = useReplyDraft();
   const writeReply = useDraftReply();
-  const toast = useToast();
+  const summarize = useSummarize();
   const [composing, setComposing] = useState<{ draft: Draft; dropped: string[] } | null>(null);
   const composer = useRef<HTMLElement>(null);
-  const opened = composing !== null;
+  const opened = composing !== null || replyDraft.isPending;
   useEffect(() => {
     if (opened) composer.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [opened]);
@@ -219,15 +221,20 @@ export function ThreadScreen({ id, onLeave, folder: backTo }: { id: number; onLe
   const asked = useRef(false);
   const latest = thread.data?.messages.at(-1);
   const drafting = writeReply.isPending || replyDraft.isPending;
+  const [draftRequested, setDraftRequested] = useState(false);
+  const [generated, setGenerated] = useState<{ body: string; id: number | null } | null>(null);
   const draftReply = () => {
-    if (!latest) return;
-    writeReply.mutate(id, {
-      onSuccess: ({ body, draft_id }) =>
-        replyDraft.mutate(
-          { message_id: latest.id, reply_all: false },
-          { onSuccess: (result) => setComposing({ draft: { ...result.draft, ...(draft_id ? { id: draft_id } : {}), body: result.draft.body ? `${body}\n\n${result.draft.body}` : body }, dropped: result.dropped }) },
-        ),
-      onError: (error) => toast({ title: error instanceof ApiRequestError ? error.detail.message : t("mail.draftReply.failed"), tone: "danger" }),
+    if (!latest || drafting) return;
+    setDraftRequested(true);
+    setGenerated(null);
+    writeReply.reset();
+    replyDraft.mutate({ message_id: latest.id, reply_all: false }, {
+      onSuccess: (result) => {
+        setComposing({ draft: result.draft, dropped: result.dropped });
+        writeReply.mutate(id, {
+          onSuccess: ({ body, draft_id }) => setGenerated({ body: result.draft.body ? `${body}\n\n${result.draft.body}` : body, id: draft_id ?? null }),
+        });
+      },
     });
   };
   useEffect(() => {
@@ -267,7 +274,7 @@ export function ThreadScreen({ id, onLeave, folder: backTo }: { id: number; onLe
         <div className="flex items-center gap-1">
           <TextLink href={folder} className="text-sm md:hidden">{t("mail.backToInbox")}</TextLink>
           <AskAgent context={[`thread:${id}`]} title={row.subject || t("mail.noSubject")} />
-          <SummaryAction id={id} />
+          <SummaryAction id={id} pending={summarize.isPending} run={() => summarize.mutate(id)} />
           <Button variant="ai" thinking data-testid="draft-reply" loading={drafting} disabled={composing !== null} onClick={draftReply}>{t(drafting ? "mail.draftReply.working" : "mail.draftReply")}</Button>
           <span className="flex-1" />
           <IconButton icon="flag" label={t(row.flagged ? "mail.unflag" : "mail.flag")} onClick={() => setFlag.mutate({ id, flagged: !row.flagged })} />
@@ -283,16 +290,18 @@ export function ThreadScreen({ id, onLeave, folder: backTo }: { id: number; onLe
         </div>
         <ThreadFiling thread={row} messages={messages} />
         {row.why ? <WhyHere thread={id} reason={row.why} /> : null}
-        <SummaryBlock id={id} />
+        <SummaryBlock id={id} pending={summarize.isPending} phase={summarize.phase} error={summarize.error?.message ?? null} retry={() => summarize.mutate(id)} />
       </header>
       <div className="flex flex-col">
         {messages.map((message, index) => (
           <MessageCard threadWhy={row.why} key={message.id} message={message} open={index === messages.length - 1} onReply={reply} />
         ))}
       </div>
+      {draftRequested && !composing ? <section ref={composer} className="rounded-lg border border-line-subtle bg-surface-raised p-4">{replyDraft.isPending ? <GenerationSurface phase="preparing" label={t("generation.reply")} placeholder /> : null}{replyDraft.error ? <ErrorState title={t("generation.replyFailed")} description={replyDraft.error.message} onRetry={draftReply} /> : null}</section> : null}
       {composing ? (
         <section ref={composer} className="rounded-lg border border-line-subtle bg-surface-raised p-4">
-          <Composer initial={composing.draft} dropped={composing.dropped} onDone={() => setComposing(null)} />
+          <Composer initial={composing.draft} dropped={composing.dropped} generation={writeReply.isPending ? writeReply.phase : undefined} generated={generated} generationFailed={draftRequested && writeReply.isError} onDone={() => { setComposing(null); setDraftRequested(false); setGenerated(null); }} />
+          {draftRequested && writeReply.error ? <ErrorState title={t("generation.replyFailed")} description={writeReply.error.message} onRetry={draftReply} /> : null}
         </section>
       ) : null}
     </div>

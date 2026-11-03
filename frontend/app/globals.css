@@ -167,7 +167,6 @@ svg.lucide {
   background:
     linear-gradient(theme(colors.surface.raised), theme(colors.surface.raised)) padding-box,
     conic-gradient(from var(--ai-angle), var(--ai-colors)) border-box;
-  animation: ai-turn 6s linear infinite;
 }
 /* Its glow needs a place to sit, but what's already fixed on screen stays fixed. */
 .ai-glow:not(.fixed) {
@@ -183,7 +182,6 @@ svg.lucide {
   filter: blur(7px);
   opacity: 0.35;
   transition: opacity var(--motion-normal) var(--motion-easing);
-  animation: ai-turn 6s linear infinite;
   pointer-events: none;
 }
 .ai-glow:hover::before,
@@ -198,7 +196,6 @@ svg.lucide {
   background:
     linear-gradient(theme(colors.surface.raised), theme(colors.surface.raised)) padding-box,
     conic-gradient(from var(--ai-angle), var(--ai-colors)) border-box;
-  animation: ai-turn 12s linear infinite;
 }
 .ai-surface::before {
   content: "";
@@ -209,7 +206,6 @@ svg.lucide {
   background: conic-gradient(from var(--ai-angle), var(--ai-colors));
   filter: blur(14px);
   opacity: 0.22;
-  animation: ai-turn 12s linear infinite;
   pointer-events: none;
 }
 @keyframes ai-turn {
@@ -217,4 +213,33 @@ svg.lucide {
 }
 @media (prefers-reduced-motion: reduce) {
   .ai-glow, .ai-glow::before, .ai-surface, .ai-surface::before { animation: none; }
+}
+
+/* An AI identity rim is still. Only a model generating earns the moving light. */
+.generation-surface { position: relative; isolation: isolate; }
+.generation-surface[data-phase="generating"]::before {
+  animation: ai-turn var(--motion-generation) linear infinite;
+}
+.generation-surface[data-phase="generating"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(110deg, transparent, theme(colors.ai.one / 0.14), theme(colors.ai.three / 0.18), theme(colors.ai.four / 0.12), transparent);
+  background-size: 250% 100%;
+  animation: ai-wash var(--motion-generation) ease-in-out infinite alternate;
+}
+@keyframes ai-wash {
+  from { background-position: 100% 50%; }
+  to { background-position: 0% 50%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .generation-surface[data-phase="generating"]::before,
+  .generation-surface[data-phase="generating"]::after { animation: none; }
+}
+
+.generation-surface[data-phase="preparing"] .generation-placeholder > div {
+  background: theme(colors.surface.raised);
 }
