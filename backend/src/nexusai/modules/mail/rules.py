@@ -49,10 +49,21 @@ PUBLIC_MAIL_DOMAINS = frozenset(
 )
 
 
+# Automated mail goes unjudged, unless what it says could cost the person something.
+WORTH_A_LOOK = re.compile(
+    r"\b(action required|payment|overdue|past due|due (on|by|date|soon)|expir(es|ing|ed|y)|deadline"
+    r"|security|suspicious|unauthori[sz]ed|sign-?in|password|declined|invoice|interview"
+    r"|offer letter|your application|verify your|final notice|renewal|outage|cancell?ed)\b",
+    re.I,
+)
+
+
 @dataclass(frozen=True)
 class RuleMatch:
     name: str
     actions: RuleActions
+    # Only a guess from its headers, so what it says can still bring it to the agent.
+    look_closer: bool = False
 
     @property
     def why(self) -> str:
@@ -60,6 +71,20 @@ class RuleMatch:
 
 
 _WRITING = threading.Lock()
+
+
+# Their names, because they only guess from headers, unlike a rule the person wrote.
+BUILT_IN_RULES = frozenset(
+    {
+        "Notification from a system",
+        "Automatically generated mail",
+        "From a social network",
+        "Company bulk mail",
+        "Marketing or bulk mail",
+        "Mailing list",
+        "Sent from a no-reply address",
+    }
+)
 
 
 def _builtin(parsed: ParsedMessage, own_domain: str | None = None) -> RuleMatch | None:
@@ -74,7 +99,7 @@ def _builtin(parsed: ParsedMessage, own_domain: str | None = None) -> RuleMatch 
         return RuleMatch("Notification from a system", updates)
     auto_submitted = headers.get("auto-submitted", "no").lower()
     if not auto_submitted.startswith("no") or "x-auto-response-suppress" in headers:
-        return RuleMatch("Automatically generated mail", updates)
+        return RuleMatch("Automatically generated mail", updates, True)
     # A company's own server has no social mail to speak of, and nor is its own mail a promotion.
     if not own_domain and any(
         sender_domain == domain or sender_domain.endswith(f".{domain}") for domain in SOCIAL_DOMAINS
@@ -88,7 +113,7 @@ def _builtin(parsed: ParsedMessage, own_domain: str | None = None) -> RuleMatch 
     if "list-id" in headers or precedence == "list":
         return RuleMatch("Mailing list", forums)
     if NO_REPLY.search(parsed.from_addr):
-        return RuleMatch("Sent from a no-reply address", updates)
+        return RuleMatch("Sent from a no-reply address", updates, True)
     return None
 
 

@@ -70,7 +70,7 @@ triage_batch = 10
 triage_retry_seconds = 60
 max_recent_thread_messages = 8
 max_thread_chars = 20000
-memory_max_chars = 4000
+memory_max_chars = 8000
 # One run of the Mail agent. It stops there, and what it finished is kept.
 triage_token_limit = 30000
 # How many past emails the rule engine didn't catch the Mail agent reads to learn about the person,

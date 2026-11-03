@@ -301,3 +301,23 @@ Build this before any feature, because everything else depends on it:
 5. One thin feature through every layer as a proof: **Settings → change theme**, with the event inspector showing it
 
 After that, features follow the stages in [`FEATURES.md`](FEATURES.md).
+
+## The Mail agent's judgement
+
+What it knows, strongest first, and how far each is trusted. `modules/agent/knowledge.py` builds this for a real run and for the "What it knows" page, so the page can't drift from what the model is sent.
+
+| Layer | Comes from | Trust |
+|---|---|---|
+| About the person, Personalized prompts | Profile and prompt files | The person's own words, and they always win |
+| What you corrected | `mail_feedback`, from their own changes. An agent's changes don't count | Theirs |
+| What the mailbox shows, and the facts with each email | Counted by `modules/agent/signals.py` with no model | Reliable |
+| Memory: confirmed | `memory/user/` | Theirs |
+| Memory: learned | `memory/agents/mail/learned.md`, each note marked with the mail it came from | Untrusted hints, because anyone can send mail |
+| The email | The server | Untrusted, and the weakest evidence of its own importance |
+
+- **Who has the next move** is status, and what they'd do is `next_action`. Interrupting is `notify`, decided apart from importance. Questions stop at three open.
+- **Without any model:** sending takes a conversation off their plate at once, a reply moves it back, and a follow-up date that passes tells them once.
+- **Automated mail** skips the model unless its subject could cost them something, or it's in a conversation they wrote in.
+- **A broadcast** (more than 10 recipients) reaches the model as a count, and `read_recipients` searches the list if it matters.
+- **Recommendations** name real senders only, show the app's own counts, and do nothing until the person agrees. Quiet groups only archive what's read and over a month old. Nothing is ever deleted.
+- **Prompts are checked** with `make eval-mail`, which runs made-up emails through the real model. Tests use a fake model and can't judge wording.

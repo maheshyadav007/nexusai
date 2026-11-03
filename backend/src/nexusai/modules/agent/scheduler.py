@@ -45,6 +45,20 @@ INSERT INTO schedules (title, prompt, kind, every, time, enabled) VALUES ('Mail 
 )
 
 
+BUILT_IN_MIGRATION = Migration(
+    "agent_schedule_built_in_001",
+    """
+INSERT INTO schedules (title, prompt, kind, every, time, enabled) VALUES ('Morning brief', '', 'mail-brief', 'day', '08:30', 1);
+INSERT INTO schedules (title, prompt, kind, every, weekday, time, enabled) VALUES ('Inbox review', '', 'mail-review', 'week', 0, '09:00', 1);
+""",
+)
+FOLLOW_UP_NOTICE_KIND = "follow-up"
+BRIEF_KIND = "mail-brief"
+REVIEW_KIND = "mail-review"
+# What the Mail agent runs for itself, which the person turns on and off through its settings.
+BUILT_IN_KINDS = ("mail-hourly", BRIEF_KIND, REVIEW_KIND)
+
+
 def _local_now() -> datetime:
     return datetime.now().astimezone().replace(tzinfo=None, second=0, microsecond=0)
 
@@ -86,6 +100,35 @@ def set_default(ctx: Context, key: str, value: bool | str) -> None:
         tx.execute(
             "INSERT INTO agent_defaults (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
             (key, text),
+        )
+
+
+def start_built_ins(ctx: Context) -> None:
+    """The ones that come with the app have no time set until they first run."""
+    rows = ctx.bus.db.fetch_all(
+        "SELECT * FROM schedules WHERE enabled = 1 AND next_run IS NULL AND kind IN (?, ?)",
+        (BRIEF_KIND, REVIEW_KIND),
+    )
+    for row in rows:
+        following = next_run_after(row_to_schedule(row), _local_now())
+        with ctx.bus.db.transaction() as tx:
+            tx.execute("UPDATE schedules SET next_run = ? WHERE id = ?", (following, row["id"]))
+
+
+def built_in_on(ctx: Context, kind: str) -> bool:
+    rows = ctx.bus.db.fetch_all("SELECT enabled FROM schedules WHERE kind = ?", (kind,))
+    return bool(rows and rows[0]["enabled"])
+
+
+def set_built_in(ctx: Context, kind: str, enabled: bool) -> None:
+    rows = ctx.bus.db.fetch_all("SELECT * FROM schedules WHERE kind = ?", (kind,))
+    if not rows:
+        return
+    following = next_run_after(row_to_schedule(rows[0]), _local_now()) if enabled else None
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "UPDATE schedules SET enabled = ?, next_run = ? WHERE id = ?",
+            (int(enabled), following, rows[0]["id"]),
         )
 
 
@@ -159,6 +202,7 @@ class Scheduler:
         if time_check_enabled(self.ctx):
             planner.fire_due_reminders(self.ctx, now)
             self._overdue(now)
+            self._follow_ups(now)
         self._run_due(now)
 
     def _overdue(self, now: datetime) -> None:
@@ -179,6 +223,35 @@ class Scheduler:
                     f"/mail/thread/{row['thread']}" if row["thread"] else "/today",
                     OVERDUE_NOTICE_KIND,
                     False,
+                )
+
+    def _follow_ups(self, now: datetime) -> None:
+        """Nobody's answered by the day it was worth chasing. Uses no model, and tells them once."""
+        today = now.strftime("%Y-%m-%d")
+        rows = self.ctx.bus.db.fetch_all(
+            "SELECT id, subject FROM threads WHERE status = 'waiting_on_others' AND follow_up_on <= ?"
+            " AND followup_notified IS NULL AND in_trash = 0",
+            (today,),
+        )
+        for row in rows:
+            with self.ctx.bus.unit_of_work() as work:
+                work.tx.execute(
+                    "UPDATE threads SET followup_notified = ? WHERE id = ?", (today, row["id"])
+                )
+                channel.notify(
+                    self.ctx,
+                    work,
+                    f"No answer yet: {row['subject'] or 'your message'}",
+                    "It's time to follow up.",
+                    f"/mail/thread/{row['id']}",
+                    FOLLOW_UP_NOTICE_KIND,
+                    False,
+                )
+                work.emit(
+                    "mail.changed",
+                    {"threads": 1, "reason": "follow-up"},
+                    source="agent",
+                    trace_id=self.ctx.trace_id,
                 )
 
     def _run_due(self, now: datetime) -> None:

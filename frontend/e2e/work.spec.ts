@@ -179,6 +179,24 @@ test("a schedule is created and runs on demand", async ({ page }) => {
   await page.getByRole("switch", { name: "Time check for reminders and deadlines" }).click();
 });
 
+test("what the agent knows, and is told, can be seen and it asks before moving mail", async ({ page }) => {
+  await page.goto("/agent/memory");
+  await expect(page.getByRole("tab", { name: "What it knows" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("heading", { name: "Learned from your mail" })).toBeVisible();
+  const layers = page.getByRole("list", { name: "Everything it's told, in order" });
+  await expect(layers.getByTestId("knowledge-layer").first()).toContainText("System prompt");
+  await layers.getByRole("button", { name: "Open Mail agent's instructions" }).click();
+  await expect(layers.getByText("chief of staff")).toBeVisible();
+  await noViolations(page);
+  await page.getByRole("switch", { name: "Morning brief" }).click();
+  await expect(page.getByRole("switch", { name: "Morning brief" })).not.toBeChecked();
+  await page.getByRole("switch", { name: "Morning brief" }).click();
+  await expect(page.getByRole("switch", { name: "Morning brief" })).toBeChecked();
+  await page.getByRole("tab", { name: "What it sees" }).click();
+  await expect(page.getByText("calls no model")).toBeVisible();
+  await noViolations(page);
+});
+
 test("agent screens open cleanly and memory proposals are decided", async ({ page }) => {
   for (const path of ["/cockpit", "/agent/activity", "/agent/channel"]) {
     await page.goto(path);

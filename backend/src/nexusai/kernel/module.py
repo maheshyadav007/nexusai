@@ -26,6 +26,8 @@ class Context:
     bus: EventBus
     config: Config
     trace_id: str
+    # Who a change comes from, so what an agent does isn't taken as the person's own choice.
+    actor: str = "person"
 
 
 Route = Callable[[Any, Context], BaseModel]

@@ -8,6 +8,7 @@ import re
 import sqlite3
 import time
 from collections.abc import Callable, Iterable
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, cast
 
@@ -393,6 +394,7 @@ def _lines(items: Iterable[str]) -> str:
 def specs(
     ctx: Context, guard: Guard, wrap_untrusted: Callable[[str], str], session: str
 ) -> list[Spec]:
+    ctx = replace(ctx, actor="agent")
     db = ctx.bus.db
     documents = ctx.config.home / "documents"
 

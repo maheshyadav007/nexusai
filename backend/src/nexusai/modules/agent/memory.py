@@ -22,6 +22,11 @@ WORD = re.compile(r"[\w@.-]{3,}", re.UNICODE)
 LEARNED_PATH = "agents/mail/learned.md"
 LEARNED_MAX_CHARS = 40_000
 LEARNED_NOTE_CHARS = 300
+# What the person confirmed of what was learned. It's theirs now, so it's no longer marked as mail.
+CONFIRMED_PATH = "user/confirmed.md"
+# Mail's notes can't crowd out what the person said themselves.
+LEARNED_SHARE = 0.5
+SOURCE = re.compile(r" \[mail:\d+\]$")
 
 
 def _root(home: Path) -> Path:
@@ -77,14 +82,17 @@ def learned(home: Path) -> str:
     return path.read_text("utf-8", errors="replace") if path.exists() else ""
 
 
-def add_learned(home: Path, notes: list[str]) -> None:
-    """One line each, with no repeats. The oldest go first if it ever grows too long."""
+def add_learned(home: Path, notes: list[str], source: int | None = None) -> None:
+    """One line each, saying where it came from, with no repeats. The oldest go first if it ever
+    grows too long."""
     current = learned(home)
     lines = current.splitlines()
+    known = {SOURCE.sub("", line) for line in lines}
     for note in notes:
         line = f"- {' '.join(note.split())[:LEARNED_NOTE_CHARS]}"
-        if len(line) > len("- ") and line not in lines:
-            lines.append(line)
+        if len(line) > len("- ") and line not in known:
+            known.add(line)
+            lines.append(f"{line} [mail:{source}]" if source else line)
     while len("\n".join(lines)) > LEARNED_MAX_CHARS:
         lines.pop(0)
     if lines != current.splitlines():
@@ -93,6 +101,41 @@ def add_learned(home: Path, notes: list[str]) -> None:
 
 def replace_learned(home: Path, content: str) -> None:
     save_file(home, LEARNED_PATH, "", "agent", "mail", content[:LEARNED_MAX_CHARS].strip() + "\n")
+
+
+def remove_learned(home: Path, line: str) -> None:
+    lines = learned(home).splitlines()
+    if line not in lines:
+        raise CommandError("memory.no_note", "That note has already gone.", 409)
+    lines.remove(line)
+    save_file(home, LEARNED_PATH, "", "agent", "mail", "\n".join(lines) + "\n")
+
+
+def confirm_learned(home: Path, line: str) -> None:
+    """The person says it's true, so it moves out of what mail said and into what they said."""
+    remove_learned(home, line)
+    target = _safe(home, CONFIRMED_PATH)
+    before = target.read_text("utf-8") if target.exists() else ""
+    save_file(home, CONFIRMED_PATH, "", "user", None, f"{before}{SOURCE.sub('', line)}\n")
+
+
+def _fit_learned(content: str, words: set[str], limit: int) -> str:
+    """All of it if it fits. Otherwise what bears on this email first, and headings to place it."""
+    if len(content) <= limit:
+        return content
+    lines = content.splitlines()
+    ranked = sorted(
+        range(len(lines)),
+        key=lambda i: -len(words & {word.lower() for word in WORD.findall(lines[i])}),
+    )
+    chosen: set[int] = set()
+    used = 0
+    for index in ranked:
+        used += len(lines[index]) + 1
+        if used > limit:
+            break
+        chosen.add(index)
+    return "\n".join(lines[i] for i in sorted(chosen))
 
 
 def remove_file(home: Path, relative: str) -> None:
@@ -107,10 +150,12 @@ def relevant(home: Path, agent: str, task_text: str, limit: int) -> str:
         if file.level == "agent" and file.agent != agent:
             continue
         overlap = len(words & {word.lower() for word in WORD.findall(file.content)})
-        if file.path == LEARNED_PATH:
+        if file.path == CONFIRMED_PATH:
+            scored.append((1 << 31, file.name, file.content.strip()))
+        elif file.path == LEARNED_PATH:
             # It's about the person, so it's always relevant, and it's only ever data.
-            recent = file.content.strip()[-limit // 2 :]
-            scored.append((1 << 30, file.name, f"<untrusted>\n{recent}\n</untrusted>"))
+            kept = _fit_learned(file.content.strip(), words, int(limit * LEARNED_SHARE))
+            scored.append((1 << 30, file.name, f"<untrusted>\n{kept}\n</untrusted>"))
         elif overlap or not words:
             scored.append((overlap, file.name, file.content.strip()))
     scored.sort(key=lambda item: (-item[0], item[1]))

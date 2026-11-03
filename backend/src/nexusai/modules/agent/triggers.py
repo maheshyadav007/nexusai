@@ -39,7 +39,12 @@ EVENT_ORIGIN = "event"
 MOST_THREADS_PER_RUN = 3
 SCHEDULE_TRIGGER = "schedule"
 HOURLY_KIND = "mail-hourly"
-SCHEDULE_AGENTS = {"daily-prep": "daily-prep", "prompt": "scheduled"}
+REVIEW_KIND = scheduler.REVIEW_KIND
+BRIEF_KIND = scheduler.BRIEF_KIND
+REVIEWED = "mail_reviewed"
+LOOPS_CHECKED = "mail_loops_checked"
+JUDGED_AGAIN = "mail_judged_again"
+SCHEDULE_AGENTS = {"daily-prep": "daily-prep", BRIEF_KIND: "daily-prep", "prompt": "scheduled"}
 SCHEDULE_ORIGIN = "schedule"
 LAST_DIGEST = "last_digest"
 
@@ -70,6 +75,7 @@ class Triggers:
         self._requeue_unfinished()
         self.runtime.on_turn_end = self.turn_ended
         self.runtime.on_hold = self.hold_for_model
+        self._catch_up_once()
         self.thread.start()
         self.wake.set()
 
@@ -79,6 +85,28 @@ class Triggers:
         self.thread.join(timeout=10)
         self.runtime.on_turn_end = None
         self.runtime.on_hold = None
+
+    def _catch_up_once(self) -> None:
+        """A Home from before these existed, or one that finished reading while this was off."""
+        ctx = self.ctx
+        if mail_agent.learning_state(ctx) != "done":
+            return
+        if not mail_agent._setting(ctx, LOOPS_CHECKED):
+            mail_agent._set(ctx, LOOPS_CHECKED, mail_agent._now())
+            mail_agent.look_for_open_loops(ctx)
+        if not mail_agent._setting(ctx, JUDGED_AGAIN):
+            mail_agent._set(ctx, JUDGED_AGAIN, mail_agent._now())
+            mail_agent.judge_open_again(ctx)
+        if not mail_agent._setting(ctx, REVIEWED):
+            self.review_now(f"first-review-{mail_agent._now()}")
+
+    def review_now(self, event: str) -> None:
+        """Whichever time it comes up, it runs like the weekly one."""
+        rows = self.ctx.bus.db.fetch_all(
+            "SELECT id FROM schedules WHERE kind = ? LIMIT 1", (REVIEW_KIND,)
+        )
+        if rows:
+            self.fire_schedule(event, rows[0]["id"])
 
     def _requeue_unfinished(self) -> None:
         """Runs that were started but whose turn never got going go back in line."""
@@ -174,6 +202,7 @@ class Triggers:
             return
         if not memory.learned(ctx.config.home):
             mail_agent.set_learning_state(ctx, "done")
+            self._catch_up_once()
             return
         own = self._mail_trigger()
         request = mail_agent.wrap_up_turn(ctx)
@@ -214,6 +243,19 @@ class Triggers:
                 "interview",
                 False,
             )
+
+    def read_more(self, count: int) -> int:
+        """When someone wants it to know more, starting with their own conversations."""
+        with self.lock:
+            if mail_agent.learning_state(self.ctx) in {"reading", "wrapping"}:
+                raise CommandError(
+                    "mailAgent.busy", "It's already reading. It can do more once that's done.", 409
+                )
+            found = mail_agent.queue_learning(self.ctx, count)
+            if not found:
+                mail_agent.set_learning_state(self.ctx, "done")
+        self.wake.set()
+        return found
 
     def _model_ready(self) -> bool:
         if self.waiting_for_model and time.monotonic() < self.retry_at:
@@ -354,6 +396,8 @@ class Triggers:
                 mail_agent.settle(self.ctx, [run["id"]], "skipped")
             elif found[0]["kind"] == HOURLY_KIND:
                 self._hourly(run["id"])
+            elif found[0]["kind"] == REVIEW_KIND:
+                self._review(run["id"])
             else:
                 self._start_schedule(run["id"], found[0])
 
@@ -369,6 +413,20 @@ class Triggers:
             mail_agent.settle(self.ctx, [run], "skipped")
             return
         scheduler.set_default(self.ctx, LAST_DIGEST, mail_agent._now())
+        self._dispatch(request, [run], self.config.triage_token_limit)
+
+    def _review(self, run: int) -> None:
+        ctx = self.ctx
+        if not mail_agent.enabled(ctx):
+            mail_agent.settle(ctx, [run], "skipped")
+            return
+        if self.runtime.active_turn(mail_agent.SESSION_ID) is not None or not self._model_ready():
+            return
+        request = mail_agent.review_turn(ctx)
+        mail_agent._set(ctx, REVIEWED, mail_agent._now())
+        if request is None:
+            mail_agent.settle(ctx, [run], "skipped")
+            return
         self._dispatch(request, [run], self.config.triage_token_limit)
 
     def _digest_since(self) -> str:
@@ -395,12 +453,22 @@ class Triggers:
 
     def _start_schedule(self, run: int, schedule: Any) -> None:
         """One chat for each schedule, so its runs read as one conversation."""
+        is_brief = schedule["kind"] == BRIEF_KIND
+        # With no mail read yet there's nothing to brief on, so it doesn't spend anything.
+        if is_brief and mail_agent.learning_state(self.ctx) != "done":
+            mail_agent.settle(self.ctx, [run], "skipped")
+            return
         session = self._schedule_session(schedule)
         if self.runtime.active_turn(session) is not None or not self._model_ready():
             return
         own = {"mode": schedule["context_mode"], "keep_messages": schedule["keep_messages"]}
         prompt = schedule["prompt"] or "Prepare my morning from the work board."
-        request = TurnRequest(session, prompt, SCHEDULE_ORIGIN, context=own)
+        task = ""
+        if is_brief:
+            task = mail_agent.brief_task(self.ctx)
+            with self.ctx.bus.db.transaction() as tx:
+                tx.execute("UPDATE agent_sessions SET untrusted = 1 WHERE id = ?", (session,))
+        request = TurnRequest(session, prompt, SCHEDULE_ORIGIN, task=task, context=own)
         if not self._dispatch(request, [run], schedule["token_limit"]):
             return
         with self.ctx.bus.unit_of_work() as work:
@@ -439,8 +507,12 @@ class Triggers:
         mail = [run for run in runs if run["trigger"] == mail_agent.MAIL_TRIGGER]
         if mail:
             mail_agent.after_turn(self.ctx, turn, mail, error)
-        if turn == mail_agent.learning_turn(self.ctx):
+        if turn == mail_agent.learning_turn(self.ctx) and (
+            mail_agent.learning_state(self.ctx) == "wrapping"
+        ):
             mail_agent.set_learning_state(self.ctx, "done")
+            self._catch_up_once()
+            self.review_now(f"after-reading-{turn}")
         others = [run["id"] for run in runs if run["trigger"] != mail_agent.MAIL_TRIGGER]
         mail_agent.settle(self.ctx, others, "failed" if error else "done", error)
         self.wake.set()

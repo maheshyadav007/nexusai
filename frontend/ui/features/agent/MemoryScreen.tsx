@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AgentKnows, AgentSees } from "./AgentKnows";
 import type { MemoryFile, PromptFile } from "@/ui/client/contracts.generated";
 import { useDecideMemory, useMemory, usePrompts, useRemoveMemory, useSaveMemory, useSavePrompt } from "@/ui/client/work";
 import { Button } from "@/ui/primitives/Button";
@@ -124,7 +125,7 @@ export function MemoryScreen() {
   return (
     <div className="mx-auto flex max-w-reading flex-col gap-5 p-6">
       <PageHeader title={t("nav.memory")} />
-      <Tabs label={t("nav.memory")} tabs={[{ value: "prompts", label: t("prompts.title"), content: <PromptsEditor /> }, { value: "memory", label: t("memory.title"), content: <MemoryBrowser /> }]} />
+      <Tabs label={t("nav.memory")} tabs={[{ value: "knows", label: t("knows.title"), content: <AgentKnows /> }, { value: "prompts", label: t("prompts.title"), content: <PromptsEditor /> }, { value: "memory", label: t("memory.title"), content: <MemoryBrowser /> }, { value: "sees", label: t("knows.sees.title"), content: <AgentSees /> }]} />
     </div>
   );
 }

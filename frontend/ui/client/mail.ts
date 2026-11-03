@@ -2,7 +2,7 @@
 
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { command, query } from "./api";
-import type { Draft, ListThreads, MailProfile, MoveThread, RuleSet, SaveCategory, SearchMail, SetThreadStatus, UpdateCategory } from "./contracts.generated";
+import type { Importance, Draft, ListThreads, MailProfile, MoveThread, RuleSet, SaveCategory, SearchMail, SetThreadStatus, UpdateCategory } from "./contracts.generated";
 import { useHomeReady } from "./home";
 
 export type FolderRole = NonNullable<ListThreads["folder"]>;
@@ -105,6 +105,7 @@ export const useAddCategory = () => useThreadCommand((input: { id: number; name:
 export const useRemoveThreadCategory = () => useThreadCommand((input: { id: number; name: string }) => command("thread.removeCategory", input));
 export const useMoveThread = () => useThreadCommand((input: MoveThread) => command("thread.move", input));
 export const useSetStatus = () => useThreadCommand((input: { id: number; status: ThreadStatus }) => command("thread.setStatus", input));
+export const useSetImportance = () => useThreadCommand((input: { id: number; importance: Importance }) => command("thread.setImportance", input));
 export const useSetCategory = () => useThreadCommand((input: { id: number; category: string | null }) => command("thread.setCategory", input));
 
 export function useRules() {

@@ -1,4 +1,14 @@
 import type {
+  AgentKnowledge,
+  ChangeLearnedNote,
+  DecideMailSuggestion,
+  GetAgentKnowledge,
+  ListMailSuggestions,
+  MailPreview,
+  MailSuggestionList,
+  PreviewMail,
+  ReadMoreMail,
+  SetThreadImportance,
   SetSenderImages,
   DismissChecklist,
   DownloadModel,
@@ -259,6 +269,7 @@ interface Commands {
   "thread.setFlag": [SetThreadFlag, MailDone];
   "thread.move": [MoveThread, MailDone];
   "thread.setStatus": [SetThreadStatus, MailDone];
+  "thread.setImportance": [SetThreadImportance, MailDone];
   "thread.setCategory": [SetThreadCategory, MailDone];
   "rules.save": [RuleSet, RuleSet];
   "drafts.save": [Draft, Draft];
@@ -332,6 +343,10 @@ interface Commands {
   "session.compact": [SessionAction, CompactResult];
   "mailAgent.save": [MailAgentSettings, MailAgentSettings];
   "mailAgent.runNow": [RunMailAgent, MailAgentRun];
+  "mailAgent.readMore": [ReadMoreMail, AgentDone];
+  "memory.confirmNote": [ChangeLearnedNote, AgentDone];
+  "memory.removeNote": [ChangeLearnedNote, AgentDone];
+  "suggestions.decide": [DecideMailSuggestion, AgentDone];
   "context.save": [ContextSettings, ContextSettings];
   "session.chooseVersion": [ChooseVersion, SessionView];
   "message.rate": [RateMessage, AgentDone];
@@ -382,6 +397,9 @@ interface Queries {
   "mail.folders": [ListMailFolders, MailFolders];
   "cockpit.events": [GetCockpitEvents, CockpitEvents];
   "mailAgent.get": [GetMailAgentSettings, MailAgentSettings];
+  "mailAgent.knowledge": [GetAgentKnowledge, AgentKnowledge];
+  "mailAgent.preview": [PreviewMail, MailPreview];
+  "suggestions.list": [ListMailSuggestions, MailSuggestionList];
   "context.get": [GetContextSettings, ContextSettings];
   "session.get": [SessionAction, SessionView];
   "approvals.list": [ListApprovals, ApprovalList];

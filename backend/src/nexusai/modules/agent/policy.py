@@ -109,6 +109,13 @@ TOOL_ENTRIES = (
     ),
     ToolEntry("search_mail", MAIL, "Search mail", "Find mail and attachments.", "read"),
     ToolEntry("read_thread", MAIL, "Read mail", "Open a conversation.", "read"),
+    ToolEntry(
+        "read_recipients",
+        MAIL,
+        "See who mail went to",
+        "Look through a message's recipients.",
+        "read",
+    ),
     ToolEntry("list_mail", MAIL, "List mail", "See what's in a folder or category.", "read"),
     ToolEntry("update_mail", MAIL, "Organize mail", "File, flag, mark and archive mail.", "data"),
     ToolEntry("trash_mail", MAIL, "Delete mail", "Move mail to Trash.", "data", ASK),

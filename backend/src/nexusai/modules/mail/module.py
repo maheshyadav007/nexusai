@@ -80,6 +80,7 @@ from nexusai.contracts.mail import (
     SetSenderImages,
     SetThreadCategory,
     SetThreadFlag,
+    SetThreadImportance,
     SetThreadRead,
     SetThreadStatus,
     StartPstUpload,
@@ -648,7 +649,7 @@ def _thread_messages(ctx: Context, thread: int) -> list[dict[str, object]]:
 def _changed(work: object, ctx: Context, thread: int, field: str, value: object) -> None:
     work.emit(  # type: ignore[attr-defined]
         "thread.updated",
-        ThreadUpdated(thread_id=thread, field=field, value=value).model_dump(),
+        ThreadUpdated(thread_id=thread, field=field, value=value, by=ctx.actor).model_dump(),
         source="mail",
         trace_id=ctx.trace_id,
     )
@@ -872,6 +873,17 @@ def set_status(command: SetThreadStatus, ctx: Context) -> MailDone:
     return MailDone()
 
 
+@mail_module.command("thread.setImportance")
+def set_importance(command: SetThreadImportance, ctx: Context) -> MailDone:
+    _thread_messages(ctx, command.id)
+    with ctx.bus.unit_of_work() as work:
+        work.tx.execute(
+            "UPDATE threads SET importance = ? WHERE id = ?", (command.importance, command.id)
+        )
+        _changed(work, ctx, command.id, "importance", command.importance)
+    return MailDone()
+
+
 @mail_module.command("thread.setCategory")
 def set_category(command: SetThreadCategory, ctx: Context) -> MailDone:
     _thread_messages(ctx, command.id)
@@ -1043,6 +1055,18 @@ def _apply_category_rule(ctx: Context, name: str, sender: str | None, subject: s
             " COALESCE(t.category_source, '') != 'user' AND EXISTS"
             f" (SELECT 1 FROM messages m WHERE {' AND '.join(where)})",
             (name, f"Matched the category “{name}”", *params),
+        )
+        return int(cursor.rowcount)
+
+
+def file_by_sender(ctx: Context, name: str, sender: str) -> int:
+    """What's already here from this sender, without touching what the person filed themselves."""
+    with ctx.bus.db.transaction() as tx:
+        cursor = tx.execute(
+            "UPDATE threads AS t SET category = ?, category_source = 'rule', why = ? WHERE"
+            " COALESCE(t.category_source, '') != 'user' AND EXISTS"
+            " (SELECT 1 FROM messages m WHERE t.id = m.thread_id AND LOWER(m.from_addr) = ?)",
+            (name, f"Matched the category “{name}”", sender),
         )
         return int(cursor.rowcount)
 

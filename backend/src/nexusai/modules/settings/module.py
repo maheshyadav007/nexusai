@@ -67,19 +67,19 @@ def update_settings(command: UpdateSettings, ctx: Context) -> Settings:
     return _load(ctx)
 
 
-def _load_profile(ctx: Context) -> Profile:
+def load_profile(ctx: Context) -> Profile:
     rows = ctx.bus.db.fetch_all("SELECT value FROM profile")
     return Profile.model_validate_json(rows[0]["value"]) if rows else Profile()
 
 
 @settings_module.query("profile.get")
 def get_profile(query: GetProfile, ctx: Context) -> Profile:
-    return _load_profile(ctx)
+    return load_profile(ctx)
 
 
 @settings_module.command("profile.update")
 def update_profile(command: Profile, ctx: Context) -> Profile:
-    before = _load_profile(ctx).model_dump()
+    before = load_profile(ctx).model_dump()
     changed = [key for key, value in command.model_dump().items() if before[key] != value]
     with ctx.bus.unit_of_work() as work:
         work.tx.execute(

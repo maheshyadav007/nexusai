@@ -28,7 +28,7 @@ from nexusai.modules.mail.parse import (
     normalize_subject,
     part_bytes,
 )
-from nexusai.modules.mail.rules import RuleMatch
+from nexusai.modules.mail.rules import WORTH_A_LOOK, RuleMatch
 from nexusai.modules.mail.safe_html import sanitize
 
 
@@ -161,6 +161,24 @@ UPDATE messages SET has_attachments = EXISTS (SELECT 1 FROM message_parts p WHER
 UPDATE threads SET has_attachments = EXISTS (SELECT 1 FROM messages m WHERE m.thread_id = threads.id AND m.has_attachments = 1);
 """,
     ),
+    Migration(
+        "mail_attention_001",
+        """
+ALTER TABLE threads ADD COLUMN next_action TEXT;
+ALTER TABLE threads ADD COLUMN follow_up_on TEXT;
+ALTER TABLE threads ADD COLUMN followup_notified TEXT;
+CREATE INDEX threads_follow_up ON threads (status, follow_up_on);
+CREATE INDEX messages_from ON messages (from_addr);
+""",
+    ),
+    # Senders are looked up without regard to case, and a scan reads every email's whole body.
+    Migration(
+        "mail_sender_lookup_001",
+        """
+DROP INDEX messages_from;
+CREATE INDEX messages_from_lower ON messages (LOWER(from_addr));
+""",
+    ),
 ]
 ATTACHMENTS_FROM_PARTS = (
     "UPDATE messages SET has_attachments = EXISTS (SELECT 1 FROM message_parts p WHERE p.message = ?"
@@ -181,14 +199,15 @@ FOLDER_FILTERS = {
     # What came in, wherever it's been filed since.
     "all": "(in_inbox = 1 OR in_archive = 1)",
     # What needs attention: judged important, waiting on the person, in a category they marked,
-    # or not judged yet, so nothing is hidden just because no model has looked at it.
+    # or not judged yet and recent, so new mail isn't hidden just because no model has looked at it.
     "priority": (
         "(in_inbox = 1 AND (importance = 'high' OR status = 'waiting_on_you'"
-        " OR (category IS NULL AND importance != 'low')"
+        " OR (category IS NULL AND importance != 'low' AND last_date > date('now', '-7 days'))"
         " OR category IN (SELECT name FROM mail_categories WHERE in_priority = 1)))"
     ),
 }
 SUBJECT_WINDOW_DAYS = 30
+MOST_PARTICIPANTS_LISTED = 20
 # How many of the newest matches get ranked, and how many of those can become results.
 SEARCH_RANKED = 5000
 SEARCH_CANDIDATES = 2000
@@ -208,6 +227,8 @@ class Stored:
     skip_agent: bool
     notify: bool
     is_new_thread: bool
+    # Filed by its headers alone, and what it says could matter to the person.
+    worth_a_look: bool = False
 
 
 def _participants(parsed: ParsedMessage) -> set[str]:
@@ -416,6 +437,7 @@ def store_message(
         rule=match.name if match else None,
         skip_agent=bool(match and match.actions.skip_agent),
         notify=bool(match and match.actions.notify),
+        worth_a_look=bool(match and match.look_closer and WORTH_A_LOOK.search(parsed.subject)),
         is_new_thread=is_new,
     )
 
@@ -523,7 +545,8 @@ def row_of(row: sqlite3.Row) -> ThreadRow:
     return ThreadRow(
         id=row["id"],
         subject=row["subject"],
-        participants=json.loads(row["participants"]),
+        # A list only names a few, and a broadcast can have thousands.
+        participants=json.loads(row["participants"])[:MOST_PARTICIPANTS_LISTED],
         last_date=row["last_date"],
         snippet=row["snippet"],
         message_count=row["message_count"],

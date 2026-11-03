@@ -1,4 +1,4 @@
-.PHONY: setup dev backend frontend check speed
+.PHONY: setup dev backend frontend check speed eval-mail
 
 setup:
 	cd backend && uv sync
@@ -20,3 +20,7 @@ check:
 # Builds a 100,000-message mailbox, so it stays out of everyday checks.
 speed:
 	cd backend && uv run pytest -q -m speed -s
+
+# Judges made-up emails with the connected model, to check the Mail agent's prompts. Uses its tokens.
+eval-mail:
+	cd backend && uv run python evals/mail_eval.py

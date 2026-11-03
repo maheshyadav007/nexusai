@@ -37,7 +37,7 @@ from nexusai.modules.agent import (
     context,
     gateway,
     guard,
-    memory,
+    knowledge,
     policy,
     prompts_builder,
     providers,
@@ -107,6 +107,8 @@ ORIGIN_NOTES = {
     PERSON: "The person sent this message, and they're there to reply.",
     "mail": "New mail arrived, and this run started by itself. Nobody is waiting in the chat.",
     "mail-hourly": "The hourly check started this run by itself. Nobody is waiting in the chat.",
+    "mail-review": "The inbox review came due, and this run started by itself. Nobody is waiting in the chat.",
+    "mail-learn": "You're reading past mail to learn about the person. Nobody is waiting in the chat.",
     "schedule": "A schedule came due, and this run started by itself. Nobody is waiting in the chat.",
     "event": "Something happened that the person asked to hear about, and this run started by itself. Nobody is waiting in the chat.",
 }
@@ -563,17 +565,11 @@ class SessionRuntime:
         turn = latest[0] if latest else None
         origin = turn["origin"] if turn else PERSON
         task = turn["task"] if turn else ""
-        recalled = memory.relevant(
-            config.home,
+        layers = knowledge.layers_for(
+            self.ctx,
             row.agent,
             f"{turn['text']}\n{task}" if turn else "",
-            config.agent.memory_max_chars,
-        )
-        layers = prompts_builder.build_layers(
-            config,
-            row.agent,
-            memory=recalled,
-            capabilities=self._capabilities(),
+            self._capabilities(),
             scratch=str(config.home / "scratch" / session),
         )
         now = datetime.now().astimezone()

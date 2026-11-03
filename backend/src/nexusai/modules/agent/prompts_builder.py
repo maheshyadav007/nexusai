@@ -52,7 +52,14 @@ def agent_prompt(home: Path, agent: str) -> str:
 
 
 def build_layers(
-    config: Config, agent: str, memory: str = "", capabilities: str = "", **values: str
+    config: Config,
+    agent: str,
+    memory: str = "",
+    capabilities: str = "",
+    about: str = "",
+    corrections: str = "",
+    mailbox: str = "",
+    **values: str,
 ) -> list[Layer]:
     home = config.home
     # Only the known fields are filled in, so braces in someone's own prompt stay as written.
@@ -68,9 +75,15 @@ def build_layers(
         ),
         Layer("Agent prompt", text),
     ]
+    if about:
+        layers.append(Layer("About the person", about))
     personal = personal_prompts(home)
     if personal:
         layers.append(Layer("Personalized prompts", personal))
+    if corrections:
+        layers.append(Layer("What you corrected", corrections))
+    if mailbox:
+        layers.append(Layer("What the mailbox shows", mailbox))
     if memory:
         layers.append(Layer("Memory", memory))
     return layers

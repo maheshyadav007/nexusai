@@ -46,6 +46,13 @@ export const useSetDefaults = () => useCommand(["schedules"], (input: { time_che
 
 export const useMailAgent = () => useReady(["mail-agent"], () => query("mailAgent.get", {}));
 export const useSaveMailAgent = () => useCommand(["mail-agent"], (input: MailAgentSettings) => command("mailAgent.save", input));
+export const useKnowledge = () => useReady(["knowledge"], () => query("mailAgent.knowledge", {}));
+export const useMailPreview = (thread: number | null) => useQuery({ queryKey: ["mail-preview", thread], queryFn: () => query("mailAgent.preview", { thread: thread as number }), enabled: thread !== null, staleTime: 0 });
+export const useReadMore = () => useCommand(["knowledge", "mail-agent", "cockpit"], (count: number) => command("mailAgent.readMore", { count }));
+export const useConfirmNote = () => useCommand(["knowledge", "memory"], (line: string) => command("memory.confirmNote", { line }));
+export const useRemoveNote = () => useCommand(["knowledge", "memory"], (line: string) => command("memory.removeNote", { line }));
+export const useSuggestions = () => useReady(["suggestions"], () => query("suggestions.list", {}));
+export const useDecideSuggestion = () => useCommand(["suggestions", "today", "threads", "categories"], (input: { id: number; accept: boolean }) => command("suggestions.decide", input));
 export const useRunMailAgent = () => useCommand(["sessions"], () => command("mailAgent.runNow", {}));
 export const useContextSettings = () => useReady(["context"], () => query("context.get", {}));
 export const useSaveContextSettings = () => useCommand(["context"], (input: ContextSettings) => command("context.save", input));
@@ -118,12 +125,14 @@ export function useWaitingCount(): number {
   const reminders = useReminders();
   const memory = useMemory("");
   const categories = useCategories();
+  const suggestions = useSuggestions();
   return (
     (channel.data?.messages ?? []).filter((message) => message.kind === "ask").length +
     (approvals.data?.approvals.length ?? 0) +
     (tasks.data?.tasks ?? []).filter((task) => task.proposed).length +
     (reminders.data?.reminders ?? []).filter((reminder) => reminder.proposed).length +
     (memory.data?.proposals.length ?? 0) +
-    (categories.data?.categories ?? []).filter((item) => item.proposed).length
+    (categories.data?.categories ?? []).filter((item) => item.proposed).length +
+    (suggestions.data?.suggestions.length ?? 0)
   );
 }

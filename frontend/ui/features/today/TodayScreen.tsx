@@ -4,13 +4,15 @@ import Link from "next/link";
 import { useEffect } from "react";
 import type { ChannelMessage, DueItem, MailCategory, TodayThread } from "@/ui/client/contracts.generated";
 import { useDateOnly, useDateTime, useShortDate } from "@/ui/client/format";
-import { useCategories, useDecideCategory, useMailStatus } from "@/ui/client/mail";
+import { useCategories, useDecideCategory, useMailStatus, useSetImportance, useSetStatus } from "@/ui/client/mail";
 import { groupApprovals, useApprovals, useSessions } from "@/ui/client/sessions";
 import { useProfile } from "@/ui/client/onboarding";
-import { useChannel, useCockpit, useDecideMemory, useDismissChannel, useMarkTodaySeen, useMemory, useReminders, useRemoveReminder, useRemoveTask, useRespondChannel, useSaveReminder, useSaveTask, useTasks, useToday, useWaitingCount } from "@/ui/client/work";
+import { useChannel, useCockpit, useDecideMemory, useDecideSuggestion, useSuggestions, useDismissChannel, useMarkTodaySeen, useMemory, useReminders, useRemoveReminder, useRemoveTask, useRespondChannel, useSaveReminder, useSaveTask, useTasks, useToday, useWaitingCount } from "@/ui/client/work";
+import { AskAgent } from "@/ui/features/agent/AskAgent";
 import { useAssistant } from "@/ui/features/assistant/AssistantProvider";
 import { ApprovalGroupCard, QuestionCard } from "@/ui/features/assistant/Cards";
 import { Icon, type IconName } from "@/ui/icons";
+import { Badge } from "@/ui/primitives/Badge";
 import { Button } from "@/ui/primitives/Button";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
@@ -26,27 +28,40 @@ const MAIL_AGENT = "mail-agent";
 // How long a conversation can sit quietly before it's worth a nudge.
 const QUIET_DAYS = 3;
 
-function ThreadList({ title, threads, empty }: { title: string; threads: readonly TodayThread[]; empty: string }) {
+const NEXT_ACTION_LABEL: Partial<Record<string, StringKey>> = { reply: "today.action.reply", do: "today.action.do", decide: "today.action.decide", read: "today.action.read" };
+
+function ThreadList({ title, threads, empty, chase = false }: { title: string; threads: readonly TodayThread[]; empty: string; chase?: boolean }) {
   const format = useShortDate();
+  const setStatus = useSetStatus();
+  const setImportance = useSetImportance();
   return (
     <section aria-label={title} className="flex flex-col gap-1">
       <h2 className="text-md font-medium text-ink-primary">{title}</h2>
       {threads.length === 0 ? <p className="py-1 text-md text-ink-muted">{empty}</p> : null}
       <ul className="flex flex-col border-t border-line-subtle">
-        {threads.map((thread) => (
-          <li key={thread.id} className="border-b border-line-subtle">
-            <Link href={`/mail/all/${thread.id}`} data-testid="today-thread" className="focus-ring flex flex-col gap-px py-2 transition-colors duration-fast hover:bg-surface-raised">
-              <span className="flex items-baseline justify-between gap-3">
-                <span className="flex min-w-0 items-center gap-2">
-                  {thread.importance === "high" ? <span aria-label={t("today.important")} role="img" className="h-2 w-2 shrink-0 rounded-full bg-accent-default" /> : null}
-                  <span className="truncate text-md text-ink-primary">{thread.subject || t("mail.noSubject")}</span>
+        {threads.map((thread) => {
+          const action = thread.next_action ? NEXT_ACTION_LABEL[thread.next_action] : undefined;
+          return (
+            <li key={thread.id} className="group flex items-start gap-2 border-b border-line-subtle">
+              <Link href={`/mail/all/${thread.id}`} data-testid="today-thread" className="focus-ring flex min-w-0 flex-1 flex-col gap-px py-2 transition-colors duration-fast hover:bg-surface-hover">
+                <span className="flex items-baseline justify-between gap-3">
+                  <span className="flex min-w-0 items-center gap-2">
+                    {thread.importance === "high" ? <span aria-label={t("today.important")} role="img" className="h-2 w-2 shrink-0 rounded-full bg-accent-default" /> : null}
+                    <span className="truncate text-md text-ink-primary">{thread.subject || t("mail.noSubject")}</span>
+                    {action ? <Badge>{t(action)}</Badge> : null}
+                  </span>
+                  <span className="shrink-0 text-sm tabular-nums text-ink-muted">{format(thread.last_date)}</span>
                 </span>
-                <span className="shrink-0 text-sm tabular-nums text-ink-muted">{format(thread.last_date)}</span>
+                {thread.why ? <span className="truncate text-sm text-ink-muted">{thread.why}</span> : null}
+              </Link>
+              <span className="flex shrink-0 items-center gap-1 py-2">
+                {chase ? <AskAgent context={[`mail:${thread.id}`]} title={t("today.chase.title")} label={t("today.chase.draft")} text={t("today.chase.ask")} /> : null}
+                {thread.importance !== "low" && !chase ? <Button variant="quiet" onClick={() => setImportance.mutate({ id: thread.id, importance: "low" })}>{t("today.notImportant")}</Button> : null}
+                <Button variant="quiet" onClick={() => setStatus.mutate({ id: thread.id, status: "resolved" })}>{t("today.done")}</Button>
               </span>
-              {thread.why ? <span className="truncate text-sm text-ink-muted">{thread.why}</span> : null}
-            </Link>
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
@@ -119,6 +134,8 @@ function WaitingOnYou() {
   const proposedTasks = (tasks.data?.tasks ?? []).filter((task) => task.proposed);
   const proposedReminders = (reminders.data?.reminders ?? []).filter((reminder) => reminder.proposed);
   const proposedMemories = memory.data?.proposals ?? [];
+  const suggestions = useSuggestions();
+  const decideSuggestion = useDecideSuggestion();
   const proposedCategories: readonly MailCategory[] = (categories.data?.categories ?? []).filter((item) => item.proposed);
   const count = useWaitingCount();
   if (channel.isError) return <ErrorState title={t("channel.error")} onRetry={() => void channel.refetch()} />;
@@ -152,6 +169,18 @@ function WaitingOnYou() {
         ))}
         {proposedCategories.map((item) => (
           <ProposalRow key={`category-${item.name}`} icon="categories" title={item.name} meta={item.sender ? t("today.proposal.categoryFrom", { sender: item.sender }) : t("today.proposal.category")} why={item.why} onDecline={() => decideCategory.mutate({ name: item.name, accept: false })} onAccept={() => decideCategory.mutate({ name: item.name, accept: true })} accept={t("categories.create")} />
+        ))}
+        {(suggestions.data?.suggestions ?? []).map((item) => (
+          <ProposalRow
+            key={`suggestion-${item.id}`}
+            icon="categories"
+            title={t("today.suggestion.title", { category: item.category, count: item.emails })}
+            meta={t("today.suggestion.meta", { senders: item.senders.length, opened: item.opened, replied: item.replied })}
+            why={item.quiet ? t("today.suggestion.quiet", { why: item.reason, count: item.to_archive }) : item.reason}
+            accept={t("today.suggestion.accept")}
+            onAccept={() => decideSuggestion.mutate({ id: item.id, accept: true })}
+            onDecline={() => decideSuggestion.mutate({ id: item.id, accept: false })}
+          />
         ))}
         {proposedMemories.map((item) => (
           <ProposalRow key={`memory-${item.id}`} icon="memory" title={item.text} meta={t("today.proposal.memory")} onDecline={() => decideMemory.mutate({ id: item.id, accept: false })} onAccept={() => decideMemory.mutate({ id: item.id, accept: true })} accept={t("memory.keep")} />
@@ -294,6 +323,7 @@ export function TodayScreen() {
         ) : (
           <>
             <ThreadList title={t("today.importantMail")} threads={today.data.needs_you} empty={t("today.needsYou.empty")} />
+            {today.data.follow_ups?.length ? <ThreadList chase title={t("today.followUps")} threads={today.data.follow_ups} empty="" /> : null}
             {waitingOnOthers.length ? <ThreadList title={t("today.waiting")} threads={waitingOnOthers} empty="" /> : null}
             <SinceYouLooked />
             {today.data.automated_count ? <TextLink className="self-start text-md" href="/mail/all">{tn("today.automated", today.data.automated_count)}</TextLink> : null}

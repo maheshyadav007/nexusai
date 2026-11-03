@@ -116,7 +116,12 @@ def test_upcoming_runs_are_listed_and_the_hour_timer_shows_when_on(
     client.post("/api/commands/schedules.save", json={"title": "Weekly", "prompt": "Go"})
     client.post("/api/commands/mailAgent.save", json={"mode": "hourly"})
     upcoming = client.post("/api/queries/cockpit.view").json()["upcoming"]
-    assert {run["title"] for run in upcoming} == {"Weekly", "Mail agent, hourly"}
+    assert {run["title"] for run in upcoming} == {
+        "Weekly",
+        "Mail agent, hourly",
+        "Morning brief",
+        "Inbox review",
+    }
 
 
 def test_old_events_are_removed_but_never_unhandled_ones(

@@ -340,6 +340,13 @@ class MoveThread(BaseModel):
     to: FolderRole
 
 
+class SetThreadImportance(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    importance: Importance
+
+
 class SetThreadStatus(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -574,6 +581,7 @@ class ThreadUpdated(BaseModel):
     thread_id: int
     field: str
     value: Any = None
+    by: str = "person"
 
 
 PstStatus = Literal["queued", "running", "paused", "done", "failed"]

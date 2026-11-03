@@ -3,9 +3,9 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ApiRequestError } from "@/ui/client/api";
-import type { Draft, MessageView } from "@/ui/client/contracts.generated";
+import type { Importance, Draft, MessageView } from "@/ui/client/contracts.generated";
 import { useDateTime } from "@/ui/client/format";
-import { useCategories, useMoveThread, useReplyDraft, useSetCategory, useSetFlag, useSetRead, useSetStatus, useThread, type ThreadStatus } from "@/ui/client/mail";
+import { useCategories, useMoveThread, useReplyDraft, useSetCategory, useSetImportance, useSetFlag, useSetRead, useSetStatus, useThread, type ThreadStatus } from "@/ui/client/mail";
 import { useSummarize, useThreadRuns, useThreadSummary } from "@/ui/client/work";
 import { AskAgent } from "@/ui/features/agent/AskAgent";
 import { Icon } from "@/ui/icons";
@@ -31,6 +31,19 @@ const STATUSES = [
   { value: "resolved", label: t("mail.status.resolved") },
   { value: "fyi", label: t("mail.status.fyi") },
 ];
+
+const IMPORTANCE = [
+  { value: "high", label: t("mail.importance.high") },
+  { value: "normal", label: t("mail.importance.normal") },
+  { value: "low", label: t("mail.importance.low") },
+];
+
+// Past this it's a broadcast, and the names are left out rather than filling the screen.
+const MOST_NAMED_RECIPIENTS = 10;
+const toLine = (people: readonly string[]) =>
+  people.length > MOST_NAMED_RECIPIENTS
+    ? t("mail.toMany", { people: people.slice(0, MOST_NAMED_RECIPIENTS).join(", "), more: (people.length - MOST_NAMED_RECIPIENTS).toLocaleString() })
+    : t("mail.toLine", { people: people.join(", ") });
 
 const sizeOf = (bytes: number) => new Intl.NumberFormat(undefined, { style: "unit", unit: bytes < 1024 ** 2 ? "kilobyte" : "megabyte", maximumFractionDigits: 1 }).format(bytes < 1024 ** 2 ? bytes / 1024 : bytes / 1024 ** 2);
 
@@ -144,7 +157,7 @@ function MessageCard({ message, open: startsOpen, onReply, threadWhy }: { messag
           <span className={`truncate text-md ${message.read ? "text-ink-primary" : "font-medium text-ink-primary"}`}>{sender}</span>
           {open ? (
             <span className="truncate text-sm text-ink-muted">
-              {t("mail.toLine", { people: [...message.to, ...message.cc].join(", ") })}
+              {toLine([...message.to, ...message.cc])}
               {message.signed ? ` · ${t("mail.signed")}` : ""}
             </span>
           ) : (
@@ -188,6 +201,7 @@ export function ThreadScreen({ id, onLeave }: { id: number; onLeave?: () => void
   const move = useMoveThread();
   const setStatus = useSetStatus();
   const setCategory = useSetCategory();
+  const setImportance = useSetImportance();
   const categories = useCategories();
   const replyDraft = useReplyDraft();
   const [composing, setComposing] = useState<{ draft: Draft; dropped: string[] } | null>(null);
@@ -232,6 +246,7 @@ export function ThreadScreen({ id, onLeave }: { id: number; onLeave?: () => void
         <h2 className="break-words text-xl font-medium text-ink-primary">{row.subject || t("mail.noSubject")}</h2>
         <div className="flex flex-wrap items-center gap-2">
           <Select quiet label={t("mail.status.label")} value={row.status} options={STATUSES} onChange={(status) => setStatus.mutate({ id, status: status as ThreadStatus })} />
+          <Select quiet label={t("mail.importance.label")} value={row.importance} options={IMPORTANCE} onChange={(importance) => setImportance.mutate({ id, importance: importance as Importance })} />
           <Select quiet label={t("mail.category")} value={row.category ?? NO_CATEGORY} options={categoryOptions} onChange={(category) => setCategory.mutate({ id, category: category === NO_CATEGORY ? null : category })} />
         </div>
         <ThreadFiling thread={row} messages={messages} />

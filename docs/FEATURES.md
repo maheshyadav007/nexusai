@@ -272,6 +272,15 @@ Rules run first and cost nothing; mail they mark "skip agent" never reaches the 
 | ID | Feature | Pri |
 |---|---|---|
 | AGN-3 | Mail agent: triggered live by every new email that escapes the fixed rules, reading it with recent thread messages (THR-6) and giving category, importance, summary, key facts and suggested action; can propose tasks, reminders, drafts and memory; records deadlines and thread status on the work board; has no Command or send tool | MVP |
+| AGN-3a | Each judgement goes by, strongest first: what the person said, what they corrected, their memory, what the app counted (To or Cc, who they reply to, what they open), notes learned from mail, then the email itself | MVP |
+| AGN-3b | Sets who has the next move, what they'd do (reply, do, decide, read), when to chase, and whether to interrupt, each with a reason. Interrupting is decided apart from importance, and at most three questions stay open | MVP |
+| AGN-3c | Sending takes a conversation off the person's plate and works out what comes next. A follow-up date that passes tells them once, on Today with a draft button. A reply moves it back. None of this needs a model except the date | MVP |
+| AGN-3d | Automated mail skips the model unless what it says could cost the person something, or it's in a conversation they wrote in | MVP |
+| AGN-3e | A broadcast reaches the model as a count, and it can search the list if who else got it matters | MVP |
+| AGN-3f | Weekly inbox review, and after reading past mail: recommends where whole groups of mail should go, with the app's own counts. Nothing moves until the person agrees. The same correction three times offers to make it automatic | MVP |
+| AGN-3g | A morning brief on Today, from what's already judged | MVP |
+| AGN-3h | "What it knows" shows everything the agent is told, in order and how far it's trusted; each learned note with its source, to confirm or remove; corrections and who they write to. "What it sees" shows the exact text for any conversation, without calling a model | MVP |
+| AGN-3i | `make eval-mail` runs made-up emails through the real model to check the prompts | MVP |
 | AGN-4 | Burst handling: a single email starts right away with no timer. Emails arriving during a run wait, then go together in the next run, grouped by thread and capped per run. Its own queue, separate from the session limit; catches up in order after being offline or if the model is unavailable | MVP |
 | AGN-5 | Runs from setup onward only; older mail is triaged only on request, with an estimate of the work first | MVP |
 | AGN-6 | Mail agent appears as one entry in Sessions; each email has its own run record, reachable from "Why is this here?" | MVP |

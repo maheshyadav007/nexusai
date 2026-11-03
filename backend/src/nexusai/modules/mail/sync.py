@@ -75,6 +75,7 @@ class MailSync:
         self.password = password
         self.config = ctx.config.mail
         self._own_domain = own_domain_of(profile.address or profile.auth.user)
+        self._own = {(profile.address or profile.auth.user).lower(), profile.auth.user.lower()}
         self.status = SyncStatus()
         self._stop = threading.Event()
         self._wake = threading.Event()
@@ -542,6 +543,20 @@ class MailSync:
         self._note_progress()
         return True
 
+    def _deserves_a_look(self, tx: Any, result: store.Stored) -> bool:
+        """Headers filed it, but it says something that could matter, or it's a conversation
+        the person is part of, and those always get read."""
+        if result.worth_a_look:
+            return True
+        marks = ", ".join("?" * len(self._own))
+        return bool(
+            tx.execute(
+                "SELECT 1 FROM messages WHERE thread_id = ?"  # noqa: S608
+                f" AND LOWER(from_addr) IN ({marks}) LIMIT 1",
+                (result.thread, *self._own),
+            ).fetchone()
+        )
+
     def _note_copies(self, session: ImapSession, folder: Folder, uids: list[int]) -> list[int]:
         """Files what's already held under this folder too, and returns what needs downloading."""
         ids = session.message_ids(uids)
@@ -634,6 +649,14 @@ class MailSync:
                     source="mail",
                     trace_id=self.ctx.trace_id,
                 )
+            if live and folder.role == "sent":
+                for result in stored:
+                    work.emit(
+                        "mail.sent",
+                        {"message_id": result.message, "thread_id": result.thread},
+                        source="mail",
+                        trace_id=self.ctx.trace_id,
+                    )
             if live and folder.role == "inbox":
                 for result in stored:
                     work.emit(
@@ -644,7 +667,7 @@ class MailSync:
                         source="mail",
                         trace_id=self.ctx.trace_id,
                     )
-                    if not result.skip_agent:
+                    if not result.skip_agent or self._deserves_a_look(work.tx, result):
                         work.emit(
                             "mail.needsTriage",
                             {"message_id": result.message, "thread_id": result.thread},

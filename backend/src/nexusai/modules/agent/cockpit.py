@@ -38,6 +38,7 @@ def _triggered(ctx: Context, event: AppEvent) -> Line:
     words = {
         "mail": "Mail agent started on new mail",
         "mail-hourly": "Mail agent started on the hourly check",
+        "mail-review": "Mail agent started its inbox review",
         "schedule": f"Schedule started: {title}",
         "event": f"Trigger started: {title}",
     }

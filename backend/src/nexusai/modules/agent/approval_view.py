@@ -42,12 +42,12 @@ DATA_TOOLS = {
     "delete_reminders", "create_categories", "delete_categories", "merge_categories",
     "reorder_categories", "delete_rules", "update_memory", "forget_memory", "propose_memory",
     "save_personal_prompt", "delete_documents", "remove_panels", "remove_agents", "run_agent",
-    "suggest", "tell", "notify_person", "use", "write_work_board", "update_category", "save_rule",
+    "recommend_mail_change", "suggest", "tell", "notify_person", "use", "write_work_board", "update_category", "save_rule",
     "update_documents", "save_panel", "create_agent", "update_agent",
 }  # fmt: skip
 # Tools that only read never reach a person, unless their permission was set to ask.
 READ_TOOLS = {
-    "read_file", "list_folder", "search_mail", "read_thread", "search_documents", "read_document",
+    "read_file", "list_folder", "search_mail", "read_thread", "read_recipients", "search_documents", "read_document",
     "list_documents", "list_tasks", "list_reminders", "list_categories", "list_rules",
     "list_drafts", "list_memory", "list_panels", "list_agents", "read_database", "semantic_search",
     "read_work_board", "read_agent_messages", "list_mail",

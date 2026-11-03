@@ -9,9 +9,11 @@ from nexusai.contracts.agent import (
     ActivityRow,
     AgentChannelList,
     AgentDone,
+    AgentKnowledge,
     AnswerSession,
     ApprovalList,
     BoardList,
+    ChangeLearnedNote,
     ChannelList,
     ChooseVersion,
     Cockpit,
@@ -22,9 +24,11 @@ from nexusai.contracts.agent import (
     CreateSession,
     DecideApproval,
     DecideApprovals,
+    DecideMailSuggestion,
     DecideMemoryProposal,
     DismissChannel,
     DueItem,
+    GetAgentKnowledge,
     GetCockpit,
     GetCockpitEvents,
     GetContextSettings,
@@ -49,6 +53,7 @@ from nexusai.contracts.agent import (
     ListBoard,
     ListChannel,
     ListJobs,
+    ListMailSuggestions,
     ListMemory,
     ListPipelines,
     ListPrompts,
@@ -56,6 +61,8 @@ from nexusai.contracts.agent import (
     ListSessions,
     MailAgentRun,
     MailAgentSettings,
+    MailPreview,
+    MailSuggestionList,
     MarkTodaySeen,
     MemoryList,
     ModelCallView,
@@ -63,10 +70,12 @@ from nexusai.contracts.agent import (
     Permissions,
     PipelineList,
     PipelineMore,
+    PreviewMail,
     PromptFile,
     PromptList,
     QuietHours,
     RateMessage,
+    ReadMoreMail,
     RemoveMemory,
     RemoveSchedule,
     RemoveTrigger,
@@ -116,8 +125,10 @@ from nexusai.modules.agent import (
     citations,
     cockpit,
     context,
+    feedback,
     gateway,
     guard,
+    knowledge,
     mail_agent,
     memory,
     pipelines,
@@ -126,6 +137,8 @@ from nexusai.modules.agent import (
     providers,
     runtime,
     scheduler,
+    signals,
+    suggestions,
     tools,
     triggers,
 )
@@ -168,6 +181,9 @@ agent_module = Module(
         scheduler.TIMES_MIGRATION,
         scheduler.CONTEXT_MIGRATION,
         triggers.MIGRATION,
+        scheduler.BUILT_IN_MIGRATION,
+        feedback.MIGRATION,
+        suggestions.MIGRATION,
     ],
 )
 _runtime: runtime.SessionRuntime | None = None
@@ -187,6 +203,7 @@ def _startup(ctx: Context) -> None:
         # By default it runs on each email and on the hour. Choosing otherwise is remembered.
         if mail_agent.mode(ctx) != "each":
             scheduler.set_hourly(ctx, True)
+        scheduler.start_built_ins(ctx)
         _scheduler = scheduler.Scheduler(ctx)
         _scheduler.start()
         # Mail may have finished coming down while this wasn't running, or before it existed.
@@ -216,6 +233,45 @@ def needs_triage(event: AppEvent, ctx: Context) -> None:
         )
         if _triggers:
             _triggers.wake.set()
+
+
+@agent_module.on("mail.sent", "agent.person_replied")
+def person_replied(event: AppEvent, ctx: Context) -> None:
+    message, thread = int(event.payload["message_id"]), int(event.payload["thread_id"])
+    mail_agent.person_replied(ctx, thread)
+    if mail_agent.enabled(ctx):
+        mail_agent.enqueue(ctx, message, thread, event=f"{mail_agent.SENT_PREFIX}{message}")
+        if _triggers:
+            _triggers.wake.set()
+
+
+@agent_module.on("mail.received", "agent.they_answered")
+def they_answered(event: AppEvent, ctx: Context) -> None:
+    mail_agent.they_answered(ctx, int(event.payload["message_id"]), int(event.payload["thread_id"]))
+
+
+@agent_module.on("thread.updated", "agent.learn_from_corrections")
+def learn_from_corrections(event: AppEvent, ctx: Context) -> None:
+    """What the person changes teaches the agent. What an agent changes doesn't count."""
+    if event.payload.get("by", "person") != "person":
+        return
+    habit = feedback.note(
+        ctx.bus.db,
+        int(event.payload["thread_id"]),
+        str(event.payload["field"]),
+        event.payload.get("value"),
+        signals.own_addresses(ctx),
+    )
+    if habit:
+        sender, category = habit
+        suggestions.add(
+            ctx,
+            category,
+            [sender],
+            f"You've filed {sender} under {category} {feedback.HABIT} times, so this would do it for you.",
+            False,
+            by="habit",
+        )
 
 
 @agent_module.on("mail.changed", "agent.learn_when_enough_mail")
@@ -637,7 +693,9 @@ def summarize_thread(command: SummarizeThread, ctx: Context) -> ThreadSummary:
 
 
 def _schedule_list(ctx: Context) -> ScheduleList:
-    rows = ctx.bus.db.fetch_all("SELECT * FROM schedules WHERE kind != 'mail-hourly' ORDER BY id")
+    rows = ctx.bus.db.fetch_all(
+        "SELECT * FROM schedules WHERE kind NOT IN (?, ?, ?) ORDER BY id", scheduler.BUILT_IN_KINDS
+    )
     return ScheduleList(
         schedules=[scheduler.row_to_schedule(row) for row in rows],
         time_check_enabled=scheduler.time_check_enabled(ctx),
@@ -652,7 +710,7 @@ def list_schedules(query: ListSchedules, ctx: Context) -> ScheduleList:
 
 @agent_module.command("schedules.save")
 def save_schedule(command: Schedule, ctx: Context) -> ScheduleList:
-    if command.kind == "mail-hourly":
+    if command.kind in scheduler.BUILT_IN_KINDS:
         raise CommandError("schedule.reserved", "That schedule belongs to the Mail agent.", 422)
     next_run = (
         scheduler.next_run_after(command, datetime.now().astimezone().replace(tzinfo=None))
@@ -727,6 +785,8 @@ def get_mail_agent(query: GetMailAgentSettings, ctx: Context) -> MailAgentSettin
         learning_done=done,
         learning_total=total,
         tokens_per_email=mail_agent.APPROX_TOKENS_PER_MESSAGE,
+        morning_brief=scheduler.built_in_on(ctx, scheduler.BRIEF_KIND),
+        inbox_review=scheduler.built_in_on(ctx, scheduler.REVIEW_KIND),
     )
 
 
@@ -736,6 +796,10 @@ def save_mail_agent(command: MailAgentSettings, ctx: Context) -> MailAgentSettin
     scheduler.set_hourly(ctx, command.mode != "each")
     if command.learn_emails is not None:
         mail_agent.set_learn_count(ctx, command.learn_emails)
+    if command.morning_brief is not None:
+        scheduler.set_built_in(ctx, scheduler.BRIEF_KIND, command.morning_brief)
+    if command.inbox_review is not None:
+        scheduler.set_built_in(ctx, scheduler.REVIEW_KIND, command.inbox_review)
     with ctx.bus.unit_of_work() as work:
         work.emit("mailAgent.changed", {}, source="agent", trace_id=ctx.trace_id)
     if _scheduler:
@@ -743,6 +807,51 @@ def save_mail_agent(command: MailAgentSettings, ctx: Context) -> MailAgentSettin
     if _triggers:
         _triggers.wake.set()
     return command
+
+
+@agent_module.query("mailAgent.knowledge")
+def mail_agent_knowledge(query: GetAgentKnowledge, ctx: Context) -> AgentKnowledge:
+    return knowledge.view(ctx)
+
+
+@agent_module.query("mailAgent.preview")
+def mail_agent_preview(query: PreviewMail, ctx: Context) -> MailPreview:
+    return knowledge.preview(ctx, query.thread)
+
+
+@agent_module.command("mailAgent.readMore")
+def mail_agent_read_more(command: ReadMoreMail, ctx: Context) -> AgentDone:
+    if _triggers is None:
+        raise CommandError("agent.not_ready", "The agent isn't ready yet.", 409)
+    _triggers.read_more(command.count)
+    with ctx.bus.unit_of_work() as work:
+        work.emit("mailAgent.changed", {}, source="agent", trace_id=ctx.trace_id)
+    return AgentDone()
+
+
+@agent_module.command("memory.removeNote")
+def remove_note(command: ChangeLearnedNote, ctx: Context) -> AgentDone:
+    memory.remove_learned(ctx.config.home, command.line)
+    _memory_changed(ctx)
+    return AgentDone()
+
+
+@agent_module.command("memory.confirmNote")
+def confirm_note(command: ChangeLearnedNote, ctx: Context) -> AgentDone:
+    memory.confirm_learned(ctx.config.home, command.line)
+    _memory_changed(ctx)
+    return AgentDone()
+
+
+@agent_module.query("suggestions.list")
+def list_suggestions(query: ListMailSuggestions, ctx: Context) -> MailSuggestionList:
+    return MailSuggestionList(suggestions=suggestions.waiting(ctx))
+
+
+@agent_module.command("suggestions.decide")
+def decide_suggestion(command: DecideMailSuggestion, ctx: Context) -> AgentDone:
+    suggestions.decide(ctx, command.id, command.accept)
+    return AgentDone()
 
 
 @agent_module.command("mailAgent.runNow")
@@ -1084,7 +1193,7 @@ def _today_thread(row: Any) -> TodayThread:
     return TodayThread(
         id=row["id"], subject=row["subject"], people=json.loads(row["participants"])[:3], importance=row["importance"],
         status=row["status"], category=row["category"], last_date=row["last_date"], why=row["why"],
-        quiet_days=_quiet_days(row["last_date"]),
+        quiet_days=_quiet_days(row["last_date"]), next_action=row["next_action"], follow_up_on=row["follow_up_on"],
     )  # fmt: skip
 
 
@@ -1093,13 +1202,21 @@ def today_view(query: GetToday, ctx: Context) -> TodayView:
     db = ctx.bus.db
     account = accounts.current_account(ctx.config)
     needs = db.fetch_all(
-        "SELECT * FROM threads WHERE account = ? AND in_inbox = 1 AND (status = 'waiting_on_you' OR (importance = 'high' AND status != 'resolved'))"
+        "SELECT * FROM threads WHERE account = ? AND in_inbox = 1 AND (status = 'waiting_on_you'"
+        " OR (importance = 'high' AND status IN ('none', 'fyi')))"
         " ORDER BY importance = 'high' DESC, last_date DESC LIMIT 20",
         (account,),
     )
+    local_day = datetime.now().astimezone().strftime("%Y-%m-%d")
+    chase = db.fetch_all(
+        "SELECT * FROM threads WHERE account = ? AND in_trash = 0 AND status = 'waiting_on_others'"
+        " AND follow_up_on IS NOT NULL AND follow_up_on <= ? ORDER BY follow_up_on LIMIT 20",
+        (account, local_day),
+    )
     waiting = db.fetch_all(
-        "SELECT * FROM threads WHERE account = ? AND in_inbox = 1 AND status = 'waiting_on_others' ORDER BY last_date DESC LIMIT 20",
-        (account,),
+        "SELECT * FROM threads WHERE account = ? AND in_trash = 0 AND status = 'waiting_on_others'"
+        " AND (follow_up_on IS NULL OR follow_up_on > ?) ORDER BY last_date DESC LIMIT 20",
+        (account, local_day),
     )
     automated = db.fetch_all(
         "SELECT COUNT(*) AS n FROM threads WHERE account = ? AND in_inbox = 1 AND unread_count > 0 AND category_source = 'rule'",
@@ -1122,6 +1239,7 @@ def today_view(query: GetToday, ctx: Context) -> TodayView:
     return TodayView(
         brief=_brief(_waiting_for_person(ctx), due, len(needs)),
         needs_you=[_today_thread(row) for row in needs],
+        follow_ups=[_today_thread(row) for row in chase],
         waiting=[_today_thread(row) for row in waiting],
         automated_count=automated,
         prep_session=prep_session,
@@ -1140,7 +1258,8 @@ def _waiting_for_person(ctx: Context) -> int:
             " + (SELECT COUNT(*) FROM tasks WHERE proposed = 1 AND status != 'done')"
             " + (SELECT COUNT(*) FROM reminders WHERE proposed = 1 AND fired = 0)"
             " + (SELECT COUNT(*) FROM mail_categories WHERE proposed = 1)"
-            " + (SELECT COUNT(*) FROM memory_proposals) AS n"
+            " + (SELECT COUNT(*) FROM mail_suggestions WHERE status = 'open')"
+            " + (SELECT COUNT(*) FROM memory_proposals WHERE status = 'pending') AS n"
         )[0]["n"]
     )
 

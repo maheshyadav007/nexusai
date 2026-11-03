@@ -27,7 +27,16 @@ from nexusai.contracts.mail import SearchMail, SearchResults
 from nexusai.kernel.database import Migration
 from nexusai.kernel.home import scratch_folder
 from nexusai.kernel.module import CommandError, Context
-from nexusai.modules.agent import channel, citations, mail_agent, memory, policy, work_tools
+from nexusai.modules.agent import (
+    channel,
+    citations,
+    mail_agent,
+    memory,
+    policy,
+    signals,
+    suggestions,
+    work_tools,
+)
 from nexusai.modules.agent.policy import Action
 from nexusai.modules.connectors import module as connectors
 from nexusai.modules.documents.module import get_document as _get_document
@@ -446,6 +455,15 @@ class _ReadThread(BaseModel):
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
+class _ReadRecipients(BaseModel):
+    thread_id: int = Field(description="The conversation's ID.")
+    contains: str | None = Field(
+        default=None, description="Only addresses containing this, like a name or a domain."
+    )
+    offset: int = Field(default=0, ge=0, description="Where to read on from in a long list.")
+    tool_call_id: Annotated[str, InjectedToolCallId]
+
+
 class _AskUser(BaseModel):
     question: str = Field(description="What you need to know.")
     options: list[str] = Field(
@@ -528,12 +546,31 @@ class _ReadDocument(BaseModel):
 MAX_DETAIL_CHARS = 4000
 
 
+class _RecommendMail(BaseModel):
+    category: str = Field(description="Where this mail should go, a short name.")
+    senders: list[str] = Field(description="The exact sender addresses, from the list you have.")
+    reason: str = Field(description="One plain sentence for the person. Don't add up totals.")
+    quiet: bool = Field(
+        default=False, description="True only for mail they plainly never read or reply to."
+    )
+    tool_call_id: Annotated[str, InjectedToolCallId]
+
+
 class _RecordTriage(BaseModel):
     category: str | None = Field(default=None, description="A short category name.")
     importance: Literal["low", "normal", "high"] = "normal"
     status: Literal["waiting_on_you", "waiting_on_others", "resolved", "fyi"] = "fyi"
+    next_action: Literal["reply", "do", "decide", "read", "none"] = "none"
+    follow_up_on: str | None = Field(
+        default=None, description="With waiting_on_others, when to chase it, as YYYY-MM-DD."
+    )
+    notify: bool | None = Field(
+        default=None, description="True only when it can't wait until they next look."
+    )
     summary: str = Field(default="", description="One plain sentence on what this is.")
-    reason: str = Field(default="", description="One plain sentence on why you judged it this way.")
+    reason: str = Field(
+        default="", description="One plain sentence on what this judgement rests on."
+    )
     facts: list[str] = Field(
         default_factory=list, description="Key facts, like deadlines or amounts."
     )
@@ -582,6 +619,7 @@ MAIL_AGENT_TOOLS = frozenset(
         "record_triage",
         "search_mail",
         "read_thread",
+        "read_recipients",
         "list_mail",
         "semantic_search",
         "search_documents",
@@ -603,10 +641,23 @@ MAIL_AGENT_TOOLS = frozenset(
         "notify_person",
     }
 )
+# Judging one email takes only these, so every other tool's description isn't sent each time.
+TRIAGE_TOOLS = frozenset(
+    {
+        "record_triage",
+        "search_mail",
+        "read_thread",
+        "read_recipients",
+        "semantic_search",
+        "read_work_board",
+        "read_document",
+    }
+)
+REVIEW_ORIGIN = "mail-review"
 # It ends a run, so judging simple mail takes one model call.
 ENDS_THE_RUN = frozenset({"record_triage"})
 LEARNING_ORIGIN = "mail-learn"
-MAIL_AGENT_ONLY = frozenset({"record_triage", "save_what_i_learned"})
+MAIL_AGENT_ONLY = frozenset({"record_triage", "save_what_i_learned", "recommend_mail_change"})
 
 
 def allowed_for(agent: str, origin: str, has_email: bool) -> frozenset[str] | None:
@@ -614,11 +665,15 @@ def allowed_for(agent: str, origin: str, has_email: bool) -> frozenset[str] | No
     there's only a judgement to record when the run was started for an email."""
     if agent != "mail":
         return None
+    if has_email:
+        return TRIAGE_TOOLS
     allowed = MAIL_AGENT_TOOLS | {"ask_user"} if origin == "person" else MAIL_AGENT_TOOLS
     # Only the run that wraps up reading past mail can rewrite what it learned.
-    if origin == LEARNING_ORIGIN and not has_email:
+    if origin == LEARNING_ORIGIN:
         allowed |= {"save_what_i_learned"}
-    return allowed if has_email else allowed - {"record_triage"}
+    if origin in {REVIEW_ORIGIN, "person"}:
+        allowed |= {"recommend_mail_change"}
+    return allowed - {"record_triage"}
 
 
 def _untrusted(text: str) -> str:
@@ -686,6 +741,15 @@ def build_tools(
             "done",
             None,
             0,
+        )
+        return result
+
+    def recommend_mail_change(
+        category: str, senders: list[str], reason: str, tool_call_id: str, quiet: bool = False
+    ) -> str:
+        result = suggestions.add(ctx, category, senders, reason, quiet)
+        _log_call(
+            ctx, session, tool_call_id, "recommend_mail_change", category, result, "done", None, 0
         )
         return result
 
@@ -886,6 +950,26 @@ def build_tools(
             "read",
             ctx.config.home / "memory",
             f"Search mail: {query}",
+            "",
+            False,
+            work,
+            marks_untrusted=True,
+        )
+
+    def read_recipients(
+        thread_id: int, tool_call_id: str, contains: str | None = None, offset: int = 0
+    ) -> str:
+        def work() -> str:
+            return _untrusted(signals.read_recipients(ctx, thread_id, contains, offset))
+
+        return _guarded(
+            ctx,
+            session,
+            tool_call_id,
+            "read_recipients",
+            "read",
+            ctx.config.home / "memory",
+            f"Read who conversation {thread_id} went to",
             "",
             False,
             work,
@@ -1118,6 +1202,11 @@ def build_tools(
             "you've decided. It finishes the run, so write nothing before it.",
         ),
         (
+            recommend_mail_change,
+            _RecommendMail,
+            "Recommend filing all mail from these senders under a category. The person decides.",
+        ),
+        (
             save_what_i_learned,
             _SaveLearned,
             "Replace your notes about the person with this tidy version. It stays marked as "
@@ -1246,6 +1335,12 @@ def build_tools(
             read_thread,
             _ReadThread,
             "Read a whole mail conversation, by the ID from a search or list.",
+        ),
+        (
+            read_recipients,
+            _ReadRecipients,
+            "See who a message went to. A broadcast only shows you the count, so use this when "
+            "who else got it would change what you do. Give contains to look for someone.",
         ),
     ]
 

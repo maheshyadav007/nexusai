@@ -818,12 +818,15 @@ class MailAgentSettings(BaseModel):
 
     mode: MailMode = "both"
     # How many past emails the rule engine didn't catch it reads before going live.
-    learn_emails: int | None = Field(default=None, ge=1, le=5000)
+    learn_emails: int | None = Field(default=None, ge=0, le=5000)
     # Filled in when read, to say how that's going.
     learning_state: str | None = None
     learning_done: int | None = None
     learning_total: int | None = None
     tokens_per_email: int | None = None
+    # What it does on its own besides judging each email.
+    morning_brief: bool | None = None
+    inbox_review: bool | None = None
 
 
 class GetMailAgentSettings(BaseModel):
@@ -842,7 +845,7 @@ class Schedule(BaseModel):
     id: int | None = None
     title: str = Field(min_length=1, max_length=200)
     prompt: str = Field(default="", max_length=20000)
-    kind: Literal["prompt", "daily-prep", "mail-hourly"] = "prompt"
+    kind: Literal["prompt", "daily-prep", "mail-hourly", "mail-brief", "mail-review"] = "prompt"
     every: Literal["once", "hour", "day", "week"] = "day"
     time: str = Field(default="08:00", pattern=r"^\d{2}:\d{2}$")
     weekday: int = Field(default=0, ge=0, le=6)
@@ -902,6 +905,8 @@ class TodayThread(BaseModel):
     why: str | None
     # How long since anyone wrote, for mail that's waiting on someone else.
     quiet_days: int = 0
+    next_action: str | None = None
+    follow_up_on: str | None = None
 
 
 class DueItem(BaseModel):
@@ -924,6 +929,8 @@ class SinceLastLook(BaseModel):
 class TodayView(BaseModel):
     brief: str
     needs_you: list[TodayThread]
+    # Waiting on someone, and it's time to chase them.
+    follow_ups: list[TodayThread] = Field(default_factory=list)
     waiting: list[TodayThread]
     automated_count: int
     prep_session: str | None
@@ -934,6 +941,104 @@ class TodayView(BaseModel):
 
 class MarkTodaySeen(BaseModel):
     pass
+
+
+class MailSuggestion(BaseModel):
+    id: int
+    category: str
+    senders: list[str]
+    reason: str
+    # Also keeps this mail away from the agent, and archives what's old and read.
+    quiet: bool
+    emails: int
+    # Counted by the app, so the person never has to take the agent's word for it.
+    opened: int
+    replied: int
+    to_archive: int
+
+
+class ListMailSuggestions(BaseModel):
+    pass
+
+
+class MailSuggestionList(BaseModel):
+    suggestions: list[MailSuggestion]
+
+
+class DecideMailSuggestion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    accept: bool
+
+
+class ContactRow(BaseModel):
+    address: str
+    written: int
+    last: str
+
+
+class CorrectionRow(BaseModel):
+    sender: str
+    field: str
+    value: str
+    said: str
+    times: int
+    latest: str
+
+
+class LearnedNote(BaseModel):
+    line: str
+    text: str
+    section: str
+    thread: int | None
+
+
+class KnowledgeLayer(BaseModel):
+    name: str
+    text: str
+    trust: str
+
+
+class AgentKnowledge(BaseModel):
+    layers: list[KnowledgeLayer]
+    notes: list[LearnedNote]
+    corrections: list[CorrectionRow]
+    contacts: list[ContactRow]
+    judged: int
+    learning_state: str
+    learning_done: int
+    learning_total: int
+    conversations_unread: int
+
+
+class GetAgentKnowledge(BaseModel):
+    pass
+
+
+class PreviewMail(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    thread: int
+
+
+class MailPreview(BaseModel):
+    layers: list[KnowledgeLayer]
+    given: str
+    instruction: str
+    approx_tokens: int
+
+
+class ChangeLearnedNote(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    line: str = Field(min_length=1, max_length=2000)
+
+
+class ReadMoreMail(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    count: int = Field(ge=1, le=5000)
 
 
 class GetToday(BaseModel):
