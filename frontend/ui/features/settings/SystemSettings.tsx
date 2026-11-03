@@ -1,5 +1,6 @@
 "use client";
 
+import { copyText } from "@/ui/client/browser";
 import { useState } from "react";
 import { RecoverySettings } from "@/ui/features/home/RecoveryKey";
 import { useHomeStatus, useResetEverything } from "@/ui/client/home";
@@ -49,7 +50,7 @@ export function NetworkSettings() {
   const toast = useToast();
   const diagnostics = useDiagnostics();
   const check = useNetworkCheck();
-  const copy = (report: string) => void navigator.clipboard.writeText(report).then(() => toast({ title: t("settings.network.copied") }));
+  const copy = (report: string) => void copyText(report).then(() => toast({ title: t("settings.network.copied") }));
   return (
     <Card title={t("settings.section.network")} description={t("settings.network.description")}>
       <div className="flex flex-col items-start gap-4">

@@ -39,4 +39,4 @@ cd frontend && npx playwright install chromium && npm run test:e2e   # browser t
 
 On first run the app asks where to keep your Home folder, which holds your mail, documents and memory. Set `NEXUSAI_HOME` to use a fixed folder instead.
 
-The app runs on port 4000 and its backend on 4100, on your computer only. To reach it at another address, list it in `NEXUSAI_ALLOWED_ORIGINS`, separated by commas, for example `http://mybox.local:4000`. Other websites stay refused, because any page you visit could otherwise reach your mail.
+The app runs on port 4000 and its backend on 4100. From another machine on a private network, open `http://<machine-ip>:4000`, with no setup and no login yet, so keep it to test machines for now. To use a machine name or public address, list it in `NEXUSAI_ALLOWED_ORIGINS`, separated by commas, for example `http://mybox.local:4000`.

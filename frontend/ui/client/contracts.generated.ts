@@ -473,6 +473,7 @@ export type MatchedAttachment = boolean;
 export type MatchedBy = string;
 export type Hits = SearchHit[];
 export type Corrected = string | null;
+export type WithEveryWord = number;
 export type Threads1 = number;
 export type Reason1 = string;
 export type State1 = "off" | "paused" | "connecting" | "syncing" | "backfilling" | "live" | "offline" | "failed";
@@ -1551,6 +1552,7 @@ export type Parent1 = string | null;
 export type Folders5 = string[];
 export type Files1 = string[];
 export type Drives = string[];
+export type Problem1 = string | null;
 export type Path15 = string;
 export type Ok7 = boolean;
 export type Problems1 = string[];
@@ -2703,6 +2705,7 @@ export interface SearchHit {
 export interface SearchResults {
   hits: Hits;
   corrected?: Corrected;
+  with_every_word?: WithEveryWord;
   [k: string]: unknown;
 }
 /**
@@ -5224,6 +5227,7 @@ export interface FolderListing {
   folders: Folders5;
   files?: Files1;
   drives?: Drives;
+  problem?: Problem1;
   [k: string]: unknown;
 }
 /**

@@ -11,13 +11,15 @@ export interface ToastMessage {
   tone?: "neutral" | "danger";
 }
 
+let lastId = 0;
+
 const ToastContext = createContext<(message: ToastMessage) => void>(() => {});
 
 export const useToast = () => useContext(ToastContext);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<(ToastMessage & { id: string })[]>([]);
-  const show = useCallback((message: ToastMessage) => setToasts((current) => [...current, { ...message, id: crypto.randomUUID() }]), []);
+  const show = useCallback((message: ToastMessage) => setToasts((current) => [...current, { ...message, id: String(++lastId) }]), []);
   const value = useMemo(() => show, [show]);
   return (
     <ToastContext.Provider value={value}>

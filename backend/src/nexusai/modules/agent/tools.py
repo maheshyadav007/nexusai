@@ -33,6 +33,7 @@ from nexusai.modules.agent import (
     mail_agent,
     memory,
     policy,
+    prompts_builder,
     signals,
     suggestions,
     work_tools,
@@ -140,7 +141,7 @@ def shell_command(command: str, windows: bool) -> tuple[list[str], str | None]:
             "-Command",
             POWERSHELL_RUNNER,
         ], command
-    return [shutil.which("zsh") or "/bin/sh", "-c", command], None
+    return [prompts_builder.posix_shell(), "-c", command], None
 
 
 def list_documents(query: ListDocuments, ctx: Context) -> DocumentLibrary:

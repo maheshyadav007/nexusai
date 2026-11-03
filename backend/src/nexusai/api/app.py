@@ -27,6 +27,7 @@ from nexusai.contracts.home import (
     BrowseFolders,
     CheckHome,
     ChooseHome,
+    CreateFolder,
     FolderListing,
     HomeCheck,
     HomeStatus,
@@ -319,6 +320,13 @@ def create_app(config: Config | None = None) -> FastAPI:
         except homes.HomeError as error:
             return _error(422, "home.unreadable", str(error))
 
+    @app.post("/api/home/create-folder", response_model=None)
+    async def create_folder(command: CreateFolder) -> FolderListing | JSONResponse:
+        try:
+            return await asyncio.to_thread(homes.create_folder, command.path, command.name)
+        except homes.HomeError as error:
+            return _error(422, "home.not_created", str(error))
+
     @app.post("/api/home/choose", response_model=None)
     async def choose_home(command: ChooseHome) -> HomeStatus | JSONResponse:
         if runtime is not None:
@@ -332,9 +340,12 @@ def create_app(config: Config | None = None) -> FastAPI:
             return _error(422, "home.not_found", message)
         try:
             await asyncio.to_thread(open_home, path)
+            homes.write_pointer(data_dir, path)
         except homes.HomeError as error:
             return _error(422, "home.not_allowed", str(error))
-        homes.write_pointer(data_dir, path)
+        except OSError as error:
+            log.exception("home_open_failed")
+            return _error(500, "home.open_failed", f"Couldn't open that folder: {error}")
         log.info("home_opened", existing=check.is_existing_home)
         return home_status()
 

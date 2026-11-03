@@ -1,5 +1,6 @@
 "use client";
 
+import { copyText } from "@/ui/client/browser";
 import { createContext, use, useState, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -12,7 +13,7 @@ import type { MessageSource } from "./parts";
 function CodeBlock({ language, children }: { language: string; children: string }) {
   const [copied, setCopied] = useState(false);
   const copy = () =>
-    void navigator.clipboard.writeText(children).then(() => {
+    void copyText(children).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), COPIED_MS);
     });

@@ -10,6 +10,7 @@ from pathlib import Path
 from nexusai.kernel.config import Config
 from nexusai.modules.agent.gateway import Layer
 
+SH_LIKE = frozenset({"bash", "zsh", "sh", "dash", "ksh"})
 PERSONAL_ORDER = ("about-me.md", "importance.md", "categories.md", "senders.md", "topics.md")
 TOOLS_TO_REPORT = ("python3", "git", "node", "uv")
 
@@ -18,9 +19,17 @@ def packaged(name: str) -> str:
     return resources.files(__package__).joinpath("prompts", name).read_text("utf-8")
 
 
+def posix_shell() -> str:
+    """The shell commands run in here, and what the model is told, so its syntax suits it."""
+    chosen = os.environ.get("SHELL", "")
+    if Path(chosen).name in SH_LIKE and shutil.which(chosen):
+        return chosen
+    return shutil.which("bash") or shutil.which("zsh") or "/bin/sh"
+
+
 def system_context(config: Config) -> str:
     """Told once, in the system prompt only, so commands suit this computer."""
-    shell = "PowerShell" if sys.platform == "win32" else os.environ.get("SHELL", "/bin/zsh")
+    shell = "PowerShell" if sys.platform == "win32" else posix_shell()
     tools = [name for name in TOOLS_TO_REPORT if shutil.which(name)]
     home = config.home
     return "\n".join(

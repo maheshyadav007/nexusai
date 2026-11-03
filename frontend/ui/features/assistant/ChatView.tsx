@@ -1,5 +1,6 @@
 "use client";
 
+import { copyText } from "@/ui/client/browser";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -63,7 +64,7 @@ function CopyAction({ text, label }: { text: string; label: string }) {
     <ActionButton
       label={copied ? t("chat.copied") : label}
       onClick={() =>
-        void navigator.clipboard.writeText(text).then(() => {
+        void copyText(text).then(() => {
           setCopied(true);
           setTimeout(() => setCopied(false), COPIED_MS);
         })
@@ -182,7 +183,7 @@ function AssistantMessage({ message, session, running, isLast, onFollowUp, showF
   const settled = !running || !isLast;
   const { turn, feedback, versions, thread } = factsOf(message);
   const menu: MenuItem[] = [
-    ...(text ? [{ id: "copy", label: t("menu.copy"), onSelect: () => void navigator.clipboard.writeText(text) }] : []),
+    ...(text ? [{ id: "copy", label: t("menu.copy"), onSelect: () => void copyText(text) }] : []),
     ...(canRetry ? [{ id: "retry", label: t("menu.retry"), icon: "retry" as const, onSelect: onRetry }] : []),
   ];
   return (

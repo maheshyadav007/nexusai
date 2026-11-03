@@ -50,6 +50,15 @@ class FolderListing(BaseModel):
     files: list[str] = Field(default_factory=list)
     # Other drives to go to, on Windows.
     drives: list[str] = Field(default_factory=list)
+    # Why this folder couldn't be read. It still lists, so there's always a way back out.
+    problem: str | None = None
+
+
+class CreateFolder(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1, max_length=4096)
+    name: str = Field(min_length=1, max_length=255)
 
 
 class UnlockHome(BaseModel):

@@ -25,7 +25,7 @@ function installToken(): string | null {
   return token;
 }
 
-const REFUSED = "This address isn't allowed to reach NexusAI. Open the app at http://127.0.0.1:4000, or add this address to NEXUSAI_ALLOWED_ORIGINS.";
+const REFUSED = "This address isn't allowed to reach NexusAI. Open the app by its IP address, or add this address to NEXUSAI_ALLOWED_ORIGINS.";
 
 function allowedOrigins(): string[] {
   const extra = (process.env.NEXUSAI_ALLOWED_ORIGINS ?? "").split(",").map((origin) => origin.trim().replace(/\/$/, ""));

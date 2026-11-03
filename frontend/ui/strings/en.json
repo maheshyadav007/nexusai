@@ -1426,6 +1426,14 @@
   "search.back": "Back to results",
   "search.resultsFor": "Results for “{words}”",
   "search.thread.empty": "Open a result to read it here",
-  "error.unreachable": "Can't reach NexusAI. Check it's running, and open it at http://127.0.0.1:4000.",
-  "error.failed": "That didn't work (error {status})."
+  "error.unreachable": "Can't reach NexusAI. Check it's running.",
+  "error.failed": "That didn't work (error {status}).",
+  "home.useCurrent": "Use current folder",
+  "home.picker.places": "Quick places",
+  "home.picker.home": "Your home folder",
+  "home.picker.current": "Current folder",
+  "home.picker.goTo": "Type a path and press Enter",
+  "home.picker.new": "New folder",
+  "home.picker.newName": "Folder name",
+  "home.picker.create": "Create"
 }

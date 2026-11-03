@@ -1,5 +1,6 @@
 "use client";
 
+import { copyText } from "@/ui/client/browser";
 import { useState } from "react";
 import { ApiRequestError } from "@/ui/client/api";
 import { useAvailableModels, useCancelLogin, useDisconnect, useModelStatus, useSelectModel, useStartLogin, useTestModel } from "@/ui/client/models";
@@ -23,7 +24,7 @@ const messageOf = (error: unknown) => (error instanceof ApiRequestError ? error.
 function SignIn({ code, url }: { code: string; url: string }) {
   const toast = useToast();
   const cancel = useCancelLogin();
-  const copy = () => void navigator.clipboard.writeText(code).then(() => toast({ title: t("settings.models.copied") }));
+  const copy = () => void copyText(code).then(() => toast({ title: t("settings.models.copied") }));
   return (
     <div className="flex flex-col items-start gap-3">
       <p className="text-md text-ink-secondary">{t("settings.models.signIn.steps")}</p>

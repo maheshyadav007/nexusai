@@ -120,14 +120,41 @@ def too_new(path: Path) -> bool:
 
 
 def normalize(path: str) -> Path:
-    return Path(path).expanduser().resolve()
+    try:
+        return Path(path).expanduser().resolve()
+    except (OSError, RuntimeError, ValueError) as error:
+        raise HomeError("That isn't a folder path.") from error
+
+
+def _is_dir(path: Path) -> bool:
+    """Looking inside a locked folder raises an error, rather than saying it isn't there."""
+    try:
+        return path.is_dir()
+    except OSError:
+        return False
+
+
+def _exists(path: Path) -> bool:
+    try:
+        return path.exists()
+    except OSError:
+        return False
 
 
 def _nearest_existing(path: Path) -> Path:
     current = path
-    while not current.exists() and current != current.parent:
+    while not _exists(current) and current != current.parent:
         current = current.parent
     return current
+
+
+def _sendable(name: str) -> bool:
+    """Linux allows names that aren't valid text, and those can't reach the browser."""
+    try:
+        name.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
 
 
 def _is_network_path(path: Path) -> bool:
@@ -152,24 +179,27 @@ def _can_write(folder: Path) -> bool:
 
 
 def check_folder(raw: str, min_free_bytes: int) -> HomeCheck:
-    path = normalize(raw)
+    try:
+        path = normalize(raw)
+    except HomeError as error:
+        return HomeCheck(path=raw, ok=False, problems=[str(error)], warnings=[], free_bytes=None)
     problems: list[str] = []
     warnings: list[str] = []
     existing = _nearest_existing(path)
     free: int | None = None
-    if not existing.is_dir():
+    if not _is_dir(existing):
         problems.append("That path is a file, not a folder. Choose a folder.")
     elif _is_network_path(path):
         problems.append("That's a network drive. Choose a folder on this computer.")
     elif not _can_write(existing):
         problems.append("NexusAI can't write to that folder. Choose one you have access to.")
-    if existing.is_dir():
-        free = shutil.disk_usage(existing).free
-        if free < min_free_bytes:
-            gigabytes = min_free_bytes / 1024**3
-            warnings.append(
-                f"This drive has less than {gigabytes:.0f} GB free, and mail takes space."
-            )
+    try:
+        free = shutil.disk_usage(existing).free if _is_dir(existing) else None
+    except OSError:
+        free = None
+    if free is not None and free < min_free_bytes:
+        gigabytes = min_free_bytes / 1024**3
+        warnings.append(f"This drive has less than {gigabytes:.0f} GB free, and mail takes space.")
     if any(marker in path.parts or marker in str(path) for marker in CLOUD_MARKERS) or (
         path.is_relative_to(Path.home())
         and path != Path.home()
@@ -182,7 +212,13 @@ def check_folder(raw: str, min_free_bytes: int) -> HomeCheck:
     home = is_home(path)
     if home and too_new(path):
         problems.append("That Home was made by a newer NexusAI. Update the app to open it.")
-    if not home and path.is_dir() and any(path.iterdir()):
+    try:
+        has_files = not home and _is_dir(path) and any(path.iterdir())
+    except OSError:
+        has_files = False
+        if not problems:
+            problems.append("NexusAI can't read that folder. Choose one you have access to.")
+    if has_files:
         warnings.append(
             "This folder already has files in it. NexusAI adds its folders beside them."
         )
@@ -222,24 +258,61 @@ def _other_drives(path: Path) -> list[str]:
     return [mount for mount in mounts if mount.lower() != path.anchor.lower()]
 
 
-def browse(raw: str | None, extension: str | None = None) -> FolderListing:
-    path = normalize(raw) if raw else Path.home()
-    if not path.is_dir():
-        path = _nearest_existing(path)
+def _kind(entry: os.DirEntry[str]) -> str | None:
+    """One unreadable entry shouldn't hide everything else in the folder."""
     try:
-        entries = [e for e in os.scandir(path) if not e.name.startswith(".")]
-        folders = sorted((e.name for e in entries if e.is_dir()), key=str.lower)
-        wanted = f".{extension}" if extension else None
-        files = sorted(
-            (e.name for e in entries if wanted and e.is_file() and e.name.lower().endswith(wanted)),
-            key=str.lower,
-        )
-    except OSError as error:
-        raise HomeError("Couldn't open that folder.") from error
-    parent = None if path.parent == path else str(path.parent)
+        return "folder" if entry.is_dir() else "file" if entry.is_file() else None
+    except OSError:
+        return None
+
+
+def browse(raw: str | None, extension: str | None = None) -> FolderListing:
+    path = normalize(raw) if raw else Path("~").expanduser()
+    if not _is_dir(path):
+        path = _nearest_existing(path)
+    if not _sendable(str(path)):
+        path = Path("~").expanduser()
+    folders: list[str] = []
+    files: list[str] = []
+    problem = None
+    wanted = f".{extension}" if extension else None
+    try:
+        with os.scandir(path) as found:
+            for entry in found:
+                if entry.name.startswith(".") or not _sendable(entry.name):
+                    continue
+                kind = _kind(entry)
+                if kind == "folder":
+                    folders.append(entry.name)
+                elif kind == "file" and wanted and entry.name.lower().endswith(wanted):
+                    files.append(entry.name)
+    except OSError:
+        problem = "You don't have permission to open this folder. Go up, or choose another one."
     return FolderListing(
-        path=str(path), parent=parent, folders=folders, files=files, drives=_other_drives(path)
+        path=str(path),
+        parent=None if path.parent == path else str(path.parent),
+        folders=sorted(folders, key=str.lower),
+        files=sorted(files, key=str.lower),
+        drives=_other_drives(path),
+        problem=problem,
     )
+
+
+def create_folder(parent: str, name: str) -> FolderListing:
+    """One new folder, directly inside this one. A name can't lead anywhere else."""
+    clean = name.strip()
+    if clean in {"", ".", ".."} or any(mark in clean for mark in ("/", "\\", "\0")):
+        raise HomeError("A folder name can't contain slashes.")
+    target = normalize(parent) / clean
+    try:
+        target.mkdir(exist_ok=True)
+    except FileExistsError as error:
+        raise HomeError("There's already a file with that name here.") from error
+    except PermissionError as error:
+        raise HomeError("You don't have permission to create a folder here.") from error
+    except OSError as error:
+        raise HomeError(f"Couldn't create that folder: {error.strerror}") from error
+    return browse(str(target))
 
 
 def agent_path(home: Path, requested: str, *, write: bool) -> Path:

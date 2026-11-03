@@ -61,7 +61,7 @@ Status legend: **In use** (in the repo today) · **Decided** (agreed, not built 
 | Zod | Decided | Validates theme files and API responses in the UI. |
 | Preload + `contextBridge` typed IPC | Decided | `contextIsolation: true`, `nodeIntegration: false`; the UI only sees a small typed API. |
 | electron-builder | Decided | One config produces macOS `.dmg` and Windows installers. Windows: **per-user NSIS** installer (no admin needed). |
-| Credentials | Decided | Mail accounts: one encrypted file in Home (AES-GCM, key derived from the Home's key). Home's key and model and connector sign-ins: OS credential store through Python `keyring`. |
+| Credentials | Decided | Mail accounts: one encrypted file in Home (AES-GCM, key derived from the Home's key). Home's key and model and connector sign-ins: for now, a local file only this user can read, `secrets.json` in the app data folder, because a missing keyring blocked opening a Home. Secrets already in the OS credential store are still read. Planned once things are stable: OS credential store through Python `keyring`. |
 | Auto-update (`electron-updater`) | Decided | Details depend on where corporate builds are hosted. |
 
 ### Agent runtime

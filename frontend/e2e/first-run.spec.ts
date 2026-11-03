@@ -139,6 +139,46 @@ test("the folder chooser shows problems and browses folders", async ({ page }) =
   await expect(page.getByRole("dialog")).toBeHidden();
 });
 
+test("the folder picker can make a folder, jump to a place, and always has a way out", async ({ page }) => {
+  await page.route("**/api/home/status", (route) => route.fulfill({ json: { state: "unset", default_path: "/tmp", path: null, message: null } }));
+  await page.goto("/setup");
+  await page.getByRole("button", { name: "Browse" }).click();
+  const shown = page.getByTestId("picker-path");
+  await expect(shown).not.toHaveText("");
+
+  // A folder that can't be opened says so, and leaves Up and the other places working.
+  await page.route("**/api/home/browse", (route) => route.fulfill({ json: { path: "/locked", parent: "/", folders: [], files: [], drives: [], problem: "You don't have permission to open this folder." } }));
+  await page.getByTestId("picker-go").fill("/locked");
+  await page.getByTestId("picker-go").press("Enter");
+  await expect(page.getByTestId("picker-problem")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Up one level" })).toBeVisible();
+  await noViolations(page);
+
+  // Even a failed request leaves a way back.
+  await page.route("**/api/home/browse", (route) => route.fulfill({ status: 500, body: "Internal Server Error" }));
+  await page.getByTestId("picker-go").fill("/broken/here");
+  await page.getByTestId("picker-go").press("Enter");
+  await expect(page.getByText("Couldn't open that folder")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Up one level" })).toBeVisible();
+  await page.unroute("**/api/home/browse");
+
+  await page.getByTestId("picker-home").click();
+  await expect(page.getByRole("button", { name: "Use this folder" }).last()).toBeEnabled();
+  await page.getByTestId("picker-current").click();
+  await expect(shown).not.toHaveText(".");
+
+  await page.getByTestId("picker-go").fill("/tmp");
+  await page.getByTestId("picker-go").press("Enter");
+  const name = `nexusai-e2e-${Date.now()}`;
+  await page.getByTestId("picker-new").click();
+  await page.getByTestId("picker-new-name").fill(name);
+  await page.getByRole("button", { name: "Create" }).click();
+  await expect(shown).toContainText(name);
+  await page.keyboard.press("Escape");
+  await page.getByTestId("use-current-folder").click();
+  await expect(page.getByRole("textbox", { name: "Folder" })).not.toHaveValue("/tmp");
+});
+
 test("a missing Home shows recovery and is never recreated silently", async ({ page }) => {
   const status = { state: "missing", default_path: "/tmp/NexusAI", path: "/Volumes/Gone/NexusAI", message: "NexusAI can't find your Home at this location." };
   await page.route("**/api/home/status", (route) => route.fulfill({ json: status }));

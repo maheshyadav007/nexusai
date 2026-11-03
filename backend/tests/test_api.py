@@ -120,6 +120,25 @@ def test_another_address_can_be_named_but_never_opened_to_everything(
     assert "*" not in named.allowed_origins
 
 
+@pytest.mark.parametrize("ip", ["10.1.2.3", "192.168.1.5", "172.16.0.9", "100.70.1.2"])
+def test_the_app_can_be_opened_by_ip_from_another_machine(client: TestClient, ip: str) -> None:
+    answer = client.post(
+        "/api/queries/settings.get",
+        json={},
+        headers={"host": f"{ip}:4100", "origin": f"http://{ip}:4000"},
+    )
+    assert answer.status_code == 200
+    assert answer.headers["access-control-allow-origin"] == f"http://{ip}:4000"
+
+
+@pytest.mark.parametrize("origin", ["http://8.8.8.8", "https://evil.example", "http://10.evil.io"])
+def test_websites_stay_refused(client: TestClient, origin: str) -> None:
+    assert (
+        client.post("/api/queries/settings.get", json={}, headers={"origin": origin}).status_code
+        == 403
+    )
+
+
 def test_dns_rebinding_host_is_refused(client: TestClient) -> None:
     assert client.get("/api/health", headers={"host": "evil.example:4100"}).status_code == 403
 

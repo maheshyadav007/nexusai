@@ -4,6 +4,32 @@ Problems found while testing on the real mailbox and model, and how we plan to s
 
 Last reviewed: 2026-11-03, at commit `8a5dafe`.
 
+## Security
+
+| Problem | What happens | How we'll solve it |
+|---|---|---|
+| No login, and open to the network | For testing, any machine on a private network can open the app by IP and use everything, including mail and agents. Must be fixed before real use | Add a login and HTTPS, and listen only on this computer by default |
+| Secrets are in a plain file | A missing keyring blocked opening a Home on Linux, so the Home's key and sign-ins now go in `secrets.json`, readable only by this user but not encrypted. Anything running as this user can read them, and the database is only as safe as this file | Once things are stable, go back to the OS credential store, with a clear fallback when none exists, and move these secrets across |
+| Folder-watch limit on Linux | If Linux runs out of file watches, opening a Home may fail with an error. Not reproduced | Catch it, and carry on without watching for file changes |
+
+## Other machines
+
+The app has only ever been run for real on one Mac, so these come from reading the code and lockfiles. None were seen happening, except where noted.
+
+| Problem | What happens | How we'll solve it |
+|---|---|---|
+| Nothing tests Linux or Windows | Every check runs on a Mac only, which is how the keyring failure reached Linux | Run `make check` on Linux and Windows on each push |
+| Older systems can't install | `onnxruntime` has no build for Intel Macs or macOS before 14. `onnxruntime` and `sqlcipher3` need glibc 2.28 or newer on Linux, so RHEL or CentOS 7 and Ubuntu 18.04 fail. `cryptography` has no Windows on ARM build | Make meaning search an optional install, and check the system before setup |
+| Company networks | Web requests trust a built-in certificate list, so a company that inspects traffic can break model sign-in and connectors. `next build` downloads fonts from Google, so a blocked network can fail the build | Use the system's certificates, and ship the fonts in the repo |
+| Commands use the wrong shell | The agent is told the shell is `$SHELL`, but commands run in `zsh`, or `/bin/sh` if that's missing. On Ubuntu that's `dash`, so bash commands can fail | Run commands in the shell the agent is told about |
+| Opening the app by IP address | Toasts and Copy now work over plain http. Browsers still don't grant notifications there | Add HTTPS |
+| Memory limit on attachments | The attachment reader is capped at 2 GB of address space. Linux enforces this, and a Mac ignores it, so large files may fail only on Linux | Test on Linux, then raise the limit or change how it's measured |
+| Moving a Home to another computer | The key stays behind in the app data folder or Keychain, so the Home asks for its recovery key, and model and connector sign-ins must be repeated | Explain this at setup, and make sure the recovery key was saved |
+| Network and virtual drives | The check misses some types, such as `virtiofs`, `vboxsf`, `ceph` and WSL's `/mnt/c`, where the database can be slow or unreliable | Add them to the list, and warn on WSL mounts |
+| Frontend and backend must share an account | The frontend reads the backend's token from the user's app data, and remembers it. A different user, or a reset, gives "Request refused" until it restarts | Read the token again after a refusal, and say what's wrong |
+| Ports already in use | Other programs often use 4000, such as NoMachine, and the frontend's port is fixed | Add one setting for both ports, and a clear message when one is taken |
+| No fixed Node version | Node 22 is only mentioned in the README | Add `engines` and `.nvmrc` |
+
 ## Search
 
 | Problem | What happens | How we'll solve it |

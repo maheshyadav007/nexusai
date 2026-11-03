@@ -1,5 +1,6 @@
 "use client";
 
+import { newId } from "@/ui/client/browser";
 import { useEffect, useState } from "react";
 import { AgentKnows, AgentSees } from "./AgentKnows";
 import type { MemoryFile, PromptFile } from "@/ui/client/contracts.generated";
@@ -105,7 +106,7 @@ function MemoryBrowser() {
         className="flex items-end gap-2"
         onSubmit={(event) => {
           event.preventDefault();
-          save.mutate({ name: `note-${crypto.randomUUID().slice(0, 8)}`, content: note }, { onSuccess: () => setNote("") });
+          save.mutate({ name: `note-${newId().slice(0, 8)}`, content: note }, { onSuccess: () => setNote("") });
         }}
       >
         <div className="min-w-0 flex-1"><Field label={t("memory.add")}>{({ invalid, ...control }) => <Input invalid={invalid} value={note} onChange={(event) => setNote(event.target.value)} {...control} />}</Field></div>

@@ -21,6 +21,10 @@ export function useHomeCheck(path: string) {
   });
 }
 
+export const useCreateFolder = () => useMutation({ mutationFn: (input: { path: string; name: string }) => post<FolderListing>("/api/home/create-folder", input) });
+/** "." is wherever the app was started, and the backend works out what that is. */
+export const useCurrentFolder = () => useMutation({ mutationFn: () => post<FolderListing>("/api/home/browse", { path: "." }) });
+
 export function useFolders(path: string | null, enabled: boolean, extension?: string) {
   return useQuery({
     queryKey: ["home-folders", path, extension],

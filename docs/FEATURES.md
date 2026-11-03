@@ -52,7 +52,7 @@ Feature set for review, grouped by how the pieces depend on each other. Context:
 
 ## A2. Home folder
 
-The user picks one **NexusAI Home**. Everything the app stores lives there, except model and connector sign-ins and this Home's own key, which stay in the OS credential store. Mail accounts, passwords included, are in an encrypted file here. There is one Home per user, with no separate per-project spaces. A small pointer file in the OS app-data folder records where Home is.
+The user picks one **NexusAI Home**. Everything the app stores lives there, except model and connector sign-ins and this Home's own key, which for now stay in a private local file instead of the OS credential store. Mail accounts, passwords included, are in an encrypted file here. There is one Home per user, with no separate per-project spaces. A small pointer file in the OS app-data folder records where Home is.
 
 ```text
 <NexusAI Home>/

@@ -1,5 +1,6 @@
 "use client";
 
+import { newId } from "@/ui/client/browser";
 import { useState } from "react";
 import type { Panel, PanelBoard as Board } from "@/ui/client/contracts.generated";
 import { useDateTime } from "@/ui/client/format";
@@ -65,7 +66,7 @@ function PanelBuilder({ onAdd }: { onAdd: (panel: Panel) => void }) {
   const [flagged, setFlagged] = useState(false);
   const create = () => {
     const filters = source === "threads" ? { ...(sender ? { sender } : {}), ...(subject ? { subject } : {}), unread_only: unread, flagged_only: flagged } : { ...(query ? { query } : {}) };
-    onAdd({ id: `panel-${crypto.randomUUID().slice(0, 8)}`, title: title.trim(), source, filters, size: "medium" });
+    onAdd({ id: `panel-${newId().slice(0, 8)}`, title: title.trim(), source, filters, size: "medium" });
     setOpen(false);
     setTitle("");
   };

@@ -1,16 +1,21 @@
 import json
 import os
+import stat
 import sys
 from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
 
+import keyring
 import pytest
 from fastapi.testclient import TestClient
+from keyring.errors import NoKeyringError
 
 from nexusai.api.app import create_app
 from nexusai.kernel import home as homes
 from nexusai.kernel.config import Config
+from nexusai.kernel.secrets import SECRETS_FILE, LocalStore
+from nexusai.modules.agent import prompts_builder, tools
 
 
 @pytest.fixture
@@ -199,3 +204,114 @@ def test_each_task_gets_its_own_scratch_folder(home: Path) -> None:
     assert (home / "scratch" / "task-1").is_dir()
     with pytest.raises(homes.PathNotAllowed):
         homes.scratch_folder(home, "../escape")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Permissions work differently")
+def test_a_locked_folder_gets_a_reason_and_a_way_back_out(tmp_path: Path) -> None:
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    locked.chmod(0)
+    try:
+        listing = homes.browse(str(locked))
+        assert listing.problem and listing.folders == [] and listing.parent == str(tmp_path)
+        assert homes.browse(str(locked / "inside")).path in {str(locked), str(tmp_path)}
+        assert not homes.check_folder(str(locked), 0).ok
+        assert not homes.check_folder(str(locked / "inside"), 0).ok
+    finally:
+        locked.chmod(0o755)
+
+
+def test_a_name_that_isnt_text_doesnt_stop_the_rest_of_the_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "fine").mkdir()
+    real = homes.os.scandir
+
+    class Odd:
+        name = "bad\udcff"
+
+        def is_dir(self) -> bool:
+            return True
+
+    class Listing:
+        def __init__(self, path: Path) -> None:
+            self.entries = [*real(path), Odd()]
+
+        def __enter__(self) -> list[object]:
+            return self.entries
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+    monkeypatch.setattr(homes.os, "scandir", Listing)
+    listing = homes.browse(str(tmp_path))
+    assert listing.folders == ["fine"]
+    listing.model_dump_json()
+
+
+def test_a_folder_can_be_made_here_and_only_here(tmp_path: Path) -> None:
+    made = homes.create_folder(str(tmp_path), " NexusAI ")
+    assert made.path == str((tmp_path / "NexusAI").resolve())
+    assert (tmp_path / "NexusAI").is_dir()
+    assert homes.create_folder(str(tmp_path), "NexusAI").path == made.path
+    for bad in ("..", ".", "a/b", "../out", "a\\b", "x\0y"):
+        with pytest.raises(homes.HomeError):
+            homes.create_folder(str(tmp_path), bad)
+    assert not (tmp_path.parent / "out").exists()
+    (tmp_path / "taken").write_text("x")
+    with pytest.raises(homes.HomeError):
+        homes.create_folder(str(tmp_path), "taken")
+
+
+def test_the_current_folder_and_home_can_be_asked_for(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    assert homes.browse(".").path == str(tmp_path.resolve())
+    assert homes.browse("~").path == str(Path.home())
+
+
+def test_a_home_opens_with_no_keyring_on_the_computer(
+    config: Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def missing(*_: object, **__: object) -> None:
+        raise NoKeyringError("none")
+
+    monkeypatch.setattr(keyring, "get_password", missing)
+    monkeypatch.setattr(keyring, "set_password", missing)
+    monkeypatch.setattr(keyring, "delete_password", missing)
+    monkeypatch.setenv("NEXUSAI_APP_DATA", str(tmp_path / "app-data"))
+    plain = replace(config, home_dir=None, secrets_test_file=None)
+    with TestClient(create_app(plain), base_url="http://127.0.0.1:4100") as client:
+        answer = client.post("/api/home/choose", json={"path": str(tmp_path / "Home")})
+    assert answer.status_code == 200, answer.text
+    assert answer.json()["state"] == "ready"
+    saved = tmp_path / "app-data" / SECRETS_FILE
+    assert saved.exists()
+    if sys.platform != "win32":
+        assert stat.S_IMODE(saved.stat().st_mode) == 0o600
+
+
+def test_secrets_kept_in_the_keyring_before_are_still_found(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    earlier = {("NexusAI", "old-key"): "from-the-keychain"}
+    removed: list[str] = []
+    monkeypatch.setattr(keyring, "get_password", lambda service, name: earlier.get((service, name)))
+    monkeypatch.setattr(keyring, "delete_password", lambda _, name: removed.append(name))
+    store = LocalStore(tmp_path / SECRETS_FILE)
+    assert store.get("old-key") == "from-the-keychain"
+    store.set("new-key", "here")
+    assert store.get("new-key") == "here"
+    store.delete("old-key")
+    assert removed == ["old-key"]
+
+
+def test_commands_run_in_the_shell_the_model_is_told_about(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SHELL", "/bin/sh")
+    assert tools.shell_command("ls", windows=False)[0][0] == prompts_builder.posix_shell()
+    assert prompts_builder.posix_shell().endswith("sh")
+    monkeypatch.setenv("SHELL", "/usr/bin/fish")
+    assert Path(prompts_builder.posix_shell()).name in prompts_builder.SH_LIKE

@@ -1,5 +1,6 @@
 "use client";
 
+import { copyText } from "@/ui/client/browser";
 import { useState } from "react";
 import { useConfirmRecoveryKey, useNewRecoveryKey, useRecoveryKey } from "@/ui/client/home";
 import { Button } from "@/ui/primitives/Button";
@@ -20,7 +21,7 @@ export function PendingRecoveryKey({ value, action, onSaved }: { value: string; 
       <p data-testid="recovery-key" className="w-full break-all rounded-md bg-surface-sunken p-3 font-mono text-lg tabular-nums text-ink-primary">
         {value}
       </p>
-      <Button onClick={() => void navigator.clipboard.writeText(value).then(() => toast({ title: t("recovery.copied") }))}>{t("recovery.copy")}</Button>
+      <Button onClick={() => void copyText(value).then(() => toast({ title: t("recovery.copied") }))}>{t("recovery.copy")}</Button>
       <p className="text-md text-ink-secondary">{t("recovery.warning")}</p>
       <Checkbox label={t("recovery.saved")} checked={saved} onChange={setSaved} />
       <Button variant="primary" disabled={!saved} loading={confirm.isPending} onClick={() => confirm.mutate(undefined, onSaved ? { onSuccess: onSaved } : {})}>

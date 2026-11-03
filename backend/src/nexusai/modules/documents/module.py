@@ -543,7 +543,10 @@ def _scan_home_files(ctx: Context) -> None:
     if root.is_dir():
         for path in root.rglob("*"):
             if path.is_file() and not path.is_symlink() and not path.name.startswith("."):
-                seen[path.relative_to(ctx.config.home).as_posix()] = path
+                relative = path.relative_to(ctx.config.home).as_posix()
+                # Linux allows names that aren't valid text, and the database can't hold those.
+                if not _has_bad_text(relative):
+                    seen[relative] = path
     db = ctx.bus.db
     known = {row["path"]: row for row in db.fetch_all("SELECT * FROM home_files")}
     changed = False
@@ -573,6 +576,14 @@ def _scan_home_files(ctx: Context) -> None:
     if changed:
         with ctx.bus.unit_of_work() as work:
             work.emit("documents.changed", {}, source="documents", trace_id=ctx.trace_id)
+
+
+def _has_bad_text(name: str) -> bool:
+    try:
+        name.encode("utf-8")
+    except UnicodeEncodeError:
+        return True
+    return False
 
 
 def _read_home_file(ctx: Context) -> bool:

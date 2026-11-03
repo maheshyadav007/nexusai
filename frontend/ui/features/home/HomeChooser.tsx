@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ApiRequestError } from "@/ui/client/api";
-import { useChooseHome, useHomeCheck } from "@/ui/client/home";
+import { useChooseHome, useCurrentFolder, useHomeCheck } from "@/ui/client/home";
 import { Button } from "@/ui/primitives/Button";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Field } from "@/ui/primitives/Field";
@@ -19,6 +19,7 @@ export function HomeChooser({ initialPath, mustExist = false, action, onChosen }
   const [path, setPath] = useState(initialPath);
   const check = useHomeCheck(path);
   const choose = useChooseHome();
+  const current = useCurrentFolder();
   const result = check.data?.path && !check.isFetching ? check.data : undefined;
   const missingHome = mustExist && result && !result.is_existing_home;
   const problem = result?.problems[0] ?? (missingHome ? t("home.notAHome") : undefined);
@@ -30,6 +31,7 @@ export function HomeChooser({ initialPath, mustExist = false, action, onChosen }
             <div className="flex items-center gap-2">
               <Input invalid={invalid} spellCheck={false} value={path} onChange={(event) => setPath(event.target.value)} {...control} />
               <FolderPicker start={path} onPick={setPath} trigger={<Button className="shrink-0">{t("home.browse")}</Button>} />
+              <Button className="shrink-0" data-testid="use-current-folder" loading={current.isPending} onClick={() => current.mutate(undefined, { onSuccess: (found) => setPath(found.path) })}>{t("home.useCurrent")}</Button>
             </div>
           )}
         </Field>

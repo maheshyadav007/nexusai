@@ -5,8 +5,10 @@ from pathlib import Path
 from typing import Protocol
 
 import keyring
+import structlog
 
 from nexusai.kernel.files import replace_file
+from nexusai.kernel.home import app_data_dir
 
 
 class SecretStore(Protocol):
@@ -19,6 +21,9 @@ class SecretStore(Protocol):
 # character. A sign-in token can be longer, so long values are kept in several entries.
 PIECE_CHARS = 1000
 PIECES_MARK = "nexusai-pieces:"
+SECRETS_FILE = "secrets.json"
+_FILE_LOCK = threading.Lock()
+log = structlog.get_logger()
 
 
 class KeyringStore:
@@ -69,7 +74,7 @@ class KeyringStore:
 
 
 class FileStore:
-    """For tests only, so they never touch the real credential store."""
+    """One JSON file only this user can read. The secrets in it aren't encrypted."""
 
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -81,19 +86,55 @@ class FileStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         # Replaced in one step, because the sign-in thread writes while requests read.
         temporary = self.path.with_suffix(f".{threading.get_ident()}.tmp")
-        temporary.write_text(json.dumps(values), encoding="utf-8")
-        os.chmod(temporary, 0o600)
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as file:
+            json.dump(values, file)
         replace_file(temporary, self.path)
 
     def get(self, name: str) -> str | None:
         return self._read().get(name)
 
     def set(self, name: str, value: str) -> None:
-        self._write({**self._read(), name: value})
+        with _FILE_LOCK:
+            self._write({**self._read(), name: value})
 
     def delete(self, name: str) -> None:
-        self._write({k: v for k, v in self._read().items() if k != name})
+        with _FILE_LOCK:
+            self._write({k: v for k, v in self._read().items() if k != name})
+
+
+class LocalStore:
+    """Secrets go in a local file for now, because a missing or locked keyring stopped people from
+    opening a Home at all, as it does on many Linux setups. To go back to the OS credential store
+    when things are stable, return KeyringStore from secret_store.
+
+    What's already in the keyring is still read, or Homes made earlier couldn't open.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.file = FileStore(path)
+        self.keyring = KeyringStore()
+
+    def get(self, name: str) -> str | None:
+        found = self.file.get(name)
+        if found is not None:
+            return found
+        try:
+            return self.keyring.get(name)
+        # Each backend raises its own errors, and none of them should stop the app.
+        except Exception:
+            return None
+
+    def set(self, name: str, value: str) -> None:
+        self.file.set(name, value)
+
+    def delete(self, name: str) -> None:
+        self.file.delete(name)
+        try:
+            self.keyring.delete(name)
+        except Exception:
+            log.info("keyring_secret_kept")
 
 
 def secret_store(test_file: Path | None) -> SecretStore:
-    return FileStore(test_file) if test_file else KeyringStore()
+    return FileStore(test_file) if test_file else LocalStore(app_data_dir() / SECRETS_FILE)

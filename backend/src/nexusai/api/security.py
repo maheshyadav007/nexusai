@@ -1,8 +1,10 @@
+import ipaddress
 import os
 import secrets
 from collections.abc import Awaitable, Callable, MutableMapping
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import structlog
 from starlette.responses import JSONResponse, Response
@@ -20,12 +22,14 @@ TOKEN_FILE = "install-token"
 TOKEN_HEADER = "x-nexusai-token"
 # Only says the server is up, and whatever starts the app needs it before anything else.
 OPEN_PATHS = frozenset({"/api/health"})
+# Carrier networks and VPNs such as Tailscale, which aren't counted as private.
+SHARED_ADDRESSES = ipaddress.ip_network("100.64.0.0/10")
 PREFLIGHT = "access-control-request-method"
 PREFLIGHT_SECONDS = "600"
 ALLOWED_METHODS = "GET, POST, PUT, DELETE, OPTIONS"
 REFUSED = (
-    "This address isn't allowed to reach NexusAI. Open the app at http://127.0.0.1:4000, or add"
-    " this address to NEXUSAI_ALLOWED_ORIGINS."
+    "This address isn't allowed to reach NexusAI. Open the app by its IP address, or add this"
+    " address to NEXUSAI_ALLOWED_ORIGINS."
 )
 
 
@@ -43,6 +47,16 @@ def install_token(data_dir: Path) -> str:
     with os.fdopen(descriptor, "w", encoding="utf-8") as file:
         file.write(token)
     return token
+
+
+def _on_private_network(address: str) -> bool:
+    """For now, so the app can be tried from other machines by IP with no setup. There's no login
+    yet, so anyone on the network can use it. Names stay refused, which stops DNS rebinding."""
+    try:
+        ip = ipaddress.ip_address(urlsplit(address).hostname or "")
+    except ValueError:
+        return False
+    return ip.is_private or ip in SHARED_ADDRESSES
 
 
 def _cross_origin(origin: str) -> dict[str, str]:
@@ -93,7 +107,9 @@ class LocalOnlyMiddleware:
             return
         headers = {k.decode("latin-1"): v.decode("latin-1") for k, v in scope["headers"]}
         host, origin = headers.get("host"), headers.get("origin")
-        if host not in self.allowed_hosts or (origin and origin not in self.allowed_origins):
+        good_host = host in self.allowed_hosts or _on_private_network(f"//{host}")
+        good_origin = not origin or origin in self.allowed_origins or _on_private_network(origin)
+        if not good_host or not good_origin:
             log.warning("request_refused", host=host, origin=origin, path=scope["path"])
             error = ApiError(code="request.refused", message=REFUSED)
             await JSONResponse(error.model_dump(), status_code=403)(scope, receive, send)
