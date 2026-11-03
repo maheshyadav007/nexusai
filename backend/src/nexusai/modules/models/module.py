@@ -210,6 +210,11 @@ def _status(ctx: Context) -> ModelStatus:
         return ModelStatus(
             connected=True, selected_model=_system_selected(ctx, system), login=login, managed=True
         )
+    # A model server set up in Settings counts just as a ChatGPT sign-in does.
+    saved = _provider_row(ctx)
+    if saved.get("provider") == "litellm":
+        ready = bool(saved.get("base_url") and saved.get("model") and litellm_key(ctx))
+        return ModelStatus(connected=ready, selected_model=saved.get("model"), login=login)
     tokens = _stored_tokens(ctx)
     if tokens is None:
         return ModelStatus(connected=False, login=login)
@@ -363,6 +368,7 @@ def save_provider(command: SaveModelProvider, ctx: Context) -> ModelProviderView
             "supports_tools": command.supports_tools,
         },
     )
+    _announce(ctx, "connected")
     return _provider_view(ctx)
 
 

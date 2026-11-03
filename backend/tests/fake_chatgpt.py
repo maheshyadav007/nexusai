@@ -134,7 +134,9 @@ def create_fake() -> FastAPI:
                         "arguments": json.dumps(reply),
                     },
                 )
-            elif "Summarize a mail conversation" in body.get("instructions", ""):
+            elif "Write the reply this person would send" in body.get(
+                "instructions", ""
+            ) or "Summarize a mail conversation" in body.get("instructions", ""):
                 yield event("response.output_text.delta", delta="They want the numbers by Friday.")
             elif last.get("type") == "function_call_output":
                 yield event("response.output_text.delta", delta=f"Tool said: {last['output'][:60]}")

@@ -12,9 +12,16 @@ from fastapi.testclient import TestClient
 from fake_mail import FakeMail, make_mail
 from nexusai.api.app import create_app
 from nexusai.kernel.config import Config
-from nexusai.modules.agent import gateway
-from nexusai.modules.agent.providers import ModelNotConfigured, TextChunk, ToolCall
+from nexusai.modules.agent import gateway, mail_agent
+from nexusai.modules.agent import module as agent_module
+from nexusai.modules.agent.providers import (
+    ModelNotConfigured,
+    ReasoningChunk,
+    TextChunk,
+    ToolCall,
+)
 from nexusai.modules.agent.ui_stream import UiTranslator, followups_part
+from nexusai.modules.mail import module as mail_module
 from test_agent_work import (  # noqa: F401
     Script,
     app_config,
@@ -662,6 +669,14 @@ def test_a_category_files_old_mail_and_new_mail(
     assert not [rule for rule in rules if "Invoices" in rule["name"]]
 
 
+def enough_votes(client: TestClient, name: str) -> None:
+    with client.app.state.bus.db.transaction() as tx:  # type: ignore[attr-defined]
+        for thread in range(1000, 1005):
+            tx.execute(
+                "INSERT INTO mail_category_votes (name, thread) VALUES (?, ?)", (name, thread)
+            )
+
+
 def test_a_suggested_category_waits_and_a_no_is_remembered(
     client: TestClient,
     script: Script,
@@ -675,6 +690,7 @@ def test_a_suggested_category_waits_and_a_no_is_remembered(
     ]
     fake.state.deliver(make_mail(subject="Receipt 1"))
     triaged(client, "Receipt 1")
+    enough_votes(client, "Receipts")
     listed = client.post("/api/queries/categories.list").json()["categories"]
     assert next(c for c in listed if c["name"] == "Receipts")["proposed"] is True
     client.post("/api/commands/categories.decide", json={"name": "Receipts", "accept": False})
@@ -731,3 +747,175 @@ def test_connecting_a_model_starts_waiting_triage_straight_away(
             "triage after connecting",
             seconds=8,
         )
+
+
+def test_thinking_streams_as_thinking_and_is_never_sent_back(
+    client: TestClient,
+    script: Script,
+) -> None:
+    session = new_session(client)
+    script.replies = [[ReasoningChunk("Let me "), ReasoningChunk("think."), TextChunk("Done.")]]
+    parts = chat(client, session, "Hello")
+    kinds = [part["type"] for part in parts]
+    assert "reasoning-start" in kinds
+    assert kinds.index("reasoning-end") < kinds.index("text-start")
+    thought = "".join(part["delta"] for part in parts if part["type"] == "reasoning-delta")
+    assert thought == "Let me think."
+    view = client.post("/api/queries/session.get", json={"id": session}).json()
+    reply = [m for m in view["messages"] if m["role"] == "assistant"][0]
+    assert [p["text"] for p in reply["parts"] if p["type"] == "reasoning"] == ["Let me think."]
+    assert [p["text"] for p in reply["parts"] if p["type"] == "text"] == ["Done."]
+    script.replies = [[TextChunk("Again.")]]
+    chat(client, session, "And?")
+    replayed = [m.text for m in script.requests[-1].messages if m.role == "assistant"]
+    assert replayed == ["Done."]
+
+
+def test_overlapping_suggestions_become_one_and_show_once_there_is_enough_mail(
+    client: TestClient,
+    script: Script,
+    fake: FakeMail,
+) -> None:
+    connect(client, fake)
+    names = ["HR", "HR feedback", "HR communication", "hr", "HR updates"]
+    script.replies = [
+        triage_reply(suggest_category={"name": name, "sender": "hr@x.example", "reason": "Often."})
+        for name in names
+    ]
+    for number in range(len(names)):
+        fake.state.deliver(make_mail(subject=f"People {number}", message_id=f"<hr{number}@x>"))
+        triaged(client, f"People {number}")
+        listed = client.post("/api/queries/categories.list").json()["categories"]
+        shown = [c["name"] for c in listed if c["proposed"]]
+        assert shown == ([] if number < len(names) - 1 else ["HR"])
+    calls = len(script.requests)
+    client.post("/api/commands/categories.decide", json={"name": "HR", "accept": True})
+    # All five go there on a yes, without reading any of them again.
+    assert len(subjects(client, folder="all", category="HR")) == len(names)
+    assert len(script.requests) == calls
+
+
+def test_old_overlaps_are_tidied_without_a_model(
+    client: TestClient,
+    script: Script,
+) -> None:
+    db = client.app.state.bus.db  # type: ignore[attr-defined]
+    with db.transaction() as tx:
+        for name, source, proposed in [
+            ("Product", "agent", 0),
+            ("Product updates", "agent", 0),
+            ("Updates", "rule", 0),
+            ("HR", "agent", 1),
+            ("HR feedback", "agent", 1),
+            ("Travel", "agent", 1),
+        ]:
+            tx.execute(
+                "INSERT OR IGNORE INTO mail_categories (name, source, proposed, created)"
+                " VALUES (?, ?, ?, 'now')",
+                (name, source, proposed),
+            )
+    calls = len(script.requests)
+    assert agent_module._triggers is not None
+    ctx = agent_module._triggers.ctx
+    assert mail_agent.tidy_categories(ctx) == 2
+    listed = client.post("/api/queries/categories.list").json()["categories"]
+    names = {c["name"] for c in listed}
+    assert {"Product", "Updates", "HR", "Travel"} <= names
+    assert not {"Product updates", "HR feedback"} & names
+    assert len(script.requests) == calls
+
+
+def test_starter_categories_file_by_subject_and_old_mail_too(
+    app_config: Config,
+    script: Script,
+    fake: FakeMail,
+) -> None:
+    starters = (
+        {"name": "PLM", "subject_prefix": "[PLM]"},
+        {"name": "Swarm", "subject_prefix": "[Swarm]"},
+    )
+    with_starters = replace(app_config, mail=replace(app_config.mail, starter_categories=starters))
+    with TestClient(create_app(with_starters), base_url="http://127.0.0.1:4100") as live:
+        connect(live, fake)
+        script.default = triage_reply()
+        fake.state.deliver(make_mail(subject="[PLM] Release 12 is out", message_id="<p1@x>"))
+        fake.state.deliver(make_mail(subject="Re: [PLM] Sprint plan", message_id="<p2@x>"))
+        fake.state.deliver(make_mail(subject="About [PLM] next week", message_id="<p3@x>"))
+        wait(lambda: len(subjects(live, folder="all")) == 3)
+        wait(lambda: len(subjects(live, folder="all", category="PLM")) == 2)
+        filed = subjects(live, folder="all", category="PLM")
+        assert "About [PLM] next week" not in filed
+        rows = {
+            c["name"]: c for c in live.post("/api/queries/categories.list").json()["categories"]
+        }
+        assert rows["Swarm"]["count"] == 0
+
+
+def test_automated_starter_mail_stays_filed_and_replies_reach_the_agent(
+    app_config: Config,
+    script: Script,
+    fake: FakeMail,
+) -> None:
+    starters = ({"name": "PLM", "subject_prefix": "[PLM]"},)
+    with_starters = replace(app_config, mail=replace(app_config.mail, starter_categories=starters))
+    with TestClient(create_app(with_starters), base_url="http://127.0.0.1:4100") as live:
+        connect(live, fake)
+        fake.state.deliver(make_mail(subject="[PLM] Build 12 passed", message_id="<a1@x>"))
+        wait(lambda: subjects(live, folder="all", category="PLM"))
+        assert not script.requests
+        assert "[PLM] Build 12 passed" not in subjects(live, folder="priority")
+        # Automated, but saying it's escalated is worth a look.
+        script.replies = [triage_reply(importance="high"), triage_reply(importance="high")]
+        fake.state.deliver(make_mail(subject="[PLM] Issue 7 escalated", message_id="<a2@x>"))
+        wait(lambda: len(script.requests) == 1)
+        fake.state.deliver(make_mail(subject="Re: [PLM] Build 13 failed", message_id="<a3@x>"))
+        wait(lambda: len(script.requests) == 2)
+        wait(lambda: "Re: [PLM] Build 13 failed" in subjects(live, folder="priority"))
+        assert "Re: [PLM] Build 13 failed" in subjects(live, folder="all", category="PLM")
+        # Nobody suggests the folder itself, though it can still be added by hand.
+        rows = {
+            c["name"]: c for c in live.post("/api/queries/categories.list").json()["categories"]
+        }
+        assert rows["PLM"]["in_priority"] is False
+
+
+def test_a_category_can_be_suggested_for_priority_and_a_no_is_remembered(
+    client: TestClient,
+    script: Script,
+) -> None:
+    client.post("/api/commands/categories.save", json={"name": "Customers"})
+    assert agent_module._triggers is not None
+    ctx = agent_module._triggers.ctx
+    assert "Suggested" in mail_module.suggest_priority(ctx, "Customers", "Most of it needs you.")
+    listed = client.post("/api/queries/categories.list").json()["categories"]
+    row = next(c for c in listed if c["name"] == "Customers")
+    assert row["priority_suggested"] is True and row["in_priority"] is False
+    client.post(
+        "/api/commands/categories.decidePriority", json={"name": "Customers", "accept": False}
+    )
+    listed = client.post("/api/queries/categories.list").json()["categories"]
+    assert next(c for c in listed if c["name"] == "Customers")["priority_suggested"] is False
+    assert "said no" in mail_module.suggest_priority(ctx, "Customers", "Again.")
+    client.post("/api/commands/categories.save", json={"name": "Partners"})
+    mail_module.suggest_priority(ctx, "Partners", "Often urgent.")
+    client.post(
+        "/api/commands/categories.decidePriority", json={"name": "Partners", "accept": True}
+    )
+    listed = client.post("/api/queries/categories.list").json()["categories"]
+    row = next(c for c in listed if c["name"] == "Partners")
+    assert row["in_priority"] is True and row["priority_suggested"] is False
+
+
+def test_the_chat_can_put_a_category_in_priority(
+    client: TestClient,
+    script: Script,
+) -> None:
+    client.post("/api/commands/categories.save", json={"name": "Customers"})
+    session = new_session(client)
+    script.replies = [
+        [ToolCall("c1", "update_category", {"name": "Customers", "in_priority": True})],
+        [TextChunk("Done.")],
+    ]
+    chat(client, session, "Put Customers in my priority inbox")
+    listed = client.post("/api/queries/categories.list").json()["categories"]
+    assert next(c for c in listed if c["name"] == "Customers")["in_priority"] is True

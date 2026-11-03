@@ -146,7 +146,7 @@ Messages from every source are normalized into one model and de-duplicated by `M
 new mail
   → 1. normalize      one message model; thread by In-Reply-To / References
   → 2. rule filters   built-in header rules + the user's own rules (no AI, instant)
-        ├─ matched  → filed in its bucket (Automated, Newsletters, a project…); agent not involved
+        ├─ matched  → filed in its bucket (Updates, Promotions, a project…); agent not involved
         └─ not matched ↓
   → 3. agent          system prompt + the user's personal prompt + the message
                        decides: category, summary, key facts (deadlines, asks, people),

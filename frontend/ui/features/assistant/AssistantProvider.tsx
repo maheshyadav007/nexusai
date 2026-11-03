@@ -1,9 +1,11 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { usePathname } from "next/navigation";
 import { createContext, use, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import appConfig from "@/app.config.json";
 import type { CreateSession } from "@/ui/client/contracts.generated";
+import { query } from "@/ui/client/api";
 import { leaveFirstMessage, useCreateSession } from "@/ui/client/sessions";
 
 interface Start {
@@ -70,6 +72,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<string | null>(null);
   const create = useCreateSession();
   const { mutate } = create;
+  const client = useQueryClient();
+  const [starting, setStarting] = useState(false);
 
   // Saving waits until it's been read, or the empty start would overwrite what was there.
   const [restored, setRestored] = useState(false);
@@ -91,16 +95,25 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   const start = useCallback(
     ({ text, context, title, model }: Start) => {
-      setOpen(true);
+      setStarting(true);
       const input = { ...(context ? { context: context as CreateSession["context"] } : {}), ...(title ? { title } : {}), ...(model ? { model } : {}) };
       mutate(input, {
+        // The chat and what's attached are read first, so the panel never opens onto something empty.
         onSuccess: (row) => {
           if (text) leaveFirstMessage(row.id, text);
-          setSession(row.id);
+          void Promise.allSettled([
+            client.prefetchQuery({ queryKey: ["session", row.id], queryFn: () => query("session.get", { id: row.id }) }),
+            client.prefetchQuery({ queryKey: ["session-context", row.id], queryFn: () => query("session.context", { id: row.id }) }),
+          ]).then(() => {
+            setSession(row.id);
+            setOpen(true);
+            setStarting(false);
+          });
         },
+        onError: () => setStarting(false),
       });
     },
-    [mutate, setOpen],
+    [client, mutate, setOpen],
   );
   const value = useMemo<Assistant>(
     () => ({
@@ -110,7 +123,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       setNeedsRoom,
       pinned,
       session,
-      starting: create.isPending,
+      starting,
       setOpen,
       setPinned,
       openSession: (id) => {
@@ -123,7 +136,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       },
       start,
     }),
-    [open, makingRoom, peeking, setOpen, pinned, session, create.isPending, start],
+    [open, makingRoom, peeking, setOpen, pinned, session, starting, start],
   );
   return <AssistantContext value={value}>{children}</AssistantContext>;
 }

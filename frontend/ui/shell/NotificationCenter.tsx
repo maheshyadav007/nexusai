@@ -11,6 +11,7 @@ import { IconButton } from "@/ui/primitives/IconButton";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Popover } from "@/ui/primitives/Popover";
+import { AttentionCount } from "@/ui/primitives/AttentionCount";
 import { Pressable } from "@/ui/primitives/Pressable";
 import { Select } from "@/ui/primitives/Select";
 import { Skeleton } from "@/ui/primitives/Skeleton";
@@ -37,7 +38,7 @@ export function NotificationCenter() {
       trigger={
         <Pressable aria-label={label} className="inline-flex items-center gap-1 rounded-md p-2 text-ink-secondary transition-colors duration-fast hover:bg-surface-sunken hover:text-ink-primary">
           <Icon name="notifications" />
-          {unread ? <span className="text-sm tabular-nums text-accent-default">{unread}</span> : null}
+          {unread ? <AttentionCount value={unread} /> : null}
         </Pressable>
       }
     >

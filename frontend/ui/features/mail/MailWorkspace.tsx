@@ -2,7 +2,7 @@
 
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useParams, usePathname } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useGetMoreFromFolder, useMailAccounts, useMailFolders, useSearch, useThreadPages, PAGE_SIZE, type FolderRole } from "@/ui/client/mail";
 import type { IconName } from "@/ui/icons";
 import { Button } from "@/ui/primitives/Button";
@@ -70,23 +70,19 @@ function ThreadList({ title, role, category, location, base, icon, empty }: { ti
   const [rowHeight, setRowHeight] = useState(ROW_ESTIMATE);
   const [first] = useThreadPages(role, category, location, FIRST_PAGE);
   const count = first?.data?.total ?? 0;
-  const virtual = useVirtualizer({
-    count,
-    getScrollElement: () => scroller.current,
-    estimateSize: () => rowHeight,
-    overscan: 10,
-    measureElement: (element) => {
-      const height = element.getBoundingClientRect().height;
-      if (element.getAttribute("data-index") === "0" && height) setRowHeight(height);
-      return height;
-    },
-  });
+  // Rows are all one height and never measured one by one. Measuring moves the list under a
+  // scrollbar being dragged, so the thumb would stop following the mouse.
+  const virtual = useVirtualizer({ count, getScrollElement: () => scroller.current, estimateSize: () => rowHeight, overscan: 10 });
   const items = virtual.getVirtualItems();
   const wanted = [...new Set(items.map((item) => Math.floor(item.index / PAGE_SIZE)))];
   const pages = useThreadPages(role, category, location, wanted);
   const rowAt = (index: number) => pages[wanted.indexOf(Math.floor(index / PAGE_SIZE))]?.data?.threads[index % PAGE_SIZE];
-  // The real height is known once a row has been drawn, and the rest should expect the same.
+  // The real height comes from text size, so it's read from one row, and only when it changes.
   useEffect(() => virtual.measure(), [rowHeight, virtual]);
+  const measureOne = useCallback((row: HTMLLIElement | null) => {
+    const height = row?.getBoundingClientRect().height;
+    if (height) setRowHeight(height);
+  }, []);
   // Virtual rows are placed by live measurements, which only a style can carry.
   const total = { height: virtual.getTotalSize() };
   return (
@@ -114,7 +110,7 @@ function ThreadList({ title, role, category, location, base, icon, empty }: { ti
             }
             const href = `${base}/${thread.id}`;
             return (
-              <li key={thread.id} data-index={item.index} ref={virtual.measureElement} {...{ style: place }} data-testid="thread-row" className="absolute left-0 top-0 w-full">
+              <li key={thread.id} data-index={item.index} ref={item.index === items[0]?.index ? measureOne : null} {...{ style: place }} data-testid="thread-row" className="absolute left-0 top-0 w-full">
                 <ThreadRowView thread={thread} href={href} active={pathname === href} />
               </li>
             );

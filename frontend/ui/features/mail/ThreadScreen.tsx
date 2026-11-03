@@ -1,12 +1,12 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiRequestError } from "@/ui/client/api";
 import type { Importance, Draft, MessageView } from "@/ui/client/contracts.generated";
 import { useDateTime } from "@/ui/client/format";
 import { useCategories, useMoveThread, useReplyDraft, useSetCategory, useSetImportance, useSetFlag, useSetRead, useSetStatus, useThread, type ThreadStatus } from "@/ui/client/mail";
-import { useSummarize, useThreadRuns, useThreadSummary } from "@/ui/client/work";
+import { useDraftReply, useSummarize, useThreadRuns, useThreadSummary } from "@/ui/client/work";
 import { AskAgent } from "@/ui/features/agent/AskAgent";
 import { Icon } from "@/ui/icons";
 import { Avatar } from "@/ui/primitives/Avatar";
@@ -19,6 +19,7 @@ import { Pressable } from "@/ui/primitives/Pressable";
 import { Select } from "@/ui/primitives/Select";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { TextLink } from "@/ui/primitives/TextLink";
+import { useToast } from "@/ui/primitives/Toast";
 import { t, tn } from "@/ui/strings";
 import { Composer } from "./Composer";
 import { SafeMailFrame } from "./SafeMailFrame";
@@ -94,6 +95,8 @@ function Body({ message }: { message: MessageView }) {
     </div>
   );
 }
+
+const DRAFT_PARAM = "draft";
 
 function SummaryAction({ id }: { id: number }) {
   const summary = useThreadSummary(id);
@@ -204,7 +207,35 @@ export function ThreadScreen({ id, onLeave, folder: backTo }: { id: number; onLe
   const setImportance = useSetImportance();
   const categories = useCategories();
   const replyDraft = useReplyDraft();
+  const writeReply = useDraftReply();
+  const toast = useToast();
   const [composing, setComposing] = useState<{ draft: Draft; dropped: string[] } | null>(null);
+  const composer = useRef<HTMLElement>(null);
+  const opened = composing !== null;
+  useEffect(() => {
+    if (opened) composer.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [opened]);
+  // Today can send someone here to draft a reply straight away.
+  const asked = useRef(false);
+  const latest = thread.data?.messages.at(-1);
+  const drafting = writeReply.isPending || replyDraft.isPending;
+  const draftReply = () => {
+    if (!latest) return;
+    writeReply.mutate(id, {
+      onSuccess: ({ body, draft_id }) =>
+        replyDraft.mutate(
+          { message_id: latest.id, reply_all: false },
+          { onSuccess: (result) => setComposing({ draft: { ...result.draft, ...(draft_id ? { id: draft_id } : {}), body: result.draft.body ? `${body}\n\n${result.draft.body}` : body }, dropped: result.dropped }) },
+        ),
+      onError: (error) => toast({ title: error instanceof ApiRequestError ? error.detail.message : t("mail.draftReply.failed"), tone: "danger" }),
+    });
+  };
+  useEffect(() => {
+    if (asked.current || !latest || new URLSearchParams(window.location.search).get(DRAFT_PARAM) === null) return;
+    asked.current = true;
+    router.replace(window.location.pathname);
+    draftReply();
+  }, [latest]);
 
   const unread = thread.data?.thread.unread_count ?? 0;
   const { mutate: markRead } = setRead;
@@ -237,6 +268,7 @@ export function ThreadScreen({ id, onLeave, folder: backTo }: { id: number; onLe
           <TextLink href={folder} className="text-sm md:hidden">{t("mail.backToInbox")}</TextLink>
           <AskAgent context={[`thread:${id}`]} title={row.subject || t("mail.noSubject")} />
           <SummaryAction id={id} />
+          <Button variant="ai" thinking data-testid="draft-reply" loading={drafting} disabled={composing !== null} onClick={draftReply}>{t(drafting ? "mail.draftReply.working" : "mail.draftReply")}</Button>
           <span className="flex-1" />
           <IconButton icon="flag" label={t(row.flagged ? "mail.unflag" : "mail.flag")} onClick={() => setFlag.mutate({ id, flagged: !row.flagged })} />
           <IconButton icon="markUnread" label={t("mail.markUnread")} onClick={() => setRead.mutate({ id, read: false })} />
@@ -259,7 +291,7 @@ export function ThreadScreen({ id, onLeave, folder: backTo }: { id: number; onLe
         ))}
       </div>
       {composing ? (
-        <section className="rounded-lg border border-line-subtle bg-surface-raised p-4">
+        <section ref={composer} className="rounded-lg border border-line-subtle bg-surface-raised p-4">
           <Composer initial={composing.draft} dropped={composing.dropped} onDone={() => setComposing(null)} />
         </section>
       ) : null}

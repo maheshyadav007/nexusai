@@ -18,7 +18,7 @@ import { isFinished, toolName, type ToolPart } from "./parts";
 
 function Shell({ children, testid }: { children: ReactNode; testid?: string }) {
   return (
-    <Rise as="section" data-testid={testid} className="flex flex-col gap-3 rounded-lg border border-line-subtle bg-surface-raised p-4">
+    <Rise as="section" data-testid={testid} className="flex flex-col gap-3 rounded-lg border border-accent-default bg-surface-raised p-4 shadow-raised">
       {children}
     </Rise>
   );

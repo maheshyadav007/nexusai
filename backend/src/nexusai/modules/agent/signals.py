@@ -245,6 +245,10 @@ def writing_samples(ctx: Context, sender: str) -> list[str]:
     return [row["own_text"].strip()[:STYLE_SAMPLE_CHARS] for row in chosen]
 
 
+# Too few to say anything about a whole category.
+MOST_FEW_THREADS = 3
+
+
 def sender_table(ctx: Context) -> str:
     """The inbox by sender, for recommending where whole groups of mail should go."""
     db = ctx.bus.db
@@ -276,3 +280,22 @@ def sender_table(ctx: Context) -> str:
             f" replied in {len(threads & engaged)}, latest {_when(row['latest'])}. Subjects: {shown}"
         )
     return "\n".join(lines)
+
+
+def category_table(ctx: Context) -> str:
+    """Each category by how much of its mail needed the person, for what's worth putting first."""
+    broad = ", ".join(f"'{name}'" for name in BROAD_CATEGORIES)
+    rows = ctx.bus.db.fetch_all(
+        "SELECT t.category AS name, COUNT(*) AS n,"  # noqa: S608
+        " SUM(t.importance = 'high' OR t.status = 'waiting_on_you') AS needed,"
+        " SUM(t.unread_count = 0) AS opened"
+        " FROM threads t JOIN mail_categories c ON c.name = t.category"
+        f" WHERE t.account = ? AND c.in_priority = 0 AND c.proposed = 0 AND c.priority_suggested = 0"
+        f" AND t.category NOT IN ({broad}) GROUP BY t.category HAVING n >= ? ORDER BY needed DESC",
+        (accounts.current_account(ctx.config), MOST_FEW_THREADS),
+    )
+    return "\n".join(
+        f"- {row['name']}: {row['n']} conversations, {row['needed']} needed them,"
+        f" {row['opened']} opened"
+        for row in rows
+    )

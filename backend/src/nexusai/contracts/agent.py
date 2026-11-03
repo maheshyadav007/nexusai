@@ -543,6 +543,18 @@ class SummarizeThread(BaseModel):
     id: int
 
 
+class DraftThreadReply(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+
+
+class DraftedReply(BaseModel):
+    body: str
+    # Set when it's a draft already saved, so changes to it go there and not to a second one.
+    draft_id: int | None = None
+
+
 class ThreadSummary(BaseModel):
     thread: int
     text: str | None
@@ -915,6 +927,7 @@ class DueItem(BaseModel):
     when: str
     overdue: bool
     link: str
+    task_id: int | None = None
 
 
 class SinceLastLook(BaseModel):

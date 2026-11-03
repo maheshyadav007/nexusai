@@ -2,7 +2,7 @@
 
 Problems found while testing on the real mailbox and model, and how we plan to solve each one. Remove a row once it's fixed and proven on the real account.
 
-Last reviewed: 2026-11-03, at commit `486d009`.
+Last reviewed: 2026-11-03, at commit `9fa50d4`.
 
 ## Security
 
@@ -43,7 +43,9 @@ The app has connected to the real company servers, and the first feedback came f
 | Other mail clients can clash | Servers lock a POP3 mailbox while it's open, so Outlook may fail during a check, and we wait and retry if it's the other way round | Check on the real server, and lengthen the gap if it happens |
 | A server without `UIDL` can't sync | We use it to tell which mail is new, and every modern server has it. Without it, the app keeps retrying | Say so plainly if it's ever seen |
 | A company certificate fails | Certificates are checked by default, and a private one fails with a message naming the setting | Set `NEXUSAI_MAIL_VERIFY_CERT=false` for now, then add the company's certificate |
-| Replies from the company model aren't checked yet | Tool calls written as text are now read in more forms, but this was tested with made-up replies shaped like the reported one, not the real model. Replies that still can't be read are logged as `model_reply_not_a_tool_call` | Check on the company server, and add any new form it uses |
+| Replies from the company model aren't checked yet | Tool calls and thinking written as text are now read in more forms, but this was tested with made-up replies, not the real models. Replies that still can't be read are logged as `model_reply_not_a_tool_call` | Check on the company server with the thinking and non-thinking models, and add any new form they use |
+| First reply from some thinking models | If the server's template opens the thinking tag itself, nothing marks the start, so that model's first reply shows its thinking as words. Its later replies are right until the app restarts | Remember this per model across restarts, if it's seen on the company server |
+| Stopping during a rate limit wait | A run waiting for a free slot can take up to a minute to stop | Check for a stop while waiting |
 | Password in the clear | SMTP on port 25 without TLS sends the password unencrypted if the server asks for one | Use TLS once the servers allow it |
 | API key in a plain file | `.env` holds the model key unencrypted, though it isn't committed or passed to the agent's commands | Move it with the other secrets to the OS credential store |
 | A proxy can catch internal addresses | With `HTTP_PROXY` set, calls to the model server go through the proxy, and may fail | List the server in `NO_PROXY` for now, then bypass the proxy for private addresses |
@@ -87,9 +89,12 @@ The app has connected to the real company servers, and the first feedback came f
 
 | Problem | What happens | How we'll solve it |
 |---|---|---|
-| Mail agent judges one conversation per call | Each call repeats the instructions. On the real account it used about 5,170 input tokens per email, so reading 400 costs about 2M | Judge about 10 in a call, once `make eval-mail` shows the quality holds |
+| Mail agent judges one conversation per call | Kept on purpose, since each email gets the agent's full attention. On the real account it used about 5,170 input tokens per email, so reading 400 costs about 2M | Shorten the repeated instructions if the cost becomes a problem |
+| Overlapping categories in different words | HR and HR feedback are caught by their shared word, without a model. HR and People team need the Inbox review to fold them, which hasn't been seen on company mail | Check after the next review on company mail |
+| Priority can only follow categories | A category can be shown in the Priority inbox, but a server folder can't | Add it for server folders if it's wanted on IMAP. POP3 has none |
 | Reply-all on a broadcast | It still prefills everyone, which could be thousands of people | Warn above a set number of recipients, and suggest replying to the sender only |
 | Older threads keep old categories | For example, a Suki confirmation is still in Promotions and an Adobe thread in Updates | Offer a one-time pass over the person's own conversations, with the token cost shown first |
+| Hourly check starts off | A new Home treats the Mail agent as "both", but its hourly schedule stays off until the settings are saved, so no hourly check runs | Turn the schedule on for new Homes, and decide whether existing ones should follow |
 | Suggestions list is slow | It's the slowest query behind Today, at about 0.9 seconds | Cache the sender counts and refresh them when mail changes |
 
 ## Not yet proven on the real account
@@ -101,6 +106,8 @@ These pass with fake mail or a fake model, but haven't run for real. Each is fin
 | Live mail through the new prompts | Watch the next real emails get judged, then check the results |
 | A real sent mail flipping waiting and needs you, and the follow-up notice | Wait for the person's next real reply and follow-up date |
 | Hourly check on the new prompt | Read its next run |
+| A category suggested for the Priority inbox | On Gmail the Inbox review looked and found none worth it. Check on company mail, where more of it needs the person |
+| `[PLM]`, `[Swarm]` and `[3GPP Briefing]` mail on the company server | Automated mail stays in its folder with no model call, and replies reach the agent. Check with real mail |
 | Accepting a suggestion, including archiving on Gmail | The person accepts one, then we check the result on Gmail |
 | `read_recipients` with the real model | Judge a real broadcast with the mail eval |
 | Saving the Know you better answers | The person clicks Allow 3 on Today, then we check the prompts and the next judgements |

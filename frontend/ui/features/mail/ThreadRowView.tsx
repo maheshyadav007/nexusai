@@ -10,6 +10,9 @@ import { Icon } from "@/ui/icons";
 import { ContextMenu } from "@/ui/primitives/ContextMenu";
 import { t, type StringKey } from "@/ui/strings";
 
+// A line with nothing to say still takes up its line, so every row is one height.
+const BLANK_LINE = "\u00A0";
+
 const STATUS_LABELS: Readonly<Record<string, StringKey>> = {
   waiting_on_you: "mail.status.waitingOnYou",
   waiting_on_others: "mail.status.waitingOnOthers",
@@ -44,15 +47,15 @@ export function ThreadRowView({ thread, excerpt, href, active = false, highlight
       <span className="flex min-w-0 flex-1 flex-col gap-px">
         <span className="flex items-baseline justify-between gap-3">
           <span className={`min-w-0 truncate text-md ${unread ? "font-medium text-ink-primary" : "text-ink-secondary"}`}>
-            {people}
+            {people || BLANK_LINE}
             {thread.message_count > 1 ? <span className="ml-1 text-sm tabular-nums text-ink-muted">{thread.message_count}</span> : null}
           </span>
           <span className="shrink-0 text-sm tabular-nums text-ink-muted">{format(thread.last_date)}</span>
         </span>
         <span className={`block truncate text-md ${unread ? "text-ink-primary" : "text-ink-secondary"}`}>{thread.subject || t("mail.noSubject")}</span>
-        <span className="block truncate text-sm text-ink-muted">{highlight ? <Highlight text={excerpt ?? thread.snippet} words={highlight} /> : (excerpt ?? thread.snippet)}</span>
-        {status || thread.category || thread.has_attachments || thread.flagged ? (
-          <span className="mt-1 flex items-center gap-2 text-sm text-ink-muted">
+        <span className="block truncate text-sm text-ink-muted">{highlight ? <Highlight text={excerpt ?? thread.snippet} words={highlight} /> : (excerpt || thread.snippet || BLANK_LINE)}</span>
+        {/* Always there, even empty: every row is one height, which keeps a long list's scrollbar true. */}
+          <span className="mt-1 flex min-h-5 items-center gap-2 text-sm text-ink-muted">
             {thread.flagged ? (
               <span role="img" aria-label={t("mail.flagged")} className="text-accent-default">
                 <Icon name="flag" className="h-3 w-3" />
@@ -66,7 +69,6 @@ export function ThreadRowView({ thread, excerpt, href, active = false, highlight
             {thread.category ? <span className="truncate">{thread.category}</span> : null}
             {status && thread.status === "waiting_on_you" ? <span className="shrink-0">{status}</span> : null}
           </span>
-        ) : null}
       </span>
     </Link>
     </ContextMenu>

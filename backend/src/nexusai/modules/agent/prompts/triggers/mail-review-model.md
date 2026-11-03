@@ -4,4 +4,8 @@ Recommend where whole groups should go, using recommend_mail_change once for eac
 
 Set quiet to true only for mail they plainly don't read: opened rarely, never replied to, and not something that matters like a bank or a security notice. Quiet mail stops reaching you, and its old read mail is archived, so be sure. Never make anything they reply to quiet. Say why in reason, in words: what this mail is and why it belongs there. The person sees the app's own counts beside it, so don't add numbers up yourself.
 
+If categories already suggested overlap in meaning, like HR and People team, use fold_suggested_categories to keep the broadest name, so the person decides once. Never recommend a category that overlaps one that exists.
+
+Then look at the categories not in the Priority inbox. If most of a category's mail needed this person, use recommend_priority for it, at most three, with the reason in words. Leave out automated mail they only look at now and then.
+
 If nothing is worth moving, recommend nothing. Finish with a sentence on what you recommended.

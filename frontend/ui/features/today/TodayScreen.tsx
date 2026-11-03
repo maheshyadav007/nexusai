@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { ChannelMessage, DueItem, MailCategory, TodayThread, ToolApproval } from "@/ui/client/contracts.generated";
 import { useDateOnly, useDateTime, useShortDate } from "@/ui/client/format";
-import { useCategories, useDecideCategory, useMailStatus, useSetImportance, useSetStatus } from "@/ui/client/mail";
+import { useCategories, useDecideCategory, useDecidePriority, useMailStatus, useSetImportance, useSetStatus } from "@/ui/client/mail";
 import { groupApprovals, useApprovals, useDecideApprovals, useSessions } from "@/ui/client/sessions";
 import { useProfile } from "@/ui/client/onboarding";
 import { useChannel, useCockpit, useDecideMemory, useDecideSuggestion, useSuggestions, useDismissChannel, useMarkTodaySeen, useMemory, useReactToBrief, useReminders, useRemoveReminder, useRemoveTask, useRespondChannel, useSaveReminder, useSaveTask, useTasks, useToday, useWaitingCount } from "@/ui/client/work";
@@ -13,6 +13,7 @@ import { useAssistant } from "@/ui/features/assistant/AssistantProvider";
 import { ApprovalGroupCard, QuestionCard } from "@/ui/features/assistant/Cards";
 import { Markdown } from "@/ui/features/assistant/Markdown";
 import { Icon, type IconName } from "@/ui/icons";
+import { AttentionCount } from "@/ui/primitives/AttentionCount";
 import { Badge } from "@/ui/primitives/Badge";
 import { Button } from "@/ui/primitives/Button";
 import { Checkbox } from "@/ui/primitives/Checkbox";
@@ -20,7 +21,7 @@ import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { IconButton } from "@/ui/primitives/IconButton";
 import { Textarea } from "@/ui/primitives/Input";
-import { Presence, Rise } from "@/ui/primitives/Motion";
+import { CountPop, Presence, Rise } from "@/ui/primitives/Motion";
 import { Pressable } from "@/ui/primitives/Pressable";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { StatusDot } from "@/ui/primitives/StatusDot";
@@ -33,42 +34,74 @@ const MAIL_AGENT = "mail-agent";
 // How long a conversation can sit quietly before it's worth a nudge.
 const QUIET_DAYS = 3;
 
+/** A part of the day: what it is, how many, and what can be done about it, all at a glance. */
+function Panel({ id, icon, title, count, urgent = false, hint, action, children }: { id?: string; icon: IconName; title: string; count?: number; urgent?: boolean; hint?: string; action?: ReactNode; children: ReactNode }) {
+  return (
+    <section id={id} aria-label={title} className={`flex scroll-mt-4 flex-col gap-3 rounded-lg border bg-surface-raised p-4 shadow-raised ${urgent ? "border-accent-default" : "border-line-subtle"}`}>
+      <header className="flex items-start gap-3">
+        <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${urgent ? "bg-accent-default text-accent-on" : "bg-surface-sunken text-ink-secondary"}`}>
+          <Icon name={icon} />
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <h2 className="flex items-center gap-2 text-lg font-medium text-ink-primary">
+            {title}
+            {count ? (urgent ? <AttentionCount value={count} /> : <span className="text-md tabular-nums text-ink-muted">{count}</span>) : null}
+          </h2>
+          {hint ? <p className="text-sm text-ink-secondary">{hint}</p> : null}
+        </div>
+        {action}
+      </header>
+      {children}
+    </section>
+  );
+}
+
+/** One figure in the line beside the greeting. It takes you to what it counts. */
+function Stat({ href, label, value, urgent = false, alarming = false }: { href: string; label: string; value: number; urgent?: boolean; alarming?: boolean }) {
+  const tone = !value ? "text-ink-faint" : alarming ? "text-status-danger" : urgent ? "text-accent-default" : "text-ink-primary";
+  return (
+    <Link href={href} data-testid="today-stat" className="focus-ring group flex items-baseline gap-2 rounded-sm px-4 first:pl-0 last:pr-0">
+      <CountPop value={value} className={`text-xl font-medium tabular-nums ${tone}`} />
+      <span className="text-sm text-ink-secondary underline-offset-4 transition-colors duration-fast group-hover:text-ink-primary group-hover:underline">{label}</span>
+    </Link>
+  );
+}
+
 const NEXT_ACTION_LABEL: Partial<Record<string, StringKey>> = { reply: "today.action.reply", do: "today.action.do", decide: "today.action.decide", read: "today.action.read" };
 
-function ThreadList({ title, threads, empty, chase = false }: { title: string; threads: readonly TodayThread[]; empty: string; chase?: boolean }) {
+function ThreadList({ id, icon, title, hint, urgent = false, threads, empty, chase = false }: { id?: string; icon: IconName; title: string; hint?: string; urgent?: boolean; threads: readonly TodayThread[]; empty: string; chase?: boolean }) {
   const format = useShortDate();
   const setStatus = useSetStatus();
   const setImportance = useSetImportance();
   return (
-    <section aria-label={title} className="flex flex-col gap-1">
-      <h2 className="text-md font-medium text-ink-primary">{title}</h2>
-      {threads.length === 0 ? <p className="py-1 text-md text-ink-muted">{empty}</p> : null}
-      <ul className="flex flex-col border-t border-line-subtle">
+    <Panel {...(id ? { id } : {})} icon={icon} title={title} count={threads.length} urgent={urgent && threads.length > 0} {...(hint && threads.length ? { hint } : {})}>
+      {threads.length === 0 ? <p className="text-md text-ink-muted">{empty}</p> : null}
+      <ul className="flex flex-col">
         {threads.map((thread) => {
           const action = thread.next_action ? NEXT_ACTION_LABEL[thread.next_action] : undefined;
           return (
-            <li key={thread.id} className="group flex items-start gap-2 border-b border-line-subtle">
-              <Link href={`/mail/all/${thread.id}`} data-testid="today-thread" className="focus-ring flex min-w-0 flex-1 flex-col gap-px py-2 transition-colors duration-fast hover:bg-surface-hover">
+            <li key={thread.id} className="flex flex-col gap-2 border-t border-line-subtle py-3">
+              <Link href={`/mail/all/${thread.id}`} data-testid="today-thread" className="focus-ring flex min-w-0 flex-col gap-px rounded-sm transition-colors duration-fast hover:text-accent-default">
                 <span className="flex items-baseline justify-between gap-3">
                   <span className="flex min-w-0 items-center gap-2">
                     {thread.importance === "high" ? <span aria-label={t("today.important")} role="img" className="h-2 w-2 shrink-0 rounded-full bg-accent-default" /> : null}
-                    <span className="truncate text-md text-ink-primary">{thread.subject || t("mail.noSubject")}</span>
-                    {action ? <Badge>{t(action)}</Badge> : null}
+                    <span className="truncate text-md font-medium text-ink-primary">{thread.subject || t("mail.noSubject")}</span>
+                    {action ? <Badge tone="accent">{t(action)}</Badge> : null}
                   </span>
                   <span className="shrink-0 text-sm tabular-nums text-ink-muted">{format(thread.last_date)}</span>
                 </span>
-                {thread.why ? <span className="truncate text-sm text-ink-muted">{thread.why}</span> : null}
+                {thread.why ? <span className="truncate text-sm text-ink-secondary">{thread.why}</span> : null}
               </Link>
-              <span className="flex shrink-0 items-center gap-1 py-2">
-                {chase ? <AskAgent context={[`mail:${thread.id}`]} title={t("today.chase.title")} label={t("today.chase.draft")} text={t("today.chase.ask")} /> : null}
+              <span className="flex flex-wrap items-center gap-2">
+                {chase ? <AskAgent context={[`mail:${thread.id}`]} title={t("today.chase.title")} label={t("today.chase.draft")} text={t("today.chase.ask")} /> : <Link href={`/mail/all/${thread.id}?draft`} data-testid="today-draft" className="focus-ring press ai-glow inline-flex items-center rounded-md px-3 py-2 text-md font-medium text-ink-primary">{t("mail.draftReply")}</Link>}
+                <Button onClick={() => setStatus.mutate({ id: thread.id, status: "resolved" })}>{t("today.done")}</Button>
                 {thread.importance !== "low" && !chase ? <Button variant="quiet" onClick={() => setImportance.mutate({ id: thread.id, importance: "low" })}>{t("today.notImportant")}</Button> : null}
-                <Button variant="quiet" onClick={() => setStatus.mutate({ id: thread.id, status: "resolved" })}>{t("today.done")}</Button>
               </span>
             </li>
           );
         })}
       </ul>
-    </section>
+    </Panel>
   );
 }
 
@@ -221,6 +254,7 @@ function WaitingOnYou() {
   const removeReminder = useRemoveReminder();
   const decideMemory = useDecideMemory();
   const decideCategory = useDecideCategory();
+  const decidePriority = useDecidePriority();
   const decideApprovals = useDecideApprovals();
   const dismiss = useDismissChannel();
   const formatWhen = useDateTime();
@@ -233,6 +267,7 @@ function WaitingOnYou() {
   const suggestions = useSuggestions();
   const decideSuggestion = useDecideSuggestion();
   const proposedCategories: readonly MailCategory[] = (categories.data?.categories ?? []).filter((item) => item.proposed);
+  const priorityPicks: readonly MailCategory[] = (categories.data?.categories ?? []).filter((item) => item.priority_suggested);
   const count = useWaitingCount();
   const [selecting, setSelecting] = useState(false);
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
@@ -241,6 +276,7 @@ function WaitingOnYou() {
   const taskItem = (task: (typeof proposedTasks)[number]): WaitingItem => ({ key: `task-${task.id}`, title: task.title, doIt: () => saveTask.mutateAsync({ id: task.id, title: task.title, notes: task.notes, status: task.status, due: task.due ?? null, thread: task.thread ?? null, proposed: false }), decline: () => removeTask.mutateAsync(task.id) });
   const reminderItem = (reminder: (typeof proposedReminders)[number]): WaitingItem => ({ key: `reminder-${reminder.id}`, title: reminder.title, doIt: () => saveReminder.mutateAsync({ id: reminder.id, title: reminder.title, when: reminder.when, repeat: reminder.repeat, thread: reminder.thread ?? null, task: reminder.task ?? null, proposed: false }), decline: () => removeReminder.mutateAsync(reminder.id) });
   const categoryItem = (item: MailCategory): WaitingItem => ({ key: `category-${item.name}`, title: item.name, doIt: () => decideCategory.mutateAsync({ name: item.name, accept: true }), decline: () => decideCategory.mutateAsync({ name: item.name, accept: false }) });
+  const priorityItem = (item: MailCategory): WaitingItem => ({ key: `priority-${item.name}`, title: t("today.priority.title", { category: item.name }), doIt: () => decidePriority.mutateAsync({ name: item.name, accept: true }), decline: () => decidePriority.mutateAsync({ name: item.name, accept: false }) });
   const suggestionItem = (item: NonNullable<typeof suggestions.data>["suggestions"][number]): WaitingItem => ({ key: `suggestion-${item.id}`, title: t("today.suggestion.title", { category: item.category, count: item.emails }), doIt: () => decideSuggestion.mutateAsync({ id: item.id, accept: true }), decline: () => decideSuggestion.mutateAsync({ id: item.id, accept: false }) });
   const memoryItem = (item: (typeof proposedMemories)[number]): WaitingItem => ({ key: `memory-${item.id}`, title: item.text, doIt: () => decideMemory.mutateAsync({ id: item.id, accept: true }), decline: () => decideMemory.mutateAsync({ id: item.id, accept: false }) });
   const approvalItem = (group: readonly ToolApproval[]): WaitingItem => {
@@ -256,6 +292,7 @@ function WaitingOnYou() {
     ...proposedTasks.map(taskItem),
     ...proposedReminders.map(reminderItem),
     ...proposedCategories.map(categoryItem),
+    ...priorityPicks.map(priorityItem),
     ...(suggestions.data?.suggestions ?? []).map(suggestionItem),
     ...proposedMemories.map(memoryItem),
   ];
@@ -269,14 +306,7 @@ function WaitingOnYou() {
   const row = (item: WaitingItem) => ({ item, selecting, selected: picked.has(item.key), onToggle: () => toggle(item.key) });
   if (channel.isError) return <ErrorState title={t("channel.error")} onRetry={() => void channel.refetch()} />;
   return (
-    <section aria-label={t("today.needsYou")} className="flex flex-col gap-3">
-      <div className="flex items-baseline justify-between gap-2">
-        <h2 className="flex items-baseline gap-2 text-md font-medium text-ink-primary">
-          {t("today.needsYou")}
-          {count ? <span className="text-sm tabular-nums text-accent-default">{count}</span> : null}
-        </h2>
-        {allItems.length > 1 && !selecting ? <Button variant="quiet" className="py-px" data-testid="bulk-select" onClick={() => setSelecting(true)}>{t("today.select")}</Button> : null}
-      </div>
+    <Panel id="today-needs" icon="approvals" title={t("today.needsYou")} count={count} urgent={count > 0} {...(count ? { hint: t("today.needsYou.hint") } : {})} action={allItems.length > 1 && !selecting ? <Button variant="quiet" className="py-px" data-testid="bulk-select" onClick={() => setSelecting(true)}>{t("today.select")}</Button> : undefined}>
       {selecting ? (
         <>
           <BulkBar items={allItems} picked={picked} onPick={(keys) => setPicked(new Set(keys))} onClear={() => setPicked(new Set())} onCancel={() => { setSelecting(false); setPicked(new Set()); }} />
@@ -288,12 +318,17 @@ function WaitingOnYou() {
       <Presence>
         {groups.map((group) => {
           const item = approvalItem(group);
+          // While picking, each approval is one line: its own ticks would look like part of the selection.
+          if (selecting) {
+            return (
+              <ul key={item.key}>
+                <ProposalRow {...row(item)} icon="approvals" title={tn("approvals.group", group.length, { label: item.title })} meta={group[0]?.session_title ?? ""} />
+              </ul>
+            );
+          }
           return (
             <Rise key={item.key} settle className="flex flex-col gap-1">
-              <p className="flex items-center gap-2 text-sm text-ink-muted">
-                {selecting ? <Checkbox label={t("today.select.item", { title: item.title })} hideLabel checked={picked.has(item.key)} onChange={() => toggle(item.key)} /> : null}
-                {group[0]?.session_title}
-              </p>
+              <p className="flex items-center gap-2 text-sm text-ink-muted">{group[0]?.session_title}</p>
               <ApprovalGroupCard approvals={group} />
             </Rise>
           );
@@ -322,6 +357,10 @@ function WaitingOnYou() {
             const item = categoryItem(category);
             return <ProposalRow key={item.key} {...row(item)} icon="categories" title={category.name} meta={category.sender ? t("today.proposal.categoryFrom", { sender: category.sender }) : t("today.proposal.category")} why={category.why} accept={t("categories.create")} />;
           })}
+          {priorityPicks.map((category) => {
+            const item = priorityItem(category);
+            return <ProposalRow key={item.key} {...row(item)} icon="priority" title={item.title} meta={t("today.priority.meta", { needed: category.needed_you ?? 0, total: category.count ?? 0 })} why={category.priority_why} accept={t("today.priority.accept")} />;
+          })}
           {(suggestions.data?.suggestions ?? []).map((suggestion) => {
             const item = suggestionItem(suggestion);
             return <ProposalRow key={item.key} {...row(item)} icon="categories" title={item.title} meta={t("today.suggestion.meta", { senders: suggestion.senders.length, opened: suggestion.opened, replied: suggestion.replied })} why={suggestion.quiet ? t("today.suggestion.quiet", { why: suggestion.reason, count: suggestion.to_archive }) : suggestion.reason} accept={t("today.suggestion.accept")} />;
@@ -332,7 +371,7 @@ function WaitingOnYou() {
           })}
         </Presence>
       </ul>
-    </section>
+    </Panel>
   );
 }
 
@@ -395,26 +434,23 @@ function AgentNotes() {
   const notes = (channel.data?.messages ?? []).filter((message) => message.kind !== "ask");
   if (!notes.length) return null;
   return (
-    <section aria-label={t("channel.title")} className="flex flex-col gap-1">
-      <h2 className="text-md font-medium text-ink-primary">{t("channel.title")}</h2>
-      <ul className="flex flex-col border-t border-line-subtle">
+    <Panel id="today-agents" icon="channel" title={t("channel.title")} count={notes.length} hint={t("today.agents.hint")}>
+      <ul className="flex flex-col">
         {notes.map((message) => (
-          <li key={message.id} data-testid="channel-message" className="flex items-start justify-between gap-3 border-b border-line-subtle py-2">
-            <div className="flex min-w-0 flex-col gap-px">
-              <p className="break-words text-md text-ink-primary">{message.text}</p>
-              <p className="flex items-center gap-2 text-sm text-ink-muted">
-                {message.agent}
-                {message.count > 1 ? <span className="tabular-nums">{t("channel.times", { count: message.count })}</span> : null}
-                {message.thread ? <TextLink className="text-sm" href={`/mail/all/${message.thread}`}>{t("channel.openSource")}</TextLink> : null}
-              </p>
-            </div>
-            <Button variant="quiet" onClick={() => dismiss.mutate(message.id)}>
-              {t("channel.dismiss")}
-            </Button>
+          <li key={message.id} data-testid="channel-message" className="flex flex-col gap-2 border-t border-line-subtle py-3">
+            <p className="break-words text-md text-ink-primary">{message.text}</p>
+            <p className="flex items-center gap-2 text-sm text-ink-muted">
+              {message.agent}
+              {message.count > 1 ? <span className="tabular-nums">{t("channel.times", { count: message.count })}</span> : null}
+            </p>
+            <span className="flex flex-wrap items-center gap-2">
+              {message.thread ? <TextLink className="text-sm" href={`/mail/all/${message.thread}`}>{t("channel.openSource")}</TextLink> : null}
+              <Button onClick={() => dismiss.mutate(message.id)}>{t("channel.dismiss")}</Button>
+            </span>
           </li>
         ))}
       </ul>
-    </section>
+    </Panel>
   );
 }
 
@@ -422,23 +458,30 @@ function AgentNotes() {
 function DueToday({ items }: { items: readonly DueItem[] }) {
   const formatDay = useDateOnly();
   const formatWhen = useDateTime();
-  if (!items.length) return null;
+  const tasks = useTasks(false);
+  const saveTask = useSaveTask();
+  const finish = (id: number) => {
+    const task = tasks.data?.tasks.find((row) => row.id === id);
+    if (task) saveTask.mutate({ id: task.id, title: task.title, notes: task.notes, status: "done", due: task.due ?? null, thread: task.thread ?? null, proposed: false });
+  };
+  const overdue = items.some((item) => item.overdue);
   return (
-    <section aria-label={t("today.due")} className="flex flex-col gap-1">
-      <h2 className="text-md font-medium text-ink-primary">{t("today.due")}</h2>
-      <ul className="flex flex-col border-t border-line-subtle">
+    <Panel id="today-due" icon="reminders" title={t("today.due")} count={items.length} urgent={overdue} {...(items.length ? { hint: t("today.due.hint") } : {})}>
+      {items.length === 0 ? <p className="text-md text-ink-muted">{t("today.due.empty")}</p> : null}
+      <ul className="flex flex-col">
         {items.map((item) => (
-          <li key={`${item.kind}-${item.title}-${item.when}`} data-testid="due-item" className="border-b border-line-subtle">
-            <Link href={item.link} className="focus-ring flex items-baseline justify-between gap-3 py-2 transition-colors duration-fast hover:bg-surface-raised">
-              <span className="min-w-0 truncate text-md text-ink-primary">{item.title}</span>
-              <span className={`shrink-0 text-sm tabular-nums ${item.overdue ? "text-status-danger" : "text-ink-muted"}`}>
+          <li key={`${item.kind}-${item.title}-${item.when}`} data-testid="due-item" className="flex flex-col gap-2 border-t border-line-subtle py-3">
+            <Link href={item.link} className="focus-ring flex flex-col gap-px rounded-sm transition-colors duration-fast hover:text-accent-default">
+              <span className="break-words text-md font-medium text-ink-primary">{item.title}</span>
+              <span className={`text-sm tabular-nums ${item.overdue ? "font-medium text-status-danger" : "text-ink-secondary"}`}>
                 {item.overdue ? t("today.due.overdue", { when: formatDay(item.when) }) : item.kind === "reminder" ? formatWhen(item.when) : t("today.due.today")}
               </span>
             </Link>
+            {item.task_id ? <span><Button onClick={() => finish(item.task_id as number)}>{t("today.due.finish")}</Button></span> : null}
           </li>
         ))}
       </ul>
-    </section>
+    </Panel>
   );
 }
 
@@ -448,8 +491,8 @@ function SinceYouLooked() {
   const since = today.data?.since_last_look;
   if (!since?.mail && !since?.judged) return null;
   return (
-    <section aria-label={t("today.since")} data-testid="since-last-look" className="flex flex-col gap-1">
-      <h2 className="text-md font-medium text-ink-primary">{t("today.since")}</h2>
+    <section aria-label={t("today.since")} data-testid="since-last-look" className="flex flex-col gap-1 rounded-lg border border-line-subtle bg-surface-raised p-4 shadow-raised">
+      <h2 className="text-lg font-medium text-ink-primary">{t("today.since")}</h2>
       <p className="text-md tabular-nums text-ink-secondary">{t("today.since.counts", { mail: since.mail ?? 0, important: since.important ?? 0, filed: since.filed ?? 0 })}</p>
       {since.proposed ? <p className="text-md tabular-nums text-ink-secondary">{tn("today.since.proposed", since.proposed)}</p> : null}
       <Pressable onClick={() => assistant.openSession(MAIL_AGENT)} className="self-start rounded-sm text-sm text-ink-secondary underline underline-offset-2 hover:text-ink-primary">{t("today.since.open")}</Pressable>
@@ -492,33 +535,43 @@ export function TodayScreen() {
   useEffect(() => () => markSeen(), [markSeen]);
   const noMail = mail.data?.state === "off" && !today.data?.needs_you.length && !today.data?.waiting.length;
   const waitingOnOthers = (today.data?.waiting ?? []).filter((thread) => (thread.quiet_days ?? 0) >= QUIET_DAYS);
+  const needed = useWaitingCount();
+  const cockpit = useCockpit();
+  const due = today.data?.due ?? [];
   return (
-    <div className="mx-auto flex max-w-reading flex-col gap-6 p-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="font-serif text-display text-ink-primary">{greeting}</h1>
-        {today.data ? <p data-testid="today-brief" className="text-md tabular-nums text-ink-secondary">{today.data.brief}</p> : null}
+    <div className="mx-auto flex max-w-page flex-col gap-6 p-6">
+      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+        <div className="flex min-w-0 flex-col gap-1">
+          <h1 className="font-serif text-display text-ink-primary">{greeting}</h1>
+          {today.data ? <p data-testid="today-brief" className="text-md tabular-nums text-ink-secondary">{today.data.brief}</p> : null}
+        </div>
+        <nav aria-label={t("today.stat.label")} className="flex flex-wrap items-baseline divide-x divide-line-subtle">
+          <Stat href="#today-needs" label={t("today.stat.needsYou")} value={needed} urgent />
+          <Stat href="#today-due" label={t("today.stat.due")} value={due.length} alarming={due.some((item) => item.overdue)} urgent />
+          <Stat href="#today-important" label={t("today.stat.important")} value={today.data?.needs_you.length ?? 0} urgent />
+          <Stat href="/cockpit" label={t("today.stat.working")} value={cockpit.data?.jobs.length ?? 0} />
+        </nav>
       </header>
       <MorningBrief />
       <FinishSetup />
       {today.isError ? <ErrorState title={t("today.error")} onRetry={() => void today.refetch()} /> : null}
-      <WaitingOnYou />
-      <DueToday items={today.data?.due ?? []} />
-      <AgentNotes />
       {today.isPending ? <Skeleton className="h-6 w-full" /> : null}
-      {today.data ? (
-        noMail ? (
-          <EmptyState icon="today" title={t("today.empty.title")} description={t("today.empty.description")} action={<TextLink href="/connectors">{t("mail.noAccount.action")}</TextLink>} />
-        ) : (
-          <>
-            <ThreadList title={t("today.importantMail")} threads={today.data.needs_you} empty={t("today.needsYou.empty")} />
-            {today.data.follow_ups?.length ? <ThreadList chase title={t("today.followUps")} threads={today.data.follow_ups} empty="" /> : null}
-            {waitingOnOthers.length ? <ThreadList title={t("today.waiting")} threads={waitingOnOthers} empty="" /> : null}
-            <SinceYouLooked />
-            {today.data.automated_count ? <TextLink className="self-start text-md" href="/mail/all">{tn("today.automated", today.data.automated_count)}</TextLink> : null}
-          </>
-        )
-      ) : null}
-      <StatusLine />
+      {today.data && noMail ? <EmptyState icon="today" title={t("today.empty.title")} description={t("today.empty.description")} action={<TextLink href="/connectors">{t("mail.noAccount.action")}</TextLink>} /> : null}
+      <div className="grid items-start gap-6 lg:grid-cols-3">
+        <div className="flex min-w-0 flex-col gap-6 lg:col-span-2">
+          <WaitingOnYou />
+          {today.data && !noMail ? <ThreadList id="today-important" icon="priority" title={t("today.importantMail")} hint={t("today.important.hint")} urgent threads={today.data.needs_you} empty={t("today.needsYou.empty")} /> : null}
+          {today.data?.follow_ups?.length ? <ThreadList chase icon="followUp" title={t("today.followUps")} threads={today.data.follow_ups} empty="" /> : null}
+          {waitingOnOthers.length ? <ThreadList icon="sent" title={t("today.waiting")} threads={waitingOnOthers} empty="" /> : null}
+        </div>
+        <div className="flex min-w-0 flex-col gap-6">
+          <DueToday items={due} />
+          <AgentNotes />
+          {today.data && !noMail ? <SinceYouLooked /> : null}
+          {today.data?.automated_count ? <TextLink className="self-start text-md" href="/mail/all">{tn("today.automated", today.data.automated_count)}</TextLink> : null}
+          <StatusLine />
+        </div>
+      </div>
     </div>
   );
 }

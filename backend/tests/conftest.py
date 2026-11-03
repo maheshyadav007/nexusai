@@ -30,8 +30,11 @@ def no_model_downloads(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 def config(tmp_path: Path) -> Config:
     # The test file keeps tests away from the real Keychain.
+    loaded = load_config(tmp_path)
+    # Default categories are tested on their own. Elsewhere they'd crowd what tests count.
     return replace(
-        load_config(tmp_path),
+        loaded,
+        mail=replace(loaded.mail, starter_categories=()),
         handler_retry_delay_seconds=0,
         secrets_test_file=tmp_path / "secrets.json",
         require_install_token=False,

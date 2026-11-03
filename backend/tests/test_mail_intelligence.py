@@ -95,6 +95,8 @@ def test_judging_one_email_only_offers_what_it_needs(client: TestClient) -> None
     assert "draft_reply" not in tools.TRIAGE_TOOLS
     assert "recommend_mail_change" not in tools.allowed_for("mail", "mail-hourly", False)  # type: ignore[operator]
     assert "recommend_mail_change" in tools.allowed_for("mail", "mail-review", False)  # type: ignore[operator]
+    assert "recommend_priority" in tools.allowed_for("mail", "mail-review", False)  # type: ignore[operator]
+    assert "recommend_priority" not in tools.allowed_for("mail", "mail-hourly", False)  # type: ignore[operator]
 
 
 def test_a_correction_is_used_from_then_on_but_an_agents_own_change_isnt(

@@ -1,3 +1,4 @@
+import uuid
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
@@ -15,9 +16,12 @@ from nexusai.modules.agent.guard import DamagedToken, DataGuard, GuardBlocked, d
 from nexusai.modules.agent.providers import (
     Message,
     ModelFlagged,
+    ModelRateLimited,
     ModelRequest,
     ModelUnavailable,
     OpenAiCompatibleProvider,
+    ReasoningChunk,
+    ReplyReader,
     TextChunk,
     ToolCall,
     ToolSpec,
@@ -439,3 +443,178 @@ def test_litellm_classifies_errors(status: int, body: bytes, error: type[Excepti
     made = provider_with(lambda _: httpx.Response(status, content=body))
     with pytest.raises(error):
         list(made.stream(ModelRequest("m", "i", [Message("user", "hi")])))
+
+
+def read_stream(replies: list[str], supports_tools: bool = False, base: str = "") -> list[Any]:
+    """The reply arriving piece by piece, with what came out after each piece."""
+    import json
+
+    def handler(_: Any) -> Any:
+        events = [json.dumps({"choices": [{"delta": {"content": piece}}]}) for piece in replies]
+        return sse(*events, "[DONE]")
+
+    made = provider_with(handler, supports_tools)
+    if base:
+        made.base_url = base
+    return list(
+        made.stream(ModelRequest("m", "i", [Message("user", "hi")], [ToolSpec("read", "r", {})]))
+    )
+
+
+def thoughts(chunks: list[Any]) -> str:
+    return "".join(c.text for c in chunks if isinstance(c, ReasoningChunk))
+
+
+def words(chunks: list[Any]) -> str:
+    return "".join(c.text for c in chunks if isinstance(c, TextChunk))
+
+
+@pytest.mark.parametrize(
+    ("opening", "closing"),
+    [("<think>", "</think>"), ("<thinking>", "</thinking>"), ("[THINK]", "[/THINK]")],
+)
+@pytest.mark.parametrize("supports_tools", [False, True])
+def test_thinking_has_its_own_place_however_its_marked(
+    opening: str, closing: str, supports_tools: bool
+) -> None:
+    chunks = read_stream(
+        [opening[:3], opening[3:] + "Let me ", 'see {"tool": ', closing[:2], closing[2:], "Hello"],
+        supports_tools,
+    )
+    assert thoughts(chunks) == 'Let me see {"tool": '
+    assert words(chunks) == "Hello"
+    assert not [c for c in chunks if isinstance(c, ToolCall)]
+
+
+def test_a_tool_call_drafted_in_thought_doesnt_run_and_the_real_one_does() -> None:
+    chunks = read_stream(
+        [
+            '<think>maybe {"tool": "other", "arguments": {}}',
+            "</think>",
+            '{"tool": "read", "arguments": {"a": 1}}',
+        ]
+    )
+    assert [(c.name, c.arguments) for c in chunks if isinstance(c, ToolCall)] == [
+        ("read", {"a": 1})
+    ]
+    assert words(chunks) == ""
+
+
+def test_thinking_the_server_opened_is_caught_from_then_on() -> None:
+    base = f"https://llm-{uuid.uuid4().hex}.example/v1"
+    first = read_stream(["pondering</think>", '{"tool": "read", "arguments": {}}'], base=base)
+    assert [c.name for c in first if isinstance(c, ToolCall)] == ["read"]
+    # It can't be known until the closing tag, but it's never mistaken for an answer again.
+    second = read_stream(["pondering", "</think>", "Hello"], base=base)
+    assert thoughts(second) == "pondering"
+    assert words(second) == "Hello"
+
+
+def test_thinking_sent_in_its_own_field_is_kept_apart_and_never_replayed() -> None:
+    sent: list[Any] = []
+
+    def handler(request: Any) -> Any:
+        sent.append(request.content)
+        return sse(
+            '{"choices":[{"delta":{"reasoning_content":"Hmm"}}]}',
+            '{"choices":[{"delta":{"reasoning":" more"}}]}',
+            '{"choices":[{"delta":{"content":"Hello"}}]}',
+            "[DONE]",
+        )
+
+    chunks = list(provider_with(handler).stream(ModelRequest("m", "i", [Message("user", "hi")])))
+    assert thoughts(chunks) == "Hmm more"
+    assert words(chunks) == "Hello"
+
+
+def test_words_stream_on_a_server_without_tool_calling() -> None:
+    reader = ReplyReader([ToolSpec("read", "r", {})], True, False)
+    assert [c.text for c in reader.feed("Hello ")] == ["Hello "]
+    assert [c.text for c in reader.feed("there")] == ["there"]
+    # Only what could be a tool call waits.
+    assert reader.feed('{"tool": "read",') == []
+    assert reader.feed(' "arguments": {}}') == []
+    assert [c.name for c in reader.finish() if isinstance(c, ToolCall)] == ["read"]
+
+
+def test_braces_that_arent_a_call_still_show() -> None:
+    reader = ReplyReader([ToolSpec("read", "r", {})], True, False)
+    shown = [*reader.feed("Use {"), *reader.feed("x} and [a"), *reader.finish()]
+    assert words(shown) == "Use {x} and [a"
+
+
+def test_thinking_reaches_the_caller_with_real_values_restored(
+    ctx: Context, provider: FakeProvider
+) -> None:
+    masked = DataGuard(ctx.bus.db, default_rules()).mask("Mail me at a@b.example")
+    provider.script = [ReasoningChunk(masked), TextChunk("ok"), Usage(1, 1)]
+    chunks = list(gateway.stream_model(ctx, agent="a", session=None, layers=[], messages=[]))
+    assert thoughts(chunks) == "Mail me at a@b.example"
+
+
+def test_a_429_is_told_apart_and_carries_the_wait() -> None:
+    import httpx
+
+    made = provider_with(lambda _: httpx.Response(429, headers={"retry-after": "7"}))
+    with pytest.raises(ModelRateLimited) as caught:
+        list(made.stream(ModelRequest("m", "i", [Message("user", "hi")])))
+    assert caught.value.retry_after == 7
+
+
+def test_told_to_slow_down_it_waits_and_tries_again(
+    ctx: Context, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(gateway, "pacer", gateway.CallPacer())
+    waits: list[float] = []
+    monkeypatch.setattr(gateway.time, "sleep", waits.append)
+    clock = [1000.0]
+    monkeypatch.setattr(gateway.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(
+        gateway.time, "sleep", lambda s: (waits.append(s), clock.__setitem__(0, clock[0] + s))
+    )
+
+    class Busy(FakeProvider):
+        def stream(self, request: ModelRequest) -> Iterator[Any]:
+            self.requests.append(request)
+            if len(self.requests) == 1:
+                raise ModelRateLimited("slow down", 2)
+            yield TextChunk("ok")
+
+    fake = Busy()
+    monkeypatch.setattr(gateway, "resolve_provider", lambda _: (fake, "m"))
+    chunks = list(gateway.stream_model(ctx, agent="a", session=None, layers=[], messages=[]))
+    assert words(chunks) == "ok"
+    assert len(fake.requests) == 2
+    assert sum(waits) >= 2
+
+
+def test_a_long_wait_goes_back_in_line_instead_of_holding_the_call(
+    ctx: Context, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(gateway, "pacer", gateway.CallPacer())
+    fake = FakeProvider([ModelRateLimited("slow down", 3600)])
+    monkeypatch.setattr(gateway, "resolve_provider", lambda _: (fake, "m"))
+    with pytest.raises(ModelRateLimited):
+        list(gateway.stream_model(ctx, agent="a", session=None, layers=[], messages=[]))
+    assert len(fake.requests) == 1
+    assert gateway.pacer.seconds_to_wait() > 3000
+
+
+def test_calls_a_minute_are_kept_to_the_limit() -> None:
+    clock = [1000.0]
+    pacer = gateway.CallPacer()
+    original = gateway.time
+    try:
+
+        class Clock:
+            monotonic = staticmethod(lambda: clock[0])
+            sleep = staticmethod(lambda s: clock.__setitem__(0, clock[0] + s))
+
+        gateway.time = Clock  # type: ignore[assignment]
+        for _ in range(3):
+            pacer.take_turn(3, 60)
+        assert clock[0] == 1000.0
+        pacer.take_turn(3, 60)
+        assert clock[0] >= 1060.0
+    finally:
+        gateway.time = original

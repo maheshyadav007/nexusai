@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { ApiRequestError } from "@/ui/client/api";
 import { Icon } from "@/ui/icons";
-import { useCategories, useSaveCategory } from "@/ui/client/mail";
+import { useCategories, useSaveCategory, useUpdateCategory } from "@/ui/client/mail";
 import { Button } from "@/ui/primitives/Button";
 import { Checkbox } from "@/ui/primitives/Checkbox";
 import { ContextMenu } from "@/ui/primitives/ContextMenu";
@@ -19,6 +19,7 @@ import { t } from "@/ui/strings";
 const EDIT_CATEGORIES = "/settings?section=categories";
 
 function NewCategory() {
+  const router = useRouter();
   const save = useSaveCategory();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -35,6 +36,8 @@ function NewCategory() {
             { name: name.trim(), in_priority: priority, ...(sender.trim() ? { sender: sender.trim() } : {}) },
             {
               onSuccess: () => {
+                // It has no mail yet, so it's only in the sidebar while it's open.
+                router.push(`/mail/category/${encodeURIComponent(name.trim())}`);
                 setOpen(false);
                 setName("");
                 setSender("");
@@ -62,17 +65,20 @@ export function CategoryNav({ collapsed }: { collapsed: boolean }) {
   const categories = useCategories();
   const pathname = usePathname();
   const router = useRouter();
+  const update = useUpdateCategory();
   if (collapsed) return null;
-  const rows = (categories.data?.categories ?? []).filter((item) => !item.proposed);
+  const hrefOf = (name: string) => `/mail/category/${encodeURIComponent(name)}`;
+  // One with no mail is only clutter, unless it's the one open. Settings still lists them all.
+  const rows = (categories.data?.categories ?? []).filter((item) => !item.proposed && ((item.count ?? 0) > 0 || pathname.startsWith(hrefOf(item.name))));
   return (
     <section aria-label={t("nav.categories")}>
       <ul className="flex flex-col gap-px">
         {rows.map((item) => {
-          const href = `/mail/category/${encodeURIComponent(item.name)}`;
+          const href = hrefOf(item.name);
           const active = pathname === href || pathname.startsWith(`${href}/`);
           return (
             <li key={item.name} data-testid="nav-category">
-              <ContextMenu items={[{ id: "open", label: t("menu.open"), onSelect: () => router.push(href) }, { id: "edit", label: t("menu.editCategory"), onSelect: () => router.push(EDIT_CATEGORIES) }]}>
+              <ContextMenu items={[{ id: "open", label: t("menu.open"), onSelect: () => router.push(href) }, { id: "priority", label: t(item.in_priority ? "menu.leavePriority" : "menu.joinPriority"), onSelect: () => update.mutate({ name: item.name, in_priority: !item.in_priority }) }, { id: "edit", label: t("menu.editCategory"), onSelect: () => router.push(EDIT_CATEGORIES) }]}>
               <Link href={href} aria-current={active ? "page" : undefined} className={`focus-ring press relative flex items-center gap-2 rounded-md px-2 py-1 text-md transition-colors duration-fast ${active ? "text-ink-primary" : "text-ink-secondary hover:bg-surface-raised hover:text-ink-primary"}`}>
                 {active ? <ActiveMark group="nav-active" /> : null}
                 <span aria-hidden className={`relative flex shrink-0 ${item.in_priority ? "text-accent-default" : ""}`}>

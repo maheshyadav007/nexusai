@@ -112,22 +112,38 @@ class UiTranslator:
             return [{"type": "finish-step"}]
         return []
 
+    def _thinking_over(self) -> list[dict[str, Any]]:
+        """Thinking ends when anything else starts, though its block only finishes with the reply."""
+        parts = []
+        for index, block in list(self.blocks.items()):
+            if block["kind"] == "reasoning":
+                parts.append({"type": "reasoning-end", "id": block["id"]})
+                del self.blocks[index]
+        return parts
+
     def _block_start(self, index: int, content: dict[str, Any]) -> list[dict[str, Any]]:
         block_type = content.get("type")
         if block_type == "text":
             block_id = self._id("text")
+            over = self._thinking_over()
             self.blocks[index] = {"kind": "text", "id": block_id}
-            return [{"type": "text-start", "id": block_id}]
+            return [*over, {"type": "text-start", "id": block_id}]
         if block_type == "reasoning":
             block_id = self._id("reasoning")
             self.blocks[index] = {"kind": "reasoning", "id": block_id}
             return [{"type": "reasoning-start", "id": block_id}]
         if block_type in {"tool_call_chunk", "tool_call"}:
             call_id = str(content.get("id"))
+            over = self._thinking_over()
             self.blocks[index] = {"kind": "tool", "id": call_id, "name": content.get("name")}
             self.announced.add(call_id)
             return [
-                {"type": "tool-input-start", "toolCallId": call_id, "toolName": content.get("name")}
+                *over,
+                {
+                    "type": "tool-input-start",
+                    "toolCallId": call_id,
+                    "toolName": content.get("name"),
+                },
             ]
         return []
 

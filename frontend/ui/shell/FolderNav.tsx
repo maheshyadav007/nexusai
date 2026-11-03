@@ -18,7 +18,9 @@ export function FolderNav({ collapsed }: { collapsed: boolean }) {
   const router = useRouter();
   const more = useGetMoreFromFolder();
   if (collapsed) return null;
-  const rows = (folders.data?.folders ?? []).filter((row) => !LISTED_ELSEWHERE.has(row.role));
+  const hrefOf = (name: string) => `/mail/folder/${encodeURIComponent(name)}`;
+  // Nothing here and nothing on the server is only clutter, unless it's the one open.
+  const rows = (folders.data?.folders ?? []).filter((row) => !LISTED_ELSEWHERE.has(row.role) && ((row.here ?? 0) > 0 || (row.on_server ?? 0) > 0 || pathname.startsWith(hrefOf(row.name))));
   if (!rows.length) return null;
   const depthOf = (name: string, parent?: string | null): number => {
     const above = rows.find((row) => row.name === parent);
@@ -28,7 +30,7 @@ export function FolderNav({ collapsed }: { collapsed: boolean }) {
     <section aria-label={t("nav.folders")}>
       <ul className="flex flex-col gap-px">
         {rows.map((row) => {
-          const href = `/mail/folder/${encodeURIComponent(row.name)}`;
+          const href = hrefOf(row.name);
           const active = pathname === href || pathname.startsWith(`${href}/`);
           const depth = depthOf(row.name, row.parent);
           return (

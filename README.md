@@ -6,7 +6,7 @@ Status: in development. The web app comes first, then an Electron desktop app.
 
 | Folder | Contents |
 |---|---|
-| `docs/` | [Product vision](docs/PRODUCT_VISION.md), [features](docs/FEATURES.md), [architecture](docs/ARCHITECTURE.md), [component plan](docs/COMPONENT_PLAN.md), [tech stack](docs/TECH_STACK.md), [known problems](docs/KNOWN_PROBLEMS.md), design reference |
+| `docs/` | [Product vision](docs/PRODUCT_VISION.md), [features](docs/FEATURES.md), [architecture](docs/ARCHITECTURE.md), [agents and categories](docs/AGENTS_AND_CATEGORIES.md), [component plan](docs/COMPONENT_PLAN.md), [tech stack](docs/TECH_STACK.md), [known problems](docs/KNOWN_PROBLEMS.md), design reference |
 | `backend/` | Local Python backend: FastAPI, event bus, modules. Managed with `uv` |
 | `frontend/` | Next.js UI: theme files, typed client, screens |
 | `scripts/` | `dev.mjs`, for setup and running without `make` |
@@ -44,6 +44,7 @@ cp .env.example .env    # then fill it in, and restart the app
 | `NEXUSAI_MODEL_API_KEY` | Its key | None |
 | `NEXUSAI_MODEL_NAMES` | Models to offer, separated by commas. The first is the default | The server's own list |
 | `NEXUSAI_MODEL_TOOLS` | Whether the server supports tool calling | `false` |
+| `NEXUSAI_MODEL_CALLS_PER_MINUTE` | Model calls allowed in a minute, across every agent | No limit of its own. It still slows down when the server says to |
 | `NEXUSAI_MAIL_HOST` | Mail server | Not set: people enter a server or use Gmail |
 | `NEXUSAI_MAIL_PROTOCOL` | `pop3` or `imap` | `pop3` |
 | `NEXUSAI_MAIL_PORT`, `NEXUSAI_MAIL_SECURE` | Incoming port, and whether it uses TLS | `995`, `true` |

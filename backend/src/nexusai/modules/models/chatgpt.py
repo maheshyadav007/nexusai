@@ -29,6 +29,10 @@ class SignInRequired(ChatGptError):
     pass
 
 
+class ChatGptLimited(ChatGptError):
+    pass
+
+
 @dataclass(frozen=True)
 class DeviceCode:
     device_auth_id: str
@@ -236,7 +240,7 @@ def _raise_for_status(response: httpx.Response) -> None:
     if response.status_code == 401:
         raise SignInRequired("Your ChatGPT sign-in has ended. Connect ChatGPT again.")
     if response.status_code == 429:
-        raise ChatGptError("You've reached your ChatGPT plan's limit for now. Try again later.")
+        raise ChatGptLimited("You've reached your ChatGPT plan's limit for now. Try again later.")
     if response.status_code == 403:
         raise ChatGptError("ChatGPT refused this request. Your plan may not include this model.")
     raise ChatGptError(f"ChatGPT returned an error (HTTP {response.status_code}). Try again.")

@@ -302,6 +302,14 @@ Build this before any feature, because everything else depends on it:
 
 After that, features follow the stages in [`FEATURES.md`](FEATURES.md).
 
+## Agents and categories
+
+How many agents there are, what starts each one, and how categories are managed are in [`AGENTS_AND_CATEGORIES.md`](AGENTS_AND_CATEGORIES.md).
+
+## Model replies
+
+`ReplyReader` in `modules/agent/providers.py` sorts a reply as it arrives. Words stream at once, and thinking becomes `ReasoningChunk`, shown apart and never sent back to the model. On servers without tool calling, only text that could be a written tool call waits until the reply ends. The pacer in `modules/agent/gateway.py` keeps all model calls within any limit, and handles rate limit replies.
+
 ## The Mail agent's judgement
 
 What it knows, strongest first, and how far each is trusted. `modules/agent/knowledge.py` builds this for a real run and for the "What it knows" page, so the page can't drift from what the model is sent.
@@ -317,7 +325,7 @@ What it knows, strongest first, and how far each is trusted. `modules/agent/know
 
 - **Who has the next move** is status, and what they'd do is `next_action`. Interrupting is `notify`, decided apart from importance. Questions stop at three open.
 - **Without any model:** sending takes a conversation off their plate at once, a reply moves it back, and a follow-up date that passes tells them once.
-- **Automated mail** skips the model unless its subject could cost them something, or it's in a conversation they wrote in.
+- **Automated mail** skips the model unless its subject could cost them something, or it's in a conversation they wrote in. Starter categories also send replies to the agent.
 - **A broadcast** (more than 10 recipients) reaches the model as a count, and `read_recipients` searches the list if it matters.
 - **Recommendations** name real senders only, show the app's own counts, and do nothing until the person agrees. Quiet groups only archive what's read and over a month old. Nothing is ever deleted.
 - **Prompts are checked** with `make eval-mail`, which runs made-up emails through the real model. Tests use a fake model and can't judge wording.

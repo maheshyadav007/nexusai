@@ -29,7 +29,7 @@ import { AnsweredQuestion, ApprovalGroupCard, MailCard, QuestionCard, ResultCard
 import { AttachedChips, AttachMenu, ModelPicker, useAttachedReading, type Attached } from "./ChatControls";
 import { Composer } from "./Composer";
 import { Markdown } from "./Markdown";
-import { factsOf, failureOf, followUpsOf, sourcesOf, isFinished, mergeResults, textOf, timeOf, toBlocks, toolName, type ToolPart, type Versions } from "./parts";
+import { factsOf, failureOf, followUpsOf, sourcesOf, isFinished, mergeResults, showsItsWork, textOf, timeOf, toBlocks, toolName, type ToolPart, type Versions } from "./parts";
 import { ThinkingTrace } from "./ThinkingTrace";
 
 const COPIED_MS = 1500;
@@ -169,7 +169,7 @@ function QuestionPart({ part, session }: { part: ToolPart; session: string }) {
   );
 }
 
-function AssistantMessage({ message, session, running, isLast, onFollowUp, showFollowUps, canRetry, onRetry, onChooseVersion }: { message: UIMessage; session: string; running: boolean; isLast: boolean; onFollowUp: (text: string) => void; showFollowUps: boolean; canRetry: boolean; onRetry: () => void; onChooseVersion: (turn: number) => void }) {
+function AssistantMessage({ message, session, running, isLast, onFollowUp, followUpsDisabled, canRetry, onRetry, onChooseVersion }: { message: UIMessage; session: string; running: boolean; isLast: boolean; onFollowUp: (text: string) => void; followUpsDisabled: boolean; canRetry: boolean; onRetry: () => void; onChooseVersion: (turn: number) => void }) {
   const approvals = useApprovals();
   const pending = useMemo(() => new Map((approvals.data?.approvals ?? []).filter((item) => item.session === session).map((item) => [item.tool_call_id, item])), [approvals.data, session]);
   const blocks = toBlocks(message, new Set(pending.keys()));
@@ -220,11 +220,11 @@ function AssistantMessage({ message, session, running, isLast, onFollowUp, showF
         </div>
         </div>
       ) : null}
-      {showFollowUps && settled && followUps.length ? (
+      {settled && followUps.length ? (
         <ul aria-label={t("chat.followUps")} className="flex flex-col">
           {followUps.map((question) => (
             <li key={question}>
-              <Pressable onClick={() => onFollowUp(question)} className="focus-ring flex w-full items-center gap-2 py-2 text-left text-md text-ink-secondary transition-colors duration-fast hover:text-ink-primary">
+              <Pressable disabled={followUpsDisabled} onClick={() => onFollowUp(question)} className="focus-ring flex w-full items-center gap-2 py-2 text-left text-md text-ink-secondary transition-colors duration-fast hover:text-ink-primary disabled:cursor-not-allowed disabled:text-ink-faint">
                 <Icon name="followUp" className="h-3 w-3 shrink-0 text-ink-muted" />
                 {question}
               </Pressable>
@@ -399,14 +399,14 @@ export function ChatView({ id, initial, active, footer }: { id: string; initial:
               <UserMessage key={message.id} message={message} onEdit={edit} />
             ) : (
               <Fragment key={message.id}>
-              <AssistantMessage message={message} session={id} running={working && !waiting} isLast={index === messages.length - 1} showFollowUps={index === lastAssistant && !working} onFollowUp={say} canRetry={index === lastAssistant && !working} onRetry={() => void regenerate()} onChooseVersion={(turn) => chooseVersion.mutate({ id, turn }, { onSuccess: (view) => setMessages(view.messages as unknown as UIMessage[]) })} />
+              <AssistantMessage message={message} session={id} running={working && !waiting} isLast={index === messages.length - 1} followUpsDisabled={working} onFollowUp={say} canRetry={index === lastAssistant && !working} onRetry={() => void regenerate()} onChooseVersion={(turn) => chooseVersion.mutate({ id, turn }, { onSuccess: (view) => setMessages(view.messages as unknown as UIMessage[]) })} />
                 {(session.data?.compactions ?? []).filter((entry) => entry.after_turn === factsOf(message).turn).map((entry) => (
                   <WavyDivider key={entry.time}>{t("chat.compacted", { when: format(entry.time), before: tokensOf(entry.before_tokens), after: tokensOf(entry.after_tokens) })}</WavyDivider>
                 ))}
               </Fragment>
             ),
           )}
-          {status === "submitted" && messages[messages.length - 1]?.role === "user" ? (
+          {working && !waiting && !showsItsWork(messages[messages.length - 1]) ? (
             <p data-testid="thinking-start" className="flex items-center gap-2 py-1 text-md text-ink-muted">
               <Icon name="thinking" className="h-4 w-4 animate-working motion-reduce:animate-none" />
               {t("chat.thinking")}

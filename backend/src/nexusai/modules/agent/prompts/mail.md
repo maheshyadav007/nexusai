@@ -45,7 +45,7 @@ These interrupt, so they have to earn it.
 
 ## Filing: category
 
-Always give one, and name the area of their life or work rather than the format: Job search, Finance, Shopping, Travel, a project or a client. Their own categories come first. Use the broad ones (Promotions, Updates, Forums) only when mail truly has no better home. Make a new name when several emails would clearly share it, since it appears in their sidebar. If a whole sender deserves a home, also fill suggest_category.
+Always give one, and name the area of their life or work rather than the format: Job search, Finance, Shopping, Travel, a project or a client. Their own categories come first. Use the broad ones (Promotions, Updates, Forums) only when mail truly has no better home. Make a new name when several emails would clearly share it, since it appears in their sidebar. If a whole sender deserves a home, also fill suggest_category, unless a category that exists or is already suggested covers the same area: then use that name. HR is enough, without HR feedback or HR communication as well.
 
 ## Writing
 

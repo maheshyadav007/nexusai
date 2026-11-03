@@ -19,6 +19,7 @@ from nexusai.contracts.mail import (
     CheckDraft,
     ConnectionResult,
     DecideCategory,
+    DecidePriority,
     Draft,
     DraftList,
     FindPst,
@@ -199,6 +200,7 @@ def _sort_kinds_once(ctx: Context) -> None:
 
 def _startup(ctx: Context) -> None:
     _closing.clear()
+    _add_starter_categories(ctx)
     threading.Thread(target=_sort_kinds_once, args=(ctx,), daemon=True, name="mail-kinds").start()
     _start_sync(ctx)
     # An import that was running when the app closed carries on from its saved position.
@@ -955,6 +957,7 @@ CATEGORY_RULE_PREFIX = "Category: "
 # What each Home last announced, so a count that didn't change doesn't send an event.
 _last_categories: dict[str, list[dict[str, Any]]] = {}
 SUGGESTED, DECLINED = 1, 2
+PRIORITY_SUGGESTED, PRIORITY_DECLINED = 1, 2
 UNORDERED = 1_000_000
 
 
@@ -991,10 +994,31 @@ def category_rows(ctx: Context) -> list[MailCategory]:
     found = []
     named = set()
     positions: dict[str, int] = {}
+    # Only worked out for what's being suggested, since this list is read all the time.
+    needed = {
+        row["name"]: row["n"]
+        for row in db.fetch_all(
+            "SELECT category AS name, COUNT(*) AS n FROM threads WHERE account = ?"
+            " AND (importance = 'high' OR status = 'waiting_on_you') AND category IN"
+            " (SELECT name FROM mail_categories WHERE priority_suggested = 1) GROUP BY category",
+            (account,),
+        )
+    }
+    votes = {
+        row["name"]: row["n"]
+        for row in db.fetch_all("SELECT name, COUNT(*) AS n FROM mail_category_votes GROUP BY name")
+    }
     for row in db.fetch_all("SELECT * FROM mail_categories ORDER BY name"):
         named.add(row["name"])
         # One the person turned down stays recorded, so it isn't suggested again.
         if row["proposed"] == DECLINED:
+            continue
+        # One email isn't a pattern, so a suggestion waits until enough mail would go in it.
+        if (
+            row["proposed"] == SUGGESTED
+            and row["needs_votes"]
+            and votes.get(row["name"], 0) < ctx.config.agent.category_suggestion_min_threads
+        ):
             continue
         count, unread = counts.get(row["name"], (0, 0))
         found.append(
@@ -1003,6 +1027,10 @@ def category_rows(ctx: Context) -> list[MailCategory]:
                 source=row["source"],
                 in_priority=bool(row["in_priority"]),
                 proposed=row["proposed"] == SUGGESTED,
+                priority_suggested=row["priority_suggested"] == PRIORITY_SUGGESTED
+                and not row["in_priority"],
+                priority_why=row["priority_why"],
+                needed_you=needed.get(row["name"], 0),
                 why=row["why"],
                 sender=row["sender"],
                 subject=row["subject"],
@@ -1072,6 +1100,62 @@ def _apply_category_rule(ctx: Context, name: str, sender: str | None, subject: s
             (name, f"Matched the category “{name}”", *params),
         )
         return int(cursor.rowcount)
+
+
+SUBJECT_REPLY_PREFIXES = ("", "Re: ", "Fwd: ", "Fw: ")
+
+
+def _add_starter_categories(ctx: Context) -> None:
+    """Once for each Home, with what's already here filed too. An empty one stays out of the sidebar."""
+    db = ctx.bus.db
+    if not ctx.config.mail.starter_categories or db.fetch_all(
+        "SELECT 1 FROM mail_starter_categories LIMIT 1"
+    ):
+        return
+    for starter in ctx.config.mail.starter_categories:
+        name, prefix = starter["name"], starter["subject_prefix"]
+        rule_name = CATEGORY_RULE_PREFIX + name
+
+        def changed(
+            existing: list[MailRule],
+            rule_name: str = rule_name,
+            name: str = name,
+            prefix: str = prefix,
+        ) -> list[MailRule]:
+            if any(rule.name == rule_name for rule in existing):
+                return existing
+            condition = RuleCondition(field="subject_prefix", value=prefix)
+            return [
+                *existing,
+                MailRule(
+                    name=rule_name,
+                    conditions=[condition],
+                    actions=RuleActions(category=name, skip_agent=True, read_replies=True),
+                ),
+            ]
+
+        rules.change_rules(ctx.config.home, changed)
+        patterns = [f"{reply}{prefix}%" for reply in SUBJECT_REPLY_PREFIXES]
+        marks = " OR ".join("m.subject LIKE ?" for _ in patterns)
+        with db.transaction() as tx:
+            tx.execute(
+                # Automated mail, kept to itself, so it's never suggested for the Priority inbox.
+                "INSERT OR IGNORE INTO mail_categories (name, source, priority_suggested, created)"
+                " VALUES (?, 'rule', ?, ?)",
+                (name, PRIORITY_DECLINED, datetime.now(UTC).isoformat()),
+            )
+            tx.execute(
+                "UPDATE threads AS t SET category = ?, category_source = 'rule', why = ? WHERE"  # noqa: S608
+                " COALESCE(t.category_source, '') != 'user' AND EXISTS"
+                f" (SELECT 1 FROM messages m WHERE m.thread_id = t.id AND ({marks}))",
+                (name, f"Matched the category “{name}”", *patterns),
+            )
+    with db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO mail_starter_categories (added) VALUES (?)",
+            (datetime.now(UTC).isoformat(),),
+        )
+    _categories_changed(ctx)
 
 
 def file_by_sender(ctx: Context, name: str, sender: str) -> int:
@@ -1271,6 +1355,15 @@ def decide_category(command: DecideCategory, ctx: Context) -> CategoryList:
             ),
             ctx,
         )
+        # The agent already read this mail when it suggested the name, so nothing is read again.
+        with ctx.bus.db.transaction() as tx:
+            tx.execute(
+                "UPDATE threads SET category = ?, category_source = 'agent' WHERE id IN"
+                " (SELECT thread FROM mail_category_votes WHERE name = ?)"
+                " AND COALESCE(category_source, '') NOT IN ('user', 'rule')",
+                (row["name"], row["name"]),
+            )
+        _categories_changed(ctx)
     else:
         with ctx.bus.db.transaction() as tx:
             tx.execute(
@@ -1278,6 +1371,39 @@ def decide_category(command: DecideCategory, ctx: Context) -> CategoryList:
             )
         _categories_changed(ctx)
     return CategoryList(categories=category_rows(ctx))
+
+
+@mail_module.command("categories.decidePriority")
+def decide_priority(command: DecidePriority, ctx: Context) -> CategoryList:
+    """Saying no is remembered, so it isn't suggested again. Right-click can still add it."""
+    with ctx.bus.db.transaction() as tx:
+        cursor = tx.execute(
+            "UPDATE mail_categories SET priority_suggested = ?, in_priority = in_priority OR ?"
+            " WHERE name = ? AND priority_suggested = ?",
+            (PRIORITY_DECLINED, int(command.accept), command.name, PRIORITY_SUGGESTED),
+        )
+    if not cursor.rowcount:
+        raise CommandError("category.not_found", "That suggestion has already been handled.", 409)
+    _categories_changed(ctx)
+    return CategoryList(categories=category_rows(ctx))
+
+
+def suggest_priority(ctx: Context, name: str, reason: str) -> str:
+    """Only for a category with mail in it, that's not there yet and hasn't been turned down."""
+    rows = ctx.bus.db.fetch_all("SELECT * FROM mail_categories WHERE name = ?", (name,))
+    if not rows or rows[0]["proposed"]:
+        return f"There's no category called {name}."
+    if rows[0]["in_priority"]:
+        return f"{name} is in the Priority inbox already."
+    if rows[0]["priority_suggested"]:
+        return f"{name} has been suggested already, or they said no."
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "UPDATE mail_categories SET priority_suggested = ?, priority_why = ? WHERE name = ?",
+            (PRIORITY_SUGGESTED, reason[:500], name),
+        )
+    _categories_changed(ctx)
+    return f"Suggested {name} for the Priority inbox. The person decides."
 
 
 # Writing

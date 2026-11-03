@@ -44,6 +44,17 @@ export function toBlocks(message: UIMessage, pending: ReadonlySet<string>): Bloc
   return blocks;
 }
 
+/** Whether something on screen already shows it's working. If not, the thinking line has to. */
+export function showsItsWork(message: UIMessage | undefined): boolean {
+  if (!message || message.role !== "assistant") return false;
+  const last = toBlocks(message, new Set()).at(-1);
+  if (!last) return false;
+  if (last.kind === "trace") return true;
+  if (last.kind === "card") return !isFinished(last.part);
+  const words = message.parts.filter((part) => part.type === "text").at(-1) as { state?: string } | undefined;
+  return words?.state === "streaming";
+}
+
 export type Shown = Block | { kind: "results"; parts: ToolPart[]; key: string };
 
 const WITH_OWN_CARD = new Set(["ask_user", "send_mail", "record_triage"]);

@@ -51,11 +51,16 @@ PUBLIC_MAIL_DOMAINS = frozenset(
 
 # Automated mail goes unjudged, unless what it says could cost the person something.
 WORTH_A_LOOK = re.compile(
-    r"\b(action required|payment|overdue|past due|due (on|by|date|soon)|expir(es|ing|ed|y)|deadline"
+    r"\b(action required|escalat\w*|payment|overdue|past due|due (on|by|date|soon)"
+    r"|expir(es|ing|ed|y)|deadline"
     r"|security|suspicious|unauthori[sz]ed|sign-?in|password|declined|invoice|interview"
     r"|offer letter|your application|verify your|final notice|renewal|outage|cancell?ed)\b",
     re.I,
 )
+
+
+# A reply to a [PLM] mail is still about PLM.
+REPLY_PREFIX = re.compile(r"^(?:\s*(?:re|fwd?|aw)\s*:\s*)+", re.I)
 
 
 @dataclass(frozen=True)
@@ -121,6 +126,8 @@ def _condition_matches(condition: RuleCondition, parsed: ParsedMessage) -> bool:
     needle = condition.value.lower()
     if condition.field == "subject":
         return needle in parsed.subject.lower()
+    if condition.field == "subject_prefix":
+        return REPLY_PREFIX.sub("", parsed.subject).lower().startswith(needle)
     if condition.field == "body":
         return needle in parsed.text.lower()
     if condition.field == "sender":
@@ -142,7 +149,9 @@ def evaluate(
     """The person's own rules come first, because they know their mail best."""
     for rule in rules:
         if rule.enabled and all(_condition_matches(c, parsed) for c in rule.conditions):
-            return RuleMatch(rule.name, rule.actions)
+            if rule.actions.read_replies and REPLY_PREFIX.match(parsed.subject):
+                return RuleMatch(rule.name, rule.actions.model_copy(update={"skip_agent": False}))
+            return RuleMatch(rule.name, rule.actions, rule.actions.read_replies)
     return _builtin(parsed, own_domain)
 
 

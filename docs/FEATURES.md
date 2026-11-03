@@ -185,7 +185,7 @@ Every data source is a connector: an MCP server with its own tools, skills and r
 | ACC-3g | Kinds of mail by header, with no model: Promotions, Updates, Forums, and Social on public mail services. Mail from the person's own company domain is never Promotions | MVP |
 | ACC-6 | Send, reply and forward via SMTP, only after approval; Sent and Drafts folders, including agent drafts awaiting approval | MVP |
 | ACC-8 | Two-way mail state: read, flag, move, delete and drafts sync with the server | MVP |
-| NAV-2 | Mail categories: built-in (Needs you, FYI, Newsletters, Automated) and user-created; set by rules or the agent | MVP |
+| NAV-2 | Mail categories: starter (PLM, Swarm, 3GPP Briefing), by header (Promotions, Updates, Forums, Social), and made by the person or the agent. Overlapping names become one, a suggestion needs 5 conversations, and empty ones are hidden but kept. See [`AGENTS_AND_CATEGORIES.md`](AGENTS_AND_CATEGORIES.md#categories) | MVP |
 | ACC-5 | Choose folders to sync (Inbox, Sent, others) | Next |
 | ACC-9 | Shared and delegated mailboxes | Next |
 | ACC-10 | Company install: model and mail servers set once in `.env`, so people only see their username, password and model names. POP3 with plain SMTP alongside IMAP, with read marks, flags, filing and sent mail kept on this computer. Gmail keeps working | MVP |
@@ -196,9 +196,9 @@ Every data source is a connector: an MCP server with its own tools, skills and r
 | ID | Feature | Pri |
 |---|---|---|
 | PRC-1 | Normalize every message into one model; clean body for the agent by stripping quoted replies, disclaimers and signature text, keeping the original for display | MVP |
-| PRC-4 | Fixed rules: built-in header rules (auto-generated, no-reply, lists), plus user rules in `rules.json` with an editor: subject, body, sender, header and attachment conditions → category, mark read, skip agent, notify, tag | MVP |
+| PRC-4 | Fixed rules: built-in header rules (auto-generated, no-reply, lists), plus user rules in `rules.json` with an editor: subject, subject starts with, body, sender, header and attachment conditions → category, mark read, skip agent (optionally still reading replies), notify, tag | MVP |
 | PRC-6 | "Why is this here?" on every message (rule name or agent reason) | MVP |
-| PRC-7 | Safe mail display: sanitize HTML, block scripts and remote images by default | MVP |
+| PRC-7 | Safe mail display: sanitize HTML and block scripts. Remote images load by default with trackers removed, and `mail.remote_images` can block them | MVP |
 | PRC-8 | Detect encrypted and signed mail (S/MIME), and say plainly when it can't be read | MVP |
 | PRC-9 | Warn on lookalike senders and links | Next |
 
@@ -278,18 +278,18 @@ Rules run first and cost nothing; mail they mark "skip agent" never reaches the 
 | AGN-3c | Sending takes a conversation off the person's plate and works out what comes next. A follow-up date that passes tells them once, on Today with a draft button. A reply moves it back. None of this needs a model except the date | MVP |
 | AGN-3d | Automated mail skips the model unless what it says could cost the person something, or it's in a conversation they wrote in | MVP |
 | AGN-3e | A broadcast reaches the model as a count, and it can search the list if who else got it matters | MVP |
-| AGN-3f | Weekly inbox review, and after reading past mail: recommends where whole groups of mail should go, with the app's own counts. Nothing moves until the person agrees. The same correction three times offers to make it automatic | MVP |
+| AGN-3f | Weekly inbox review, and after reading past mail: recommends where whole groups of mail should go and which categories belong in the Priority inbox, with the app's own counts, and folds suggestions that mean the same. Nothing moves until the person agrees. The same correction three times offers to make it automatic | MVP |
 | AGN-3g | A morning brief on Today, from what's already judged | MVP |
 | AGN-3h | "What it knows" shows everything the agent is told, in order and how far it's trusted; each learned note with its source, to confirm or remove; corrections and who they write to. "What it sees" shows the exact text for any conversation, without calling a model | MVP |
 | AGN-3i | `make eval-mail` runs made-up emails through the real model to check the prompts | MVP |
 | AGN-3j | Morning brief card at the top of Today, with like, dislike and a request box. Each new brief is told the person's words and reactions, and they're listed under What it knows | MVP |
-| AGN-3k | Needs you: each action blocks its row, shows it running, then says how it went. Select several, then Do it or Decline in bulk. Sending mail and running commands stay one at a time | MVP |
+| AGN-3k | Needs you: each action blocks its row, shows it running, then says how it went. Select several, then Do it or Decline in bulk, with each approval as one line while selecting. Sending mail and running commands stay one at a time | MVP |
 | AGN-3l | Agents list on the Agent channel page: running, active, finished, off and removed agents, what starts each and when it runs next | MVP |
 | AGN-4 | Burst handling: a single email starts right away with no timer. Emails arriving during a run wait, then go together in the next run, grouped by thread and capped per run. Its own queue, separate from the session limit; catches up in order after being offline or if the model is unavailable | MVP |
-| AGN-5 | Runs from setup onward only; older mail is triaged only on request, with an estimate of the work first | MVP |
+| AGN-5 | Runs one conversation per model call, on new mail and on the newest past mail (AGN-L1). Older mail is judged only on request, with an estimate of the work first | MVP |
 | AGN-6 | Mail agent appears as one entry in Sessions; each email has its own run record, reachable from "Why is this here?" | MVP |
 | AGN-10 | Agent from anywhere: "Ask agent" on any email, thread, task, document, notification or text selection opens a session with that item attached as context, which the user can see and remove | MVP |
-| AGT-3 | Draft replies in the user's tone, shown with "why" | MVP |
+| AGT-3 | Draft reply on a thread or on Today: opens the reply box with a draft in the person's style, reusing one the Mail agent already wrote. Nothing is saved or sent until they choose, and no-reply senders are refused | MVP |
 | AGT-4 | Ask anything across mail, attachments and documents, with sources | MVP |
 | AGT-5 | App UI exposed as tools alongside connector tools: ask, suggest, tell, notify, approval card, pin | MVP |
 | AGT-8 | Activity log with undo where possible | MVP |
@@ -377,9 +377,9 @@ Tools: **Read, Write, Edit** and **Command** (zsh on macOS, PowerShell on Window
 
 | ID | Feature | Pri |
 |---|---|---|
-| MDL-1 | Model providers: ChatGPT subscription sign-in (for testing), internal API through LiteLLM (no tool calling, JSON fallback), internal API v2 (tools), Gemini (enterprise auth); choose from the models each one offers; every call passes through the data guard | MVP |
+| MDL-1 | Model providers: ChatGPT subscription sign-in (for testing), internal API through LiteLLM (no tool calling, JSON fallback), internal API v2 (tools), Gemini (enterprise auth); choose from the models each one offers; every call passes through the data guard. Replies stream, and thinking is shown apart and never sent back | MVP |
 | MDL-5 | Model usage limits and view: tokens and cost per agent, daily cap, warning near it | MVP |
-| MDL-6 | Model failure behaviour: mail, search and documents keep working, and queued agent work resumes when the model returns | MVP |
+| MDL-6 | Model failure behaviour: mail, search and documents keep working, and queued agent work resumes when the model returns. Rate limits: an optional calls-per-minute limit, and automatic retries that follow what the server says | MVP |
 | MDL-7 | Automatic fallback to a second model | Next |
 | MDL-3 | Local ONNX models for text embeddings, OCR and image description; downloaded once; CPU, or GPU when available (DirectML on Windows, CoreML on macOS); app works without them | Next |
 
@@ -409,7 +409,7 @@ Shown     Please contact kim.j@samsung.com and open http://wiki.samsung.net/proj
 Agents and sessions work as one team instead of each starting from nothing. A **work board** holds what is known, and an **agent channel** lets them tell each other things. This is separate from the user channel (E1), which is between agents and the user.
 
 ```text
-Live mail agent ──writes──▶ Work board ◀──reads── Daily prep, sessions, Time check
+Mail agent ──writes──▶ Work board ◀──reads── Morning brief, sessions, Time check
 Session A ──"Priya replied on the budget thread"──▶ Agent channel ──▶ Session B
 ```
 
@@ -426,17 +426,18 @@ Session A ──"Priya replied on the budget thread"──▶ Agent channel ─�
 
 ## D1. Default runs
 
-Only three things run by default, and they share what they know through the work board:
+What runs by itself, and what starts it, is in [`AGENTS_AND_CATEGORIES.md`](AGENTS_AND_CATEGORIES.md#what-starts-each-one). The main ones:
 
 | Default | When | What it does |
 |---|---|---|
-| **Live mail agent** | Every email that escapes the fixed rules | Triage, plus recording deadlines and thread status on the work board as it reads |
-| **Daily prep** | Nightly | One run: overnight drafts and reports, morning brief, and follow-ups and deadlines needing attention. Reads the work board instead of re-reading mail |
-| **Time check** (uses no model) | At the next due time, using one timer rather than polling | Reads the work board for overdue items and reminders; raises a notification or an Ask. Also does backup, index upkeep and the scratch timer on its nightly pass |
+| **Mail agent** | Each conversation with new mail that the fixed rules didn't send to its folder | Judges it, and records deadlines and status on the work board |
+| **Morning brief** | Every day at 08:30 | Writes the brief on Today from what's on the person's plate |
+| **Inbox review** | Mondays at 09:00, and after reading past mail | Suggests where groups of mail should go, and what belongs in Priority |
+| **Time check** (uses no model) | At the next due time, using one timer rather than polling | Fires reminders and follow-up notices |
 
 | ID | Feature | Pri |
 |---|---|---|
-| JOB-4 | Daily prep: drafts, reports and briefs for mail that needs the user, ready to approve in one click at the start of the day. The user sets the time, the scope and a nightly token limit. A laptop that was closed catches up on wake. Nothing is sent without approval | MVP |
+| JOB-4 | Morning brief: a daily schedule writes it from what's on the person's plate, and it can be turned off in the Mail agent settings. Drafts come from the Mail agent as mail arrives | MVP |
 | JOB-7 | Time check as above | MVP |
 | JOB-5 | The three defaults can each be turned off, retimed or edited | MVP |
 
@@ -473,7 +474,7 @@ The main focus space on Today is a two-way channel between the agents and the us
 
 | ID | Feature | Pri |
 |---|---|---|
-| NTF-3 | Today: greeting and one-line brief, Needs you, Due, Important mail, Waiting on others, Since you last looked, and one status line linking to the Cockpit | MVP |
+| NTF-3 | Today: greeting and one-line brief, a line of counts that link to what they count, the morning brief, then cards for Needs you, Due, From your agents, Important mail and Waiting on others, each with its actions in view, plus Since you last looked and one status line linking to the Cockpit | MVP |
 | NTF-7 | Cockpit: what's running, health of each part, what's coming up, and a filterable feed of what happened | MVP |
 | NTF-7a | Work on a timer with no agent is listed once (`modules/agent/pipelines.py`), and shows on the Schedules page and in the Cockpit with Stop and Run now. Mail sync is the only one today | MVP |
 | AGN-L1 | Once enough mail is here, or no more is coming, the Mail agent reads the newest K emails rules didn't catch (`agent.learn_emails`, 400), oldest first. Each is judged, but can't notify, ask or add work. It keeps notes in `memory/agents/mail/learned.md`, which only it reads, always as untrusted data, and the person can edit. It then tells the person what it learned and goes live on new mail and the hourly check | MVP |

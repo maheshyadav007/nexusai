@@ -39,7 +39,7 @@ describe("themes", () => {
 
   it("changing one value in a theme file changes the CSS", () => {
     const changed = { ...light, color: { ...light.color, surface: { ...light.color.surface, page: "#102030" } } };
-    expect(themeToCss(light, true)).toContain("--color-surface-page: 247 244 238;");
+    expect(themeToCss(light, true)).toContain("--color-surface-page: 243 238 229;");
     expect(themeToCss(changed, true)).toContain("--color-surface-page: 16 32 48;");
   });
 });

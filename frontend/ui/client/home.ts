@@ -4,8 +4,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { post } from "./api";
 import type { BackupList, ChooseHome, FolderListing, HomeCheck, HomeStatus, RecoveryKeyView, ResetHome } from "./contracts.generated";
 
+const STARTUP_RETRIES = 100;
+const STARTUP_RETRY_MS = 3000;
+
 export function useHomeStatus() {
-  return useQuery({ queryKey: ["home"], queryFn: () => post<HomeStatus>("/api/home/status", {}) });
+  // A page opened while the backend is still starting has to wait for it, not give up.
+  return useQuery({ queryKey: ["home"], queryFn: () => post<HomeStatus>("/api/home/status", {}), retry: STARTUP_RETRIES, retryDelay: STARTUP_RETRY_MS });
 }
 
 export function useHomeReady(): boolean {

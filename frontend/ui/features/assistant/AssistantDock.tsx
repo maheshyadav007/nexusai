@@ -141,7 +141,7 @@ function Panel() {
         <IconButton icon={assistant.pinned ? "unpin" : "pin"} label={t(assistant.pinned ? "chat.unpin" : "chat.pin")} aria-pressed={assistant.pinned} onClick={() => assistant.setPinned(!assistant.pinned)} />
         <IconButton icon="minimize" label={t("chat.minimize")} onClick={() => assistant.setOpen(false)} />
       </header>
-      {assistant.session ? <SessionChat key={assistant.session} id={assistant.session} /> : <NewChat />}
+      <div key={assistant.session ?? "new"} className="flex min-h-0 flex-1 animate-fade flex-col">{assistant.session ? <SessionChat id={assistant.session} /> : <NewChat />}</div>
     </SlidePanel>
   );
 }

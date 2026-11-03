@@ -97,6 +97,7 @@ export const useRemoveMemory = () => useCommand(["memory"], (path: string) => co
 export const useDecideMemory = () => useCommand(["memory"], (input: { id: number; accept: boolean }) => command("memory.decide", input));
 
 export const useThreadSummary = (id: number) => useReady(["summary", id], () => query("thread.summary", { id }));
+export const useDraftReply = () => useMutation({ mutationFn: (id: number) => command("thread.draftReply", { id }) });
 export const useSummarize = () => useCommand(["summary"], (id: number) => command("thread.summarize", { id }));
 export const useThreadRuns = (thread: number, enabled: boolean) => useQuery({ queryKey: ["runs", thread], queryFn: () => query("triage.runs", { thread }), enabled, staleTime: 0 });
 export const useTriageEstimate = () => useReady(["triage-estimate"], () => query("triage.estimate", {}));
@@ -145,7 +146,7 @@ export function useWaitingCount(): number {
     (tasks.data?.tasks ?? []).filter((task) => task.proposed).length +
     (reminders.data?.reminders ?? []).filter((reminder) => reminder.proposed).length +
     (memory.data?.proposals.length ?? 0) +
-    (categories.data?.categories ?? []).filter((item) => item.proposed).length +
+    (categories.data?.categories ?? []).filter((item) => item.proposed || item.priority_suggested).length +
     (suggestions.data?.suggestions.length ?? 0)
   );
 }

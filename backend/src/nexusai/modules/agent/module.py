@@ -29,6 +29,8 @@ from nexusai.contracts.agent import (
     DecideMailSuggestion,
     DecideMemoryProposal,
     DismissChannel,
+    DraftedReply,
+    DraftThreadReply,
     DueItem,
     GetAgentKnowledge,
     GetCockpit,
@@ -701,6 +703,11 @@ def summarize_thread(command: SummarizeThread, ctx: Context) -> ThreadSummary:
     return mail_agent.summarize(ctx, command.id)
 
 
+@agent_module.command("thread.draftReply")
+def draft_thread_reply(command: DraftThreadReply, ctx: Context) -> DraftedReply:
+    return mail_agent.draft_reply(ctx, command.id)
+
+
 # Schedules
 
 
@@ -1340,7 +1347,7 @@ def _due_items(ctx: Context) -> list[DueItem]:
     today = now.strftime("%Y-%m-%d")
     items: list[DueItem] = []
     for row in db.fetch_all(
-        "SELECT title, due, thread FROM tasks WHERE proposed = 0 AND status != 'done' AND due IS NOT NULL AND due <= ? ORDER BY due",
+        "SELECT id, title, due, thread FROM tasks WHERE proposed = 0 AND status != 'done' AND due IS NOT NULL AND due <= ? ORDER BY due",
         (today,),
     ):
         link = f"/mail/thread/{row['thread']}" if row["thread"] else "/planner/tasks"
@@ -1351,6 +1358,7 @@ def _due_items(ctx: Context) -> list[DueItem]:
                 when=row["due"],
                 overdue=row["due"] < today,
                 link=link,
+                task_id=row["id"],
             )
         )
     for row in db.fetch_all(

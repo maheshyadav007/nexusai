@@ -87,6 +87,11 @@ test("new mail is judged, and reaches Today, the thread and the channel", async 
   await page.reload();
   await expect(page.getByTestId("summary-text")).toContainText("They want the numbers by Friday.");
 
+  await page.getByTestId("draft-reply").click();
+  // The agent already wrote one for this mail, so it opens that and the model isn't asked again.
+  await expect(page.getByRole("textbox", { name: "Message" })).toHaveValue(/Thanks, I'll look at this/);
+  await page.reload();
+
   await page.getByRole("button", { name: "Ask agent" }).click();
   await expect(page.getByTestId("assistant-dock")).toBeVisible();
   await expect(page.getByTestId("context-chip")).toContainText(subject);

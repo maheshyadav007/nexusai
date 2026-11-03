@@ -62,6 +62,8 @@ const TOOL_SHOWN: Readonly<Record<string, { label: StringKey; icon: IconName; ch
   read_agent_messages: { label: "tool.read_agent_messages", icon: "channel" },
   propose_memory: { label: "tool.propose_memory", icon: "memory" },
   save_personal_prompt: { label: "tool.save_personal_prompt", icon: "memory", chip: "name" },
+  recommend_priority: { label: "tool.recommend_priority", icon: "priority", chip: "category" },
+  fold_suggested_categories: { label: "tool.fold_suggested_categories", icon: "categories", chip: "keep" },
   suggest: { label: "tool.suggest", icon: "channel" },
   tell: { label: "tool.tell", icon: "channel" },
   notify_person: { label: "tool.notify_person", icon: "notifications" },

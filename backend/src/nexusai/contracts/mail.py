@@ -383,7 +383,7 @@ class MailDone(BaseModel):
 class RuleCondition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    field: Literal["subject", "body", "sender", "header", "has_attachment"]
+    field: Literal["subject", "subject_prefix", "body", "sender", "header", "has_attachment"]
     value: str = Field(default="", max_length=500)
     header: str | None = Field(default=None, max_length=100)
 
@@ -394,6 +394,8 @@ class RuleActions(BaseModel):
     category: str | None = Field(default=None, max_length=64)
     mark_read: bool = False
     skip_agent: bool = False
+    # Skips what a system sends, but a reply means a person got involved, so the agent reads that.
+    read_replies: bool = False
     notify: bool = False
     tag: str | None = Field(default=None, max_length=64)
 
@@ -412,6 +414,9 @@ class MailCategory(BaseModel):
     source: Literal["user", "agent", "rule"]
     in_priority: bool
     proposed: bool
+    priority_suggested: bool = False
+    priority_why: str | None = None
+    needed_you: int = 0
     why: str | None = None
     sender: str | None = None
     subject: str | None = None
@@ -471,6 +476,13 @@ class CategoryName(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=64)
+
+
+class DecidePriority(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=64)
+    accept: bool
 
 
 class DecideCategory(BaseModel):

@@ -30,6 +30,9 @@ import type {
   CategoryName,
   CategorySaved,
   DecideCategory,
+  DecidePriority,
+  DraftThreadReply,
+  DraftedReply,
   GetToolCatalog,
   ListCategories,
   SaveCategory,
@@ -309,6 +312,8 @@ interface Commands {
   "categories.update": [UpdateCategory, CategoryList];
   "categories.reorder": [ReorderCategories, CategoryList];
   "categories.decide": [DecideCategory, CategoryList];
+  "categories.decidePriority": [DecidePriority, CategoryList];
+  "thread.draftReply": [DraftThreadReply, DraftedReply];
   "channel.respond": [RespondChannel, AgentDone];
   "channel.dismiss": [DismissChannel, AgentDone];
   "agentChannel.setMuted": [SetTopicMuted, AgentDone];

@@ -9,11 +9,19 @@ from typing import Any, Literal
 
 import structlog
 
-from nexusai.contracts.agent import ThreadRuns, ThreadSummary, TriageEstimate, TriageRun
+from nexusai.contracts.agent import (
+    DraftedReply,
+    ThreadRuns,
+    ThreadSummary,
+    TriageEstimate,
+    TriageRun,
+)
+from nexusai.contracts.mail import MergeCategories
 from nexusai.kernel.database import Migration
 from nexusai.kernel.home import scratch_folder
 from nexusai.kernel.module import CommandError, Context
 from nexusai.modules.agent import (
+    category_names,
     channel,
     feedback,
     gateway,
@@ -27,6 +35,7 @@ from nexusai.modules.agent.context import TurnRequest
 from nexusai.modules.agent.gateway import Layer
 from nexusai.modules.agent.providers import Message
 from nexusai.modules.mail import accounts
+from nexusai.modules.mail import module as mail
 from nexusai.modules.mail.rules import BUILT_IN_RULES, NO_REPLY
 from nexusai.modules.planner import module as planner
 
@@ -364,6 +373,9 @@ def task_for(
     )
     if known:
         task += "\n\nCategories that exist: " + ", ".join(row[0] for row in known)
+    waiting = db.fetch_all("SELECT name FROM mail_categories WHERE proposed = 1 ORDER BY 1")
+    if waiting:
+        task += "\n\nCategories already suggested: " + ", ".join(row[0] for row in waiting)
     if live:
         task += _style_samples(ctx, thread)
     if answers:
@@ -505,14 +517,25 @@ def brief_task(ctx: Context) -> str:
 def review_turn(ctx: Context) -> TurnRequest | None:
     """Where whole groups of mail should go. Nothing to say about means no run at all."""
     table = signals.sender_table(ctx)
-    if not table:
+    waiting = [
+        str(row["name"])
+        for row in ctx.bus.db.fetch_all(
+            "SELECT name FROM mail_categories WHERE proposed = 1 ORDER BY name"
+        )
+    ]
+    categories = signals.category_table(ctx)
+    if not table and not waiting and not categories:
         return None
+    # These names came from reading mail, so they stay marked as untrusted too.
+    named = f"\n\nCategories already suggested: {', '.join(waiting)}" if waiting else ""
+    if categories:
+        named += f"\n\nCategories not in the Priority inbox:\n{categories}"
     return TurnRequest(
         SESSION_ID,
         _template("mail-review"),
         "mail-review",
         _template("mail-review-model"),
-        f"<untrusted>\n{table}\n</untrusted>",
+        f"<untrusted>\n{table}{named}\n</untrusted>",
     )
 
 
@@ -556,16 +579,63 @@ def they_answered(ctx: Context, message: int, thread: int) -> None:
             )
 
 
-def judge_open_again(ctx: Context) -> int:
-    """Once, when how mail is judged has changed, for what's still sitting on their plate."""
-    rows = ctx.bus.db.fetch_all(
-        "SELECT t.id AS thread, MAX(m.id) AS message FROM threads t JOIN messages m ON m.thread_id = t.id"
-        " WHERE t.account = ? AND t.status = 'waiting_on_you' GROUP BY t.id",
-        (accounts.current_account(ctx.config),),
-    )
-    for row in rows:
-        enqueue(ctx, row["message"], row["thread"], event=f"again-{row['message']}")
-    return len(rows)
+def tidy_categories(ctx: Context) -> int:
+    """Once, for what was named before overlaps were caught. Needs no model, and reads no mail.
+
+    The agent's own folders in one area become one, and overlapping suggestions become one.
+    Returns how many suggestions are left, since only a model can tell HR from People team.
+    """
+    db = ctx.bus.db
+    rows = db.fetch_all("SELECT name, source, proposed FROM mail_categories")
+    accepted = [row for row in rows if row["proposed"] == 0]
+    for row in sorted(accepted, key=lambda item: len(item["name"]), reverse=True):
+        others = [other["name"] for other in accepted if other["name"] != row["name"]]
+        area = category_names.area_of(row["name"], others)
+        if row["source"] == "agent" and area and len(area) < len(row["name"]):
+            mail.merge_categories(MergeCategories(names=[row["name"]], into=area), ctx)
+            accepted = [other for other in accepted if other["name"] != row["name"]]
+    settled = [str(row["name"]) for row in accepted]
+    left: list[str] = []
+    with db.transaction() as tx:
+        for row in sorted((r for r in rows if r["proposed"] == 1), key=lambda r: len(r["name"])):
+            name = str(row["name"])
+            area = category_names.area_of(name, settled + left)
+            if area is None:
+                left.append(name)
+                continue
+            tx.execute(
+                "UPDATE OR IGNORE mail_category_votes SET name = ? WHERE name = ?", (area, name)
+            )
+            tx.execute("UPDATE mail_categories SET proposed = 2 WHERE name = ?", (name,))
+    if rows:
+        with ctx.bus.unit_of_work() as work:
+            work.emit("categories.changed", {}, source="agent", trace_id=ctx.trace_id)
+    return len(left)
+
+
+def suggest_priority(ctx: Context, name: str, reason: str) -> str:
+    return mail.suggest_priority(ctx, name, reason)
+
+
+def fold_suggestions(ctx: Context, keep: str, names: list[str]) -> str:
+    """Only suggestions, none of them in use, so the person still decides on the one that's left."""
+    db = ctx.bus.db
+    waiting = {
+        str(row["name"])
+        for row in db.fetch_all("SELECT name FROM mail_categories WHERE proposed = 1")
+    }
+    if keep not in waiting:
+        return f"{keep} isn't waiting as a suggestion."
+    folded = [name for name in names if name in waiting and name != keep]
+    with db.transaction() as tx:
+        for name in folded:
+            tx.execute(
+                "UPDATE OR IGNORE mail_category_votes SET name = ? WHERE name = ?", (keep, name)
+            )
+            tx.execute("UPDATE mail_categories SET proposed = 2 WHERE name = ?", (name,))
+    with ctx.bus.unit_of_work() as work:
+        work.emit("categories.changed", {}, source="agent", trace_id=ctx.trace_id)
+    return f"Folded {len(folded)} into {keep}."
 
 
 def look_for_open_loops(ctx: Context) -> int:
@@ -722,7 +792,7 @@ class Triage:
         )
         provisional = bool(question)
         why = f"{reason} (a best guess until you answer)" if provisional else reason
-        category = self._settled_category(category)
+        category = self._settled_category(category, thread)
         next_action = parsed.get("next_action")
         next_action = next_action if next_action in NEXT_ACTIONS else None
         follow_up = _valid_date(parsed.get("follow_up_on"))
@@ -821,7 +891,7 @@ class Triage:
                 )
         if not sent:
             self._note_category(category)
-        self._suggest_category(parsed.get("suggest_category"))
+        self._suggest_category(parsed.get("suggest_category"), thread)
         memory.add_learned(ctx.config.home, _strings(parsed.get("learned")), thread)
         if learning:
             return
@@ -846,25 +916,35 @@ class Triage:
         applied = {row["rule"] for row in rows if row["rule"]}
         return wrote and applied <= BUILT_IN_RULES
 
-    def _settled_category(self, category: str | None) -> str | None:
-        """So "Job Search" and "Job search" or "Atlas" and "Atlas launch" don't become two folders."""
+    def _settled_category(self, category: str | None, thread: int) -> str | None:
+        """So "Job Search" and "Job search" or "HR" and "HR feedback" don't become two folders."""
         if not category:
             return None
-        known = self.ctx.bus.db.fetch_all(
+        db = self.ctx.bus.db
+        waiting = [
+            str(row["name"])
+            for row in db.fetch_all("SELECT name FROM mail_categories WHERE proposed = 1")
+        ]
+        # Waiting on the person: filed under it already, and it appears if they say yes.
+        if name := category_names.area_of(category, waiting):
+            self._vote(name, thread)
+            return name
+        known = db.fetch_all(
             "SELECT name, source FROM mail_categories WHERE proposed = 0 UNION"
             " SELECT DISTINCT category, 'rule' FROM threads WHERE category IS NOT NULL"
         )
-        wanted = category.strip().casefold()
-        for row in known:
-            name = str(row["name"]).casefold()
-            if (
-                wanted == name
-                or f"{name} ".startswith(f"{wanted} ")
-                or f"{wanted} ".startswith(f"{name} ")
-            ):
-                return str(row["name"])
+        if settled := category_names.area_of(category, [str(row["name"]) for row in known]):
+            return settled
         made = sum(1 for row in known if row["source"] == "agent")
         return None if made >= MOST_AGENT_CATEGORIES else category.strip()
+
+    def _vote(self, name: str, thread: int) -> None:
+        with self.ctx.bus.unit_of_work() as work:
+            work.tx.execute(
+                "INSERT OR IGNORE INTO mail_category_votes (name, thread) VALUES (?, ?)",
+                (name, thread),
+            )
+            work.emit("categories.changed", {}, source="agent", trace_id=self.ctx.trace_id)
 
     def _open_asks(self) -> int:
         return int(
@@ -885,24 +965,37 @@ class Triage:
                 (category, _now()),
             )
 
-    def _suggest_category(self, suggestion: Any) -> None:
-        """Mail that keeps coming from one place. The person decides, on Today."""
+    def _suggest_category(self, suggestion: Any, thread: int) -> None:
+        """Mail that keeps coming from one place. Once enough does, the person decides, on Today."""
         if not isinstance(suggestion, dict) or not suggestion.get("name"):
             return
-        name = str(suggestion["name"])[:64]
-        with self.ctx.bus.unit_of_work() as work:
-            cursor = work.tx.execute(
-                "INSERT OR IGNORE INTO mail_categories (name, source, proposed, why, sender, created)"
-                " VALUES (?, 'agent', 1, ?, ?, ?)",
-                (
-                    name,
-                    str(suggestion.get("reason") or "")[:500],
-                    str(suggestion.get("sender") or "")[:320] or None,
-                    _now(),
-                ),
+        name = str(suggestion["name"]).strip()[:64]
+        db = self.ctx.bus.db
+        rows = db.fetch_all("SELECT name, proposed FROM mail_categories")
+        taken = [str(row["name"]) for row in rows] + [
+            str(row["category"])
+            for row in db.fetch_all(
+                "SELECT DISTINCT category FROM threads WHERE category IS NOT NULL"
             )
-            if cursor.rowcount:
-                work.emit("categories.changed", {}, source="agent", trace_id=self.ctx.trace_id)
+        ]
+        area = category_names.area_of(name, taken)
+        waiting = {str(row["name"]) for row in rows if row["proposed"] == 1}
+        if area and area not in waiting:
+            return
+        if not area:
+            with db.transaction() as tx:
+                tx.execute(
+                    "INSERT OR IGNORE INTO mail_categories"
+                    " (name, source, proposed, needs_votes, why, sender, created)"
+                    " VALUES (?, 'agent', 1, 1, ?, ?, ?)",
+                    (
+                        name,
+                        str(suggestion.get("reason") or "")[:500],
+                        str(suggestion.get("sender") or "")[:320] or None,
+                        _now(),
+                    ),
+                )
+        self._vote(area or name, thread)
 
     def _proposals(self, thread: int, parsed: dict[str, Any], subject: str) -> None:
         """The agent proposes. The person accepts tasks and reminders, and sends drafts."""
@@ -1062,6 +1155,62 @@ def summary_view(ctx: Context, thread: int) -> ThreadSummary:
         new_messages=max(count - rows[0]["covered"], 0),
         updated=rows[0]["updated"],
     )
+
+
+def _ready_draft(ctx: Context, thread: int) -> DraftedReply | None:
+    """What's already written for this conversation, unless mail has come in since."""
+    rows = ctx.bus.db.fetch_all(
+        "SELECT d.id, d.body FROM mail_drafts d JOIN threads t ON t.id = ?"
+        " WHERE json_extract(d.body, '$.thread_id') = ? AND d.updated >= t.last_date"
+        " ORDER BY d.updated DESC LIMIT 1",
+        (thread, thread),
+    )
+    if not rows:
+        return None
+    body = str(json.loads(rows[0]["body"]).get("body") or "").strip()
+    return DraftedReply(body=body, draft_id=rows[0]["id"]) if body else None
+
+
+def draft_reply(ctx: Context, thread: int) -> DraftedReply:
+    """Only when asked, and only words for the person to check. Nothing is saved or sent."""
+    if ready := _ready_draft(ctx, thread):
+        return ready
+    config = ctx.config.agent
+    subject, _, text = _thread_text(
+        ctx, thread, config.max_recent_thread_messages, config.max_thread_chars
+    )
+    if not text:
+        raise CommandError("thread.not_found", "That conversation no longer exists.", 404)
+    latest = ctx.bus.db.fetch_all(
+        "SELECT from_addr FROM messages WHERE thread_id = ? ORDER BY date DESC LIMIT 1", (thread,)
+    )
+    if latest and NO_REPLY.search(latest[0]["from_addr"]):
+        raise CommandError(
+            "draft.no_reply",
+            "This came from an address nobody reads, so there's no one to reply to.",
+            409,
+        )
+    task = (
+        f"<untrusted>\nSubject: {subject}\n\n{text}\n</untrusted>{_style_samples(ctx, thread)}"
+        "\n\nWrite the reply now."
+    )
+    layers: list[Layer] = prompts_builder.build_layers(ctx.config, "draft-reply")
+    try:
+        result = gateway.call_model(
+            ctx, agent="draft-reply", session=None, layers=layers, messages=[Message("user", task)]
+        )
+    except (
+        providers.ModelUnavailable,
+        providers.ModelNotConfigured,
+        providers.ModelFlagged,
+        gateway.DailyCapReached,
+        guard.GuardBlocked,
+    ) as error:
+        raise CommandError("draft.failed", str(error), 502) from error
+    body = result.text.strip()
+    if not body:
+        raise CommandError("draft.failed", "The model didn't write anything. Try again.", 502)
+    return DraftedReply(body=body)
 
 
 def summarize(ctx: Context, thread: int) -> ThreadSummary:

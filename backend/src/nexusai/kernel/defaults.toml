@@ -34,6 +34,12 @@ model_list_client_versions = ["99.0.0", "0.0.0"]
 test_instructions = "You are NexusAI's connection test. Reply briefly."
 
 [mail]
+# Filed by rule on every Home, without a model. One with no mail stays out of the sidebar.
+starter_categories = [
+  { name = "PLM", subject_prefix = "[PLM]" },
+  { name = "Swarm", subject_prefix = "[Swarm]" },
+  { name = "3GPP Briefing", subject_prefix = "[3GPP Briefing]" },
+]
 connect_timeout_seconds = 30
 initial_batch = 200
 backfill_batch = 100
@@ -87,11 +93,20 @@ daily_token_cap = 0
 max_running_sessions = 3
 triage_batch = 10
 triage_retry_seconds = 60
+# Model calls allowed in a minute, across every agent. 0 means no limit of our own.
+model_calls_per_minute = 0
+# When the server says to slow down: tries again this many times, waiting longer each time, unless
+# the server says how long. A wait over the longest goes back in line instead of holding the call.
+rate_limit_retries = 3
+rate_limit_wait_seconds = 10
+rate_limit_longest_wait = 60
 max_recent_thread_messages = 8
 max_thread_chars = 20000
 memory_max_chars = 8000
 # One run of the Mail agent. It stops there, and what it finished is kept.
 triage_token_limit = 30000
+# A suggested category shows once this many conversations would go in it.
+category_suggestion_min_threads = 5
 # How many past emails the rule engine didn't catch the Mail agent reads to learn about the person,
 # before it goes live. Each takes about one model call.
 learn_emails = 400

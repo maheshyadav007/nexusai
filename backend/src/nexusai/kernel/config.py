@@ -26,6 +26,7 @@ class MailConfig:
     initial_batch: int
     backfill_batch: int
     progress_every: int
+    starter_categories: tuple[dict[str, str], ...]
     flag_window: int
     suggested_pull: int
     check_every_seconds: float
@@ -69,6 +70,11 @@ class AgentConfig:
     max_running_sessions: int
     triage_batch: int
     triage_retry_seconds: float
+    model_calls_per_minute: int
+    rate_limit_retries: int
+    rate_limit_wait_seconds: float
+    rate_limit_longest_wait: float
+    category_suggestion_min_threads: int
     max_recent_thread_messages: int
     max_thread_chars: int
     memory_max_chars: int
@@ -216,12 +222,19 @@ def load_config(home_dir: Path | None = None) -> Config:
         sse_keepalive_seconds=events["sse_keepalive_seconds"],
         log_page_size=events["log_page_size"],
         default_settings=raw["settings"],
-        mail=MailConfig(**raw["mail"]),
+        mail=MailConfig(
+            **{**raw["mail"], "starter_categories": tuple(raw["mail"]["starter_categories"])}
+        ),
         agent=AgentConfig(
             **{
                 **raw["agent"],
                 "learn_emails": int(
                     os.environ.get("NEXUSAI_LEARN_EMAILS", raw["agent"]["learn_emails"])
+                ),
+                "model_calls_per_minute": int(
+                    env.get(
+                        "NEXUSAI_MODEL_CALLS_PER_MINUTE", raw["agent"]["model_calls_per_minute"]
+                    )
                 ),
             }
         ),

@@ -105,7 +105,7 @@ def test_it_reads_the_newest_mail_rules_missed_oldest_first_then_starts_the_inte
 
     # What it learned is kept, once, and it's told as data when it comes back.
     assert memory.learned(app_config.home).strip() == "Role: engineer."
-    assert "what you've learned" in said(client)[-1]
+    assert any("what you've learned" in line for line in said(client))
 
     # Old mail can't ask, notify or add work, however it reads.
     assert client.post("/api/queries/channel.list").json().get("items", []) == []
@@ -123,7 +123,12 @@ def test_it_reads_the_newest_mail_rules_missed_oldest_first_then_starts_the_inte
     session = interview()[0]["id"]
     wait(lambda: status(client, session) != "running", "its first answer")
     assert said(client, session) == ["Let's get set up. Ask me what you need to know."]
-    words = script.requests[-1].messages[-1].text
+    # Found by what it says, because the inbox review can run alongside it.
+    words = next(
+        request.messages[-1].text
+        for request in reversed(script.requests)
+        if "Role: engineer." in request.messages[-1].text
+    )
     assert words.index("<untrusted>") < words.index("Role: engineer.") < words.index("</untrusted>")
     assert len(interview()) == 1
 

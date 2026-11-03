@@ -150,6 +150,21 @@ UPDATE mail_categories SET name = 'Promotions' WHERE name = 'Newsletters' AND NO
 """,
     ),
     Migration(
+        "mail_category_priority_001",
+        """
+ALTER TABLE mail_categories ADD COLUMN priority_suggested INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE mail_categories ADD COLUMN priority_why TEXT;
+""",
+    ),
+    Migration(
+        "mail_category_votes_001",
+        """
+CREATE TABLE mail_category_votes (name TEXT NOT NULL, thread INTEGER NOT NULL, PRIMARY KEY (name, thread));
+CREATE TABLE mail_starter_categories (added TEXT NOT NULL);
+ALTER TABLE mail_categories ADD COLUMN needs_votes INTEGER NOT NULL DEFAULT 0;
+""",
+    ),
+    Migration(
         "mail_images_001",
         """
 CREATE TABLE mail_image_senders (address TEXT PRIMARY KEY, allow INTEGER NOT NULL);

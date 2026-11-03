@@ -126,7 +126,11 @@ TOOL_ENTRIES = (
     ToolEntry("list_categories", CATEGORIES, "See categories", "See your mail categories.", "read"),
     ToolEntry("create_categories", CATEGORIES, "Create categories", "Add categories.", "data"),
     ToolEntry(
-        "update_category", CATEGORIES, "Change categories", "Rename one, or set its rule.", "data"
+        "update_category",
+        CATEGORIES,
+        "Change categories",
+        "Rename one, set its rule, or show it in the Priority inbox.",
+        "data",
     ),
     ToolEntry(
         "merge_categories", CATEGORIES, "Merge categories", "Fold categories into one.", "data"

@@ -3,7 +3,7 @@
 import json
 import re
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -13,7 +13,7 @@ import structlog
 from nexusai.kernel.config import Config
 from nexusai.kernel.module import Context
 from nexusai.modules.models import module as models
-from nexusai.modules.models.chatgpt import ChatGptError, SignInRequired
+from nexusai.modules.models.chatgpt import ChatGptError, ChatGptLimited, SignInRequired
 
 log = structlog.get_logger()
 
@@ -27,13 +27,37 @@ JSON_TOOL_NOTE = (
 # so only "tool", the word we asked for, counts for a tool we didn't offer.
 OFFERED_NAME_KEYS = ("tool", "name", "tool_name", "function")
 ARGUMENT_KEYS = ("arguments", "args", "parameters", "input")
-THINKING = re.compile(r"<think>.*?</think>", re.S)
+# How thinking models mark what isn't the answer, when the server doesn't separate it for us.
+THINKING_TAGS = (
+    ("<think>", "</think>"),
+    ("<thinking>", "</thinking>"),
+    ("<reasoning>", "</reasoning>"),
+    ("<seed:think>", "</seed:think>"),
+    ("[THINK]", "[/THINK]"),
+    ("◁think▷", "◁/think▷"),
+)
+THINKING = re.compile(
+    "|".join(f"{re.escape(start)}.*?{re.escape(end)}" for start, end in THINKING_TAGS), re.S
+)
+# Servers that do separate it use one of these fields.
+REASONING_FIELDS = ("reasoning_content", "reasoning", "thinking")
 JSON_START = re.compile(r"[{\[]")
 OPENING_FENCE = re.compile(r"```(?:json)?\s*$")
+# Where a written tool call could begin, and how a reply may end part of the way into one.
+CALL_START = re.compile(r"\{\s*\"|\[\s*\{|```(?:json)?\s*[{\[]")
+CALL_START_CUT_OFF = re.compile(r"(?:\{\s*|\[\s*|`{1,3}(?:j|js|jso|json)?\s*)$")
 
 
 class ModelUnavailable(Exception):
     """Temporary: work waits and tries again."""
+
+
+class ModelRateLimited(ModelUnavailable):
+    """The server said to slow down, sometimes with how long to wait."""
+
+    def __init__(self, message: str, retry_after: float | None = None) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
 
 
 class ModelFlagged(Exception):
@@ -82,12 +106,19 @@ class TextChunk:
 
 
 @dataclass
+class ReasoningChunk:
+    """What a thinking model thought on the way. It's shown apart, and never sent back to it."""
+
+    text: str
+
+
+@dataclass
 class Usage:
     input_tokens: int = 0
     output_tokens: int = 0
 
 
-Chunk = TextChunk | ToolCall | Usage
+Chunk = TextChunk | ReasoningChunk | ToolCall | Usage
 
 
 class ModelProvider(Protocol):
@@ -168,6 +199,8 @@ class ChatGptProvider:
                     )
         except SignInRequired as error:
             raise ModelNotConfigured(str(error)) from error
+        except ChatGptLimited as error:
+            raise ModelRateLimited(str(error)) from error
         except ChatGptError as error:
             if FLAGGED.search(str(error)):
                 raise ModelFlagged(str(error)) from error
@@ -239,6 +272,100 @@ def _json_tool_calls(text: str, tools: list[ToolSpec]) -> tuple[str, list[ToolCa
     return stripped, []
 
 
+def _longest_cut_off(text: str, markers: Iterable[str]) -> int:
+    """How much of the end could be the start of a marker, so it waits for the next piece."""
+    longest = 0
+    for marker in markers:
+        for size in range(min(len(text), len(marker) - 1), longest, -1):
+            if marker.startswith(text[-size:]):
+                longest = size
+                break
+    return longest
+
+
+class ReplyReader:
+    """Sorts a reply into thinking, words and tool calls as it arrives, so it streams.
+
+    A written tool call can't be used until it's whole. Only that part is kept back: if it turns
+    out not to be a call, it's shown then.
+    """
+
+    def __init__(self, tools: list[ToolSpec], calls_in_text: bool, starts_thinking: bool) -> None:
+        self.tools = tools
+        self.calls_in_text = calls_in_text
+        self.buffer = ""
+        self.closing: str | None = THINKING_TAGS[0][1] if starts_thinking else None
+        self.saw_unopened_close = False
+        self.holding = False
+
+    def feed(self, text: str) -> list[Chunk]:
+        self.buffer += text
+        if self.holding:
+            return []
+        chunks: list[Chunk] = []
+        while True:
+            if self.closing is not None:
+                at = self.buffer.find(self.closing)
+                if at < 0:
+                    keep = _longest_cut_off(self.buffer, [self.closing])
+                    self._take(chunks, ReasoningChunk, len(self.buffer) - keep)
+                    return chunks
+                self._take(chunks, ReasoningChunk, at)
+                self.buffer = self.buffer[len(self.closing) :]
+                self.closing = None
+                continue
+            found = self._next_tag()
+            call = CALL_START.search(self.buffer) if self.calls_in_text else None
+            if call and (found is None or call.start() < found[0]):
+                self._take(chunks, TextChunk, call.start())
+                self.holding = True
+                return chunks
+            if found is None:
+                markers = [tag for pair in THINKING_TAGS for tag in pair]
+                keep = _longest_cut_off(self.buffer, markers)
+                if self.calls_in_text and (cut := CALL_START_CUT_OFF.search(self.buffer)):
+                    keep = max(keep, len(self.buffer) - cut.start())
+                self._take(chunks, TextChunk, len(self.buffer) - keep)
+                return chunks
+            at, tag, closing = found
+            self._take(chunks, TextChunk, at)
+            self.buffer = self.buffer[len(tag) :]
+            if closing is None:
+                # Its opening tag came from the server's template, so what came first was thinking.
+                self.saw_unopened_close = True
+            self.closing = closing
+
+    def _next_tag(self) -> tuple[int, str, str | None] | None:
+        found: tuple[int, str, str | None] | None = None
+        for start, end in THINKING_TAGS:
+            for tag, closing in ((start, end), (end, None)):
+                at = self.buffer.find(tag)
+                if at >= 0 and (found is None or at < found[0]):
+                    found = (at, tag, closing)
+        return found
+
+    def _take(self, chunks: list[Chunk], kind: type[TextChunk | ReasoningChunk], size: int) -> None:
+        if size > 0:
+            chunks.append(kind(self.buffer[:size]))
+            self.buffer = self.buffer[size:]
+
+    def finish(self) -> list[Chunk]:
+        left, self.buffer = self.buffer, ""
+        if self.closing is not None:
+            return [ReasoningChunk(left)] if left else []
+        if not self.calls_in_text:
+            return [TextChunk(left)] if left else []
+        said, calls = _json_tool_calls(left, self.tools)
+        return [*([TextChunk(said)] if said else []), *calls]
+
+
+def _retry_after(response: httpx.Response) -> float | None:
+    try:
+        return max(0.0, float(response.headers.get("retry-after", "")))
+    except ValueError:
+        return None
+
+
 def _chat_messages(request: ModelRequest, native_tools: bool) -> list[dict[str, Any]]:
     instructions = request.instructions
     if request.tools and not native_tools:
@@ -277,6 +404,11 @@ def _chat_messages(request: ModelRequest, native_tools: bool) -> list[dict[str, 
     return output
 
 
+# Models whose replies begin already thinking, because the server's template opens the tag. Seen
+# once, from a closing tag with no opening one.
+_THINKING_OPENED_BY_SERVER: set[tuple[str, str]] = set()
+
+
 class OpenAiCompatibleProvider:
     """A LiteLLM server, or anything else with the same API, such as the internal one."""
 
@@ -312,7 +444,10 @@ class OpenAiCompatibleProvider:
                 for t in request.tools
             ]
         calls: dict[int, dict[str, str]] = {}
-        text_seen: list[str] = []
+        started_in_thought = (self.base_url, request.model) in _THINKING_OPENED_BY_SERVER
+        reader = ReplyReader(
+            request.tools, bool(request.tools) and not self.supports_tools, started_in_thought
+        )
         try:
             with self.http.stream(
                 "POST", f"{self.base_url}/chat/completions", json=body
@@ -321,6 +456,11 @@ class OpenAiCompatibleProvider:
                     detail = response.read().decode("utf-8", "replace")
                     if FLAGGED.search(detail):
                         raise ModelFlagged("The model refused this content under its policy.")
+                    if response.status_code == 429:
+                        raise ModelRateLimited(
+                            "The model server is limiting calls right now.",
+                            _retry_after(response),
+                        )
                     if response.status_code in {401, 403}:
                         raise ModelNotConfigured(
                             "The model server refused this key. Check it in Settings."
@@ -342,12 +482,11 @@ class OpenAiCompatibleProvider:
                         if choice.get("finish_reason") == "content_filter":
                             raise ModelFlagged("The model refused this content under its policy.")
                         delta = choice.get("delta", {})
+                        for name in REASONING_FIELDS:
+                            if isinstance(delta.get(name), str) and delta[name]:
+                                yield ReasoningChunk(delta[name])
                         if delta.get("content"):
-                            # Without tool calling, a tool call only shows once the reply is whole.
-                            if request.tools and not self.supports_tools:
-                                text_seen.append(delta["content"])
-                            else:
-                                yield TextChunk(delta["content"])
+                            yield from reader.feed(delta["content"])
                         for call in delta.get("tool_calls") or []:
                             slot = calls.setdefault(
                                 call.get("index", 0), {"id": "", "name": "", "arguments": ""}
@@ -358,13 +497,11 @@ class OpenAiCompatibleProvider:
                             slot["arguments"] += function.get("arguments") or ""
         except httpx.HTTPError as error:
             raise ModelUnavailable("Couldn't reach the model server.") from error
+        yield from reader.finish()
+        if reader.saw_unopened_close:
+            _THINKING_OPENED_BY_SERVER.add((self.base_url, request.model))
         for slot in calls.values():
             yield ToolCall(slot["id"], slot["name"], _arguments(slot["arguments"]))
-        if text_seen:
-            said, found = _json_tool_calls("".join(text_seen), request.tools)
-            if said:
-                yield TextChunk(said)
-            yield from found
 
 
 def active_provider(ctx: Context) -> tuple[ModelProvider, str]:

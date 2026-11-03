@@ -695,6 +695,8 @@ def specs(
             return f"Updated {new_name or name}."
 
         summary = f"Rename {name} to {new_name}" if new_name else f"Change {name}"
+        if in_priority is not None and not new_name:
+            summary = f"{'Show' if in_priority else 'Stop showing'} {name} in the Priority inbox"
         return guard(tool_call_id, "update_category", "data", summary, "", work)
 
     def delete_categories(names: list[str], tool_call_id: str) -> str:

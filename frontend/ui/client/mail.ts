@@ -191,6 +191,7 @@ export const useSaveCategory = () => useCategoryCommand((input: SaveCategory) =>
 export const useUpdateCategory = () => useCategoryCommand((input: UpdateCategory) => command("categories.update", input));
 export const useReorderCategories = () => useCategoryCommand((names: string[]) => command("categories.reorder", { names }));
 export const useRemoveCategory = () => useCategoryCommand((name: string) => command("categories.remove", { name }));
+export const useDecidePriority = () => useCategoryCommand((input: { name: string; accept: boolean }) => command("categories.decidePriority", input));
 export const useDecideCategory = () => useCategoryCommand((input: { name: string; accept: boolean }) => command("categories.decide", input));
 
 export function useMailPresets() {

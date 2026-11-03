@@ -1,6 +1,9 @@
 """The one door for model calls. Nothing else in the app talks to a model."""
 
 import json
+import threading
+import time
+from collections import deque
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -19,8 +22,10 @@ from nexusai.modules.agent.providers import (
     ModelFlagged,
     ModelNotConfigured,
     ModelProvider,
+    ModelRateLimited,
     ModelRequest,
     ModelUnavailable,
+    ReasoningChunk,
     TextChunk,
     ToolCall,
     ToolSpec,
@@ -154,6 +159,61 @@ def _check_run_limit(db: Database, session: str | None) -> None:
         raise RunLimitReached(f"Stopped at its limit of {limit} tokens. What it finished is kept.")
 
 
+class CallPacer:
+    """Keeps model calls within what the server allows, across every agent in the app."""
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.recent: deque[float] = deque()
+        self.not_before = 0.0
+
+    def seconds_to_wait(self) -> float:
+        """How long the server asked everyone to wait, which can be long."""
+        return max(0.0, self.not_before - time.monotonic())
+
+    def told_to_wait(self, seconds: float) -> None:
+        with self.lock:
+            self.not_before = max(self.not_before, time.monotonic() + seconds)
+
+    def take_turn(self, per_minute: int, longest_wait: float) -> None:
+        """Waits for a free slot. A wait too long to sit through goes back to whoever asked."""
+        while True:
+            with self.lock:
+                now = time.monotonic()
+                while self.recent and now - self.recent[0] >= CALL_WINDOW_SECONDS:
+                    self.recent.popleft()
+                wait = self.not_before - now
+                if per_minute and len(self.recent) >= per_minute:
+                    wait = max(wait, self.recent[0] + CALL_WINDOW_SECONDS - now)
+                if wait <= 0:
+                    self.recent.append(now)
+                    return
+            if wait > longest_wait:
+                raise ModelRateLimited("The model server is limiting calls right now.", wait)
+            time.sleep(min(wait, PACER_CHECK_SECONDS))
+
+
+CALL_WINDOW_SECONDS = 60.0
+PACER_CHECK_SECONDS = 1.0
+pacer = CallPacer()
+
+
+def _within_limits(ctx: Context, provider: ModelProvider, request: ModelRequest) -> Iterator[Chunk]:
+    """Waits its turn, and tries again if told to slow down before anything came back."""
+    config = ctx.config.agent
+    for attempt in range(config.rate_limit_retries + 1):
+        pacer.take_turn(config.model_calls_per_minute, config.rate_limit_longest_wait)
+        try:
+            yield from provider.stream(request)
+            return
+        except ModelRateLimited as error:
+            wait = error.retry_after or config.rate_limit_wait_seconds * 2**attempt
+            pacer.told_to_wait(wait)
+            log.info("model_rate_limited", attempt=attempt, wait=wait)
+            if attempt == config.rate_limit_retries or wait > config.rate_limit_longest_wait:
+                raise
+
+
 def stream_model(
     ctx: Context,
     *,
@@ -219,6 +279,7 @@ def stream_model(
 
     usage = Usage()
     restorer = guard.stream_restorer()
+    thought = guard.stream_restorer()
     raw_calls: list[ToolCall] = []
 
     def finish(status: str, error: str | None) -> None:
@@ -229,15 +290,22 @@ def stream_model(
             )
 
     try:
-        for chunk in provider.stream(request):
+        for chunk in _within_limits(ctx, provider, request):
             if isinstance(chunk, TextChunk):
                 text = restorer.feed(chunk.text)
                 if text:
                     yield TextChunk(text)
+            elif isinstance(chunk, ReasoningChunk):
+                text = thought.feed(chunk.text)
+                if text:
+                    yield ReasoningChunk(text)
             elif isinstance(chunk, ToolCall):
                 raw_calls.append(chunk)
             elif isinstance(chunk, Usage):
                 usage = chunk
+        text = thought.finish()
+        if text:
+            yield ReasoningChunk(text)
         text = restorer.finish()
         if text:
             yield TextChunk(text)
@@ -286,7 +354,7 @@ def call_model(
                 on_text(chunk.text)
         elif isinstance(chunk, ToolCall):
             result.tool_calls.append(chunk)
-        else:
+        elif isinstance(chunk, Usage):
             result.usage = chunk
     result.text = "".join(parts)
     rows = ctx.bus.db.fetch_all("SELECT MAX(id) AS id FROM model_calls WHERE agent = ?", (agent,))

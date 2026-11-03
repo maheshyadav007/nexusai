@@ -19,7 +19,14 @@ from pydantic import ConfigDict
 
 from nexusai.kernel.module import Context
 from nexusai.modules.agent.gateway import Layer, stream_model
-from nexusai.modules.agent.providers import Message, TextChunk, ToolCall, ToolSpec, Usage
+from nexusai.modules.agent.providers import (
+    Message,
+    ReasoningChunk,
+    TextChunk,
+    ToolCall,
+    ToolSpec,
+    Usage,
+)
 
 SUMMARY_SOURCE = "summarization"
 
@@ -112,6 +119,10 @@ class GatewayChatModel(BaseChatModel):
         ):
             if isinstance(chunk, TextChunk):
                 yield AIMessageChunk(content=chunk.text)
+            elif isinstance(chunk, ReasoningChunk):
+                yield AIMessageChunk(
+                    content=[{"type": "reasoning", "reasoning": chunk.text, "index": "thinking"}]
+                )
             elif isinstance(chunk, ToolCall):
                 yield AIMessageChunk(
                     content="",

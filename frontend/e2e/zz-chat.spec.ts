@@ -98,7 +98,8 @@ test("a reply shows formatted, with copy, a time and clickable next steps", asyn
   await noViolations(page);
   await rows.getByRole("button", { name: "Tell me more" }).click();
   await expect(page.getByTestId("user-message").last()).toContainText("Tell me more");
-  await expect(page.getByRole("list", { name: "Suggested next steps" })).toHaveCount(0);
+  // They stay, so the earlier choices can still be read and used.
+  await expect(page.getByRole("list", { name: "Suggested next steps" }).first()).toContainText("Tell me more");
 });
 
 test("a message can be copied, and Edit puts it back in the box as a new message", async ({ page, context }) => {
@@ -422,7 +423,9 @@ test("counts in the sidebar change the moment mail moves, without asking the ser
   await request.post("/api/commands/categories.save", { data: { name: "Moved here" } });
   await page.goto("/mail/all");
   const nav = page.getByRole("navigation", { name: "Main navigation" });
-  await expect(nav.getByRole("link", { name: "Moved here" })).toBeVisible();
+  await expect(page.getByTestId("thread-row").first()).toBeVisible();
+  // It has no mail yet, so it isn't listed until it does.
+  await expect(nav.getByRole("link", { name: "Moved here" })).toHaveCount(0);
   let asked = 0;
   await page.route("**/api/queries/categories.list", (route) => {
     asked += 1;

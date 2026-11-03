@@ -5,16 +5,16 @@
   "color": {
     "surface": {
       "page": "#121010",
-      "raised": "#1B1815",
-      "sunken": "#0F0E0D",
+      "raised": "#201C18",
+      "sunken": "#0C0B0A",
       "inverse": "#F7F4EE",
       "scrim": "#000000"
     },
     "ink": {
       "primary": "#EFE9DE",
-      "secondary": "#D3C4B8",
-      "muted": "#A79B8D",
-      "faint": "#6E645A",
+      "secondary": "#DACBBF",
+      "muted": "#B5A99B",
+      "faint": "#85796C",
       "inverse": "#191714"
     },
     "accent": {
@@ -35,8 +35,8 @@
       "failed": "#EB8074"
     },
     "line": {
-      "subtle": "#2E2620",
-      "strong": "#5C4A3F"
+      "subtle": "#3A3128",
+      "strong": "#6E5A4C"
     },
     "ai": {
       "one": "#F472B6",
@@ -89,8 +89,8 @@
     "easing": "cubic-bezier(0.22, 1, 0.36, 1)"
   },
   "glass": {
-    "opacity": "78%",
-    "blur": "28px"
+    "opacity": "94%",
+    "blur": "3px"
   },
   "layout": {
     "content": "960px",

@@ -43,7 +43,9 @@ REVIEW_KIND = scheduler.REVIEW_KIND
 BRIEF_KIND = scheduler.BRIEF_KIND
 REVIEWED = "mail_reviewed"
 LOOPS_CHECKED = "mail_loops_checked"
-JUDGED_AGAIN = "mail_judged_again"
+CATEGORIES_TIDIED = "mail_categories_tidied"
+PRIORITY_ASKED = "mail_priority_asked"
+SUGGESTIONS_WORTH_A_REVIEW = 3
 SCHEDULE_AGENTS = {"daily-prep": "daily-prep", BRIEF_KIND: "daily-prep", "prompt": "scheduled"}
 SCHEDULE_ORIGIN = "schedule"
 LAST_DIGEST = "last_digest"
@@ -75,6 +77,8 @@ class Triggers:
         self._requeue_unfinished()
         self.runtime.on_turn_end = self.turn_ended
         self.runtime.on_hold = self.hold_for_model
+        self._tidy_categories_once()
+        self._ask_about_priority_once()
         self._catch_up_once()
         self.thread.start()
         self.wake.set()
@@ -94,11 +98,26 @@ class Triggers:
         if not mail_agent._setting(ctx, LOOPS_CHECKED):
             mail_agent._set(ctx, LOOPS_CHECKED, mail_agent._now())
             mail_agent.look_for_open_loops(ctx)
-        if not mail_agent._setting(ctx, JUDGED_AGAIN):
-            mail_agent._set(ctx, JUDGED_AGAIN, mail_agent._now())
-            mail_agent.judge_open_again(ctx)
         if not mail_agent._setting(ctx, REVIEWED):
             self.review_now(f"first-review-{mail_agent._now()}")
+
+    def _tidy_categories_once(self) -> None:
+        ctx = self.ctx
+        if mail_agent._setting(ctx, CATEGORIES_TIDIED):
+            return
+        mail_agent._set(ctx, CATEGORIES_TIDIED, mail_agent._now())
+        left = mail_agent.tidy_categories(ctx)
+        # What's left may still mean the same thing in different words, which takes a model.
+        if left >= SUGGESTIONS_WORTH_A_REVIEW and mail_agent._setting(ctx, REVIEWED):
+            self.review_now(f"tidy-review-{mail_agent._now()}")
+
+    def _ask_about_priority_once(self) -> None:
+        """A Home already past its first review would otherwise wait a week to hear about this."""
+        ctx = self.ctx
+        if mail_agent._setting(ctx, PRIORITY_ASKED) or not mail_agent._setting(ctx, REVIEWED):
+            return
+        mail_agent._set(ctx, PRIORITY_ASKED, mail_agent._now())
+        self.review_now(f"priority-review-{mail_agent._now()}")
 
     def review_now(self, event: str) -> None:
         """Whichever time it comes up, it runs like the weekly one."""
@@ -264,6 +283,9 @@ class Triggers:
             gateway.resolve_provider(self.ctx)
         except providers.ModelNotConfigured as error:
             self.hold_for_model(str(error))
+            return False
+        if gateway.pacer.seconds_to_wait() > self.config.rate_limit_longest_wait:
+            self.hold_for_model("The model server asked to slow down.")
             return False
         cap = gateway.daily_cap(self.ctx.bus.db, self.config.daily_token_cap)
         if cap and gateway.used_today(self.ctx.bus.db) >= cap:

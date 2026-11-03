@@ -7,6 +7,7 @@ import { Icon } from "@/ui/icons";
 import { Button } from "@/ui/primitives/Button";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { Popover } from "@/ui/primitives/Popover";
+import { AttentionCount } from "@/ui/primitives/AttentionCount";
 import { Pressable } from "@/ui/primitives/Pressable";
 import { ApprovalPreviewView } from "./ApprovalPreviewView";
 import { t, tn } from "@/ui/strings";
@@ -70,7 +71,7 @@ export function ApprovalQueue() {
       trigger={
         <Pressable aria-label={label} className="inline-flex items-center gap-1 rounded-md p-2 text-ink-secondary transition-colors duration-fast hover:bg-surface-sunken hover:text-ink-primary">
           <Icon name="approvals" />
-          {items.length ? <span className="text-sm tabular-nums text-accent-default">{items.length}</span> : null}
+          {items.length ? <AttentionCount value={items.length} /> : null}
         </Pressable>
       }
     >

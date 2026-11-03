@@ -17,6 +17,7 @@ from nexusai.modules.agent.providers import (
     ModelFlagged,
     ModelRequest,
     ModelUnavailable,
+    ReasoningChunk,
     TextChunk,
     ToolCall,
     Usage,
@@ -1005,3 +1006,44 @@ def test_draft_tool_saves_and_never_sends(
     assert "Nothing was sent" in told
     assert client.post("/api/queries/drafts.list").json()["drafts"][0]["source"] == "agent"
     assert fake.sent == []
+
+
+def test_a_reply_is_drafted_when_asked_and_nothing_is_saved_or_sent(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    connect(client, fake)
+    script.replies = [triage_reply(draft=None)]
+    fake.state.deliver(make_mail(subject="Numbers please"))
+    thread = triaged(client, "Numbers please")
+    script.replies = [[ReasoningChunk("Keep it short."), TextChunk("Sending them Friday.\n\nMaya")]]
+    answer = client.post("/api/commands/thread.draftReply", json={"id": thread["id"]}).json()
+    assert answer == {"body": "Sending them Friday.\n\nMaya", "draft_id": None}
+    assert "Numbers please" in script.requests[-1].messages[0].text
+    assert client.post("/api/queries/drafts.list").json()["drafts"] == []
+    assert fake.sent == []
+
+
+def test_a_draft_the_agent_already_wrote_is_used_without_another_model_call(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    connect(client, fake)
+    script.replies = [triage_reply(draft="Happy to.")]
+    fake.state.deliver(make_mail(subject="Can you help"))
+    thread = triaged(client, "Can you help")
+    calls = len(script.requests)
+    answer = client.post("/api/commands/thread.draftReply", json={"id": thread["id"]}).json()
+    assert answer["body"] == "Happy to." and answer["draft_id"]
+    assert len(script.requests) == calls
+
+
+def test_no_model_call_for_a_draft_to_an_address_nobody_reads(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    connect(client, fake)
+    script.replies = [triage_reply(draft=None)]
+    fake.state.deliver(make_mail(subject="Job alert", sender="alerts-noreply@jobs.example"))
+    thread = wait(lambda: thread_named(client, "Job alert"))
+    calls = len(script.requests)
+    answer = client.post("/api/commands/thread.draftReply", json={"id": thread["id"]})
+    assert answer.status_code == 409 and answer.json()["code"] == "draft.no_reply"
+    assert len(script.requests) == calls

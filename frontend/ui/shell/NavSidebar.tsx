@@ -11,6 +11,7 @@ import { useMailFolders } from "@/ui/client/mail";
 import appConfig from "@/app.config.json";
 import { Icon } from "@/ui/icons";
 import { useSidebar } from "@/ui/client/settings";
+import { AttentionCount } from "@/ui/primitives/AttentionCount";
 import { IconButton } from "@/ui/primitives/IconButton";
 import { ActiveMark, CountPop } from "@/ui/primitives/Motion";
 import { ScrollArea } from "@/ui/primitives/ScrollArea";
@@ -25,7 +26,7 @@ const ACTIVE_ROW = "nav-active";
 const MAIL_SECTION = "mail";
 const FOLDERS_COME_BEFORE = new Set(["archive", "trash"]);
 
-function NavRow({ item, active, collapsed, count }: { item: NavItem; active: boolean; collapsed: boolean; count: number | undefined }) {
+function NavRow({ item, active, collapsed, count, attention }: { item: NavItem; active: boolean; collapsed: boolean; count: number | undefined; attention: boolean }) {
   const label = t(item.label);
   const row = (
     <Link
@@ -38,7 +39,7 @@ function NavRow({ item, active, collapsed, count }: { item: NavItem; active: boo
       <span className="relative flex min-w-0 flex-1 items-center gap-2">
         <Icon name={item.icon} />
         {collapsed ? null : <span className="min-w-0 flex-1 truncate">{label}</span>}
-        {collapsed || !count ? null : <CountPop value={count} className="text-sm text-accent-default" />}
+        {collapsed || !count ? null : attention ? <AttentionCount value={count} /> : <CountPop value={count} className="text-sm text-ink-muted" />}
       </span>
     </Link>
   );
@@ -96,7 +97,7 @@ export function NavSidebar({ counts }: { counts?: Readonly<Record<string, number
     const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
     return (
       <li key={item.id}>
-        <NavRow item={item} active={active} collapsed={collapsed} count={(counts ?? { ...unread, ...waiting })[item.id]} />
+        <NavRow item={item} active={active} collapsed={collapsed} count={(counts ?? { ...unread, ...waiting })[item.id]} attention={item.id in waiting} />
       </li>
     );
   };

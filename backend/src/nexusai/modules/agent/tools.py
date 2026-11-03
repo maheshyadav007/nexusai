@@ -567,6 +567,18 @@ class _RecommendMail(BaseModel):
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
+class _RecommendPriority(BaseModel):
+    category: str = Field(description="The category, as it's written in your list.")
+    reason: str = Field(description="One plain sentence for the person. Don't add up totals.")
+    tool_call_id: Annotated[str, InjectedToolCallId]
+
+
+class _FoldSuggestions(BaseModel):
+    keep: str = Field(description="The suggested category to keep, as it's written.")
+    names: list[str] = Field(description="Suggested categories that mean the same, to fold in.")
+    tool_call_id: Annotated[str, InjectedToolCallId]
+
+
 class _RecordTriage(BaseModel):
     category: str | None = Field(default=None, description="A short category name.")
     importance: Literal["low", "normal", "high"] = "normal"
@@ -670,7 +682,15 @@ REVIEW_ORIGIN = "mail-review"
 # It ends a run, so judging simple mail takes one model call.
 ENDS_THE_RUN = frozenset({"record_triage"})
 LEARNING_ORIGIN = "mail-learn"
-MAIL_AGENT_ONLY = frozenset({"record_triage", "save_what_i_learned", "recommend_mail_change"})
+MAIL_AGENT_ONLY = frozenset(
+    {
+        "record_triage",
+        "save_what_i_learned",
+        "recommend_mail_change",
+        "fold_suggested_categories",
+        "recommend_priority",
+    }
+)
 
 
 def allowed_for(agent: str, origin: str, has_email: bool) -> frozenset[str] | None:
@@ -685,7 +705,7 @@ def allowed_for(agent: str, origin: str, has_email: bool) -> frozenset[str] | No
     if origin == LEARNING_ORIGIN:
         allowed |= {"save_what_i_learned"}
     if origin in {REVIEW_ORIGIN, "person"}:
-        allowed |= {"recommend_mail_change"}
+        allowed |= {"recommend_mail_change", "fold_suggested_categories", "recommend_priority"}
     return allowed - {"record_triage"}
 
 
@@ -763,6 +783,20 @@ def build_tools(
         result = suggestions.add(ctx, category, senders, reason, quiet)
         _log_call(
             ctx, session, tool_call_id, "recommend_mail_change", category, result, "done", None, 0
+        )
+        return result
+
+    def recommend_priority(category: str, reason: str, tool_call_id: str) -> str:
+        result = mail_agent.suggest_priority(ctx, category, reason)
+        _log_call(
+            ctx, session, tool_call_id, "recommend_priority", category, result, "done", None, 0
+        )
+        return result
+
+    def fold_suggested_categories(keep: str, names: list[str], tool_call_id: str) -> str:
+        result = mail_agent.fold_suggestions(ctx, keep, names)
+        _log_call(
+            ctx, session, tool_call_id, "fold_suggested_categories", keep, result, "done", None, 0
         )
         return result
 
@@ -1271,6 +1305,16 @@ def build_tools(
             recommend_mail_change,
             _RecommendMail,
             "Recommend filing all mail from these senders under a category. The person decides.",
+        ),
+        (
+            recommend_priority,
+            _RecommendPriority,
+            "Recommend showing a whole category in the Priority inbox. The person decides.",
+        ),
+        (
+            fold_suggested_categories,
+            _FoldSuggestions,
+            "Fold suggested categories that mean the same into one. The person still decides on it.",
         ),
         (
             save_what_i_learned,

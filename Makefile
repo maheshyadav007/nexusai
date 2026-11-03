@@ -11,6 +11,7 @@ frontend:
 	cd frontend && npm run dev
 
 dev:
+	@echo "Development mode compiles pages as they open, which feels slow. To use the app, run: make start"
 	$(MAKE) -j2 backend frontend
 
 # The fast build, for using the app. Pages compile as they're opened in dev, which feels slow.

@@ -220,3 +220,22 @@ def test_starting_twice_keeps_the_same_sign_in(
     second = client.post("/api/commands/models.login.start").json()
     assert first["login"] == second["login"]
     assert event_changes(client) == ["login_started"]
+
+
+def test_a_model_server_set_up_in_settings_counts_as_connected(client: TestClient) -> None:
+    assert status(client)["connected"] is False
+    saved = client.post(
+        "/api/commands/models.provider.save",
+        json={
+            "provider": "litellm",
+            "base_url": "http://llm.example/v1",
+            "api_key": "k",
+            "model": "company-model",
+            "supports_tools": False,
+        },
+    )
+    assert saved.status_code == 200
+    current = status(client)
+    assert current["connected"] is True
+    assert current["selected_model"] == "company-model"
+    assert "connected" in event_changes(client)
