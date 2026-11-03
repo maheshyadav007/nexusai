@@ -216,7 +216,7 @@ Every email has a mix of signature logos, real attachments and meaningful inline
 | ID | Feature | Pri |
 |---|---|---|
 | ATT-1 | Attachment classifier as above, with image-hash cache across all mail; "Show hidden images" per message, in case a signature guess is wrong | MVP |
-| ATT-2 | Text extraction from PDF and Office attachments, lazily: new mail first, history only when opened or searched | MVP |
+| ATT-2 | Text extraction from PDF and Office attachments: new mail first, then history in the background | MVP |
 | ATT-3 | OCR and description of meaningful images and scanned PDFs (ONNX); results searchable | Next |
 
 ## B5. Mail: threads
@@ -284,9 +284,6 @@ Rules run first and cost nothing; mail they mark "skip agent" never reaches the 
 | AGN-3j | Morning brief card at the top of Today, with like, dislike and a request box. Each new brief is told the person's words and reactions, and they're listed under What it knows | MVP |
 | AGN-3k | Needs you: each action blocks its row, shows it running, then says how it went. Select several, then Do it or Decline in bulk. Sending mail and running commands stay one at a time | MVP |
 | AGN-3l | Agents list on the Agent channel page: running, active, finished, off and removed agents, what starts each and when it runs next | MVP |
-| SRCH-5 | Search understands `from:`, `to:`, `subject:`, `has:attachment`, `is:unread`, `in:`, `before:`, `after:`, `category:` and "exact phrases", ignores common words, finds mail with only some of the words, corrects typos and says so, ranks a subject match and the person's own conversations first, and leaves out weak matches by meaning | MVP |
-| SRCH-6 | Opening a result keeps the results beside it, and Back returns to the same search and filters | MVP |
-| DOC-9 | Older attachments are read in the background, so search reaches inside them. A match in a file's name ranks above one in its text | MVP |
 | AGN-4 | Burst handling: a single email starts right away with no timer. Emails arriving during a run wait, then go together in the next run, grouped by thread and capped per run. Its own queue, separate from the session limit; catches up in order after being offline or if the model is unavailable | MVP |
 | AGN-5 | Runs from setup onward only; older mail is triaged only on request, with an estimate of the work first | MVP |
 | AGN-6 | Mail agent appears as one entry in Sessions; each email has its own run record, reachable from "Why is this here?" | MVP |
@@ -316,7 +313,7 @@ Every agent run builds its prompt from these layers, top to bottom. A higher lay
 |---|---|---|
 | PMT-1 | Prompt builder that assembles the layers in this order for every agent run | MVP |
 | PMT-2 | Personalized prompt editor: About me, one prompt per mail category, importance guide, per-sender and per-topic instructions; edits made outside the app are picked up | MVP |
-| PMT-10 | Setup interview: the agent asks about the user's role, people and priorities, then writes personalized prompts for review. An optional onboarding step with Skip; can be run again any time from Settings | MVP |
+| PMT-10 | Know you better (the setup interview): the agent asks about the user's role, people and priorities, then writes personalized prompts, which the person reads and approves. An optional onboarding step with Skip; can be run again any time from Settings | MVP |
 | PMT-3 | "Email priorities" onboarding step with a starter set the user edits | MVP |
 | PMT-6 | "View final prompt" for any run: exactly what was sent to the model, by layer, with the masked version and the real values side by side | MVP |
 | PMT-11 | System context injected into the system prompt only: OS and version, CPU type, shell and its version, installed tools such as Python and Git, date and time zone, Home path, allowed folders and known limits such as no admin rights, so the agent writes commands that fit this computer. Refreshed at session start, visible in Settings, and passed through the data guard | MVP |
@@ -479,7 +476,7 @@ The main focus space on Today is a two-way channel between the agents and the us
 | NTF-7 | Cockpit: what's running, health of each part, what's coming up, and a filterable feed of what happened | MVP |
 | NTF-7a | Work on a timer with no agent is listed once (`modules/agent/pipelines.py`), and shows on the Schedules page and in the Cockpit with Stop and Run now. Mail sync is the only one today | MVP |
 | AGN-L1 | Once enough mail is here, or no more is coming, the Mail agent reads the newest K emails rules didn't catch (`agent.learn_emails`, 400), oldest first. Each is judged, but can't notify, ask or add work. It keeps notes in `memory/agents/mail/learned.md`, which only it reads, always as untrusted data, and the person can edit. It then tells the person what it learned and goes live on new mail and the hourly check | MVP |
-| AGN-L2 | The Interview starts once by itself after that, using those notes as guesses to confirm. Anything it changes asks first, since the notes come from mail | MVP |
+| AGN-L2 | Know you better starts once by itself after that, using those notes as guesses to confirm. Anything it changes asks first, since the notes come from mail | MVP |
 | CHT-S1 | Answers cite what the turn read, as superscript numbers, with a sources pill in the action bar listing what was cited and what else was read. A citation of anything unread is dropped, titles come from the database, and clicking opens the email or document over the chat | MVP |
 | CHT-S2 | Approvals show a compact line built from the tool's actual arguments, with the full content formatted one click away. Only a single quoted file write reads as "Create file"; anything else is labelled a command | MVP |
 | CHT-S3 | A wavy divider marks each compaction, with its time and approximate tokens before and after. It stays where it happened | MVP |
@@ -530,6 +527,8 @@ A panel is a saved live view over any data in the app: emails from a person, a t
 |---|---|---|
 | SRC-1 | Full-text search over mail and attachment text (SQLite FTS5), with filters: sender, date, category, has attachment, folder | MVP |
 | SRC-3 | Meaning search with local text embeddings (ONNX), built in the background, with hybrid keyword and meaning ranking | Next |
+| SRC-6 | Search understands `from:`, `to:`, `subject:`, `has:attachment`, `is:unread`, `in:`, `before:`, `after:`, `category:` and "exact phrases", ignores common words, finds mail with only some of the words, corrects typos and says so, ranks a subject match and the person's own conversations first, and leaves out weak matches by meaning | MVP |
+| SRC-7 | Opening a result keeps the results beside it, and Back returns to the same search and filters | MVP |
 
 ## E5. Documents
 
@@ -539,6 +538,7 @@ A panel is a saved live view over any data in the app: emails from a person, a t
 | DOC-5 | Reads PDF, Office (including macro-enabled and old formats, best effort), HWP and HWPX, OpenDocument, RTF, Outlook and mail files, CSV and TSV, notebooks, and source code and text of any kind. Scans and pictures aren't read yet | MVP |
 | DOC-2 | Upload by drag and drop: copied to `documents/`, text extracted and indexed, usable by the agent | MVP |
 | DOC-4 | User folders and tags for documents, draggable like other folders | MVP |
+| DOC-7 | Older attachments are read in the background, so search reaches inside them. A match in a file's name ranks above one in its text | MVP |
 
 ## E6. Tasks & reminders
 

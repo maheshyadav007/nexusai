@@ -321,3 +321,21 @@ What it knows, strongest first, and how far each is trusted. `modules/agent/know
 - **A broadcast** (more than 10 recipients) reaches the model as a count, and `read_recipients` searches the list if it matters.
 - **Recommendations** name real senders only, show the app's own counts, and do nothing until the person agrees. Quiet groups only archive what's read and over a month old. Nothing is ever deleted.
 - **Prompts are checked** with `make eval-mail`, which runs made-up emails through the real model. Tests use a fake model and can't judge wording.
+
+## Search
+
+Mail search runs in three steps. The search page, the palette, folder filters and the agent's tools all share it.
+
+1. **Understand the words.** `store.with_operators` turns `from:`, `to:`, `subject:`, `has:attachment`, `is:unread`, `in:`, `before:`, `after:` and `category:` into filters, so typing them works everywhere. Common words are ignored unless they're all that was typed.
+2. **Find by words.** FTS5 looks for every word, with a subject match worth most. If that finds nothing, a likely typo is corrected from words the mailbox really contains, and the result says so. If there's less than a page, mail with only some of the words follows.
+3. **Add meaning, then rank.** Local embeddings join by rank fusion, weighted below words. Some models score unrelated text nearly as high as a match, so a meaning match counts only if it stands out from that query's usual score. Conversations the person wrote in rank higher, and promotions and low importance rank lower.
+
+- **Documents** rank a match in the name above one in the text, and that above meaning. Older attachments are read in the background, on the computer, with no model and no tokens.
+- **Agents** get `search_mail` with filters and dates, labelled when a result only matches by meaning, and `semantic_search` for topics, which shows its closest matches as possibly unrelated when nothing stands out.
+
+## The morning brief
+
+A daily schedule writes the brief from what's on the person's plate, and it shows first on Today. Reactions are kept per brief in `brief_feedback`. Their ratings and own words reach the next run as the trusted layer "How they want the brief", while what each rated brief said goes in the task as untrusted, because it came from reading mail.
+
+Prompts can only change from a session that read mail if the person approves the exact words, and that approval can't extend to the rest of the session.
+

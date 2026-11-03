@@ -6,9 +6,10 @@ Status: in development. The web app comes first, then an Electron desktop app.
 
 | Folder | Contents |
 |---|---|
-| `docs/` | [Product vision](docs/PRODUCT_VISION.md), [features](docs/FEATURES.md), [architecture](docs/ARCHITECTURE.md), [component plan](docs/COMPONENT_PLAN.md), [tech stack](docs/TECH_STACK.md), design reference |
+| `docs/` | [Product vision](docs/PRODUCT_VISION.md), [features](docs/FEATURES.md), [architecture](docs/ARCHITECTURE.md), [component plan](docs/COMPONENT_PLAN.md), [tech stack](docs/TECH_STACK.md), [known problems](docs/KNOWN_PROBLEMS.md), design reference |
 | `backend/` | Local Python backend: FastAPI, event bus, modules. Managed with `uv` |
 | `frontend/` | Next.js UI: theme files, typed client, screens |
+| `scripts/` | `dev.mjs`, for setup and running without `make` |
 | `archive/` | Old work, reference only |
 
 ## Run
@@ -28,6 +29,12 @@ node scripts/dev.mjs setup
 node scripts/dev.mjs       # then open http://127.0.0.1:3000
 ```
 
-Browser tests: `cd frontend && npx playwright install chromium && npm run test:e2e`.
+Other checks:
 
-Development data goes in `backend/.dev-home/`. Set `NEXUSAI_HOME` to use another folder.
+```sh
+make speed      # search and lists against a 100,000-message mailbox
+make eval-mail  # judges made-up emails with your connected model, and uses its tokens
+cd frontend && npx playwright install chromium && npm run test:e2e   # browser tests
+```
+
+On first run the app asks where to keep your Home folder, which holds your mail, documents and memory. Set `NEXUSAI_HOME` to use a fixed folder instead.
