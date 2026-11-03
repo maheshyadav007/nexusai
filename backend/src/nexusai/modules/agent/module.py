@@ -344,7 +344,13 @@ def current() -> runtime.SessionRuntime:
 
 @agent_module.command("session.create")
 def create_session(command: CreateSession, ctx: Context) -> SessionRow:
-    return current().create(command.title, command.context, command.agent, command.model)
+    row = current().create(command.title, command.context, command.agent, command.model)
+    if command.agent == "interview":
+        request = mail_agent.interview_turn(ctx, row.id)
+        if request.task:
+            current()._set(row.id, untrusted=1)
+        current().dispatch(request)
+    return row
 
 
 @agent_module.query("sessions.list")
@@ -376,14 +382,14 @@ def stop_session(command: SessionAction, ctx: Context) -> AgentDone:
 
 @agent_module.command("session.rename")
 def rename_session(command: RenameSession, ctx: Context) -> AgentDone:
-    current().row(command.id)
+    current().require_personal(command.id)
     current()._set(command.id, title=command.title)
     return AgentDone()
 
 
 @agent_module.command("session.archive")
 def archive_session(command: SessionAction, ctx: Context) -> AgentDone:
-    current().row(command.id)
+    current().require_personal(command.id)
     current()._set(command.id, archived=1)
     return AgentDone()
 
@@ -484,7 +490,7 @@ def undo_activity(command: UndoActivity, ctx: Context) -> AgentDone:
 
 @agent_module.command("session.setModel")
 def set_session_model(command: SetSessionModel, ctx: Context) -> AgentDone:
-    current().row(command.id)
+    current().require_personal(command.id)
     current()._set(command.id, model=command.model)
     return AgentDone()
 
@@ -512,7 +518,7 @@ def session_context(query: SessionAction, ctx: Context) -> SessionContext:
 
 @agent_module.command("session.setContext")
 def set_session_context(command: SetSessionContext, ctx: Context) -> AgentDone:
-    current().row(command.id)
+    current().require_personal(command.id)
     current()._set(command.id, context=json.dumps(command.context))
     return AgentDone()
 

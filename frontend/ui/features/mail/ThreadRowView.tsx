@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { ThreadRow } from "@/ui/client/contracts.generated";
 import { useShortDate } from "@/ui/client/format";
 import { useMailAccounts } from "@/ui/client/mail";
+import { useAssistant } from "@/ui/features/assistant/AssistantProvider";
 import { useThreadActions } from "@/ui/features/mail/threadActions";
 import { Highlight } from "@/ui/features/search/SearchFilters";
 import { Icon } from "@/ui/icons";
@@ -34,6 +35,7 @@ function useOtherPeople(thread: ThreadRow): string {
 }
 
 export function ThreadRowView({ thread, excerpt, href, active = false, highlight }: { thread: ThreadRow; excerpt?: string; href?: string; highlight?: string; active?: boolean }) {
+  const assistant = useAssistant();
   const others = useOtherPeople(thread);
   const people = thread.sender_name || others;
   const format = useShortDate();
@@ -42,7 +44,7 @@ export function ThreadRowView({ thread, excerpt, href, active = false, highlight
   const actions = useThreadActions(thread, href);
   return (
     <ContextMenu items={actions}>
-    <Link href={href ?? `/mail/all/${thread.id}`} aria-current={active ? "page" : undefined} className={`focus-ring flex items-start gap-2 border-b border-line-subtle px-3 py-3 transition-colors duration-fast ${active ? "bg-surface-sunken" : "hover:bg-surface-raised"}`}>
+    <Link onClick={(event) => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) assistant.setOpen(false); }} href={href ?? `/mail/all/${thread.id}`} aria-current={active ? "page" : undefined} className={`focus-ring flex items-start gap-2 border-b border-line-subtle px-3 py-3 transition-colors duration-fast ${active ? "bg-surface-sunken" : "hover:bg-surface-raised"}`}>
       <span aria-hidden className={`mt-1 h-2 w-2 shrink-0 rounded-full ${unread ? "bg-accent-default" : ""}`} />
       <span className="flex min-w-0 flex-1 flex-col gap-px">
         <span className="flex items-baseline justify-between gap-3">

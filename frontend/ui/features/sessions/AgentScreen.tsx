@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useSession } from "@/ui/client/sessions";
+import { isManagedSession, useSession } from "@/ui/client/sessions";
 import { CompactAction, FinalPrompt } from "@/ui/features/assistant/ChatView";
+import { ChatViewActions } from "@/ui/features/assistant/ChatViewActions";
 import { SessionChat } from "@/ui/features/assistant/SessionChat";
 import { Icon } from "@/ui/icons";
 import { StatusDot } from "@/ui/primitives/StatusDot";
@@ -32,8 +33,9 @@ export function AgentScreen({ id }: { id: string }) {
           ) : null}
         </nav>
         <div className="flex shrink-0 items-center gap-1">
-          <CompactAction session={id} wide />
+          {row && !isManagedSession(row) ? <CompactAction session={id} wide /> : null}
           <FinalPrompt session={id} />
+          <ChatViewActions session={id} full />
         </div>
         </div>
         {row?.untrusted ? <p className="text-sm text-ink-muted">{t("sessions.untrusted")}</p> : null}

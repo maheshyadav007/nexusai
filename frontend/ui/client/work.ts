@@ -42,7 +42,10 @@ export function useSaveTask() {
       if (input.id) client.setQueriesData<{ tasks: import("./contracts.generated").Task[] }>({ queryKey: ["tasks"] }, (data) => data ? { ...data, tasks: data.tasks.map((task) => task.id === input.id ? { ...task, ...input, id: task.id } : task) } : data);
       return { previous };
     },
-    onError: (_error, _input, saved) => saved?.previous.forEach(([key, value]) => client.setQueryData(key, value)),
+    onError: (_error, input, saved) => saved?.previous.forEach(([key, value]) => {
+      const before = value?.tasks.find((task) => task.id === input.id);
+      if (before) client.setQueryData<typeof value>(key, (data) => data ? { ...data, tasks: data.tasks.map((task) => task.id === input.id ? before : task) } : data);
+    }),
     onSettled: () => {
       void client.invalidateQueries({ queryKey: ["tasks"] });
       void client.invalidateQueries({ queryKey: ["today"] });

@@ -66,7 +66,7 @@ The app has connected to the real company servers, and the first feedback came f
 
 | Problem | What happens | How we'll solve it |
 |---|---|---|
-| It ignores pending decisions | It can say "your plate is quiet" while 8 decisions wait on Today | Add approvals, questions and suggestions to what the brief is given |
+| It ignores pending decisions | It can say "your plate is quiet" while 8 decisions wait on Today | Implemented: the brief now receives pending approvals, questions, mail suggestions and category proposals. Regression tested; confirm on the next real brief. |
 | Learning only uses what's typed | It only learns from like, dislike and comments, and most days people give none | Add implicit signals: which items were opened, finished or ignored |
 | Reactions apply to the whole brief | One bad line counts against all of it | Add a like and dislike for each item |
 | Feedback isn't consolidated | It keeps only the last 10 reactions, so older requests drop off | Summarize feedback weekly into a short "how I like my brief" note the person can edit |
@@ -82,7 +82,7 @@ The app has connected to the real company servers, and the first feedback came f
 
 | Problem | What happens | How we'll solve it |
 |---|---|---|
-| Inbox review says "Hasn't run yet" | Its first run happened inside the Mail agent's chat, so it isn't counted | Record each run against the agent that made it, not just its chat |
+| Inbox review says "Hasn't run yet" | Its first run happened inside the Mail agent's chat, so it isn't counted | Implemented: Inbox review uses its own turn origin and timestamp, including shared-chat runs. Regression tested; confirm after the next real review. |
 | Removed agents can vanish | A removed agent is only listed if it left a chat behind | Keep a small record when an agent is removed |
 
 ## Mail handling
@@ -94,7 +94,7 @@ The app has connected to the real company servers, and the first feedback came f
 | Priority can only follow categories | A category can be shown in the Priority inbox, but a server folder can't | Add it for server folders if it's wanted on IMAP. POP3 has none |
 | Reply-all on a broadcast | It still prefills everyone, which could be thousands of people | Warn above a set number of recipients, and suggest replying to the sender only |
 | Older threads keep old categories | For example, a Suki confirmation is still in Promotions and an Adobe thread in Updates | Offer a one-time pass over the person's own conversations, with the token cost shown first |
-| Hourly check starts off | A new Home treats the Mail agent as "both", but its hourly schedule stays off until the settings are saved, so no hourly check runs | Turn the schedule on for new Homes, and decide whether existing ones should follow |
+| Hourly check starts off | A new Home treats the Mail agent as "both", but its hourly schedule stays off until the settings are saved, so no hourly check runs | Startup already enables the hourly schedule for the default mode; added a new-Home regression test. Confirm after creating a real Home. |
 | Suggestions list is slow | It's the slowest query behind Today, at about 0.9 seconds | Cache the sender counts and refresh them when mail changes |
 
 ## Not yet proven on the real account

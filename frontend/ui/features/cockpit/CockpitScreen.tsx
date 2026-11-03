@@ -119,9 +119,8 @@ function Health() {
                 <span className="truncate text-sm tabular-nums text-ink-muted">{item.when ? format(item.when) : item.detail}</span>
               </span>
             </Link>
-          </Rise>
+          </li>
         ))}
-        </Presence>
       </ul>
     </section>
   );
@@ -133,7 +132,12 @@ function Feed() {
   const [expanded, setExpanded] = useState(false);
   const relative = useRelativeTime();
   const format = useDateTime();
-  const all = feed.data?.events ?? [];
+  const all: ((NonNullable<typeof feed.data>["events"])[number] & { repeats: number })[] = [];
+  for (const event of feed.data?.events ?? []) {
+    const previous = all[all.length - 1];
+    if (previous && previous.title === event.title && previous.detail === event.detail && previous.link === event.link && previous.problem === event.problem) previous.repeats += 1;
+    else all.push({ ...event, repeats: 1 });
+  }
   const rows = expanded ? all : all.slice(0, FEED_PREVIEW);
   const options: readonly { value: Filter; label: string }[] = [
     { value: "all", label: t("cockpit.filter.all") },
@@ -162,6 +166,7 @@ function Feed() {
                 ) : (
                   <span className="break-words text-md text-ink-primary">{row.title}</span>
                 )}
+                {row.repeats > 1 ? <span className="text-sm tabular-nums text-ink-muted">{t("cockpit.repeats", { count: row.repeats })}</span> : null}
                 {row.detail ? <span className="break-words text-sm text-ink-muted">{row.detail}</span> : null}
               </span>
             </span>
@@ -201,20 +206,20 @@ export function CockpitScreen() {
     };
   }, [client, subscribe]);
   return (
-    <div className="mx-auto flex max-w-page flex-col gap-5 p-6">
+    <div className="cockpit-container mx-auto flex max-w-page flex-col gap-5 p-6">
       <PageHeader title={t("nav.cockpit")} summary={t("cockpit.overview")} />
       {cockpit.data ? <div data-testid="cockpit-overview" className="flex flex-wrap items-center gap-5 border-y border-line-subtle py-4">
-        <span className="flex items-center gap-2 text-md text-ink-primary"><StatusDot tone={problems.length ? "failed" : "done"} />{t(problems.length ? "cockpit.attentionCount" : "cockpit.healthy", { count: problems.length })}</span>
+        <span className="flex items-center gap-2 text-md text-ink-primary"><StatusDot tone={problems.length ? "failed" : "done"} />{problems.length ? tn("cockpit.attentionCount", problems.length) : t("cockpit.healthy")}</span>
         <span className="text-sm tabular-nums text-ink-muted">{t("cockpit.runningCount", { count: running })}</span>
         <span className="text-sm tabular-nums text-ink-muted">{t("cockpit.upcomingCount", { count: cockpit.data.upcoming.length })}</span>
       </div> : null}
       {problems.length ? <Rise className="flex flex-col gap-2 border-l border-status-warning pl-4"><h2 className="text-md font-medium text-ink-primary">{t("cockpit.attention")}</h2>{problems.map((item) => <TextLink key={item.id} href={item.link ?? "/logs"}>{item.label}: {item.detail}</TextLink>)}</Rise> : null}
-      <div className="grid items-start gap-6 lg:grid-cols-3">
-        <div className="flex min-w-0 flex-col gap-6 lg:col-span-2">
+      <div className="cockpit-columns grid items-start gap-6">
+        <div className="flex min-w-0 flex-col gap-6">
           <Rise className="flex flex-col gap-4"><RunningNow /><Maintenance /></Rise>
           <Rise><Feed /></Rise>
         </div>
-        <aside className="flex min-w-0 flex-col gap-6 border-t border-line-subtle pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
+        <aside className="cockpit-aside flex min-w-0 flex-col gap-6 border-t border-line-subtle pt-4">
           <Rise><Upcoming /></Rise>
           <ExpandRow variant="plain" label={t("cockpit.health")} title={t("cockpit.health")} meta={t("cockpit.health.hint")} defaultOpen={problems.length > 0}><Health /></ExpandRow>
         </aside>

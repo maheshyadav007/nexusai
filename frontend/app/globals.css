@@ -243,3 +243,10 @@ svg.lucide {
 .generation-surface[data-phase="preparing"] .generation-placeholder > div {
   background: theme(colors.surface.raised);
 }
+
+/* Respond to the space left beside chat, rather than the whole window. */
+.cockpit-container { container: cockpit / inline-size; }
+@container cockpit (min-width: 48rem) {
+  .cockpit-columns { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+  .cockpit-aside { @apply border-l border-t-0 pl-5 pt-0; }
+}

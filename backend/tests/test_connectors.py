@@ -13,7 +13,9 @@ from fastapi.testclient import TestClient
 from fake_mail import FakeMail
 from fake_mcp import URL, FakeMcp, running
 from nexusai.kernel.config import Config
+from nexusai.modules.agent.module import current
 from nexusai.modules.agent.providers import TextChunk, ToolCall
+from nexusai.modules.agent.runtime import TurnRequest
 from test_agent_work import (  # noqa: F401
     Script,
     app_config,
@@ -175,7 +177,8 @@ def test_the_mail_agent_never_gets_outside_tools(
 ) -> None:
     add(client)
     script.replies = [[TextChunk("ok")]]
-    chat(client, "mail-agent", "Hi")
+    current().dispatch(TurnRequest("mail-agent", "Check mail", "mail-hourly"))
+    wait(lambda: status(client, "mail-agent") == "done", "mail run")
     assert not [t.name for t in script.requests[-1].tools if t.name.startswith("mcp_")]
 
 

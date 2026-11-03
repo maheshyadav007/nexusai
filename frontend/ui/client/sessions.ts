@@ -2,7 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { command, query } from "./api";
-import type { CreateSession, DecideApproval, DecideApprovals, Permissions, ToolApproval } from "./contracts.generated";
+import type { SessionRow, CreateSession, DecideApproval, DecideApprovals, Permissions, ToolApproval } from "./contracts.generated";
+import { useState } from "react";
 import { useHomeReady } from "./home";
 
 export function useSessions(search: string) {
@@ -96,4 +97,15 @@ export function useSavePermissions() {
       void client.invalidateQueries({ queryKey: ["permissions", "catalog"] });
     },
   });
+}
+
+/** Managed chats are driven by agents; free-form conversation belongs in a personal chat. */
+export const isManagedSession = (row: Pick<SessionRow, "agent"> | undefined) => Boolean(row && row.agent !== "session");
+
+// Unsent drafts survive view changes, without writing their contents to browser storage.
+const drafts = new Map<string, unknown>();
+export const clearChatDraft = (id: string) => void drafts.delete(id);
+export function useChatDraft<T>(id: string, initial: T): [T, (value: T) => void] {
+  const [value, setValue] = useState<T>(() => (drafts.get(id) as T | undefined) ?? initial);
+  return [value, (next) => { drafts.set(id, next); setValue(next); }];
 }

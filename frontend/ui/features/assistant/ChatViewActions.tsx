@@ -11,7 +11,7 @@ export function ChatViewActions({ session, full = false }: { session: string | n
   const router = useRouter();
   const leave = (showPanel: boolean) => {
     if (session) assistant.openSession(session);
-    else assistant.newChat();
+    else assistant.openDraft();
     assistant.setOpen(showPanel);
     router.push(assistant.returnTo);
   };

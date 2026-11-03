@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useDateTime } from "@/ui/client/format";
-import { useArchiveSession, useCreateSession, useSessions } from "@/ui/client/sessions";
+import { isManagedSession, useArchiveSession, useCreateSession, useSessions } from "@/ui/client/sessions";
 import { Button } from "@/ui/primitives/Button";
 import { ContextMenu } from "@/ui/primitives/ContextMenu";
 import { EmptyState } from "@/ui/primitives/EmptyState";
@@ -37,10 +37,11 @@ function SessionGroup({ title, rows }: { title: string; rows: readonly SessionRo
           const waiting = session.status === "waiting";
           return (
             <li key={session.id} className="border-b border-line-subtle">
-              <ContextMenu items={[{ id: "open", label: t("menu.open"), onSelect: () => router.push(`/agent/sessions/${session.id}`) }, { id: "archive", label: t("menu.archive"), icon: "archive", onSelect: () => archive.mutate(session.id) }]}>
+              <ContextMenu items={[{ id: "open", label: t("menu.open"), onSelect: () => router.push(`/agent/sessions/${session.id}`) }, ...(!isManagedSession(session) ? [{ id: "archive", label: t("menu.archive"), icon: "archive" as const, onSelect: () => archive.mutate(session.id) }] : [])]}>
               <Link href={`/agent/sessions/${session.id}`} data-testid="session-row" className="focus-ring flex items-center gap-3 px-2 py-2 transition-colors duration-fast hover:bg-surface-raised">
                 <StatusDot tone={state.tone} />
                 <span className="min-w-0 flex-1 truncate text-md text-ink-primary">{session.title}</span>
+                {isManagedSession(session) ? <span className="shrink-0 text-sm text-ink-muted">{t("chat.managed.badge")}</span> : null}
                 <span className={`shrink-0 text-sm ${waiting ? "font-medium text-accent-default" : "text-ink-muted"}`}>{t(state.label)}</span>
                 <span className="shrink-0 text-sm tabular-nums text-ink-muted">{format(session.updated)}</span>
               </Link>

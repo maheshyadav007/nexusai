@@ -508,6 +508,32 @@ def on_the_plate(ctx: Context) -> str:
 def brief_task(ctx: Context) -> str:
     plate = on_the_plate(ctx)
     task = f"On their plate today:\n<untrusted>\n{plate or 'Nothing open.'}\n</untrusted>"
+    decisions: list[str] = []
+    for label, query in (
+        ("Approvals", "SELECT id, summary AS text FROM tool_approvals WHERE status = 'pending'"),
+        (
+            "Questions",
+            "SELECT id, text FROM channel_messages WHERE kind = 'ask' AND status = 'open'",
+        ),
+        (
+            "Mail suggestions",
+            "SELECT id, category AS text FROM mail_suggestions WHERE status = 'open'",
+        ),
+        (
+            "Proposed categories",
+            "SELECT name AS id, name AS text FROM mail_categories WHERE proposed = 1",
+        ),
+    ):
+        rows = ctx.bus.db.fetch_all(query)
+        if rows:
+            lines = "\n".join(f"- [{label} {row['id']}] {row['text']}" for row in rows[:20])
+            decisions.append(f"{label}: {len(rows)} pending\n{lines}")
+    if decisions:
+        task += (
+            "\n\nDecisions waiting for them:\n<untrusted>\n"
+            + "\n\n".join(decisions)
+            + "\n</untrusted>"
+        )
     past = feedback.briefs_with_reactions(ctx.bus.db)
     if past:
         task += f"\n\nEarlier briefs and how they took them:\n<untrusted>\n{past}\n</untrusted>"

@@ -144,7 +144,7 @@ def test_the_same_question_asked_twice_gets_asked_twice(client: TestClient, scri
     assert last_tool_result(script) == "They answered: No"
 
 
-def test_the_mail_agent_can_be_messaged_and_still_cannot_send(
+def test_the_mail_agent_history_is_protected_after_a_triggered_run(
     client: TestClient, script: Script, fake: FakeMail
 ) -> None:
     connect(client, fake)
@@ -152,16 +152,12 @@ def test_the_mail_agent_can_be_messaged_and_still_cannot_send(
     fake.state.deliver(make_mail(subject="Mail for the agent"))
     triaged(client, "Mail for the agent")
     wait(lambda: status(client, "mail-agent") == "done", "the run to finish")
-    triggered = {tool.name for tool in script.requests[-1].tools}
-    assert "ask_user" not in triggered
-    script.replies = [[TextChunk("Because it asks you something.")]]
-    parts = chat(client, "mail-agent", "Why did you file that?")
-    assert "Because it asks you something." in "".join(p.get("delta", "") for p in parts)
-    typed = {tool.name for tool in script.requests[-1].tools}
-    assert {"search_mail", "draft_reply", "ask_user"} <= typed
-    assert "record_triage" not in typed
-    assert "record_triage" in triggered
-    assert not typed & {"send_mail", "run_command", "write_file", "delete_file", "update_mail"}
+    before = len(script.requests)
+    response = client.post(
+        "/api/sessions/chat", json={"id": "mail-agent", "text": "Change the history"}
+    )
+    assert response.status_code == 409
+    assert len(script.requests) == before
 
 
 def test_other_sessions_cant_record_a_judgement(client: TestClient, script: Script) -> None:

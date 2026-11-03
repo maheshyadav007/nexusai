@@ -55,10 +55,10 @@ function SettingsBody({ overPage = false }: { overPage?: boolean }) {
   const current = SECTIONS.find((section) => section.id === requested) ?? (SECTIONS[0] as (typeof SECTIONS)[number]);
   return (
       <div className={`flex items-stretch gap-0 ${overPage ? "min-h-0 flex-1" : ""}`}>
-        <nav aria-label={t("settings.title")} className={`w-rail-wide shrink-0 border-r border-line-strong bg-surface-sunken/40 p-3 ${overPage ? "h-full overflow-y-auto" : "sticky top-0"}`}>
+        <nav aria-label={t("settings.title")} className={`w-rail-wide shrink-0 p-3 ${overPage ? "h-full overflow-y-auto" : "sticky top-0"}`}>
           <div className="flex flex-col gap-5">
             {[...new Set(SECTIONS.map((section) => section.group))].map((group) => (
-              <div key={group}>
+              <div key={group} className="border-b border-line-subtle pb-4 last:border-b-0 last:pb-0">
                 <p className="mb-1 px-3 text-sm text-ink-muted">{t(group)}</p>
                 <ul className="flex flex-col gap-px">
                   {SECTIONS.filter((section) => section.group === group).map((section) => (

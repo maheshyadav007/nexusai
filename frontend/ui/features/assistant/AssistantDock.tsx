@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import light from "@/ui/theme/themes/nexus-light.json";
-import { useSessions } from "@/ui/client/sessions";
+import { useChatDraft, useSessions } from "@/ui/client/sessions";
 import { useWaitingCount } from "@/ui/client/work";
 import { Icon } from "@/ui/icons";
 import { Skeleton } from "@/ui/primitives/Skeleton";
@@ -24,12 +24,14 @@ const MAIL_AGENT = "mail-agent";
 
 export function NewChat() {
   const assistant = useAssistant();
-  const [text, setText] = useState(assistant.startError ? assistant.startingText ?? "" : "");
-  const [model, setModel] = useState<string | null>(null);
-  const [attached, setAttached] = useState<readonly Attached[]>([]);
+  const [draft, setDraft] = useChatDraft<{ text: string; model: string | null; attached: readonly Attached[] }>("new", { text: assistant.startError ? assistant.startingText ?? "" : "", model: null, attached: [] });
+  const { text, model, attached } = draft;
+  const setText = (text: string) => setDraft({ ...draft, text });
+  const setModel = (model: string | null) => setDraft({ ...draft, model });
+  const setAttached = (attached: readonly Attached[]) => setDraft({ ...draft, attached });
   const reading = useAttachedReading(attached);
   const send = (words: string) => {
-    if (words.trim() && !reading.size) assistant.start({ text: words.trim(), title: words.trim().slice(0, TITLE_LENGTH), model, context: attached.map((item) => item.ref) });
+    if (words.trim() && !reading.size && !assistant.starting) assistant.start({ text: words.trim(), title: words.trim().slice(0, TITLE_LENGTH), model, context: attached.map((item) => item.ref) });
   };
   return (
     <div className="flex min-h-0 flex-1 flex-col justify-end gap-3 p-3">
@@ -114,7 +116,7 @@ function Panel() {
           {assistant.startingTitle ? <p className="text-md text-ink-primary">{assistant.startingTitle}</p> : null}
           <Skeleton className="h-4 w-3/4" /><Skeleton className="h-4 w-1/2" />
         </div>
-      ) : assistant.session ? <SessionChat id={assistant.session} /> : <><NewChat />{assistant.startError ? <div className="p-3"><ErrorState title={t("sessions.failed")} description={assistant.startError} /></div> : null}</>}</div>
+      ) : assistant.session ? <SessionChat id={assistant.session} /> : <><NewChat key={assistant.draftRevision} />{assistant.startError ? <div className="p-3"><ErrorState title={t("sessions.failed")} description={assistant.startError} /></div> : null}</>}</div>
     </SlidePanel>
   );
 }

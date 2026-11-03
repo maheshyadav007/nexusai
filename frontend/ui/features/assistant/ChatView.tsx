@@ -7,7 +7,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { ApiRequestError, query } from "@/ui/client/api";
 import { useEvents } from "@/ui/client/events";
 import { useTimeOnly } from "@/ui/client/format";
-import { groupApprovals, takeFirstMessage, useAnswerSession, useApprovals, useChooseVersion, useModelCall, useRateMessage, useSession, useSetSessionModel, useStopSession } from "@/ui/client/sessions";
+import { isManagedSession, useChatDraft, groupApprovals, takeFirstMessage, useAnswerSession, useApprovals, useChooseVersion, useModelCall, useRateMessage, useSession, useSetSessionModel, useStopSession } from "@/ui/client/sessions";
 import { useChannel, useCompactSession, useDismissChannel, useSessionContext, useSetContext } from "@/ui/client/work";
 import { useGeneration } from "@/ui/client/generation";
 import { GenerationSurface } from "@/ui/primitives/GenerationSurface";
@@ -84,7 +84,7 @@ function MessageTime({ value }: { value: string | null }) {
   return value ? <time dateTime={value} className="text-sm tabular-nums text-ink-faint">{format(value)}</time> : null;
 }
 
-function UserMessage({ message, onEdit }: { message: UIMessage; onEdit: (text: string) => void }) {
+function UserMessage({ message, onEdit }: { message: UIMessage; onEdit?: (text: string) => void }) {
   const text = textOf(message);
   const { origin } = factsOf(message);
   const source = origin ? ORIGIN_LABEL[origin] : undefined;
@@ -95,9 +95,9 @@ function UserMessage({ message, onEdit }: { message: UIMessage; onEdit: (text: s
       <div className="flex items-center gap-1 opacity-0 transition-opacity duration-fast focus-within:opacity-100 group-hover:opacity-100">
         <MessageTime value={timeOf(message)} />
         <CopyAction text={text} label={t("chat.copy")} />
-        <ActionButton label={t("chat.edit")} onClick={() => onEdit(text)}>
+        {onEdit ? <ActionButton label={t("chat.edit")} onClick={() => onEdit(text)}>
           <Icon name="edit" className="h-3 w-3" />
-        </ActionButton>
+        </ActionButton> : null}
       </div>
     </Rise>
   );
@@ -217,12 +217,12 @@ function AssistantMessage({ message, session, running, isLast, onFollowUp, follo
               <Icon name="retry" className="h-3 w-3" />
             </ActionButton>
           ) : null}
-          {versions && isLast ? <VersionSwitcher versions={versions} disabled={!canRetry} onChoose={onChooseVersion} /> : null}
+          {versions && isLast && canRetry ? <VersionSwitcher versions={versions} disabled={!canRetry} onChoose={onChooseVersion} /> : null}
           <MessageTime value={timeOf(message)} />
         </div>
         </div>
       ) : null}
-      {settled && followUps.length ? (
+      {settled && followUps.length && !followUpsDisabled ? (
         <ul aria-label={t("chat.followUps")} className="flex flex-col">
           {followUps.map((question) => (
             <li key={question}>
@@ -296,6 +296,7 @@ export function ChatView({ id, initial, active, footer }: { id: string; initial:
   const { sendMessage, setMessages, regenerate, resumeStream, messages, status } = chat;
   const stop = useStopSession();
   const session = useSession(id);
+  const managed = isManagedSession(session.data?.session);
   const format = useDateTime();
   const setModel = useSetSessionModel();
   const chooseVersion = useChooseVersion();
@@ -306,7 +307,7 @@ export function ChatView({ id, initial, active, footer }: { id: string; initial:
   const editor = useRef<HTMLTextAreaElement>(null);
   const answer = useAnswerSession();
   const approvals = useApprovals();
-  const [text, setText] = useState("");
+  const [text, setText] = useChatDraft(id, "");
   const log = useRef<HTMLDivElement>(null);
   const following = useRef(true);
   const [away, setAway] = useState(false);
@@ -367,7 +368,7 @@ export function ChatView({ id, initial, active, footer }: { id: string; initial:
       setText("");
       return;
     }
-    if (working || reading.size) return;
+    if (managed || working || reading.size) return;
     say(words);
     following.current = true;
     setText("");
@@ -402,10 +403,10 @@ export function ChatView({ id, initial, active, footer }: { id: string; initial:
         >
           {messages.map((message, index) =>
             message.role === "user" ? (
-              <UserMessage key={message.id} message={message} onEdit={edit} />
+              <UserMessage key={message.id} message={message} {...(!managed ? { onEdit: edit } : {})} />
             ) : (
               <Fragment key={message.id}>
-              <AssistantMessage message={message} session={id} running={working && !waiting} isLast={index === messages.length - 1} followUpsDisabled={working} onFollowUp={say} canRetry={index === lastAssistant && !working} onRetry={() => void regenerate()} onChooseVersion={(turn) => chooseVersion.mutate({ id, turn }, { onSuccess: (view) => setMessages(view.messages as unknown as UIMessage[]) })} />
+              <AssistantMessage message={message} session={id} running={working && !waiting} isLast={index === messages.length - 1} followUpsDisabled={working || managed} onFollowUp={say} canRetry={!managed && index === lastAssistant && !working} onRetry={() => void regenerate()} onChooseVersion={(turn) => chooseVersion.mutate({ id, turn }, { onSuccess: (view) => setMessages(view.messages as unknown as UIMessage[]) })} />
                 {(session.data?.compactions ?? []).filter((entry) => entry.after_turn === factsOf(message).turn).map((entry) => (
                   <WavyDivider key={entry.time}>{t("chat.compacted", { when: format(entry.time), before: tokensOf(entry.before_tokens), after: tokensOf(entry.after_tokens) })}</WavyDivider>
                 ))}
@@ -438,9 +439,9 @@ export function ChatView({ id, initial, active, footer }: { id: string; initial:
         </Presence>
       </div>
       <div className="flex flex-col gap-2 p-3">
-          <AttachedChips items={attached} reading={reading} onRemove={(ref) => setContext.mutate({ id, context: attached.filter((item) => item.ref !== ref).map((item) => item.ref) })} />
+          {!managed ? <AttachedChips items={attached} reading={reading} onRemove={(ref) => setContext.mutate({ id, context: attached.filter((item) => item.ref !== ref).map((item) => item.ref) })} /> : null}
         {chat.error ? <ErrorState title={t("sessions.failed")} description={chat.error.message} /> : null}
-          <Composer
+          {!managed || asking ? <Composer
             value={text}
             onChange={setText}
             onSubmit={submit}
@@ -452,9 +453,9 @@ export function ChatView({ id, initial, active, footer }: { id: string; initial:
             placeholder={t(asking ? "chat.placeholder.answer" : deciding ? "chat.placeholder.decide" : "sessions.prompt.placeholder")}
             label={t("sessions.prompt")}
             inputRef={editor}
-            leading={<AttachMenu onAttach={attach} />}
-            trailing={<ModelPicker value={session.data?.session.model ?? null} onChange={(model) => setModel.mutate({ id, model })} />}
-          />
+            leading={!managed ? <AttachMenu onAttach={attach} /> : null}
+            trailing={!managed ? <ModelPicker value={session.data?.session.model ?? null} onChange={(model) => setModel.mutate({ id, model })} /> : null}
+          /> : null}
           {footer}
       </div>
     </div>

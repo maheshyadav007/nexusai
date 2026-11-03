@@ -24,7 +24,7 @@ export function Composer({ value, onChange, onSubmit, busy = false, onStop, stop
         placeholder={placeholder}
         rows={2}
         value={value}
-        disabled={disabled}
+        disabled={disabled || (busy && !onStop)}
         // eslint-disable-next-line jsx-a11y/no-autofocus -- only when the person just opened the chat
         autoFocus={autoFocus}
         onChange={(event) => onChange(event.target.value)}
@@ -41,7 +41,7 @@ export function Composer({ value, onChange, onSubmit, busy = false, onStop, stop
         <div className="flex min-w-0 flex-1 items-center justify-end gap-1">
           {trailing}
           <Swap value={busy}>
-            {busy ? (
+            {busy && !onStop ? <span role="status" aria-label={t("generation.preparing")} className={ACTION}><Icon name="loading" className="h-3 w-3 animate-spin motion-reduce:animate-none" /></span> : busy ? (
               <Pressable aria-label={t("sessions.stop")} disabled={stopping} onClick={onStop} className={ACTION}>
                 <Icon name="stop" className="h-3 w-3" />
               </Pressable>

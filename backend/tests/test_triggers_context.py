@@ -14,7 +14,9 @@ from fake_mail import FakeMail, make_mail
 from nexusai.contracts.agent import Schedule
 from nexusai.modules.agent import context, mail_agent, scheduler
 from nexusai.modules.agent.model import SUMMARY_SOURCE, to_messages
+from nexusai.modules.agent.module import current
 from nexusai.modules.agent.providers import ModelUnavailable, TextChunk, ToolCall
+from nexusai.modules.agent.runtime import TurnRequest
 from test_agent_work import (  # noqa: F401
     Script,
     app_config,
@@ -120,7 +122,7 @@ def test_a_run_with_no_judgement_says_so_and_can_be_tried_again(
     wait(lambda: "Not triaged" in (thread_named(client, "No judgement")["why"] or ""), "the note")
     settle(client)
     script.replies = [triage_reply(category="Team")]
-    chat(client, mail_agent.SESSION_ID, "ignored", retry=True)
+    current().dispatch(TurnRequest(mail_agent.SESSION_ID, "ignored"), retry=True)
     assert triaged(client, "No judgement")["category"] == "Team"
 
 

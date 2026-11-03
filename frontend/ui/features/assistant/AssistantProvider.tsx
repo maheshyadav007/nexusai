@@ -6,7 +6,7 @@ import { createContext, use, useCallback, useEffect, useMemo, useRef, useState, 
 import appConfig from "@/app.config.json";
 import type { CreateSession } from "@/ui/client/contracts.generated";
 import { query } from "@/ui/client/api";
-import { leaveFirstMessage, useCreateSession } from "@/ui/client/sessions";
+import { clearChatDraft, leaveFirstMessage, useCreateSession } from "@/ui/client/sessions";
 
 interface Start {
   text?: string;
@@ -16,7 +16,7 @@ interface Start {
   agent?: "session" | "interview";
 }
 
-// An open conversation or document needs the room, so an unpinned chat tucks away for it.
+// Reading an email makes room by minimizing the attached chat.
 const READING = /^\/(mail\/.+|search)\/\d+$/;
 
 interface Assistant {
@@ -31,6 +31,7 @@ interface Assistant {
   /** Attached to the right edge, with the page beside it instead of under it. */
   pinned: boolean;
   returnTo: string;
+  draftRevision: number;
   session: string | null;
   starting: boolean;
   startingTitle: string | null;
@@ -40,6 +41,7 @@ interface Assistant {
   setPinned: (pinned: boolean) => void;
   openSession: (id: string) => void;
   newChat: () => void;
+  openDraft: () => void;
   start: (input: Start) => void;
 }
 
@@ -81,6 +83,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const setNeedsRoom = useCallback((needed: boolean) => { if (needed) setWanted(false); }, []);
   // Floating view is disabled; the panel is always attached to the right edge.
   const pinned = true;
+  const [draftRevision, setDraftRevision] = useState(0);
   const [session, setSession] = useState<string | null>(null);
   const create = useCreateSession();
   const { mutate } = create;
@@ -153,6 +156,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       setNeedsRoom,
       pinned,
       returnTo,
+      draftRevision,
       session,
       starting,
       startingTitle,
@@ -165,14 +169,21 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         setSession(id);
         setOpen(true);
       },
+      openDraft: () => {
+        if (pathname.startsWith("/agent/sessions/")) keepOpen.current = true;
+        setSession(null);
+        setOpen(true);
+      },
       newChat: () => {
+        clearChatDraft("new");
+        setDraftRevision((value) => value + 1);
         setSession(null);
         setStartError(null);
         setOpen(true);
       },
       start,
     }),
-    [open, setOpen, setNeedsRoom, pinned, returnTo, pathname, session, starting, startingTitle, startingText, startError, start],
+    [open, setOpen, setNeedsRoom, pinned, returnTo, draftRevision, pathname, session, starting, startingTitle, startingText, startError, start],
   );
   return <AssistantContext value={value}>{children}</AssistantContext>;
 }

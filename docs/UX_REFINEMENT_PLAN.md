@@ -5,7 +5,7 @@ Planned 2026-11-03. Builds on the AI generation feedback work; keeps its distinc
 ## Changes
 
 - Planner: quiet rows and fine separators; expand details in place; compact quick-add forms; immediate, reversible task completion with rollback on failure. Reminders keep time and recurrence easy to scan.
-- Settings: a distinct navigation rail, vertical divider, clearer current item, independent scrolling in the modal, motion through shared primitives.
+- Settings: horizontal dividers between navigation groups, clearer current item, independent scrolling in the modal, motion through shared primitives.
 - Connectors: an overview of Email and MCP connections. Email opens its account settings and archive import. MCP opens its own servers and tools. Configuration appears only after choosing a connection.
 - Cockpit: a brief status overview, attention and active work first, upcoming runs alongside, then a short activity feed. Detailed system health and maintenance stay behind disclosures. Mail sync is not duplicated as an agent job.
 - Chat: minimized pill, attached right panel, full central page. Floating geometry remains behind a disabled flag for future use. Reading an email or opening a document minimizes the side panel. Explicitly reopening it works while reading. Plus means New chat. Full page offers return-to-panel and minimize controls.
@@ -18,3 +18,10 @@ Check and fix the brief omitting pending decisions, agent rows attributing share
 ## Verification
 
 Run frontend types, theme, boundary and hardcoding checks; backend checks and focused protection/brief/registry tests. Exercise planner, connection navigation, chat view transitions and protected question/approval flows with a temporary Home and fake model. Review screenshots before rebuilding and restarting the local app.
+
+## Completed verification
+
+- Frontend type, theme, hardcoding and boundary checks passed; 19 unit tests passed.
+- Backend formatting, lint, types and dependency boundaries passed. Full regression run: 773 passed, 1 skipped; one legacy connector test still sent a manual message into the now-protected Mail chat. Updated it to dispatch an internal Mail run and verified it passes. Nine managed-chat tests also pass, including explicit questions and approvals.
+- Isolated Home with a fake model: checked Settings horizontal group dividers, Email connection drill-in, quiet task rows and completion, attached/full chat and draft preservation, New chat reset, email-click minimization (including the selected email), explicit reopening while reading, protected Mail chat, and Cockpit at full and narrowed widths.
+- Pending brief and Inbox review fixes remain marked for confirmation on real scheduled runs. The default hourly schedule already worked; a new-Home regression test now covers it.

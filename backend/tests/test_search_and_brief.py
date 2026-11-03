@@ -12,6 +12,7 @@ from nexusai.contracts.mail import SearchMail
 from nexusai.kernel.config import Config
 from nexusai.modules.agent.module import current
 from nexusai.modules.agent.providers import TextChunk, ToolCall
+from nexusai.modules.agent.runtime import TurnRequest
 from nexusai.modules.mail import store
 from test_agent_sessions import start_turn
 from test_agent_work import (  # noqa: F401
@@ -182,7 +183,7 @@ def test_a_brief_reaction_reaches_the_next_brief_and_the_person_can_see_it(
 ) -> None:
     script.replies = [[TextChunk("Reply to Priya first.")]]
     session_id = str(current().create("Morning brief", [], "daily-prep").id)
-    start_turn(client, session_id, "Brief me")
+    current().dispatch(TurnRequest(session_id, "Brief me", "schedule"))
     wait(lambda: post(client, "today.view").json()["prep_text"], "brief")
     wait(lambda: status(client, session_id) == "done", "brief finished")
     today = post(client, "today.view").json()
@@ -205,7 +206,7 @@ def test_a_brief_reaction_reaches_the_next_brief_and_the_person_can_see_it(
 
     # The next run is told their words, as theirs.
     script.replies = [[TextChunk("Recruiters first.")]]
-    start_turn(client, session_id, "Brief me again")
+    current().dispatch(TurnRequest(session_id, "Brief me again", "schedule"))
     wait(
         lambda: "Recruiters" in str(post(client, "today.view").json()["prep_text"]), "second brief"
     )

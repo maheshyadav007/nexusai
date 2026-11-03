@@ -338,7 +338,19 @@ class SessionRuntime:
         )
         return rows[0] if rows else None
 
+    def require_personal(self, session: str) -> SessionRow:
+        """Managed histories only change through their triggers, questions and approvals."""
+        row = self.row(session)
+        if row.agent != "session":
+            raise CommandError(
+                "session.managed",
+                "This agent chat is protected. Answer its questions here, or start a new chat.",
+                409,
+            )
+        return row
+
     def send(self, session: str, text: str, retry: bool = False) -> int:
+        self.require_personal(session)
         return self.dispatch(TurnRequest(session, text), retry)
 
     def dispatch(self, request: TurnRequest, retry: bool = False) -> int:
@@ -449,7 +461,7 @@ class SessionRuntime:
 
     def compact(self, session: str) -> bool:
         """When asked, summarizes what's older than the messages kept. The chat shows it all still."""
-        row = self.row(session)
+        row = self.require_personal(session)
         with self.lock:
             if self.active_turn(session) is not None:
                 raise CommandError(
@@ -493,6 +505,7 @@ class SessionRuntime:
         return True
 
     def choose_version(self, session: str, turn: int) -> None:
+        self.require_personal(session)
         row = self.db.fetch_all(
             "SELECT COALESCE(retry_of, id) AS root FROM agent_turns WHERE id = ? AND session = ?",
             (turn, session),
