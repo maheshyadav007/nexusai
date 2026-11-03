@@ -1,0 +1,9 @@
+Run from backend: uv run --quiet python ../docs/audits/email_agent_probes_2026_11_04.py
+No live model calls. SQLite in memory; fake runtime and notification/model gates.
+
+BURST: 3 threads supplied; 5 events assigned to that run
+OVERDUE: {'title': 'Unfinished obligation', 'done': 1}
+ZERO LEARNING: '' brief settlement: ([99], 'skipped')
+DISPATCH ORDER: 0 associated running events visible during early completion; running after dispatch
+
+These characterize current flaws. When fixed, replace these observational probes with permanent regression tests asserting desired behavior.
