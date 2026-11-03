@@ -16,6 +16,8 @@ class ServerSettings(BaseModel):
     host: str = Field(min_length=1, max_length=255)
     port: int = Field(ge=1, le=65535)
     secure: bool = True
+    # Only POP3 can turn this off, for a company server with its own certificate.
+    verify_cert: bool = True
 
 
 class MailAuth(BaseModel):
@@ -29,6 +31,10 @@ class MailProfile(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     label: str = Field(min_length=1, max_length=120)
+    protocol: Literal["imap", "pop3"] = "imap"
+    # Its servers come from the system settings, which win over anything saved here.
+    system: bool = False
+    # The server mail comes from, whichever protocol it speaks.
     imap: ServerSettings
     smtp: ServerSettings
     auth: MailAuth
@@ -225,6 +231,11 @@ class MailPreset(BaseModel):
     smtp_port: int
     secure: bool = True
     password_hint: str | None = None
+    protocol: Literal["imap", "pop3"] = "imap"
+    # Set by whoever runs this app, so the person only gives a username and password.
+    system: bool = False
+    # Makes the mail address for a login with no @ in it.
+    address_domain: str | None = None
 
 
 class MailPresets(BaseModel):

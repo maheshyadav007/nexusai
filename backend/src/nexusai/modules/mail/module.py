@@ -95,6 +95,7 @@ from nexusai.kernel.module import CommandError, Context, Module
 from nexusai.modules.mail import accounts, pst, pst_search, pst_upload, rules, send, store
 from nexusai.modules.mail.imap import DELETING_ROLES, Folder, distinct_total, test_imap
 from nexusai.modules.mail.parse import normalize_subject, parse_message
+from nexusai.modules.mail.pop3 import test_pop3
 from nexusai.modules.mail.rules import own_domain_of
 from nexusai.modules.mail.sync import MailSync
 from nexusai.modules.semantic import module as semantic
@@ -105,6 +106,7 @@ mail_module = Module(name="mail", migrations=[*store.MIGRATIONS, pst.MIGRATION])
 
 # Filing that only exists on this computer, and old mail read from an archive file.
 LOCAL_PREFIXES = ("local:", "pst:")
+LOCAL_SENT = "local:sent"
 # Removing the last folder is what Delete is for.
 MINIMUM_TO_REMOVE = 2
 # A count far larger than any folder, for "everything in this one".
@@ -129,7 +131,7 @@ def _start_sync(ctx: Context) -> None:
             return
         profile = profiles[active]
         password = accounts.get_password(ctx.config, profile.auth.user)
-        if password is None or accounts.require_encrypted(profile):
+        if password is None or accounts.require_encrypted(profile, ctx.config):
             return
         with ctx.bus.db.transaction() as tx:
             tx.execute(
@@ -304,15 +306,17 @@ def get_accounts(query: GetMailAccounts, ctx: Context) -> MailAccounts:
 
 @mail_module.command("mail.accounts.test")
 def test_account(command: TestMailAccount, ctx: Context) -> MailTestResult:
-    if problem := accounts.require_encrypted(command.profile):
+    profile = accounts.with_system_servers(command.profile, ctx.config)
+    if problem := accounts.require_encrypted(profile, ctx.config):
         raise CommandError("mail.not_encrypted", problem, 422)
-    password = command.password or accounts.get_password(ctx.config, command.profile.auth.user)
+    password = command.password or accounts.get_password(ctx.config, profile.auth.user)
     if not password:
         raise CommandError("mail.no_password", "Enter the password first.", 422)
     timeout = ctx.config.mail.connect_timeout_seconds
     counts: dict[Folder, int] = {}
-    imap_problem = test_imap(command.profile, password, timeout, counts)
-    smtp_problem = send.test_smtp(command.profile, password, timeout)
+    check = test_pop3 if profile.protocol == "pop3" else test_imap
+    imap_problem = check(profile, password, timeout, counts)
+    smtp_problem = send.test_smtp(profile, password, timeout)
     total = distinct_total(counts)
     return MailTestResult(
         counts=[
@@ -335,12 +339,13 @@ def test_account(command: TestMailAccount, ctx: Context) -> MailTestResult:
 
 @mail_module.command("mail.accounts.save")
 def save_account(command: SaveMailAccount, ctx: Context) -> MailAccounts:
-    if problem := accounts.require_encrypted(command.profile):
+    profile = accounts.with_system_servers(command.profile, ctx.config)
+    if problem := accounts.require_encrypted(profile, ctx.config):
         raise CommandError("mail.not_encrypted", problem, 422)
     active, profiles = accounts.read_accounts(ctx.config)
-    profiles[command.name] = command.profile
+    profiles[command.name] = profile
     if command.password:
-        accounts.set_password(ctx.config, command.profile.auth.user, command.password)
+        accounts.set_password(ctx.config, profile.auth.user, command.password)
     accounts.write_accounts(ctx.config, command.name if command.make_active else active, profiles)
     # Connecting is asking for mail, so an account paused earlier starts again. How much history
     # it brings is only decided once. Stop and Get more change that afterwards.
@@ -552,7 +557,9 @@ def probe_server(command: ProbeServer, ctx: Context) -> ServerProbe:
 
 @mail_module.query("mail.presets")
 def mail_presets(query: GetMailPresets, ctx: Context) -> MailPresets:
-    return MailPresets(presets=[MailPreset(**preset) for preset in ctx.config.mail.presets])
+    known = [MailPreset(**preset) for preset in ctx.config.mail.presets]
+    system = accounts.system_preset(ctx.config)
+    return MailPresets(presets=[*known, system] if system else known)
 
 
 # Reading
@@ -1458,6 +1465,34 @@ def check_send(query: CheckDraft, ctx: Context) -> SendCheckResult:
     )
 
 
+def _keep_sent_copy(work: Any, ctx: Context, account: str, raw: bytes) -> None:
+    """POP3 has nowhere on the server for sent mail, so this computer's copy is the only one."""
+    next_uid = work.tx.execute(
+        "SELECT COALESCE(MAX(uid), 0) + 1 FROM message_locations WHERE account = ? AND folder = ?",
+        (account, LOCAL_SENT),
+    ).fetchone()[0]
+    stored = store.store_message(
+        work.tx,
+        account=account,
+        folder=LOCAL_SENT,
+        role="sent",
+        uid=next_uid,
+        raw=raw,
+        read=True,
+        flagged=False,
+        parsed=parse_message(raw),
+        match=None,
+        config=ctx.config.mail,
+    )
+    if stored:
+        work.emit(
+            "mail.changed",
+            MailChanged(threads=1, reason="sent").model_dump(),
+            source="mail",
+            trace_id=ctx.trace_id,
+        )
+
+
 @mail_module.command("mail.send")
 def send_mail(command: SendDraft, ctx: Context) -> MailDone:
     active, profile, password = _active_profile(ctx)
@@ -1477,8 +1512,10 @@ def send_mail(command: SendDraft, ctx: Context) -> MailDone:
         if draft.id is not None:
             work.tx.execute("DELETE FROM mail_drafts WHERE id = ?", (draft.id,))
             _outbox(work.tx, active, "delete_drafts", {"draft": str(draft.id)})
+        if profile.protocol == "pop3":
+            _keep_sent_copy(work, ctx, active, message.as_bytes())
         # Gmail files sent mail by itself, and a second copy would show up twice.
-        if "gmail.com" not in profile.smtp.host:
+        elif "gmail.com" not in profile.smtp.host:
             _outbox(work.tx, active, "append", {"role": "sent", "raw": message.as_bytes().hex()})
         work.emit("mail.sent", {"thread_id": draft.thread_id}, source="mail", trace_id=ctx.trace_id)
         work.emit("drafts.changed", {"id": draft.id}, source="mail", trace_id=ctx.trace_id)

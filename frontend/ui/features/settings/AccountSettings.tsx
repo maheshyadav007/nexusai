@@ -94,16 +94,21 @@ export function AccountSettings() {
 
   const active = accounts.data?.accounts.find((account) => account.name === accounts.data?.active);
   const domain = login.includes("@") ? (login.split("@").pop() ?? "").trim().toLowerCase() : ANY_LOGIN;
-  const preset = presets.data?.presets.find((row) => row.domain === domain);
+  // A system server takes any login that no other preset claims, and hides the server details.
+  const preset = presets.data?.presets.find((row) => row.domain === domain) ?? presets.data?.presets.find((row) => row.domain === ANY_LOGIN);
+  const managed = presets.data?.presets.some((row) => row.system) ?? false;
   useEffect(() => {
     if (preset) setServers({ imapHost: preset.imap_host, imapPort: String(preset.imap_port), smtpHost: preset.smtp_host, smtpPort: String(preset.smtp_port), secure: preset.secure ?? true });
   }, [preset]);
 
   const server = servers.imapHost.trim();
   const profileWith = (found: typeof servers): MailProfile => {
-    const from = address.trim() || addressFor(login, found.imapHost);
+    const company = preset?.address_domain;
+    const from = address.trim() || (company && !login.includes("@") ? `${login.trim()}@${company}` : addressFor(login, found.imapHost));
     return {
       label: preset?.label ?? found.imapHost.trim(),
+      protocol: preset?.protocol ?? "imap",
+      system: preset?.system ?? false,
       imap: { host: found.imapHost.trim(), port: Number(found.imapPort), secure: found.secure },
       smtp: { host: (found.smtpHost || found.imapHost).trim(), port: Number(found.smtpPort), secure: found.secure },
       auth: { type: "password", user: login.trim() },
@@ -140,7 +145,7 @@ export function AccountSettings() {
   if (accounts.isError) return <Card title={t("accounts.title")}><ErrorState title={t("accounts.error")} onRetry={() => void accounts.refetch()} /></Card>;
 
   return (
-    <Card title={t("accounts.title")} description={t("accounts.description")}>
+    <Card title={t("accounts.title")} description={t(managed ? "accounts.description.system" : "accounts.description")}>
       <div className="flex flex-col gap-4">
         {active && !editing ? (
           <div className="flex flex-col items-start gap-3">
@@ -170,15 +175,17 @@ export function AccountSettings() {
               void settled().then((found) => save.mutate({ name: nameFor(login), profile: profileWith(found), password, pull_limit: onServer && wanted < onServer ? wanted : null }, { onSuccess: () => setEditing(false) }));
             }}
           >
-            <Field label={t("accounts.server")} hint={t("accounts.server.hint")}>{({ invalid, ...control }) => <Input autoComplete="off" spellCheck={false} placeholder={t("accounts.server.placeholder")} invalid={invalid} value={servers.imapHost} onChange={(event) => setServers({ ...servers, imapHost: event.target.value })} {...control} />}</Field>
+            {managed ? null : <Field label={t("accounts.server")} hint={t("accounts.server.hint")}>{({ invalid, ...control }) => <Input autoComplete="off" spellCheck={false} placeholder={t("accounts.server.placeholder")} invalid={invalid} value={servers.imapHost} onChange={(event) => setServers({ ...servers, imapHost: event.target.value })} {...control} />}</Field>}
             <div className="grid gap-3 md:grid-cols-2">
               <Field label={t("accounts.username")} hint={t("accounts.username.hint")}>{({ invalid, ...control }) => <Input autoComplete="off" spellCheck={false} invalid={invalid} value={login} onChange={(event) => setLogin(event.target.value)} {...control} />}</Field>
               <Field label={t("accounts.password")} hint={preset?.password_hint ?? t("accounts.password.hint")}>{({ invalid, ...control }) => <Input type="password" autoComplete="off" invalid={invalid} value={password} onChange={(event) => setPassword(event.target.value)} {...control} />}</Field>
             </div>
-            <div>
-              <Button variant="quiet" aria-expanded={details} onClick={() => setDetails(!details)}>{t(details ? "accounts.servers.hide" : "accounts.servers.show")}</Button>
-            </div>
-            {details ? (
+            {managed ? null : (
+              <div>
+                <Button variant="quiet" aria-expanded={details} onClick={() => setDetails(!details)}>{t(details ? "accounts.servers.hide" : "accounts.servers.show")}</Button>
+              </div>
+            )}
+            {details && !managed ? (
               <div className="grid gap-3 md:grid-cols-2">
                 <Field label={t("accounts.imapPort")}>{({ invalid, ...control }) => <Input inputMode="numeric" invalid={invalid} value={servers.imapPort} onChange={(event) => setServers({ ...servers, imapPort: event.target.value })} {...control} />}</Field>
                 <Field label={t("accounts.smtpHost")} hint={t("accounts.smtpHost.hint")}>{({ invalid, ...control }) => <Input spellCheck={false} invalid={invalid} value={servers.smtpHost} onChange={(event) => setServers({ ...servers, smtpHost: event.target.value })} {...control} />}</Field>

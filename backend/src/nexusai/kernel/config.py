@@ -3,7 +3,7 @@ import tomllib
 from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 
 @dataclass(frozen=True)
@@ -33,6 +33,33 @@ class MailConfig:
     signature_max_bytes: int
     signature_repeat_count: int
     presets: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class SystemMail:
+    """The company's server, set once for everyone. People only give a login and password."""
+
+    label: str
+    protocol: Literal["imap", "pop3"]
+    host: str
+    port: int
+    secure: bool
+    verify_cert: bool
+    smtp_host: str
+    smtp_port: int
+    smtp_secure: bool
+    domain: str | None
+
+
+@dataclass(frozen=True)
+class SystemModel:
+    """The company's model server. People only choose among its models."""
+
+    base_url: str
+    # Not printed if a config is ever logged.
+    api_key: str = field(repr=False)
+    names: tuple[str, ...]
+    supports_tools: bool
 
 
 @dataclass(frozen=True)
@@ -79,6 +106,8 @@ class Config:
     # What the model sees of a conversation. Settings can change it, so it's checked there.
     context: dict[str, Any]
     secrets_test_file: Path | None = None
+    system_mail: SystemMail | None = None
+    system_model: SystemModel | None = None
     # Not printed if a config is ever logged.
     database_key: str | None = field(default=None, repr=False)
     require_install_token: bool = True
@@ -105,11 +134,66 @@ def _host_of(origin: str) -> str:
     return origin.split("://", 1)[-1]
 
 
+def _env_file() -> dict[str, str]:
+    """The .env file beside the code. Read here and not added to the process's environment, since
+    the agent's commands inherit that and the API key would be one `env` away."""
+    named = os.environ.get("NEXUSAI_ENV_FILE")
+    path = Path(named) if named else Path(__file__).resolve().parents[4] / ".env"
+    if not path.is_file():
+        return {}
+    found: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        key, equals, value = line.strip().removeprefix("export ").partition("=")
+        if equals and not key.startswith("#"):
+            found[key.strip()] = value.strip().strip("\"'")
+    return found
+
+
+def _is_on(value: str) -> bool:
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _system_mail(env: dict[str, str], raw: dict[str, Any]) -> SystemMail | None:
+    host = env.get("NEXUSAI_MAIL_HOST")
+    if not host:
+        return None
+    protocol = env.get("NEXUSAI_MAIL_PROTOCOL", raw["protocol"]).strip().lower()
+    if protocol not in {"imap", "pop3"}:
+        raise ValueError("NEXUSAI_MAIL_PROTOCOL must be pop3 or imap.")
+    return SystemMail(
+        label=env.get("NEXUSAI_MAIL_LABEL", raw["label"]),
+        protocol=cast(Literal["imap", "pop3"], protocol),
+        host=host,
+        port=int(env.get("NEXUSAI_MAIL_PORT", raw["port"])),
+        secure=_is_on(env.get("NEXUSAI_MAIL_SECURE", str(raw["secure"]))),
+        verify_cert=_is_on(env.get("NEXUSAI_MAIL_VERIFY_CERT", str(raw["verify_cert"]))),
+        smtp_host=env.get("NEXUSAI_SMTP_HOST") or host,
+        smtp_port=int(env.get("NEXUSAI_SMTP_PORT", raw["smtp_port"])),
+        smtp_secure=_is_on(env.get("NEXUSAI_SMTP_SECURE", str(raw["smtp_secure"]))),
+        domain=env.get("NEXUSAI_MAIL_DOMAIN") or None,
+    )
+
+
+def _system_model(env: dict[str, str], raw: dict[str, Any]) -> SystemModel | None:
+    url = env.get("NEXUSAI_MODEL_URL")
+    if not url:
+        return None
+    names = env.get("NEXUSAI_MODEL_NAMES", "").split(",")
+    return SystemModel(
+        base_url=url.rstrip("/"),
+        api_key=env.get("NEXUSAI_MODEL_API_KEY") or raw["no_key"],
+        names=tuple(name.strip() for name in names if name.strip()),
+        supports_tools=_is_on(env.get("NEXUSAI_MODEL_TOOLS", str(raw["supports_tools"]))),
+    )
+
+
 def load_config(home_dir: Path | None = None) -> Config:
     raw = tomllib.loads(resources.files(__package__).joinpath("defaults.toml").read_text("utf-8"))
     server, events, chatgpt = raw["server"], raw["events"], raw["chatgpt"]
     secrets_test_file = os.environ.get("NEXUSAI_SECRETS_TEST_FILE")
     extra_origins = _extra_origins()
+    # What's really set wins over the file.
+    env = {**_env_file(), **os.environ}
     return Config(
         host=os.environ.get("NEXUSAI_HOST", server["host"]),
         port=int(os.environ.get("NEXUSAI_PORT", server["port"])),
@@ -154,4 +238,6 @@ def load_config(home_dir: Path | None = None) -> Config:
             test_instructions=chatgpt["test_instructions"],
         ),
         secrets_test_file=Path(secrets_test_file) if secrets_test_file else None,
+        system_mail=_system_mail(env, raw["system_mail"]),
+        system_model=_system_model(env, raw["system_model"]),
     )

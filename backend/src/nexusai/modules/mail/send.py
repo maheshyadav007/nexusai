@@ -65,7 +65,10 @@ def _connect(profile: MailProfile, password: str, timeout: float) -> smtplib.SMT
     try:
         if server.secure and server.port != IMPLICIT_TLS_PORT:
             client.starttls(context=ssl.create_default_context())
-        client.login(profile.auth.user, password)
+        client.ehlo_or_helo_if_needed()
+        # A company relay on port 25 often takes mail from its own network with no sign-in.
+        if server.secure or client.has_extn("auth"):
+            client.login(profile.auth.user, password)
     except BaseException:
         client.close()
         raise

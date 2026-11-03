@@ -21,7 +21,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from keyring.errors import KeyringError
 
-from nexusai.contracts.mail import MailProfile, ServerProbe
+from nexusai.contracts.mail import MailPreset, MailProfile, ServerProbe, ServerSettings
 from nexusai.kernel.config import Config
 from nexusai.kernel.files import replace_file
 from nexusai.kernel.home import app_data_dir
@@ -135,7 +135,10 @@ def _load(config: Config) -> dict[str, Any]:
 def read_accounts(config: Config) -> tuple[str | None, dict[str, MailProfile]]:
     with _lock:
         body = _load(config)
-    profiles = {name: MailProfile.model_validate(p) for name, p in body["profiles"].items()}
+    profiles = {
+        name: with_system_servers(MailProfile.model_validate(p), config)
+        for name, p in body["profiles"].items()
+    }
     active = body["activeProfile"]
     return (active if active in profiles else None), profiles
 
@@ -203,8 +206,50 @@ def probe(server: str) -> ServerProbe:
     return ServerProbe(imap_port=imap_port, smtp_host=named, smtp_port=SMTP_PORTS[0])
 
 
-def require_encrypted(profile: MailProfile) -> str | None:
-    """Plain connections are only allowed to this computer, for local test servers."""
+def system_preset(config: Config) -> MailPreset | None:
+    """The server this app was set up with, used for any login no other preset claims."""
+    system = config.system_mail
+    if system is None:
+        return None
+    return MailPreset(
+        domain="*",
+        label=system.label,
+        imap_host=system.host,
+        imap_port=system.port,
+        smtp_host=system.smtp_host,
+        smtp_port=system.smtp_port,
+        secure=system.secure,
+        protocol=system.protocol,
+        system=True,
+        address_domain=system.domain,
+    )
+
+
+def with_system_servers(profile: MailProfile, config: Config) -> MailProfile:
+    """Saved accounts follow the system settings, so changing those needs no reconnecting."""
+    system = config.system_mail
+    if not profile.system or system is None:
+        return profile
+    return profile.model_copy(
+        update={
+            "protocol": system.protocol,
+            "imap": ServerSettings(
+                host=system.host,
+                port=system.port,
+                secure=system.secure,
+                verify_cert=system.verify_cert,
+            ),
+            "smtp": ServerSettings(
+                host=system.smtp_host, port=system.smtp_port, secure=system.smtp_secure
+            ),
+        }
+    )
+
+
+def require_encrypted(profile: MailProfile, config: Config) -> str | None:
+    """Plain connections are only allowed to this computer, or where the system settings say."""
+    if profile.system and config.system_mail:
+        return None
     for name, server in (("IMAP", profile.imap), ("SMTP", profile.smtp)):
         if not server.secure and server.host not in {"127.0.0.1", "localhost"}:
             return f"{name} must use an encrypted connection."

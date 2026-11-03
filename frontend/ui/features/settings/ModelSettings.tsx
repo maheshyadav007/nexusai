@@ -48,7 +48,7 @@ function SignIn({ code, url }: { code: string; url: string }) {
   );
 }
 
-function Connected({ email, plan, selected }: { email: string | null | undefined; plan: string | null | undefined; selected: string | null | undefined }) {
+function Connected({ email, plan, selected, managed = false }: { email: string | null | undefined; plan: string | null | undefined; selected: string | null | undefined; managed?: boolean }) {
   const models = useAvailableModels(true);
   const select = useSelectModel();
   const disconnect = useDisconnect();
@@ -63,9 +63,11 @@ function Connected({ email, plan, selected }: { email: string | null | undefined
           <span className="truncate">{email ?? t("settings.models.connected")}</span>
           {plan ? <span className="text-sm text-ink-muted">{plan}</span> : null}
         </p>
-        <Button variant="quiet" loading={disconnect.isPending} onClick={() => disconnect.mutate(undefined)}>
-          {t("settings.models.disconnect")}
-        </Button>
+        {managed ? null : (
+          <Button variant="quiet" loading={disconnect.isPending} onClick={() => disconnect.mutate(undefined)}>
+            {t("settings.models.disconnect")}
+          </Button>
+        )}
       </div>
       {models.isPending ? <Skeleton className="h-6 w-full" /> : null}
       {models.isError ? <ErrorState title={t("settings.models.list.error")} description={messageOf(models.error)} onRetry={() => void models.refetch()} /> : null}
@@ -137,6 +139,13 @@ export function ModelSettings() {
   const provider = useModelProvider();
   const saveProvider = useSaveModelProvider();
   const active = provider.data?.provider ?? "chatgpt";
+  if (status.data?.managed) {
+    return (
+      <Card title={t("settings.models.title")} description={t("settings.models.description.system")}>
+        <Connected email={null} plan={null} selected={status.data.selected_model} managed />
+      </Card>
+    );
+  }
   return (
     <Card title={t("settings.models.title")} description={t("settings.models.description")}>
       <div className="mb-4">

@@ -97,7 +97,7 @@ interface AppEvent<T> {  // generated from the Pydantic contract
 
 | Instead of checking repeatedly for | We react to |
 |---|---|
-| New mail | IMAP IDLE, emitting `mail.received` |
+| New mail | IMAP IDLE, emitting `mail.received`. POP3 can't announce mail, so it's a check every minute |
 | Reminders and deadlines | One timer set for the next due time, reset whenever the schedule changes |
 | Files edited outside the app | File system watcher |
 | Laptop waking or network returning | Electron `powerMonitor` and network events |

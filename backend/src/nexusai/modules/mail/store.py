@@ -163,6 +163,11 @@ UPDATE threads SET has_attachments = EXISTS (SELECT 1 FROM messages m WHERE m.th
 """,
     ),
     Migration(
+        "mail_pop3_001",
+        "CREATE TABLE pop3_uids (account TEXT NOT NULL, name TEXT NOT NULL, uid INTEGER NOT NULL,"
+        " PRIMARY KEY (account, name))",
+    ),
+    Migration(
         "mail_attention_001",
         """
 ALTER TABLE threads ADD COLUMN next_action TEXT;

@@ -70,6 +70,8 @@ class FolderStatus:
 
 
 class ImapSession:
+    keeps_flags = True
+
     def __init__(
         self, profile: MailProfile, password: str, timeout: float, *, never_delete: bool = True
     ) -> None:
@@ -201,6 +203,9 @@ class ImapSession:
 
     def append(self, folder: str, raw: bytes, flags: tuple[bytes, ...]) -> None:
         self.client.append(folder, raw, flags=flags)
+
+    def draft_uids(self, marker: str) -> list[int]:
+        return [int(uid) for uid in self.client.search(["HEADER", "X-NexusAI-Draft", marker])]
 
     def wait_for_change(self, seconds: float, interrupted: Callable[[], bool]) -> bool:
         """IDLE until the server reports a change (True), time passes, or we're interrupted."""

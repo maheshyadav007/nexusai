@@ -33,11 +33,13 @@ from nexusai.modules.mail.imap import (
     synced_folders,
 )
 from nexusai.modules.mail.parse import parse_message
+from nexusai.modules.mail.pop3 import Pop3Session
 from nexusai.modules.mail.rules import evaluate, load_rules, own_domain_of
 
 log = structlog.get_logger()
 DRAFT_HEADER = "x-nexusai-draft"
 PROGRESS_NOTICE_SECONDS = 1.0
+MailSession = ImapSession | Pop3Session
 
 
 GMAIL_SYSTEM_LABELS = {"inbox": "\\Inbox", "sent": "\\Sent", "drafts": "\\Draft"}
@@ -146,17 +148,25 @@ class MailSync:
     def _run(self) -> None:
         delay = self.config.reconnect_min_seconds
         while not self._stop.is_set():
-            session: ImapSession | None = None
+            session: MailSession | None = None
             try:
                 self._set_state("connecting")
                 settings = self._settings()
-                session = ImapSession(
-                    self.profile,
-                    self.password,
-                    self.config.connect_timeout_seconds,
-                    # Refusing is the default, so only a person's clear choice turns it off.
-                    never_delete=bool(settings["never_delete"]) if settings else True,
-                )
+                # Refusing is the default, so only a person's clear choice turns it off.
+                never_delete = bool(settings["never_delete"]) if settings else True
+                timeout = self.config.connect_timeout_seconds
+                if self.profile.protocol == "pop3":
+                    session = Pop3Session(
+                        self.profile,
+                        self.password,
+                        timeout,
+                        never_delete=never_delete,
+                        uids=self._pop3_uids,
+                    )
+                else:
+                    session = ImapSession(
+                        self.profile, self.password, timeout, never_delete=never_delete
+                    )
                 delay = self.config.reconnect_min_seconds
                 self._session(session)
             except SignInFailed:
@@ -182,7 +192,27 @@ class MailSync:
                     session.close()
         self.status.state = "off"
 
-    def _discover(self, session: ImapSession) -> list[Folder]:
+    def _pop3_uids(self, names: list[str]) -> dict[str, int]:
+        """A lasting number for each server ID. New ones count up, so newer mail is higher."""
+        with self.ctx.bus.db.transaction() as tx:
+            known = {
+                row["name"]: row["uid"]
+                for row in tx.execute(
+                    "SELECT name, uid FROM pop3_uids WHERE account = ?", (self.account,)
+                ).fetchall()
+            }
+            biggest = max(known.values(), default=0)
+            for name in names:
+                if name not in known:
+                    biggest += 1
+                    known[name] = biggest
+                    tx.execute(
+                        "INSERT INTO pop3_uids (account, name, uid) VALUES (?, ?, ?)",
+                        (self.account, name, biggest),
+                    )
+        return known
+
+    def _discover(self, session: MailSession) -> list[Folder]:
         """Every folder on the server, as it is right now. A label can appear or go at any time."""
         found = session.folders()
         wanted = synced_folders(found)
@@ -212,7 +242,7 @@ class MailSync:
             store.remove_location(tx, self.account, name, row["uid"])
         tx.execute("DELETE FROM mail_folders WHERE account = ? AND name = ?", (self.account, name))
 
-    def _session(self, session: ImapSession) -> None:
+    def _session(self, session: MailSession) -> None:
         self._older = {}
         self._copies = {}
         self._statuses = {}
@@ -262,7 +292,7 @@ class MailSync:
             else:
                 self._wake.wait(self.config.check_every_seconds)
 
-    def _file_copies(self, session: ImapSession, folders: list[Folder]) -> bool:
+    def _file_copies(self, session: MailSession, folders: list[Folder]) -> bool:
         """Files mail that's already here under the other folders it's in, downloading nothing.
 
         True while there's more to look through, so the check doesn't wait before carrying on.
@@ -295,13 +325,13 @@ class MailSync:
             )
         return True
 
-    def _measure(self, session: ImapSession, folders: list[Folder]) -> set[str]:
+    def _measure(self, session: MailSession, folders: list[Folder]) -> set[str]:
         """What each folder holds, and which ones changed since the last look."""
         changed: set[str] = set()
         counts: dict[Folder, int] = {}
+        statuses = {folder: session.status(folder.name) for folder in folders}
         with self.ctx.bus.db.transaction() as tx:
-            for folder in folders:
-                status = session.status(folder.name)
+            for folder, status in statuses.items():
                 counts[folder] = status.messages
                 if self._statuses.get(folder.name) != status:
                     changed.add(folder.name)
@@ -405,7 +435,7 @@ class MailSync:
             (stored, self.account),
         )
 
-    def _first_look(self, session: ImapSession, folder: Folder, validity: int) -> None:
+    def _first_look(self, session: MailSession, folder: Folder, validity: int) -> None:
         """Older mail comes as the budget allows. Whatever arrives after this moment is new."""
         settings = self._settings()
         budget = settings["history_budget"] if settings else None
@@ -457,7 +487,7 @@ class MailSync:
             self._spend(tx, stored)
         self._note_progress()
 
-    def _fetch_new(self, session: ImapSession, folder: Folder) -> tuple[int, int]:
+    def _fetch_new(self, session: MailSession, folder: Folder) -> tuple[int, int]:
         """How many new emails this check found in the folder, and how many came down."""
         validity, _ = session.select(folder.name)
         known, last_uid, _ = self._folder_row(folder.name)
@@ -507,7 +537,7 @@ class MailSync:
                 return turns[self._turn % len(turns)], allowance, False
         return None
 
-    def _backfill(self, session: ImapSession, folders: list[Folder]) -> bool:
+    def _backfill(self, session: MailSession, folders: list[Folder]) -> bool:
         """One batch of history per pass, so new mail is never kept waiting by a large mailbox."""
         chosen = self._next_history(folders)
         if chosen is None:
@@ -557,7 +587,7 @@ class MailSync:
             ).fetchone()
         )
 
-    def _note_copies(self, session: ImapSession, folder: Folder, uids: list[int]) -> list[int]:
+    def _note_copies(self, session: MailSession, folder: Folder, uids: list[int]) -> list[int]:
         """Files what's already held under this folder too, and returns what needs downloading."""
         ids = session.message_ids(uids)
         if not ids:
@@ -585,7 +615,7 @@ class MailSync:
         return [uid for uid in uids if uid not in copies]
 
     def _ingest(
-        self, session: ImapSession, folder: Folder, uids: list[int], *, live: bool, advance: bool
+        self, session: MailSession, folder: Folder, uids: list[int], *, live: bool, advance: bool
     ) -> int:
         """How many emails were new to this computer. One already here just gains this folder."""
         if not uids:
@@ -688,8 +718,11 @@ class MailSync:
                         )
         return len(stored)
 
-    def _sync_flags(self, session: ImapSession, folders: list[Folder]) -> None:
+    def _sync_flags(self, session: MailSession, folders: list[Folder]) -> None:
         """Changes made elsewhere: read, flagged, and mail moved or deleted on the server."""
+        # Nothing to learn from POP3, and mail its server has dropped stays here.
+        if not session.keeps_flags:
+            return
         for folder in folders:
             rows = self.ctx.bus.db.fetch_all(
                 "SELECT l.uid, l.message, m.read, m.flagged, m.thread_id, m.folder AS speaks_from"
@@ -736,7 +769,7 @@ class MailSync:
                         trace_id=self.ctx.trace_id,
                     )
 
-    def _drain_outbox(self, session: ImapSession) -> None:
+    def _drain_outbox(self, session: MailSession) -> None:
         """Local changes, kept in the database so they survive a restart or a dropped connection."""
         rows = self.ctx.bus.db.fetch_all(
             "SELECT id, op, payload, attempts FROM mail_outbox WHERE account = ? ORDER BY id",
@@ -767,14 +800,14 @@ class MailSync:
         with self.ctx.bus.db.transaction() as tx:
             tx.execute("DELETE FROM mail_outbox WHERE id = ?", (op_id,))
 
-    def _take_label_off(self, session: ImapSession, uid: int, role: str, folder: str) -> None:
+    def _take_label_off(self, session: MailSession, uid: int, role: str, folder: str) -> None:
         all_mail = self.status.folders.get("all")
         if all_mail is None:
             log.warning("mail_no_all_mail_folder", folder=folder)
             return
         session.remove_label(uid, GMAIL_SYSTEM_LABELS.get(role, folder), all_mail)
 
-    def _apply(self, session: ImapSession, op: str, payload: dict[str, object]) -> None:
+    def _apply(self, session: MailSession, op: str, payload: dict[str, object]) -> None:
         if op == "append":
             role = str(payload["role"])
             folder = self.status.folders.get(role)
@@ -787,10 +820,8 @@ class MailSync:
             folder = self.status.folders.get("drafts")
             if folder:
                 session.select(folder)
-                for uid in session.client.search(
-                    ["HEADER", "X-NexusAI-Draft", str(payload["draft"])]
-                ):
-                    session.delete(int(uid))
+                for uid in session.draft_uids(str(payload["draft"])):
+                    session.delete(uid)
             return
         folder_name, uid = str(payload["folder"]), int(str(payload["uid"]))
         session.select(folder_name)

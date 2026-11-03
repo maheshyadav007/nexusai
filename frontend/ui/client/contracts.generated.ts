@@ -8,9 +8,12 @@
 export type Host = string;
 export type Port = number;
 export type Secure = boolean;
+export type VerifyCert = boolean;
 export type Type = "password";
 export type User = string;
 export type Label = string;
+export type Protocol = "imap" | "pop3";
+export type System = boolean;
 export type Mailboxes = string[];
 export type Address = string | null;
 export type Name = string;
@@ -86,6 +89,9 @@ export type SmtpHost1 = string;
 export type SmtpPort1 = number;
 export type Secure1 = boolean;
 export type PasswordHint = string | null;
+export type Protocol1 = "imap" | "pop3";
+export type System1 = boolean;
+export type AddressDomain = string | null;
 export type Presets = MailPreset[];
 export type Folder2 = ("inbox" | "sent" | "drafts" | "trash" | "archive" | "other" | "junk") | ("priority" | "all");
 export type Location = string | null;
@@ -1540,6 +1546,7 @@ export type Connected = boolean;
 export type AccountEmail = string | null;
 export type Plan = string | null;
 export type SelectedModel = string | null;
+export type Managed = boolean;
 export type Model7 = string;
 export type Prompt4 = string;
 export type Path11 = string | null;
@@ -2008,6 +2015,7 @@ export interface ServerSettings {
   host: Host;
   port: Port;
   secure?: Secure;
+  verify_cert?: VerifyCert;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -2023,6 +2031,8 @@ export interface MailAuth {
  */
 export interface MailProfile {
   label: Label;
+  protocol?: Protocol;
+  system?: System;
   imap: ServerSettings;
   smtp: ServerSettings;
   auth: MailAuth;
@@ -2280,6 +2290,9 @@ export interface MailPreset {
   smtp_port: SmtpPort1;
   secure?: Secure1;
   password_hint?: PasswordHint;
+  protocol?: Protocol1;
+  system?: System1;
+  address_domain?: AddressDomain;
   [k: string]: unknown;
 }
 /**
@@ -5171,6 +5184,7 @@ export interface ModelStatus {
   plan?: Plan;
   selected_model?: SelectedModel;
   login: ModelLogin;
+  managed?: Managed;
   [k: string]: unknown;
 }
 /**

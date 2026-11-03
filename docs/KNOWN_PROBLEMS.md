@@ -2,7 +2,7 @@
 
 Problems found while testing on the real mailbox and model, and how we plan to solve each one. Remove a row once it's fixed and proven on the real account.
 
-Last reviewed: 2026-11-03, at commit `8a5dafe`.
+Last reviewed: 2026-11-03, at commit `486d009`.
 
 ## Security
 
@@ -29,6 +29,23 @@ The app has only ever been run for real on one Mac, so these come from reading t
 | Frontend and backend must share an account | The frontend reads the backend's token from the user's app data, and remembers it. A different user, or a reset, gives "Request refused" until it restarts | Read the token again after a refusal, and say what's wrong |
 | Ports already in use | Other programs often use 4000, such as NoMachine, and the frontend's port is fixed | Add one setting for both ports, and a clear message when one is taken |
 | No fixed Node version | Node 22 is only mentioned in the README | Add `engines` and `.nvmrc` |
+
+## POP3 and company servers
+
+POP3 and the system settings are tested against fake servers only, and haven't met the real company servers yet.
+
+| Problem | What happens | How we'll solve it |
+|---|---|---|
+| Everything starts unread | POP3 has no read marks, so all downloaded history shows as unread | Offer "mark older mail as read" after the first download |
+| Nothing syncs between devices | Read marks, flags, archiving and folders stay on this computer, and mail reaches the server's other clients as they left it | Use IMAP if the company turns it on. POP3 can't do this |
+| Sent mail exists only here | The server keeps no Sent folder for POP3, so mail sent from other programs doesn't appear, and a lost Home loses this copy | Import a PST for older sent mail, and rely on Home backups |
+| New mail takes up to a minute | POP3 can't announce mail, so the mailbox is checked every minute | Lower `check_every_seconds` if a minute is too slow |
+| Other mail clients can clash | Servers lock a POP3 mailbox while it's open, so Outlook may fail during a check, and we wait and retry if it's the other way round | Check on the real server, and lengthen the gap if it happens |
+| A server without `UIDL` can't sync | We use it to tell which mail is new, and every modern server has it. Without it, the app keeps retrying | Say so plainly if it's ever seen |
+| A company certificate fails | Certificates are checked by default, and a private one fails with a message naming the setting | Set `NEXUSAI_MAIL_VERIFY_CERT=false` for now, then add the company's certificate |
+| Password in the clear | SMTP on port 25 without TLS sends the password unencrypted if the server asks for one | Use TLS once the servers allow it |
+| API key in a plain file | `.env` holds the model key unencrypted, though it isn't committed or passed to the agent's commands | Move it with the other secrets to the OS credential store |
+| A proxy can catch internal addresses | With `HTTP_PROXY` set, calls to the model server go through the proxy, and may fail | List the server in `NO_PROXY` for now, then bypass the proxy for private addresses |
 
 ## Search
 

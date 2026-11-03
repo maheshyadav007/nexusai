@@ -188,6 +188,7 @@ Every data source is a connector: an MCP server with its own tools, skills and r
 | NAV-2 | Mail categories: built-in (Needs you, FYI, Newsletters, Automated) and user-created; set by rules or the agent | MVP |
 | ACC-5 | Choose folders to sync (Inbox, Sent, others) | Next |
 | ACC-9 | Shared and delegated mailboxes | Next |
+| ACC-10 | Company install: model and mail servers set once in `.env`, so people only see their username, password and model names. POP3 with plain SMTP alongside IMAP, with read marks, flags, filing and sent mail kept on this computer. Gmail keeps working | MVP |
 | ACC-7 | Several profiles active at once | Later |
 
 ## B3. Mail: processing & rules

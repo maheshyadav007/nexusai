@@ -101,6 +101,8 @@ Status legend: **In use** (in the repo today) · **Decided** (agreed, not built 
 | Choice | Status | Notes |
 |---|---|---|
 | **IMAP + SMTP, profile-based config** | Decided | `mail-accounts.enc`, an encrypted file with named profiles (corporate server, Gmail test account) and their passwords. Corporate login is plain username + password over TLS (no custom root certificate). |
+| POP3 (`poplib`) and plain SMTP | In use | For company servers without IMAP. `Pop3Session` offers the same calls as `ImapSession`, so sync has one path. Tested on a fake server only so far. |
+| `.env` system settings | In use | Model and mail servers set once for everyone. Read by `load_config` and not added to the process's environment, so the agent's commands don't inherit the API key. See `.env.example`. |
 | `imapclient` | In use | IMAP with IDLE, on a dedicated worker thread. Replaced `aioimaplib` because it's simpler and mature. Works against Gmail; confirm against the corporate server. |
 | Python `email` package | Decided | Parses raw messages (MIME, attachments, headers). |
 | `smtplib` (standard library) | In use | SMTP sending. Replaced `aiosmtplib`, because handlers already run on worker threads. |

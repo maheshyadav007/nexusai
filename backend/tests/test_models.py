@@ -74,6 +74,7 @@ def test_starts_disconnected(client: TestClient) -> None:
         "plan": None,
         "selected_model": None,
         "login": {"state": "idle", "user_code": None, "verification_url": None, "error": None},
+        "managed": False,
     }
 
 

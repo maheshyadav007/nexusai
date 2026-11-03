@@ -362,7 +362,8 @@ class _SmtpHandler(socketserver.StreamRequestHandler):
             text = line.decode("utf8", "replace").strip()
             upper = text.upper()
             if upper.startswith(("EHLO", "HELO")):
-                reply("250-fake\r\n250 AUTH PLAIN LOGIN")
+                offers_auth = getattr(self.server, "offers_auth", True)
+                reply("250-fake\r\n250 AUTH PLAIN LOGIN" if offers_auth else "250 fake")
             elif upper.startswith("AUTH PLAIN"):
                 import base64
 

@@ -26,6 +26,8 @@ class ModelStatus(BaseModel):
     plan: str | None = None
     selected_model: str | None = None
     login: ModelLogin
+    # The server is set for everyone, so the person only chooses a model.
+    managed: bool = False
 
 
 class StartModelLogin(BaseModel):

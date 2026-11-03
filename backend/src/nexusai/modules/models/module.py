@@ -29,6 +29,7 @@ from nexusai.contracts.models import (
     TestModel,
 )
 from nexusai.contracts.notifications import NotificationRequested
+from nexusai.kernel.config import SystemModel
 from nexusai.kernel.database import Migration
 from nexusai.kernel.module import CommandError, Context, Module
 from nexusai.kernel.secrets import secret_store
@@ -46,6 +47,8 @@ from nexusai.modules.models.chatgpt import (
 log = structlog.get_logger()
 TOKENS = "chatgpt.tokens"
 LITELLM_KEY = "litellm.key"
+# Under this name in the choices table, so a ChatGPT choice survives the setting being removed.
+SYSTEM_PROVIDER = "system"
 
 models_module = Module(
     name="models",
@@ -162,16 +165,51 @@ def _with_token[T](ctx: Context, call: Callable[[ChatGptClient, str], T]) -> T:
         raise CommandError("models.unavailable", str(error), 502) from error
 
 
-def _selected(ctx: Context) -> str | None:
-    rows = ctx.bus.db.fetch_all(
-        "SELECT model FROM model_selection WHERE provider = ?", ("chatgpt",)
-    )
+def _selected(ctx: Context, provider: str = "chatgpt") -> str | None:
+    rows = ctx.bus.db.fetch_all("SELECT model FROM model_selection WHERE provider = ?", (provider,))
     return rows[0]["model"] if rows else None
+
+
+def _system_selected(ctx: Context, system: SystemModel) -> str | None:
+    """Their choice, or the first model listed. A choice since taken off the list doesn't count."""
+    chosen = _selected(ctx, SYSTEM_PROVIDER)
+    if system.names and chosen not in system.names:
+        return system.names[0]
+    return chosen
+
+
+def _names_from_server(base_url: str, key: str, timeout: float) -> list[str]:
+    try:
+        response = httpx.get(
+            f"{base_url.rstrip('/')}/models",
+            headers={"Authorization": f"Bearer {key}"},
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        return sorted(str(item["id"]) for item in response.json().get("data", []))
+    except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError) as error:
+        raise CommandError(
+            "models.unreachable",
+            "Couldn't list models from that server. Check the address and key.",
+            502,
+        ) from error
+
+
+def _system_names(ctx: Context, system: SystemModel) -> list[str]:
+    if system.names:
+        return list(system.names)
+    return _names_from_server(
+        system.base_url, system.api_key, ctx.config.network_check_timeout_seconds
+    )
 
 
 def _status(ctx: Context) -> ModelStatus:
     with _login_lock:
         login = _login.state
+    if system := ctx.config.system_model:
+        return ModelStatus(
+            connected=True, selected_model=_system_selected(ctx, system), login=login, managed=True
+        )
     tokens = _stored_tokens(ctx)
     if tokens is None:
         return ModelStatus(connected=False, login=login)
@@ -257,6 +295,10 @@ def _provider_row(ctx: Context) -> dict[str, Any]:
 
 
 def active_settings(ctx: Context) -> ActiveModel:
+    if system := ctx.config.system_model:
+        return ActiveModel(
+            "litellm", _system_selected(ctx, system), system.base_url, system.supports_tools
+        )
     raw = _provider_row(ctx)
     provider = raw.get("provider", "chatgpt")
     if provider == "litellm":
@@ -267,6 +309,8 @@ def active_settings(ctx: Context) -> ActiveModel:
 
 
 def litellm_key(ctx: Context) -> str | None:
+    if system := ctx.config.system_model:
+        return system.api_key
     return secret_store(ctx.config.secrets_test_file).get(LITELLM_KEY)
 
 
@@ -303,13 +347,11 @@ def get_provider(query: GetModelProvider, ctx: Context) -> ModelProviderView:
 
 @models_module.command("models.provider.save")
 def save_provider(command: SaveModelProvider, ctx: Context) -> ModelProviderView:
-    if command.provider == "litellm" and command.base_url:
-        parsed = urlparse(command.base_url)
-        local = parsed.hostname in {"127.0.0.1", "localhost"}
-        if parsed.scheme != "https" and not local:
-            raise CommandError(
-                "models.not_encrypted", "Use an https:// address for the model server.", 422
-            )
+    address = command.base_url if command.provider == "litellm" else None
+    if address and urlparse(address).scheme not in {"http", "https"}:
+        raise CommandError(
+            "models.bad_address", "Use an http:// or https:// address for the model server.", 422
+        )
     if command.api_key:
         secret_store(ctx.config.secrets_test_file).set(LITELLM_KEY, command.api_key)
     _save_provider(
@@ -329,20 +371,7 @@ def list_provider_models(command: ListProviderModels, ctx: Context) -> Available
     key = command.api_key or litellm_key(ctx)
     if not key:
         raise CommandError("models.no_key", "Enter the API key first.", 422)
-    try:
-        response = httpx.get(
-            f"{command.base_url.rstrip('/')}/models",
-            headers={"Authorization": f"Bearer {key}"},
-            timeout=ctx.config.network_check_timeout_seconds,
-        )
-        response.raise_for_status()
-        names = sorted(str(item["id"]) for item in response.json().get("data", []))
-    except (httpx.HTTPError, ValueError, KeyError, TypeError) as error:
-        raise CommandError(
-            "models.unreachable",
-            "Couldn't list models from that server. Check the address and key.",
-            502,
-        ) from error
+    names = _names_from_server(command.base_url, key, ctx.config.network_check_timeout_seconds)
     return AvailableModels(models=[AvailableModel(id=name, name=name) for name in names])
 
 
@@ -409,20 +438,28 @@ models_module.on_reset.append(_forget)
 
 @models_module.query("models.list")
 def list_models(query: ListModels, ctx: Context) -> AvailableModels:
+    if system := ctx.config.system_model:
+        names = _system_names(ctx, system)
+        return AvailableModels(models=[AvailableModel(id=n, name=n) for n in names])
     pairs = _with_token(ctx, lambda client, token: client.list_models(token))
     return AvailableModels(models=[AvailableModel(id=i, name=n) for i, n in pairs])
 
 
 @models_module.command("models.select")
 def select_model(command: SelectModel, ctx: Context) -> ModelStatus:
-    pairs = _with_token(ctx, lambda client, token: client.list_models(token))
-    if command.model not in {model_id for model_id, _ in pairs}:
+    if system := ctx.config.system_model:
+        offered = set(_system_names(ctx, system))
+    else:
+        pairs = _with_token(ctx, lambda client, token: client.list_models(token))
+        offered = {model_id for model_id, _ in pairs}
+    if command.model not in offered:
         raise CommandError("models.not_available", "Your plan doesn't offer that model.", 422)
+    provider = SYSTEM_PROVIDER if ctx.config.system_model else "chatgpt"
     with ctx.bus.unit_of_work() as work:
         work.tx.execute(
             "INSERT INTO model_selection (provider, model) VALUES (?, ?)"
             " ON CONFLICT (provider) DO UPDATE SET model = excluded.model",
-            ("chatgpt", command.model),
+            (provider, command.model),
         )
         work.emit(
             "models.changed",
@@ -433,9 +470,33 @@ def select_model(command: SelectModel, ctx: Context) -> ModelStatus:
     return _status(ctx)
 
 
+def _test_system_model(ctx: Context, system: SystemModel, prompt: str) -> ModelReply:
+    model = _system_selected(ctx, system)
+    if model is None:
+        raise CommandError("models.none_selected", "Choose a model first.", 409)
+    try:
+        response = httpx.post(
+            f"{system.base_url}/chat/completions",
+            headers={"Authorization": f"Bearer {system.api_key}"},
+            json={"model": model, "messages": [{"role": "user", "content": prompt}]},
+            timeout=ctx.config.chatgpt.timeout_seconds,
+        )
+        response.raise_for_status()
+        text = str(response.json()["choices"][0]["message"]["content"] or "")
+    except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as error:
+        raise CommandError(
+            "models.unavailable", "The model server didn't answer. Try again.", 502
+        ) from error
+    if not text.strip():
+        raise CommandError("models.empty_reply", "The model sent an empty reply. Try again.", 502)
+    return ModelReply(model=model, text=text)
+
+
 @models_module.command("models.test")
 def test_model(command: TestModel, ctx: Context) -> ModelReply:
     """Sends only the text the user typed. Mail and files never reach this."""
+    if system := ctx.config.system_model:
+        return _test_system_model(ctx, system, command.prompt)
     model = _selected(ctx)
     if model is None:
         raise CommandError("models.none_selected", "Choose a model first.", 409)
