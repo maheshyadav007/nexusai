@@ -15,6 +15,7 @@ from nexusai.kernel.home import scratch_folder
 from nexusai.kernel.module import CommandError, Context
 from nexusai.modules.agent import (
     channel,
+    feedback,
     gateway,
     guard,
     memory,
@@ -494,7 +495,11 @@ def on_the_plate(ctx: Context) -> str:
 
 def brief_task(ctx: Context) -> str:
     plate = on_the_plate(ctx)
-    return f"On their plate today:\n<untrusted>\n{plate or 'Nothing open.'}\n</untrusted>"
+    task = f"On their plate today:\n<untrusted>\n{plate or 'Nothing open.'}\n</untrusted>"
+    past = feedback.briefs_with_reactions(ctx.bus.db)
+    if past:
+        task += f"\n\nEarlier briefs and how they took them:\n<untrusted>\n{past}\n</untrusted>"
+    return task
 
 
 def review_turn(ctx: Context) -> TurnRequest | None:

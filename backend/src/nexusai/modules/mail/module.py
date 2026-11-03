@@ -609,12 +609,13 @@ def get_thread(query: GetThread, ctx: Context) -> ThreadView:
 @mail_module.query("search.run")
 def run_search(query: SearchMail, ctx: Context) -> SearchResults:
     account = accounts.current_account(ctx.config)
+    query = store.with_operators(query)
     found = store.search(ctx.bus.db, account, query)
     engine = semantic.engine()
     # Words work right away. If the model isn't here yet, asking is what fetches it.
     if not query.query.strip() or engine is None or not engine.is_ready():
         return found
-    hits = engine.search(query.query, {"mail"}, MEANING_CANDIDATES)
+    hits = engine.search(found.corrected or query.query, {"mail"}, MEANING_CANDIDATES)
     return store.merge_meaning(
         ctx.bus.db, account, query, found, [(int(hit.ref), hit.excerpt) for hit in hits]
     )

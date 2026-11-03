@@ -35,6 +35,8 @@ class CatalogModel:
     # has its own scale. Measured on 16 labelled pairs: e5 keeps 7 of 8 related and 0 of 8 unrelated
     # at 0.80, and MiniLM keeps the 5 English related and 0 unrelated at 0.25.
     min_score: float = 0.0
+    # How far above this query's typical score a match has to be, when scores bunch together.
+    noise_margin: float = 0.0
 
     @property
     def size(self) -> int:
@@ -65,6 +67,7 @@ MODELS = (
         query_prefix="query: ",
         passage_prefix="passage: ",
         min_score=0.80,
+        noise_margin=0.02,
     ),
     CatalogModel(
         id="all-minilm-l6-v2",

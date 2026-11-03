@@ -23,7 +23,7 @@ from langgraph.types import interrupt
 from pydantic import BaseModel, ConfigDict, Field
 
 from nexusai.contracts.documents import DocumentLibrary, DocumentPreview, GetDocument, ListDocuments
-from nexusai.contracts.mail import SearchMail, SearchResults
+from nexusai.contracts.mail import FolderRole, SearchMail, SearchResults
 from nexusai.kernel.database import Migration
 from nexusai.kernel.home import scratch_folder
 from nexusai.kernel.module import CommandError, Context
@@ -446,7 +446,17 @@ class _Command(BaseModel):
 
 
 class _Search(BaseModel):
-    query: str = Field(description="Words to find in mail and its attachments.")
+    query: str = Field(
+        default="",
+        description='Words to find in mail and its attachments. "Quotes" find an exact phrase.',
+    )
+    sender: str | None = Field(default=None, description="Part of who it's from: name or address.")
+    after: str | None = Field(default=None, description="On or after this date, as YYYY-MM-DD.")
+    before: str | None = Field(default=None, description="Before this date, as YYYY-MM-DD.")
+    has_attachment: bool | None = Field(default=None, description="Only mail with attachments.")
+    folder: Literal["inbox", "sent", "archive"] | None = Field(
+        default=None, description="Only this folder. sent is what the person wrote."
+    )
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
@@ -653,6 +663,8 @@ TRIAGE_TOOLS = frozenset(
         "read_document",
     }
 )
+# As many as the agent can use at once. It narrows the search for more.
+SEARCH_SHOWN = 20
 REVIEW_ORIGIN = "mail-review"
 # It ends a run, so judging simple mail takes one model call.
 ENDS_THE_RUN = frozenset({"record_triage"})
@@ -931,16 +943,46 @@ def build_tools(
             work,
         )
 
-    def search_mail(query: str, tool_call_id: str) -> str:
+    def search_mail(
+        tool_call_id: str,
+        query: str = "",
+        sender: str | None = None,
+        after: str | None = None,
+        before: str | None = None,
+        has_attachment: bool | None = None,
+        folder: FolderRole | None = None,
+    ) -> str:
         def work() -> str:
-            hits = cast(SearchResults, run_search(SearchMail(query=query, limit=20), ctx)).hits
-            for hit in hits:
+            wanted = SearchMail(
+                query=query,
+                limit=SEARCH_SHOWN,
+                sender=sender,
+                date_from=after,
+                date_to=before,
+                has_attachment=has_attachment,
+                folder=folder,
+            )
+            found = cast(SearchResults, run_search(wanted, ctx))
+            for hit in found.hits:
                 citations.note(ctx.bus.db, session, citations.MAIL, str(hit.thread.id))
             lines = [
-                f"[thread {h.thread.id}] {h.thread.subject} | {', '.join(h.thread.participants[:3])} | {h.excerpt}"
-                for h in hits
+                f"[thread {h.thread.id}] {h.thread.last_date[:10]} | {h.thread.subject}"
+                f" | {', '.join(h.thread.participants[:3])}"
+                f"{' | ' + h.thread.category if h.thread.category else ''}"
+                f"{' | related in meaning, not these words' if h.matched_by == 'meaning' else ''}"
+                f" | {h.excerpt}"
+                for h in found.hits
             ]
-            return _untrusted("\n".join(lines) or "Nothing found.")
+            if found.corrected:
+                lines.insert(
+                    0, f"Nothing matched as typed, so this searched for: {found.corrected}"
+                )
+            if len(found.hits) == SEARCH_SHOWN:
+                lines.append("There may be more. Narrow it with sender, after or before.")
+            return _untrusted(
+                "\n".join(lines)
+                or "Nothing has these words. Try fewer words, or semantic_search for the topic."
+            )
 
         return _guarded(
             ctx,
@@ -1140,22 +1182,45 @@ def build_tools(
     def save_personal_prompt(name: str, content: str, tool_call_id: str) -> str:
         if not name.replace("-", "").isalnum():
             return "Not saved: that isn't a valid name."
-        # Mail can't rewrite how the agent judges mail.
-        if _is_untrusted(ctx, session):
-            return "Not saved: this session has read mail or documents, so prompts can't change from it."
-        folder = ctx.config.home / "prompts" / "personal"
-        folder.mkdir(parents=True, exist_ok=True)
-        (folder / f"{name}.md").write_text(content, "utf-8")
-        with ctx.bus.unit_of_work() as work:
-            work.emit("prompts.changed", {"name": name}, source="agent", trace_id=ctx.trace_id)
-        return f"Saved {name}. The person can edit it in Prompts and memory."
+
+        def save() -> str:
+            folder = ctx.config.home / "prompts" / "personal"
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / f"{name}.md").write_text(content, "utf-8")
+            with ctx.bus.unit_of_work() as work:
+                work.emit("prompts.changed", {"name": name}, source="agent", trace_id=ctx.trace_id)
+            return f"Saved {name}. The person can edit it in Prompts and memory."
+
+        if not _is_untrusted(ctx, session):
+            return save()
+        # Mail can't rewrite how the agent judges mail, so the person sees these words and agrees.
+        return _guarded(
+            ctx,
+            session,
+            tool_call_id,
+            "save_personal_prompt",
+            "data",
+            None,
+            f"Save your {name} prompt",
+            content,
+            False,
+            save,
+        )
 
     def search_documents(query: str, tool_call_id: str) -> str:
         def work() -> str:
             found = list_documents(ListDocuments(query=query, limit=20), ctx).documents
             for document in found:
                 citations.note(ctx.bus.db, session, citations.DOCUMENT, document.key)
-            return _untrusted("\n".join(f"[{d.key}] {d.name}" for d in found) or "Nothing found.")
+            return _untrusted(
+                "\n".join(
+                    f"[{d.key}] {d.name} | {d.date[:10]}"
+                    f"{' | from ' + d.sender if d.sender else ''}"
+                    f"{' | ' + d.place if d.place else ''}"
+                    for d in found
+                )
+                or "Nothing found."
+            )
 
         return _guarded(
             ctx,
@@ -1328,8 +1393,9 @@ def build_tools(
         (
             search_mail,
             _Search,
-            "Find mail and attachments by exact words, names or addresses. For what something is "
-            "about, use semantic_search if it's offered.",
+            "Find mail and attachments by exact words, names or addresses, and filter by sender, "
+            "date, attachment or folder. Common words are ignored, and it falls back to some of "
+            "the words. For what something is about, use semantic_search if it's offered.",
         ),
         (
             read_thread,

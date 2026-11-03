@@ -5,7 +5,7 @@ from collections import Counter
 from datetime import UTC, datetime
 from typing import Any
 
-from nexusai.contracts.agent import CorrectionRow
+from nexusai.contracts.agent import BriefReaction, CorrectionRow
 from nexusai.kernel.database import Database, Migration
 
 MIGRATION = Migration(
@@ -99,3 +99,72 @@ def for_sender(db: Database, sender: str) -> str:
     )
     counted = Counter((row["field"], row["value"]) for row in rows)
     return "; ".join(f"{_say(*key)} {times}x" for key, times in counted.most_common(3))
+
+
+BRIEF_MIGRATION = Migration(
+    "agent_brief_feedback_001",
+    """
+CREATE TABLE brief_feedback (
+  session TEXT NOT NULL, day TEXT NOT NULL, rating TEXT, comment TEXT NOT NULL DEFAULT '', brief TEXT NOT NULL DEFAULT '',
+  time TEXT NOT NULL, PRIMARY KEY (session, day));
+""",
+)
+BRIEFS_REMEMBERED = 10
+BRIEF_SHOWN_CHARS = 300
+
+
+def save_brief_reaction(
+    db: Database, session: str, day: str, rating: str | None, comment: str, brief: str
+) -> None:
+    now = datetime.now(UTC).isoformat()
+    with db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO brief_feedback (session, day, rating, comment, brief, time)"
+            " VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (session, day) DO UPDATE SET"
+            " rating = excluded.rating, comment = excluded.comment, time = excluded.time",
+            (session, day, rating, comment.strip(), brief[:BRIEF_SHOWN_CHARS], now),
+        )
+
+
+def brief_reaction(db: Database, session: str, day: str) -> tuple[str | None, str]:
+    rows = db.fetch_all(
+        "SELECT rating, comment FROM brief_feedback WHERE session = ? AND day = ?", (session, day)
+    )
+    return (rows[0]["rating"], rows[0]["comment"]) if rows else (None, "")
+
+
+def brief_reactions(db: Database) -> list[BriefReaction]:
+    rows = db.fetch_all(
+        "SELECT day, rating, comment FROM brief_feedback ORDER BY day DESC LIMIT ?",
+        (BRIEFS_REMEMBERED,),
+    )
+    return [BriefReaction(day=r["day"], rating=r["rating"], comment=r["comment"]) for r in rows]
+
+
+def brief_layer(db: Database) -> str:
+    """Only the person's own words and marks, so it can sit with what they've told the agent."""
+    rows = brief_reactions(db)
+    if not rows:
+        return ""
+    liked = sum(row.rating == "up" for row in rows)
+    disliked = sum(row.rating == "down" for row in rows)
+    lines = [
+        f"Of the last {len(rows)} briefs they reacted to, they liked {liked} and disliked {disliked}."
+    ]
+    said = [f"- {row.day}: {row.comment}" for row in rows if row.comment]
+    if said:
+        lines += ["What they asked for, newest first. Newer wins where these differ:", *said]
+    return "\n".join(lines)
+
+
+def briefs_with_reactions(db: Database) -> str:
+    """What each rated brief said, for the task, since those words came from reading mail."""
+    rows = db.fetch_all(
+        "SELECT day, rating, brief FROM brief_feedback WHERE rating IS NOT NULL AND brief != ''"
+        " ORDER BY day DESC LIMIT ?",
+        (BRIEFS_REMEMBERED,),
+    )
+    return "\n".join(
+        f"{row['day']}, {'liked' if row['rating'] == 'up' else 'disliked'}: {row['brief']}"
+        for row in rows
+    )

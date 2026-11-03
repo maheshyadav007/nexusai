@@ -3,7 +3,6 @@
 import hashlib
 import json
 import mimetypes
-import re
 import threading
 import uuid
 from datetime import UTC, datetime
@@ -84,6 +83,11 @@ CREATE TABLE home_files (
 # Pictures inside a mail are part of it. They're seen there, and aren't documents.
 EMAIL_KINDS = ("attachment", "calendar", "risky")
 READER_IDLE_SECONDS = 30.0
+BETWEEN_OLD_ATTACHMENTS = 0.1
+# How good a match is, best first.
+IN_NAME = 3
+IN_TEXT = 2
+BY_MEANING = 1
 FILE_TYPES = {
     "pdf": {"pdf"},
     "word": {"doc", "docx", "docm", "odt", "rtf", "hwp", "hwpx"},
@@ -204,27 +208,36 @@ def _home_rows(ctx: Context) -> list[DocumentRow]:
     return documents
 
 
-def _search_keys(ctx: Context, query: str) -> set[str]:
-    words = re.findall(r"[\w@.+-]+", query, flags=re.UNICODE)
+def _all_words(column: str, count: int) -> str:
+    return " AND ".join([f"{column} LIKE ?"] * count)
+
+
+def _search_keys(ctx: Context, query: str) -> dict[str, int]:
+    """Each match and how good it is: its name says more than a word somewhere inside."""
+    words = store.plain_words(query)
     if not words:
-        return set()
+        return {}
     match = " ".join(f'"{word}"*' for word in words)
     found = {
-        f"u:{row['rowid']}"
+        f"u:{row['rowid']}": IN_TEXT
         for row in ctx.bus.db.fetch_all(
             "SELECT rowid FROM document_search WHERE document_search MATCH ?", (match,)
         )
     }
-    needle = f"%{query}%"
-    for row in ctx.bus.db.fetch_all(
-        "SELECT message, part_index FROM message_parts WHERE filename LIKE ? OR text LIKE ?",
-        (needle, needle),
-    ):
-        found.add(f"m:{row['message']}:{row['part_index']}")
-    for row in ctx.bus.db.fetch_all(
-        "SELECT id FROM home_files WHERE name LIKE ? OR text LIKE ?", (needle, needle)
-    ):
-        found.add(f"h:{row['id']}")
+    needles = [f"%{word}%" for word in words]
+    tables = (
+        ("message_parts", "message, part_index", "filename", "m:{message}:{part_index}"),
+        ("home_files", "id", "name", "h:{id}"),
+    )
+    for table, ids, name, key in tables:
+        named = _all_words(name, len(words))
+        inside = _all_words("text", len(words))
+        rows = ctx.bus.db.fetch_all(
+            f"SELECT {ids}, {named} AS named FROM {table} WHERE ({named}) OR ({inside})",  # noqa: S608
+            (*needles, *needles, *needles),
+        )
+        for row in rows:
+            found[key.format(**dict(row))] = IN_NAME if row["named"] else IN_TEXT
     return found
 
 
@@ -251,8 +264,9 @@ def list_documents(query: ListDocuments, ctx: Context) -> DocumentLibrary:
         documents = [d for d in documents if d.date >= query.date_from]
     if query.date_to:
         documents = [d for d in documents if d.date <= query.date_to]
+    ranks: dict[str, int] = {}
     if query.query.strip():
-        keys = _search_keys(ctx, query.query)
+        ranks_by_words = _search_keys(ctx, query.query)
         engine = semantic.engine()
         # Words always work. Meaning only joins in if the person chose to download its model.
         places: dict[str, str | None] = {}
@@ -261,11 +275,13 @@ def list_documents(query: ListDocuments, ctx: Context) -> DocumentLibrary:
                 hit.ref: hit.place
                 for hit in engine.search(query.query, {"document"}, MEANING_CANDIDATES)
             }
-        keys |= set(places)
+        ranks = {key: ranks_by_words.get(key, BY_MEANING) for key in {*ranks_by_words, *places}}
         documents = [
-            d.model_copy(update={"place": places.get(d.key)}) for d in documents if d.key in keys
+            d.model_copy(update={"place": places.get(d.key)}) for d in documents if d.key in ranks
         ]
     documents.sort(key=lambda d: d.date, reverse=True)
+    # Sorted again and stable, so within each kind of match the newest comes first.
+    documents.sort(key=lambda d: ranks.get(d.key, 0), reverse=True)
     folders = ctx.bus.db.fetch_all("SELECT name FROM document_folders ORDER BY position")
     return DocumentLibrary(
         documents=documents[: query.limit], folders=[row["name"] for row in folders], tags=tags
@@ -581,6 +597,19 @@ def _read_home_file(ctx: Context) -> bool:
     return True
 
 
+def _read_old_attachment(ctx: Context) -> bool:
+    """History isn't read as it arrives, but search can't find what was never read."""
+    rows = ctx.bus.db.fetch_all(
+        "SELECT p.message FROM message_parts p JOIN messages m ON m.id = p.message"
+        " WHERE p.kind = 'attachment' AND p.text IS NULL AND m.folder_role NOT IN ('junk', 'trash')"
+        " ORDER BY p.message DESC LIMIT 1"
+    )
+    if not rows:
+        return False
+    extract_message(ctx, int(rows[0]["message"]))
+    return True
+
+
 def _reader_loop(ctx: Context) -> None:
     while not _reader_stop.is_set():
         try:
@@ -588,6 +617,10 @@ def _reader_loop(ctx: Context) -> None:
                 _home_changed.clear()
                 _scan_home_files(ctx)
             if _read_pending(ctx) or _read_home_file(ctx):
+                continue
+            if _read_old_attachment(ctx):
+                # Gently, since people are using the app while this catches up.
+                _reader_stop.wait(BETWEEN_OLD_ATTACHMENTS)
                 continue
         except Exception:
             log.exception("document_reader_failed")

@@ -20,6 +20,7 @@ TRUST = {
     "About the person": "yours",
     "Personalized prompts": "yours",
     "What you corrected": "yours",
+    "How they want the brief": "yours",
     "What the mailbox shows": "counted",
     "Memory": "mixed",
 }
@@ -55,13 +56,18 @@ def layers_for(
         capabilities=capabilities,
         about=about_person(ctx),
         corrections=feedback.layer(ctx.bus.db) if is_mail else "",
+        brief_wishes=feedback.brief_layer(ctx.bus.db) if agent == "daily-prep" else "",
         mailbox=signals.mailbox_layer(ctx) if is_mail else "",
         **values,
     )
 
 
 def _notes(ctx: Context) -> list[LearnedNote]:
-    notes: list[LearnedNote] = []
+    notes: list[LearnedNote] = [
+        LearnedNote(line=line, text=line.lstrip("- "), section="", thread=None, confirmed=True)
+        for line in memory.confirmed(ctx.config.home).splitlines()
+        if line.strip()
+    ]
     section = ""
     for line in memory.learned(ctx.config.home).splitlines():
         if line.startswith("#"):
@@ -95,6 +101,7 @@ def view(ctx: Context) -> AgentKnowledge:
     judged = db.fetch_all("SELECT COUNT(*) AS n FROM triage_runs WHERE status = 'done'")[0]["n"]
     done, total = mail_agent.learning_progress(ctx)
     return AgentKnowledge(
+        brief_reactions=feedback.brief_reactions(db),
         layers=_shown(layers),
         notes=_notes(ctx),
         corrections=feedback.recent(db),

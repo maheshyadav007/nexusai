@@ -50,7 +50,7 @@ LAST_DIGEST = "last_digest"
 
 
 INTERVIEW_STARTED = "interview_started"
-INTERVIEW_TITLE = "Interview"
+INTERVIEW_TITLE = "Know you better"
 INTERVIEW_AGENT = "interview"
 
 
@@ -462,7 +462,11 @@ class Triggers:
         if self.runtime.active_turn(session) is not None or not self._model_ready():
             return
         own = {"mode": schedule["context_mode"], "keep_messages": schedule["keep_messages"]}
-        prompt = schedule["prompt"] or "Prepare my morning from the work board."
+        prompt = schedule["prompt"] or (
+            "Write my morning brief from what's on my plate."
+            if is_brief
+            else "Prepare my morning from the work board."
+        )
         task = ""
         if is_brief:
             task = mail_agent.brief_task(self.ctx)

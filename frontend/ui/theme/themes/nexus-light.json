@@ -37,6 +37,12 @@
     "line": {
       "subtle": "#E5E2DD",
       "strong": "#A2907F"
+    },
+    "ai": {
+      "one": "#E0569B",
+      "two": "#F08A3C",
+      "three": "#8A5CF6",
+      "four": "#3B82F6"
     }
   },
   "type": {

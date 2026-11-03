@@ -18,6 +18,8 @@ export const themeSchema = z
       status: z.strictObject({ success: hex, warning: hex, danger: hex }),
       agent: z.strictObject({ running: hex, waiting: hex, done: hex, failed: hex }),
       line: z.strictObject({ subtle: hex, strong: hex }),
+      // The colors of anything the agents do for you, so AI looks the same everywhere.
+      ai: z.strictObject({ one: hex, two: hex, three: hex, four: hex }),
     }),
     accents: z.strictObject({ terracotta: accent, cobalt: accent, moss: accent, plum: accent }),
     type: z.strictObject({

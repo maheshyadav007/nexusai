@@ -544,6 +544,9 @@ class SearchMail(BaseModel):
     folder: FolderRole | None = None
     # One folder on the server, by its full name.
     location: str | None = Field(default=None, max_length=500)
+    recipient: str | None = Field(default=None, max_length=320)
+    subject: str | None = Field(default=None, max_length=500)
+    unread: bool | None = None
     limit: int = Field(default=100, ge=1, le=500)
 
 
@@ -558,6 +561,10 @@ class SearchHit(BaseModel):
 
 class SearchResults(BaseModel):
     hits: list[SearchHit]
+    # Nothing matched as typed, so these words were used instead.
+    corrected: str | None = None
+    # How many hits, from the top, have every word. The rest only have some.
+    with_every_word: int = 0
 
 
 class MailChanged(BaseModel):

@@ -1,14 +1,18 @@
 "use client";
 
-import { useDateTime } from "@/ui/client/format";
-import { useActivity, useAgentChannel, useMuteTopic, useUndo } from "@/ui/client/work";
+import type { AgentEntry } from "@/ui/client/contracts.generated";
+import { useDateTime, useRelativeTime } from "@/ui/client/format";
+import { useActivity, useAgentChannel, useAgents, useMuteTopic, useUndo } from "@/ui/client/work";
 import { Badge } from "@/ui/primitives/Badge";
 import { Button } from "@/ui/primitives/Button";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { PageHeader } from "@/ui/primitives/PageHeader";
 import { Skeleton } from "@/ui/primitives/Skeleton";
-import { t } from "@/ui/strings";
+import { StatusDot } from "@/ui/primitives/StatusDot";
+import { Tabs } from "@/ui/primitives/Tabs";
+import { TextLink } from "@/ui/primitives/TextLink";
+import { t, type StringKey } from "@/ui/strings";
 
 export function ActivityScreen() {
   const activity = useActivity();
@@ -36,15 +40,69 @@ export function ActivityScreen() {
   );
 }
 
+const STATE_LABEL: Readonly<Record<string, StringKey>> = { running: "agents.state.running", active: "agents.state.active", finished: "agents.state.finished", off: "agents.state.off", past: "agents.state.past" };
+const STATE_TONE: Readonly<Record<string, "running" | "done" | "waiting" | "failed">> = { running: "running", active: "done" };
+
+function AgentCard({ agent }: { agent: AgentEntry }) {
+  const format = useDateTime();
+  const relative = useRelativeTime();
+  const nextWhen = agent.next_run ? t("agents.next", { when: format(agent.next_run) }) : null;
+  const next = [nextWhen, agent.next_condition].filter(Boolean).join(" · ");
+  return (
+    <li data-testid="agent-entry" data-state={agent.state} className="flex flex-col gap-1 border-b border-line-subtle py-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex min-w-0 items-center gap-2">
+          {STATE_TONE[agent.state] ? <StatusDot tone={STATE_TONE[agent.state] as "running" | "done"} /> : null}
+          <span className="truncate text-md font-medium text-ink-primary">{agent.name}</span>
+        </span>
+        <Badge>{t(STATE_LABEL[agent.state] as StringKey)}</Badge>
+      </div>
+      <p className="text-sm text-ink-secondary">{agent.does}</p>
+      <p className="text-sm text-ink-primary">{agent.when}</p>
+      {next ? <p data-testid="agent-next" className="text-sm tabular-nums text-accent-default">{next}</p> : null}
+      <p className="flex flex-wrap items-center gap-2 text-sm tabular-nums text-ink-muted">
+        {agent.last_run ? t("agents.last", { when: relative(agent.last_run) }) : agent.state === "finished" ? null : t("agents.never")}
+        {agent.tokens ? <span>· {t("agents.tokens", { count: agent.tokens.toLocaleString() })}</span> : null}
+        {agent.session ? <TextLink className="text-sm" href={`/agent/sessions/${agent.session}`}>{t("agents.open")}</TextLink> : null}
+      </p>
+    </li>
+  );
+}
+
+function AgentList() {
+  const agents = useAgents();
+  const rows = agents.data?.agents ?? [];
+  if (agents.isPending) return <Skeleton className="h-6 w-full" />;
+  if (agents.isError) return <ErrorState title={t("agents.error")} onRetry={() => void agents.refetch()} />;
+  if (!rows.length) return <EmptyState icon="agent" title={t("agents.empty")} />;
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-md text-ink-secondary">{t("agents.description")}</p>
+      <ul aria-label={t("agents.title")} className="flex flex-col border-t border-line-subtle">
+        {rows.map((agent) => <AgentCard key={agent.id} agent={agent} />)}
+      </ul>
+    </div>
+  );
+}
+
 export function AgentChannelScreen() {
+  return (
+    <div className="mx-auto flex max-w-reading flex-col gap-5 p-6">
+      <PageHeader title={t("nav.channel")} />
+      <Tabs label={t("nav.channel")} tabs={[{ value: "agents", label: t("agents.title"), content: <AgentList /> }, { value: "messages", label: t("agents.messages"), content: <ChannelMessages /> }]} />
+    </div>
+  );
+}
+
+function ChannelMessages() {
   const channel = useAgentChannel();
   const mute = useMuteTopic();
   const format = useDateTime();
   const rows = channel.data?.messages ?? [];
   const muted = channel.data?.muted ?? [];
   return (
-    <div className="mx-auto flex max-w-reading flex-col gap-5 p-6">
-      <PageHeader title={t("nav.channel")} summary={t("agentChannel.description")} />
+    <div className="flex flex-col gap-5">
+      <p className="text-md text-ink-secondary">{t("agentChannel.description")}</p>
       {channel.isPending ? <Skeleton className="h-6 w-full" /> : null}
       {channel.isError ? <ErrorState title={t("agentChannel.error")} onRetry={() => void channel.refetch()} /> : null}
       {channel.isSuccess && rows.length === 0 ? <EmptyState icon="channel" title={t("agentChannel.empty")} /> : null}

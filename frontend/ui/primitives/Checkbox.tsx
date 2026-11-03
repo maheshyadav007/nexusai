@@ -5,7 +5,7 @@ import { useId } from "react";
 import { Icon } from "@/ui/icons";
 import { Tick } from "./Motion";
 
-export function Checkbox({ label, checked, disabled, onChange }: { label: string; checked: boolean; disabled?: boolean; onChange: (checked: boolean) => void }) {
+export function Checkbox({ label, hideLabel = false, checked, disabled, onChange }: { label: string; hideLabel?: boolean; checked: boolean; disabled?: boolean; onChange: (checked: boolean) => void }) {
   const id = useId();
   return (
     <div className="flex items-center gap-2">
@@ -16,7 +16,7 @@ export function Checkbox({ label, checked, disabled, onChange }: { label: string
           </Tick>
         </RadixCheckbox.Indicator>
       </RadixCheckbox.Root>
-      <label htmlFor={id} className="text-md text-ink-primary">
+      <label htmlFor={id} className={hideLabel ? "sr-only" : "text-md text-ink-primary"}>
         {label}
       </label>
     </div>

@@ -172,6 +172,14 @@ TOOL_ENTRIES = (
     ),
     ToolEntry("run_agent", AGENTS, "Run agents", "Start an agent now.", "data"),
     ToolEntry("remove_agents", AGENTS, "Remove agents", "Delete scheduled agents.", "data", ASK),
+    ToolEntry(
+        "save_personal_prompt",
+        AGENTS,
+        "Save your prompts",
+        "Write what it learned from you into your personal prompts.",
+        "data",
+        ASK,
+    ),
 )
 TOOLS_BY_NAME = {entry.name: entry for entry in TOOL_ENTRIES}
 

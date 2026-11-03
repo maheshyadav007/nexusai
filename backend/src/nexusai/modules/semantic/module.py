@@ -70,6 +70,8 @@ REFILL_SECONDS = 5.0
 # Unloading frees several hundred megabytes when there's nothing to do.
 IDLE_UNLOAD_SECONDS = 600.0
 NOTICE_SECONDS = 1.5
+# How many of a query's nearest matches show what it scores on unrelated text.
+NOISE_SAMPLE = 200
 # About 5 KB of one email, and about 400 KB of one document. A chunk takes about 520 bytes on
 # disk, as measured, so a full document costs about 260 KB and a typical email about 1 KB.
 MAIL_CHUNKS = 6
@@ -547,7 +549,9 @@ class Engine:
 
     # Searching
 
-    def search(self, text: str, kinds: set[str], limit: int) -> list[SemanticHit]:
+    def search(
+        self, text: str, kinds: set[str], limit: int, *, closest_anyway: bool = False
+    ) -> list[SemanticHit]:
         model = self.active()
         if not self.is_ready():
             return []
@@ -559,9 +563,14 @@ class Engine:
             for item in self.stores[kind].vector_index(model.id).search(vector, limit)
         ]
         found.sort(key=lambda item: item.score, reverse=True)
+        floor = (
+            model.min_score
+            if closest_anyway
+            else max(model.min_score, self._noise_floor(model, vector))
+        )
         hits = []
         for item in found[:limit]:
-            if item.score < model.min_score:
+            if item.score < floor:
                 break
             found_text = self._excerpt(item.kind, item.ref, item.chunk)
             if found_text is not None:
@@ -572,6 +581,16 @@ class Engine:
                     )
                 )
         return hits
+
+    def _noise_floor(self, model: CatalogModel, vector: Any) -> float:
+        """Some models score unrelated text nearly as high as a match, whatever the words, so the
+        score that means something is one that stands out from what this query usually gets."""
+        if not model.noise_margin:
+            return 0.0
+        sample = self.stores["mail"].vector_index(model.id).search(vector, NOISE_SAMPLE)
+        if len(sample) < NOISE_SAMPLE:
+            return 0.0
+        return float(sample[len(sample) // 2].score) + model.noise_margin
 
     def _excerpt(self, kind: str, ref: str, chunk: int) -> tuple[str, str | None] | None:
         """None if the thing has gone since, so it's never shown."""

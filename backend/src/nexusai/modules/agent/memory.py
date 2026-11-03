@@ -103,12 +103,22 @@ def replace_learned(home: Path, content: str) -> None:
     save_file(home, LEARNED_PATH, "", "agent", "mail", content[:LEARNED_MAX_CHARS].strip() + "\n")
 
 
+def confirmed(home: Path) -> str:
+    path = _safe(home, CONFIRMED_PATH)
+    return path.read_text("utf-8", errors="replace") if path.exists() else ""
+
+
 def remove_learned(home: Path, line: str) -> None:
     lines = learned(home).splitlines()
-    if line not in lines:
+    if line in lines:
+        lines.remove(line)
+        save_file(home, LEARNED_PATH, "", "agent", "mail", "\n".join(lines) + "\n")
+        return
+    said = confirmed(home).splitlines()
+    if line not in said:
         raise CommandError("memory.no_note", "That note has already gone.", 409)
-    lines.remove(line)
-    save_file(home, LEARNED_PATH, "", "agent", "mail", "\n".join(lines) + "\n")
+    said.remove(line)
+    save_file(home, CONFIRMED_PATH, "", "user", None, "\n".join(said) + "\n")
 
 
 def confirm_learned(home: Path, line: str) -> None:

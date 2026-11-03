@@ -95,9 +95,11 @@ export function AgentToasts() {
     [subscribe, router],
   );
 
+  // The session page is the chat itself, so nothing floats there to make room for.
+  const chatShowing = assistant.open && !pathname.startsWith("/agent/sessions/");
   const dismiss = (key: string) => setNotes((current) => current.filter((item) => item.key !== key));
   return (
-    <div role="region" aria-label={t("toast.region")} className={`pointer-events-none fixed z-50 flex w-popover max-w-full flex-col gap-2 ${assistant.open ? "bottom-4 right-dock" : "bottom-7 right-4 pb-3"}`}>
+    <div role="region" aria-label={t("toast.region")} data-beside-chat={chatShowing} className={`pointer-events-none fixed z-50 flex w-popover max-w-full flex-col gap-2 ${chatShowing ? "bottom-4 right-dock" : "bottom-7 right-0 pb-3"}`}>
       <Presence>
         {notes.map((note) => (
           <Rise key={note.key} settle data-testid="agent-toast" className="pointer-events-auto mr-4 flex items-start gap-3 rounded-lg border border-line-subtle bg-surface-raised p-3 shadow-overlay">

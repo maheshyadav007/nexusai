@@ -14,7 +14,7 @@ interface Start {
 }
 
 // An open conversation or document needs the room, so an unpinned chat tucks away for it.
-const READING = /^\/mail\/.+\/\d+$/;
+const READING = /^\/(mail\/.+|search)\/\d+$/;
 
 interface Assistant {
   /** Whether it's on screen right now. */

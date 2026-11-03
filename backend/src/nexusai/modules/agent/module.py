@@ -10,9 +10,11 @@ from nexusai.contracts.agent import (
     AgentChannelList,
     AgentDone,
     AgentKnowledge,
+    AgentRegistry,
     AnswerSession,
     ApprovalList,
     BoardList,
+    BriefReacted,
     ChangeLearnedNote,
     ChannelList,
     ChooseVersion,
@@ -49,6 +51,7 @@ from nexusai.contracts.agent import (
     JobList,
     ListActivity,
     ListAgentChannel,
+    ListAgents,
     ListApprovals,
     ListBoard,
     ListChannel,
@@ -75,6 +78,7 @@ from nexusai.contracts.agent import (
     PromptList,
     QuietHours,
     RateMessage,
+    ReactToBrief,
     ReadMoreMail,
     RemoveMemory,
     RemoveSchedule,
@@ -119,6 +123,7 @@ from nexusai.contracts.events import AppEvent
 from nexusai.contracts.mail import GetMailStatus, MailStatus
 from nexusai.contracts.semantic import IndexInfo
 from nexusai.kernel import backups
+from nexusai.kernel.database import Migration
 from nexusai.kernel.module import CommandError, Context, Module
 from nexusai.modules.agent import (
     channel,
@@ -135,6 +140,7 @@ from nexusai.modules.agent import (
     policy,
     prompts_builder,
     providers,
+    registry,
     runtime,
     scheduler,
     signals,
@@ -183,6 +189,12 @@ agent_module = Module(
         triggers.MIGRATION,
         scheduler.BUILT_IN_MIGRATION,
         feedback.MIGRATION,
+        feedback.BRIEF_MIGRATION,
+        Migration(
+            "agent_know_you_better_001",
+            "UPDATE agent_sessions SET title = 'Know you better'"
+            " WHERE agent = 'interview' AND title = 'Interview';",
+        ),
         suggestions.MIGRATION,
     ],
 )
@@ -880,6 +892,40 @@ def compact_session(command: SessionAction, ctx: Context) -> CompactResult:
     return CompactResult(compacted=current().compact(command.id))
 
 
+def _brief_text(parts: list[dict[str, Any]]) -> str | None:
+    """What it replied, or what it posted, since a brief can arrive either way."""
+    said = "".join(part.get("text", "") for part in parts if part.get("type") == "text")
+    if said:
+        return said
+    posted = [part["input"]["text"] for part in parts if part.get("type") == "tool-tell"]
+    return posted[-1] if posted else None
+
+
+@agent_module.command("brief.react")
+def react_to_brief(command: ReactToBrief, ctx: Context) -> BriefReacted:
+    """The next brief reads this, and the person sees it under What it knows."""
+    rows = ctx.bus.db.fetch_all(
+        "SELECT updated FROM agent_sessions WHERE id = ?", (command.session,)
+    )
+    if not rows:
+        raise CommandError("brief.not_found", "That brief is no longer here.", 404)
+    view = current().view(command.session)
+    last = [m for m in view.messages if m["role"] == "assistant"]
+    text = (_brief_text(last[-1]["parts"]) or "") if last else ""
+    feedback.save_brief_reaction(
+        ctx.bus.db, command.session, rows[0]["updated"][:10], command.rating, command.comment, text
+    )
+    return BriefReacted(rating=command.rating, comment=command.comment.strip())
+
+
+@agent_module.query("agents.registry")
+def agents_registry(query: ListAgents, ctx: Context) -> AgentRegistry:
+    runtime = current()
+    return AgentRegistry(
+        agents=registry.entries(ctx, lambda session: runtime.active_turn(session) is not None)
+    )
+
+
 @agent_module.query("triggers.list")
 def list_triggers(query: GetTriggers, ctx: Context) -> TriggerList:
     return triggers.list_triggers(ctx)
@@ -1223,19 +1269,23 @@ def today_view(query: GetToday, ctx: Context) -> TodayView:
         (account,),
     )[0]["n"]
     prep = db.fetch_all(
-        "SELECT id FROM agent_sessions WHERE agent = 'daily-prep' AND status = 'done' ORDER BY updated DESC LIMIT 1"
+        "SELECT id, updated FROM agent_sessions WHERE agent = 'daily-prep' AND status = 'done' ORDER BY updated DESC LIMIT 1"
     )
     prep_session = prep[0]["id"] if prep else None
     prep_text = None
+    prep_at = None
     if prep_session:
         view = current().view(prep_session)
+        prep_at = prep[0]["updated"]
         last = [m for m in view.messages if m["role"] == "assistant"]
         if last:
-            prep_text = (
-                "".join(p.get("text", "") for p in last[-1]["parts"] if p.get("type") == "text")
-                or None
-            )
+            prep_text = _brief_text(last[-1]["parts"])
     due = _due_items(ctx)
+    rating, comment = (
+        feedback.brief_reaction(db, prep_session, prep_at[:10])
+        if prep_session and prep_at
+        else (None, "")
+    )
     return TodayView(
         brief=_brief(_waiting_for_person(ctx), due, len(needs)),
         needs_you=[_today_thread(row) for row in needs],
@@ -1244,6 +1294,9 @@ def today_view(query: GetToday, ctx: Context) -> TodayView:
         automated_count=automated,
         prep_session=prep_session,
         prep_text=prep_text,
+        prep_at=prep_at,
+        prep_rating=rating,
+        prep_comment=comment,
         due=due,
         since_last_look=_since_last_look(ctx),
     )

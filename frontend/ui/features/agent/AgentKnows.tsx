@@ -5,6 +5,7 @@ import type { KnowledgeLayer, LearnedNote } from "@/ui/client/contracts.generate
 import { useShortDate } from "@/ui/client/format";
 import { useThreads } from "@/ui/client/mail";
 import { useConfirmNote, useKnowledge, useMailAgent, useMailPreview, useReadMore, useRemoveNote, useSaveMailAgent } from "@/ui/client/work";
+import { Icon } from "@/ui/icons";
 import { Badge } from "@/ui/primitives/Badge";
 import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
@@ -17,6 +18,7 @@ import { SettingRow } from "@/ui/primitives/SettingRow";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { Switch } from "@/ui/primitives/Switch";
 import { TextLink } from "@/ui/primitives/TextLink";
+import { TextView } from "@/ui/primitives/TextView";
 import { t, tn, type StringKey } from "@/ui/strings";
 
 // How much more it reads at a time when asked, so the cost of one click stays small.
@@ -29,6 +31,7 @@ const LAYER_LABEL: Record<string, StringKey> = {
   "About the person": "knows.layer.about",
   "Personalized prompts": "knows.layer.personal",
   "What you corrected": "knows.layer.corrections",
+  "How they want the brief": "knows.layer.brief",
   "What the mailbox shows": "knows.layer.mailbox",
   Memory: "knows.layer.memory",
 };
@@ -46,7 +49,7 @@ function Layers({ layers }: { layers: readonly KnowledgeLayer[] }) {
         return (
           <li key={layer.name}>
             <ExpandRow label={t("prompts.open", { title: layerTitle(layer.name) })} testid="knowledge-layer" title={`${index + 1}. ${layerTitle(layer.name)}`} meta={t("knows.layer.size", { count: layer.text.length })} aside={trust ? <Badge>{t(trust)}</Badge> : null}>
-              <pre tabIndex={0} className="focus-ring max-h-popover overflow-auto whitespace-pre-wrap rounded-md bg-surface-sunken p-2 font-mono text-sm text-ink-secondary">{layer.text}</pre>
+              <TextView title={layerTitle(layer.name)} text={layer.text} />
             </ExpandRow>
           </li>
         );
@@ -63,7 +66,7 @@ function Note({ note }: { note: LearnedNote }) {
       <span className="min-w-0 break-words text-md text-ink-primary">{note.text}</span>
       <span className="flex shrink-0 items-center gap-1">
         {note.thread ? <TextLink className="text-sm" href={`/mail/all/${note.thread}`}>{t("knows.note.source")}</TextLink> : null}
-        <Button variant="quiet" loading={confirm.isPending} onClick={() => confirm.mutate(note.line)}>{t("knows.note.confirm")}</Button>
+        {note.confirmed ? <Badge>{t("knows.note.confirmed")}</Badge> : <Button variant="quiet" loading={confirm.isPending} onClick={() => confirm.mutate(note.line)}>{t("knows.note.confirm")}</Button>}
         <Button variant="quiet" loading={remove.isPending} onClick={() => remove.mutate(note.line)}>{t("knows.note.remove")}</Button>
       </span>
     </li>
@@ -151,6 +154,19 @@ export function AgentKnows() {
         ) : <p className="text-md text-ink-muted">{t("knows.contacts.empty")}</p>}
       </Card>
       <OnItsOwn />
+      <Card title={t("knows.brief")} description={t("knows.brief.description")}>
+        {data.brief_reactions?.length ? (
+          <ul className="flex flex-col">
+            {data.brief_reactions.map((item) => (
+              <li key={item.day} data-testid="knows-brief-reaction" className="flex items-baseline gap-3 border-b border-line-subtle py-2 text-md">
+                <span className="shrink-0 text-sm tabular-nums text-ink-muted">{format(item.day)}</span>
+                {item.rating ? <Icon name={item.rating === "up" ? "like" : "dislike"} className="h-3 w-3 shrink-0 self-center text-ink-secondary" /> : null}
+                <span className="min-w-0 break-words text-ink-primary">{item.comment}</span>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="text-md text-ink-muted">{t("knows.brief.empty")}</p>}
+      </Card>
       <Card title={t("knows.layers")} description={t("knows.layers.description")}>
         <Layers layers={data.layers} />
       </Card>

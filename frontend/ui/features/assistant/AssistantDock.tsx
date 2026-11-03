@@ -172,7 +172,7 @@ export function AssistantDock() {
       ) : assistant.tucked && width >= SMALL_SCREEN ? (
         <Pressable key="aura" data-testid="assistant-aura" data-waiting={waiting > 0} aria-label={t("chat.openFromEdge")} onMouseEnter={() => assistant.setOpen(true)} onClick={() => assistant.setOpen(true)} className="assistant-aura focus-ring fixed bottom-0 right-0 top-0 z-40 w-aura" />
       ) : (
-        <RiseButton key="pill" onClick={() => assistant.setOpen(true)} data-testid="assistant-pill" className="focus-ring fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full border border-line-subtle bg-surface-raised px-4 py-2 text-md font-medium text-ink-primary shadow-overlay transition-colors duration-fast hover:bg-surface-sunken">
+        <RiseButton key="pill" onClick={() => assistant.setOpen(true)} data-testid="assistant-pill" className="ai-glow focus-ring fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full px-4 py-2 text-md font-medium text-ink-primary shadow-overlay">
           <Icon name="chat" />
           {t("chat.pill")}
           {waiting ? (

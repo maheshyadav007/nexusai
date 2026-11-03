@@ -9,6 +9,7 @@ import { useDecideApproval, useDecideApprovals } from "@/ui/client/sessions";
 import { Icon, type IconName } from "@/ui/icons";
 import { Button } from "@/ui/primitives/Button";
 import { Checkbox } from "@/ui/primitives/Checkbox";
+import { TextView } from "@/ui/primitives/TextView";
 import { Rise } from "@/ui/primitives/Motion";
 import { BareInput, Pressable } from "@/ui/primitives/Pressable";
 import { t, tn } from "@/ui/strings";
@@ -164,6 +165,8 @@ export function ApprovalGroupCard({ approvals }: { approvals: readonly ToolAppro
                 })
               }
             />
+            {/* What's being agreed to, in its own words, beside the box that agrees to it. */}
+            {item.detail && item.tool === "save_personal_prompt" ? <div className="mt-1 pl-6"><TextView title={item.summary} text={item.detail} /></div> : null}
           </li>
         ))}
       </ul>

@@ -53,6 +53,8 @@ export const useConfirmNote = () => useCommand(["knowledge", "memory"], (line: s
 export const useRemoveNote = () => useCommand(["knowledge", "memory"], (line: string) => command("memory.removeNote", { line }));
 export const useSuggestions = () => useReady(["suggestions"], () => query("suggestions.list", {}));
 export const useDecideSuggestion = () => useCommand(["suggestions", "today", "threads", "categories"], (input: { id: number; accept: boolean }) => command("suggestions.decide", input));
+export const useReactToBrief = () => useCommand(["today", "knowledge"], (input: { session: string; rating: "up" | "down" | null; comment: string }) => command("brief.react", input));
+export const useAgents = () => useReady(["agents"], () => query("agents.registry", {}));
 export const useRunMailAgent = () => useCommand(["sessions"], () => command("mailAgent.runNow", {}));
 export const useContextSettings = () => useReady(["context"], () => query("context.get", {}));
 export const useSaveContextSettings = () => useCommand(["context"], (input: ContextSettings) => command("context.save", input));
@@ -118,6 +120,17 @@ export const useSaveModelProvider = () => useCommand(["model-provider", "models"
 export const useListProviderModels = () => useMutation({ mutationFn: (input: ListProviderModels) => command("models.provider.listModels", input) });
 
 /** Everything agents are waiting on the person for. The sidebar, the chat pill and Today all use it. */
+/** What's live on each planner page, for the sidebar. */
+export function usePlannerCounts(): Readonly<Record<string, number>> {
+  const tasks = useTasks(false);
+  const reminders = useReminders();
+  const agents = useAgents();
+  const open = (tasks.data?.tasks ?? []).filter((task) => !task.proposed).length;
+  const coming = (reminders.data?.reminders ?? []).filter((reminder) => !reminder.proposed).length;
+  const scheduled = (agents.data?.agents ?? []).filter((agent) => agent.next_run).length;
+  return { tasks: open, reminders: coming, schedules: scheduled };
+}
+
 export function useWaitingCount(): number {
   const channel = useChannel();
   const approvals = useApprovals();

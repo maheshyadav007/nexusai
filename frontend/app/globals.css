@@ -94,3 +94,122 @@ svg.lucide {
 .assistant-aura[data-waiting="true"] {
   background: linear-gradient(to left, theme(colors.accent.default / 70%), transparent);
 }
+
+/* transitions.dev: Toggle. The thumb overshoots, swings back and settles. */
+.t-toggle {
+  --toggle-dur: 350ms;
+  --toggle-width: calc(var(--toggle-thumb) * 2 + var(--toggle-gap) * 2);
+  --toggle-thumb: 1rem;
+  --toggle-gap: 0.125rem;
+  --toggle-travel: var(--toggle-thumb);
+  --toggle-ov1: 1px;
+  --toggle-ease: cubic-bezier(0.34, 1.35, 0.64, 1);
+  display: inline-flex;
+  width: var(--toggle-width);
+  padding: var(--toggle-gap);
+  border-radius: var(--radius-full);
+  background: theme(colors.line.strong);
+  transition: background-color var(--motion-normal) var(--motion-easing);
+}
+.t-toggle[data-state="checked"] {
+  background: theme(colors.accent.default);
+}
+.t-toggle-thumb {
+  display: block;
+  width: var(--toggle-thumb);
+  height: var(--toggle-thumb);
+  border-radius: var(--radius-full);
+  background: theme(colors.surface.raised);
+  box-shadow: var(--shadow-raised);
+  translate: 0 0;
+  will-change: translate;
+}
+.t-toggle[data-state="checked"] .t-toggle-thumb {
+  translate: var(--toggle-travel) 0;
+}
+.t-toggle.is-init[data-state="checked"] .t-toggle-thumb {
+  animation: t-toggle-on var(--toggle-dur) var(--toggle-ease) both;
+}
+.t-toggle.is-init[data-state="unchecked"] .t-toggle-thumb {
+  animation: t-toggle-off var(--toggle-dur) var(--toggle-ease) both;
+}
+@keyframes t-toggle-on {
+  0% { translate: 0 0; }
+  55% { translate: calc(var(--toggle-travel) + var(--toggle-ov1)) 0; }
+  80% { translate: var(--toggle-travel) 0; }
+  100% { translate: var(--toggle-travel) 0; }
+}
+@keyframes t-toggle-off {
+  0% { translate: var(--toggle-travel) 0; }
+  55% { translate: calc(0px - var(--toggle-ov1)) 0; }
+  80% { translate: 0 0; }
+  100% { translate: 0 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-toggle-thumb { animation: none !important; }
+}
+
+/* Whatever the agents do for you has this rim, so AI can be recognized anywhere in the app. */
+@property --ai-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+.ai-glow {
+  --ai-colors: theme(colors.ai.one), theme(colors.ai.two), theme(colors.ai.three), theme(colors.ai.four), theme(colors.ai.one);
+  isolation: isolate;
+  border: 1.5px solid transparent;
+  background:
+    linear-gradient(theme(colors.surface.raised), theme(colors.surface.raised)) padding-box,
+    conic-gradient(from var(--ai-angle), var(--ai-colors)) border-box;
+  animation: ai-turn 6s linear infinite;
+}
+/* Its glow needs a place to sit, but what's already fixed on screen stays fixed. */
+.ai-glow:not(.fixed) {
+  position: relative;
+}
+.ai-glow::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  z-index: -1;
+  border-radius: inherit;
+  background: conic-gradient(from var(--ai-angle), var(--ai-colors));
+  filter: blur(7px);
+  opacity: 0.35;
+  transition: opacity var(--motion-normal) var(--motion-easing);
+  animation: ai-turn 6s linear infinite;
+  pointer-events: none;
+}
+.ai-glow:hover::before,
+.ai-glow:focus-visible::before {
+  opacity: 0.65;
+}
+.ai-surface {
+  --ai-colors: theme(colors.ai.one), theme(colors.ai.two), theme(colors.ai.three), theme(colors.ai.four), theme(colors.ai.one);
+  position: relative;
+  isolation: isolate;
+  border: 1.5px solid transparent;
+  background:
+    linear-gradient(theme(colors.surface.raised), theme(colors.surface.raised)) padding-box,
+    conic-gradient(from var(--ai-angle), var(--ai-colors)) border-box;
+  animation: ai-turn 12s linear infinite;
+}
+.ai-surface::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  z-index: -1;
+  border-radius: inherit;
+  background: conic-gradient(from var(--ai-angle), var(--ai-colors));
+  filter: blur(14px);
+  opacity: 0.22;
+  animation: ai-turn 12s linear infinite;
+  pointer-events: none;
+}
+@keyframes ai-turn {
+  to { --ai-angle: 360deg; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-glow, .ai-glow::before, .ai-surface, .ai-surface::before { animation: none; }
+}

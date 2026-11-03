@@ -101,7 +101,7 @@ function SummaryAction({ id }: { id: number }) {
   const data = summary.data;
   if (data?.text && !data.new_messages) return null;
   return (
-    <Button variant="quiet" loading={summarize.isPending} onClick={() => summarize.mutate(id)}>
+    <Button variant="ai" thinking loading={summarize.isPending} onClick={() => summarize.mutate(id)}>
       {t(data?.text ? "summary.update" : "summary.summarize")}
     </Button>
   );
@@ -191,10 +191,10 @@ function MessageCard({ message, open: startsOpen, onReply, threadWhy }: { messag
 
 const NO_CATEGORY = "none";
 
-export function ThreadScreen({ id, onLeave }: { id: number; onLeave?: () => void }) {
+export function ThreadScreen({ id, onLeave, folder: backTo }: { id: number; onLeave?: () => void; folder?: string }) {
   const router = useRouter();
   const pathname = usePathname();
-  const folder = pathname.slice(0, pathname.lastIndexOf("/"));
+  const folder = backTo ?? pathname.slice(0, pathname.lastIndexOf("/"));
   const thread = useThread(id);
   const setRead = useSetRead();
   const setFlag = useSetFlag();

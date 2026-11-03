@@ -1,7 +1,7 @@
 "use client";
 
 import { useSessions } from "@/ui/client/sessions";
-import { useWaitingCount } from "@/ui/client/work";
+import { usePlannerCounts, useWaitingCount } from "@/ui/client/work";
 import { CategoryNav } from "./CategoryNav";
 import { FolderNav } from "./FolderNav";
 import Link from "next/link";
@@ -54,8 +54,9 @@ function NavRow({ item, active, collapsed, count }: { item: NavItem; active: boo
 function useWaitingCounts(): Readonly<Record<string, number>> {
   const sessions = useSessions("");
   const decisions = useWaitingCount();
+  const planner = usePlannerCounts();
   const waiting = (sessions.data?.sessions ?? []).filter((row) => row.status === "waiting").length;
-  return { ...(waiting ? { sessions: waiting } : {}), ...(decisions ? { today: decisions } : {}) };
+  return { ...planner, ...(waiting ? { sessions: waiting } : {}), ...(decisions ? { today: decisions } : {}) };
 }
 
 /** Unread conversations in each fixed mail folder, the same as any other folder shows. */

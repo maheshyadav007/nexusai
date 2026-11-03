@@ -926,6 +926,49 @@ class SinceLastLook(BaseModel):
     proposed: int
 
 
+class ReactToBrief(BaseModel):
+    """What the person thought of a morning brief, which the next one goes by."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    session: str = Field(max_length=64)
+    rating: Literal["up", "down"] | None = None
+    comment: str = Field(default="", max_length=2000)
+
+
+class BriefReaction(BaseModel):
+    day: str
+    rating: str | None = None
+    comment: str = ""
+
+
+class BriefReacted(BaseModel):
+    rating: str | None = None
+    comment: str = ""
+
+
+class AgentEntry(BaseModel):
+    id: str
+    name: str
+    does: str
+    state: Literal["running", "active", "finished", "off", "past"]
+    when: str
+    next_run: str | None = None
+    # What it's waiting for, when that isn't a time.
+    next_condition: str | None = None
+    last_run: str | None = None
+    session: str | None = None
+    tokens: int = 0
+
+
+class ListAgents(BaseModel):
+    pass
+
+
+class AgentRegistry(BaseModel):
+    agents: list[AgentEntry]
+
+
 class TodayView(BaseModel):
     brief: str
     needs_you: list[TodayThread]
@@ -935,6 +978,9 @@ class TodayView(BaseModel):
     automated_count: int
     prep_session: str | None
     prep_text: str | None
+    prep_at: str | None = None
+    prep_rating: str | None = None
+    prep_comment: str = ""
     due: list[DueItem] = Field(default_factory=list)
     since_last_look: SinceLastLook | None = None
 
@@ -992,6 +1038,8 @@ class LearnedNote(BaseModel):
     text: str
     section: str
     thread: int | None
+    # The person said it's true, so it's always kept and treated as what they said.
+    confirmed: bool = False
 
 
 class KnowledgeLayer(BaseModel):
@@ -1001,6 +1049,7 @@ class KnowledgeLayer(BaseModel):
 
 
 class AgentKnowledge(BaseModel):
+    brief_reactions: list[BriefReaction] = Field(default_factory=list)
     layers: list[KnowledgeLayer]
     notes: list[LearnedNote]
     corrections: list[CorrectionRow]

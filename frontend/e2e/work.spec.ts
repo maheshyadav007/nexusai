@@ -334,3 +334,112 @@ test("a new recovery key can be made in Settings, and is only shown until saved"
   await expect(page.getByRole("button", { name: "Create a new recovery key" })).toBeVisible();
   await expect(page.getByTestId("recovery-key")).toHaveCount(0);
 });
+
+test("the page itself never scrolls, so the sidebar stays put", async ({ page }) => {
+  await page.goto("/agent/schedules");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await page.waitForTimeout(500);
+  const sizes = await page.evaluate(() => [document.documentElement.scrollHeight, window.innerHeight]);
+  expect(sizes[0]).toBeLessThanOrEqual(sizes[1] as number);
+});
+
+test("switches animate from one place and keep their state", async ({ page }) => {
+  await page.goto("/agent/memory");
+  const toggle = page.getByRole("switch").first();
+  await expect(toggle).toBeVisible();
+  const before = await toggle.getAttribute("aria-checked");
+  await toggle.click();
+  await expect(toggle).toHaveClass(/is-init/);
+  await expect(toggle).not.toHaveAttribute("aria-checked", before as string);
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-checked", before as string);
+});
+
+test("the agent list says what each one runs on and when it runs next", async ({ page }) => {
+  await page.goto("/agent/channel");
+  const rows = page.getByTestId("agent-entry");
+  await expect(rows.filter({ hasText: "Judges your mail" })).toBeVisible();
+  await expect(rows.filter({ hasText: "Writes your morning brief" }).getByTestId("agent-next")).toBeVisible();
+  await noViolations(page);
+});
+
+test("a search result opens with the results still beside it", async ({ page }) => {
+  const word = unique("Quarterzz").replace(/\s/g, "");
+  await deliver(page, { subject: `${word} first`, sender: "ann@example.com", body: "One" });
+  await deliver(page, { subject: `${word} second`, sender: "ann@example.com", body: "Two" });
+  await page.goto(`/search?q=${word}`);
+  await expect(page.getByTestId("search-hit")).toHaveCount(2, { timeout: 20_000 });
+  await page.getByTestId("search-hit").first().getByRole("link").first().click();
+  await expect(page).toHaveURL(/\/search\/\d+/);
+  await expect(page.getByTestId("thread-row")).toHaveCount(2);
+  await noViolations(page);
+  await page.getByRole("link", { name: "Back to results" }).click();
+  await expect(page).toHaveURL(/\/search\?/);
+  await expect(page.getByRole("searchbox", { name: "Search for" })).toHaveValue(word);
+});
+
+test("a long prompt opens large from its own box", async ({ page }) => {
+  await page.goto("/agent/memory");
+  await page.getByRole("tab", { name: "Prompts" }).click();
+  await page.getByRole("button", { name: /open/i }).first().click();
+  await page.getByTestId("view-expand").first().click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await noViolations(page);
+});
+
+test("About names the team, and no third party", async ({ page }) => {
+  await page.goto("/settings?section=about");
+  await expect(page.getByTestId("team-member")).toHaveText("Mahesh Yadav");
+  await expect(page.getByRole("link", { name: /unslop/i })).toHaveCount(0);
+});
+
+const proposeTask = async (page: Page, title: string) => {
+  // Made by hand it's already accepted, so it's turned back into what an agent would propose.
+  expect((await page.request.post("/api/commands/tasks.save", { data: { title } })).ok()).toBe(true);
+  const listed = (await (await page.request.post("/api/queries/tasks.list", { data: {} })).json()) as { tasks: { id: number; title: string }[] };
+  const made = listed.tasks.find((task) => task.title === title);
+  expect((await page.request.post("/api/commands/tasks.save", { data: { id: made?.id, title, proposed: true } })).ok()).toBe(true);
+};
+
+test("an action on Needs you blocks its row while it runs, and a failure can be tried again", async ({ page }) => {
+  const title = unique("Slow task");
+  await proposeTask(page, title);
+  await page.goto("/today");
+  const row = page.getByTestId("proposal").filter({ hasText: title });
+  await expect(row).toBeVisible();
+  let fail = true;
+  await page.route("**/api/commands/tasks.remove", async (route) => {
+    await new Promise((done) => setTimeout(done, 400));
+    if (fail) await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ code: "x", message: "It broke" }) });
+    else await route.continue();
+  });
+  await row.getByRole("button", { name: "Decline" }).click();
+  await expect(row).toHaveAttribute("data-state", "running");
+  await expect(row.getByRole("button", { name: "Accept" })).toBeDisabled();
+  await expect(row.getByRole("alert")).toContainText("It broke");
+  await expect(row).toHaveAttribute("data-state", "failed");
+  fail = false;
+  await row.getByRole("button", { name: "Try again" }).click();
+  await expect(row).toHaveCount(0);
+});
+
+test("several things on Needs you can be done or declined together", async ({ page }) => {
+  const [one, two, three] = [unique("Bulk one"), unique("Bulk two"), unique("Bulk three")];
+  for (const title of [one, two, three]) await proposeTask(page, title);
+  await page.goto("/today");
+  await expect(page.getByTestId("proposal").filter({ hasText: three })).toBeVisible();
+  await page.getByTestId("bulk-select").click();
+  await page.getByRole("checkbox", { name: `Select ${one}` }).click();
+  await page.getByRole("checkbox", { name: `Select ${two}` }).click();
+  await noViolations(page);
+  await page.getByTestId("bulk-bar").getByRole("button", { name: "Do it (2)" }).click();
+  await expect(page.getByTestId("proposal").filter({ hasText: one })).toHaveCount(0);
+  await expect(page.getByTestId("proposal").filter({ hasText: two })).toHaveCount(0);
+  await expect(page.getByTestId("bulk-bar")).toHaveCount(0);
+  const row = page.getByTestId("proposal").filter({ hasText: three });
+  await row.getByRole("button", { name: "Decline" }).click();
+  await expect(row).toHaveCount(0);
+  await page.goto("/planner/tasks");
+  await expect(page.getByText(one)).toBeVisible();
+  await expect(page.getByText(three)).toHaveCount(0);
+});

@@ -281,6 +281,12 @@ Rules run first and cost nothing; mail they mark "skip agent" never reaches the 
 | AGN-3g | A morning brief on Today, from what's already judged | MVP |
 | AGN-3h | "What it knows" shows everything the agent is told, in order and how far it's trusted; each learned note with its source, to confirm or remove; corrections and who they write to. "What it sees" shows the exact text for any conversation, without calling a model | MVP |
 | AGN-3i | `make eval-mail` runs made-up emails through the real model to check the prompts | MVP |
+| AGN-3j | Morning brief card at the top of Today, with like, dislike and a request box. Each new brief is told the person's words and reactions, and they're listed under What it knows | MVP |
+| AGN-3k | Needs you: each action blocks its row, shows it running, then says how it went. Select several, then Do it or Decline in bulk. Sending mail and running commands stay one at a time | MVP |
+| AGN-3l | Agents list on the Agent channel page: running, active, finished, off and removed agents, what starts each and when it runs next | MVP |
+| SRCH-5 | Search understands `from:`, `to:`, `subject:`, `has:attachment`, `is:unread`, `in:`, `before:`, `after:`, `category:` and "exact phrases", ignores common words, finds mail with only some of the words, corrects typos and says so, ranks a subject match and the person's own conversations first, and leaves out weak matches by meaning | MVP |
+| SRCH-6 | Opening a result keeps the results beside it, and Back returns to the same search and filters | MVP |
+| DOC-9 | Older attachments are read in the background, so search reaches inside them. A match in a file's name ranks above one in its text | MVP |
 | AGN-4 | Burst handling: a single email starts right away with no timer. Emails arriving during a run wait, then go together in the next run, grouped by thread and capped per run. Its own queue, separate from the session limit; catches up in order after being offline or if the model is unavailable | MVP |
 | AGN-5 | Runs from setup onward only; older mail is triaged only on request, with an estimate of the work first | MVP |
 | AGN-6 | Mail agent appears as one entry in Sessions; each email has its own run record, reachable from "Why is this here?" | MVP |

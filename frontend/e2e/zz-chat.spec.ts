@@ -281,6 +281,9 @@ test("what an agent asks elsewhere pops up at the bottom right, and opens the ch
   void request.post("/api/sessions/chat", { data: { id: session, text: "ask me something" } }).catch(() => undefined);
   const toast = page.getByTestId("agent-toast").filter({ hasText: "Which day works?" });
   await expect(toast).toBeVisible({ timeout: 15_000 });
+  // At the screen's own edge, with no gap left for a chat that isn't showing.
+  const box = await toast.boundingBox();
+  expect((box?.x ?? 0) + (box?.width ?? 0)).toBeGreaterThan((page.viewportSize()?.width ?? 0) - 40);
   await noViolations(page);
   await expect(page.getByRole("link", { name: "Sessions" })).toContainText("1");
   await toast.getByRole("button", { name: "Answer" }).click();

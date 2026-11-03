@@ -1,5 +1,6 @@
 """The mail database: one record per message, grouped into threads. Threads are the unit of work."""
 
+import difflib
 import json
 import re
 import sqlite3
@@ -173,6 +174,10 @@ CREATE INDEX messages_from ON messages (from_addr);
     ),
     # Senders are looked up without regard to case, and a scan reads every email's whole body.
     Migration(
+        "mail_search_vocab_001",
+        "CREATE VIRTUAL TABLE mail_search_vocab USING fts5vocab(mail_search, row);",
+    ),
+    Migration(
         "mail_sender_lookup_001",
         """
 DROP INDEX messages_from;
@@ -211,6 +216,105 @@ MOST_PARTICIPANTS_LISTED = 20
 # How many of the newest matches get ranked, and how many of those can become results.
 SEARCH_RANKED = 5000
 SEARCH_CANDIDATES = 2000
+# How many conversations get weighed against each other before the first page is cut.
+SEARCH_POOL = 200
+# A match in the subject says far more than one in a long newsletter's body.
+COLUMN_WEIGHTS = "10.0, 5.0, 1.0, 3.0"
+SHORT_WORD = 3
+# Words nobody means to search for, unless they're all that was typed.
+STOP_WORDS = frozenset(
+    [
+        "a",
+        "about",
+        "all",
+        "am",
+        "an",
+        "and",
+        "any",
+        "are",
+        "as",
+        "asked",
+        "at",
+        "be",
+        "been",
+        "but",
+        "by",
+        "can",
+        "did",
+        "do",
+        "does",
+        "for",
+        "from",
+        "get",
+        "got",
+        "had",
+        "has",
+        "have",
+        "he",
+        "her",
+        "him",
+        "his",
+        "how",
+        "i",
+        "if",
+        "in",
+        "into",
+        "is",
+        "it",
+        "its",
+        "me",
+        "my",
+        "no",
+        "not",
+        "of",
+        "on",
+        "or",
+        "our",
+        "she",
+        "should",
+        "so",
+        "some",
+        "than",
+        "that",
+        "the",
+        "their",
+        "them",
+        "there",
+        "these",
+        "they",
+        "this",
+        "to",
+        "us",
+        "was",
+        "we",
+        "were",
+        "what",
+        "when",
+        "where",
+        "which",
+        "who",
+        "why",
+        "will",
+        "with",
+        "would",
+        "you",
+        "your",
+    ]
+)
+OPERATOR = re.compile(
+    r"(?<!\S)(from|to|subject|has|is|in|before|after|category):(\"[^\"]*\"|\S+)", re.IGNORECASE
+)
+PHRASE = re.compile(r"\"([^\"]+)\"")
+SERVER_ROLES = frozenset({"inbox", "sent", "drafts", "archive", "trash", "junk"})
+# The same word mistyped is rarely this different from the real one.
+TYPO_LIKENESS = 0.8
+# Mail most people don't go looking for, and what they've taken part in, which they do.
+LESS_LIKELY_CATEGORIES = frozenset({"Promotions", "Social", "Forums"})
+OWN_WEIGHT = 1.5
+HIGH_WEIGHT = 1.3
+LOW_WEIGHT = 0.6
+MEANING_WEIGHT = 0.6
+SOME_WORDS_WEIGHT = 0.4
 # The usual constant for reciprocal rank fusion: it keeps one list's top result from dominating.
 FUSION_K = 60
 EXCERPT_WORDS = 24
@@ -717,11 +821,108 @@ def _search_words(text: str) -> list[str]:
     return [_folded(word) for word in re.findall(r"\w+", text, flags=re.UNICODE)]
 
 
-def _fts_query(words: list[str], sender: str | None) -> str:
-    """Each word as a quoted prefix, so punctuation in a search can't break it."""
-    terms = [f'"{word}"*' for word in words]
-    terms += [f'sender : "{word}"*' for word in _search_words(sender or "")]
-    return " ".join(terms)
+def _whole_date(value: str) -> str | None:
+    """2025, 2025-03 or 2025-03-14. Anything else isn't a date, so it isn't a filter."""
+    found = re.fullmatch(r"(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?", value)
+    if not found:
+        return None
+    return f"{found[1]}-{found[2] or '01'}-{found[3] or '01'}"
+
+
+def with_operators(query: SearchMail) -> SearchMail:
+    """from:priya has:attachment after:2025 and the rest, so typing them works everywhere."""
+    changes: dict[str, object] = {}
+
+    def apply(found: re.Match[str]) -> str:
+        name, value = found[1].lower(), found[2].strip('"')
+        lowered = value.lower()
+        if name == "from":
+            changes["sender"] = value
+        elif name == "to":
+            changes["recipient"] = value
+        elif name == "subject":
+            changes["subject"] = value
+        elif name == "category":
+            changes["category"] = value
+        elif name == "has" and lowered in {"attachment", "attachments"}:
+            changes["has_attachment"] = True
+        elif name == "is" and lowered in {"unread", "read"}:
+            changes["unread"] = lowered == "unread"
+        elif name == "in" and lowered in SERVER_ROLES:
+            changes["folder"] = lowered
+        elif name in {"before", "after"} and _whole_date(value):
+            changes["date_to" if name == "before" else "date_from"] = _whole_date(value)
+        else:
+            return found[0]
+        return " "
+
+    text = " ".join(OPERATOR.sub(apply, query.query).split())
+    return query.model_copy(update={**changes, "query": text})
+
+
+def plain_words(text: str) -> list[str]:
+    """What a search is really about: "who asked me for a coding test" is about two things."""
+    words = _search_words(PHRASE.sub(" ", text))
+    kept = [word for word in words if word not in STOP_WORDS]
+    return kept if kept or PHRASE.search(text) else words
+
+
+def _terms(text: str, words: list[str]) -> list[str]:
+    # A short word as a prefix matches nearly everything, so only longer ones stay open-ended.
+    terms = [f'"{word}"*' if len(word) >= SHORT_WORD else f'"{word}"' for word in words]
+    return [*(f'"{" ".join(_search_words(p))}"' for p in PHRASE.findall(text)), *terms]
+
+
+def _corrected_word(db: Database, word: str) -> str | None:
+    """The word it was probably meant to be, from words this mailbox really contains."""
+    if len(word) < SHORT_WORD + 1 or word.isdigit():
+        return None
+    start = word[:2]
+    rows = db.fetch_all(
+        "SELECT term, doc FROM mail_search_vocab WHERE term >= ? AND term < ? AND doc > 1",
+        (start, f"{start}\U0010ffff"),
+    )
+    terms = {row["term"]: row["doc"] for row in rows if abs(len(row["term"]) - len(word)) <= 2}
+    if word in terms:
+        return None
+    close = difflib.get_close_matches(word, terms, n=3, cutoff=TYPO_LIKENESS)
+    return max(close, key=lambda term: terms[term]) if close else None
+
+
+def _weights(db: Database, threads: list[int]) -> dict[int, float]:
+    """People look for what they took part in and what mattered, more than for promotions."""
+    if not threads:
+        return {}
+    marks = ",".join("?" * len(threads))
+    own = {
+        row["thread_id"]
+        for row in db.fetch_all(
+            f"SELECT DISTINCT thread_id FROM messages WHERE folder_role = 'sent' AND thread_id IN ({marks})",  # noqa: S608
+            threads,
+        )
+    }
+    weights: dict[int, float] = {}
+    for row in db.fetch_all(
+        f"SELECT id, importance, category FROM threads WHERE id IN ({marks})",  # noqa: S608
+        threads,
+    ):
+        weight = OWN_WEIGHT if row["id"] in own else 1.0
+        if row["importance"] == "high":
+            weight *= HIGH_WEIGHT
+        if row["importance"] == "low" or row["category"] in LESS_LIKELY_CATEGORIES:
+            weight *= LOW_WEIGHT
+        weights[row["id"]] = weight
+    return weights
+
+
+def _fts_query(terms: list[str], query: SearchMail, *, any_word: bool = False) -> str:
+    """Each word quoted, so punctuation in a search can't break it."""
+    groups = [f"({' OR '.join(terms)})"] if any_word and terms else terms
+    fields = [
+        *(f'sender : "{word}"*' for word in _search_words(query.sender or "")),
+        *(f'subject : "{word}"*' for word in _search_words(query.subject or "")),
+    ]
+    return " AND ".join([*groups, *fields])
 
 
 def _ranked_matches(
@@ -756,7 +957,7 @@ def _ranked_matches(
         values.append(floor[0]["id"])
     return db.fetch_all(
         f"SELECT m.id AS message, m.thread_id AS thread FROM {source}"  # noqa: S608
-        f" WHERE {' AND '.join(where)} ORDER BY bm25(mail_search) LIMIT ?",
+        f" WHERE {' AND '.join(where)} ORDER BY bm25(mail_search, {COLUMN_WEIGHTS}) LIMIT ?",
         (*values, SEARCH_CANDIDATES),
     )
 
@@ -804,11 +1005,9 @@ def _excerpts(db: Database, words: list[str], messages: list[int]) -> dict[int, 
     }
 
 
-def search(db: Database, account: str, query: SearchMail) -> SearchResults:
+def _filters(account: str, query: SearchMail) -> tuple[list[str], list[object]]:
     conditions = ["m.account = ?"]
     params: list[object] = [account]
-    words = _search_words(query.query)
-    match = _fts_query(words, query.sender)
     if query.date_from:
         conditions.append("m.date >= ?")
         params.append(query.date_from)
@@ -835,8 +1034,46 @@ def search(db: Database, account: str, query: SearchMail) -> SearchResults:
             "EXISTS (SELECT 1 FROM message_locations l WHERE l.message = m.id AND l.folder = ?)"
         )
         params.append(query.location)
+    if query.recipient:
+        conditions.append("(m.to_json LIKE ? OR m.cc_json LIKE ?)")
+        params += [f"%{query.recipient}%", f"%{query.recipient}%"]
+    if query.unread is not None:
+        conditions.append("m.read = ?")
+        params.append(int(not query.unread))
+    return conditions, params
+
+
+def search(db: Database, account: str, query: SearchMail) -> SearchResults:
+    query = with_operators(query)
+    conditions, params = _filters(account, query)
+    words = plain_words(query.query)
+    terms = _terms(query.query, words)
+    match = _fts_query(terms, query)
+    corrected: str | None = None
+    whole: set[int] = set()
     if match:
-        rows = _ranked_matches(db, match, conditions, params, by_relevance=bool(words))
+        rows = _ranked_matches(db, match, conditions, params, by_relevance=bool(terms))
+        if not rows and words:
+            fixes = {word: _corrected_word(db, word) for word in words}
+            if any(fixes.values()):
+                words = [fixes[word] or word for word in words]
+                corrected = " ".join(words)
+                terms = _terms(query.query, words)
+                match = _fts_query(terms, query)
+                rows = _ranked_matches(db, match, conditions, params, by_relevance=True)
+        # Fewer than a page with every word: what has some of them still beats nothing.
+        whole = {row["thread"] for row in rows}
+        if len(whole) < query.limit and len(terms) > 1:
+            rows = [
+                *rows,
+                *_ranked_matches(
+                    db,
+                    _fts_query(terms, query, any_word=True),
+                    conditions,
+                    params,
+                    by_relevance=True,
+                ),
+            ]
     else:
         rows = db.fetch_all(
             "SELECT m.id AS message, m.thread_id AS thread FROM messages m"  # noqa: S608
@@ -845,11 +1082,22 @@ def search(db: Database, account: str, query: SearchMail) -> SearchResults:
             (*params, SEARCH_CANDIDATES),
         )
     # A conversation shows once, at its best match.
-    chosen: dict[int, int] = {}
+    pool: dict[int, int] = {}
     for row in rows:
-        chosen.setdefault(row["thread"], row["message"])
-        if len(chosen) >= query.limit:
+        pool.setdefault(row["thread"], row["message"])
+        if len(pool) >= max(query.limit, SEARCH_POOL):
             break
+    if terms:
+        weights = _weights(db, list(pool))
+        order = {thread: rank for rank, thread in enumerate(pool)}
+        # Who it's from can reorder matches, but having every word always comes first.
+        complete = set(pool) if len(terms) < 2 else whole
+        ranked = sorted(
+            pool, key=lambda t: (t not in complete, -weights.get(t, 1.0) / (FUSION_K + order[t]))
+        )
+    else:
+        ranked = list(pool)
+    chosen = {thread: pool[thread] for thread in ranked[: query.limit]}
     excerpts = _excerpts(db, words, list(chosen.values())) if words else {}
     snippets = (
         {}
@@ -874,7 +1122,9 @@ def search(db: Database, account: str, query: SearchMail) -> SearchResults:
                 matched_attachment=bool(found and found[1]),
             )
         )
-    return SearchResults(hits=hits)
+    return SearchResults(
+        hits=hits, corrected=corrected, with_every_word=sum(hit.thread.id in whole for hit in hits)
+    )
 
 
 def merge_meaning(
@@ -887,37 +1137,14 @@ def merge_meaning(
     """Ranks by both lists together, so a good match in either comes up, and in both comes first."""
     if not meaning:
         return words
-    conditions = ["m.account = ?"]
-    params: list[object] = [account]
+    query = with_operators(query)
+    conditions, params = _filters(account, query)
     if query.sender:
         conditions.append("(m.from_addr LIKE ? OR m.from_name LIKE ?)")
         params += [f"%{query.sender}%", f"%{query.sender}%"]
-    if query.date_from:
-        conditions.append("m.date >= ?")
-        params.append(query.date_from)
-    if query.date_to:
-        conditions.append("m.date <= ?")
-        params.append(query.date_to)
-    if query.category:
-        conditions.append(
-            "(t.category = ? OR EXISTS (SELECT 1 FROM json_each(t.extra_categories) WHERE value = ?))"
-        )
-        params += [query.category, query.category]
-    if query.has_attachment is not None:
-        conditions.append("m.has_attachments = ?")
-        params.append(int(query.has_attachment))
-    if query.folder:
-        conditions.append(
-            "EXISTS (SELECT 1 FROM message_locations l WHERE l.message = m.id AND l.role = ?)"
-        )
-        params.append(query.folder)
-    else:
-        conditions.append(f"m.folder_role NOT IN {SET_APART}")
-    if query.location:
-        conditions.append(
-            "EXISTS (SELECT 1 FROM message_locations l WHERE l.message = m.id AND l.folder = ?)"
-        )
-        params.append(query.location)
+    if query.subject:
+        conditions.append("m.subject LIKE ?")
+        params.append(f"%{query.subject}%")
     excerpts = dict(meaning)
     marks = ",".join("?" * len(excerpts))
     rows = db.fetch_all(
@@ -929,7 +1156,9 @@ def merge_meaning(
     scores: dict[int, float] = {}
     hits: dict[int, SearchHit] = {}
     for rank, hit in enumerate(words.hits):
-        scores[hit.thread.id] = 1 / (FUSION_K + rank)
+        scores[hit.thread.id] = (1 if rank < words.with_every_word else SOME_WORDS_WEIGHT) / (
+            FUSION_K + rank
+        )
         hits[hit.thread.id] = hit
     seen: set[int] = set()
     rank = 0
@@ -938,7 +1167,7 @@ def merge_meaning(
         if thread_id is None or thread_id in seen:
             continue
         seen.add(thread_id)
-        scores[thread_id] = scores.get(thread_id, 0.0) + 1 / (FUSION_K + rank)
+        scores[thread_id] = scores.get(thread_id, 0.0) + MEANING_WEIGHT / (FUSION_K + rank)
         rank += 1
         if thread_id in hits:
             hits[thread_id] = hits[thread_id].model_copy(update={"matched_by": "both"})
@@ -951,8 +1180,11 @@ def merge_meaning(
                 matched_attachment=False,
                 matched_by="meaning",
             )
-    ranked = sorted(hits, key=lambda thread_id: scores[thread_id], reverse=True)
-    return SearchResults(hits=[hits[thread_id] for thread_id in ranked[: query.limit]])
+    weights = _weights(db, list(hits))
+    ranked = sorted(hits, key=lambda t: scores[t] * weights.get(t, 1.0), reverse=True)
+    return SearchResults(
+        hits=[hits[thread_id] for thread_id in ranked[: query.limit]], corrected=words.corrected
+    )
 
 
 def attachment(db: Database, message: int, index: int) -> tuple[str, bytes, bool] | None:

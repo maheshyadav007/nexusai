@@ -154,12 +154,11 @@ export function AboutSettings() {
       <dl className="flex flex-col gap-2">
         <Row label={t("settings.about.version")} value={diagnostics.data?.version ?? ""} />
       </dl>
-      <p className="mt-4 text-md text-ink-muted">{t("settings.about.credit")}</p>
-      <p className="mt-2 text-md">
-        <TextLink href="https://github.com/heydamir/unslop" target="_blank" rel="noreferrer">
-          {t("settings.about.unslop")}
-        </TextLink>
-      </p>
+      <p className="mt-4 text-md text-ink-secondary">{t("settings.about.what")}</p>
+      <section aria-label={t("settings.about.team")} className="mt-4 flex flex-col gap-1">
+        <h3 className="text-md font-medium text-ink-primary">{t("settings.about.team")}</h3>
+        <p data-testid="team-member" className="text-md text-ink-secondary">{t("settings.about.member")}</p>
+      </section>
     </Card>
   );
 }

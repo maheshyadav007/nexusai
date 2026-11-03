@@ -59,6 +59,7 @@ def build_layers(
     about: str = "",
     corrections: str = "",
     mailbox: str = "",
+    brief_wishes: str = "",
     **values: str,
 ) -> list[Layer]:
     home = config.home
@@ -82,6 +83,8 @@ def build_layers(
         layers.append(Layer("Personalized prompts", personal))
     if corrections:
         layers.append(Layer("What you corrected", corrections))
+    if brief_wishes:
+        layers.append(Layer("How they want the brief", brief_wishes))
     if mailbox:
         layers.append(Layer("What the mailbox shows", mailbox))
     if memory:

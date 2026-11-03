@@ -55,6 +55,7 @@ from nexusai.modules.planner import module as planner
 from nexusai.modules.semantic import module as semantic
 
 # What read_database can see. Masking tokens, approvals and the event log stay out of reach.
+WEAK_MATCHES_SHOWN = 5
 READABLE_TABLES = frozenset(
     {
         "messages",
@@ -902,24 +903,44 @@ def specs(
                     )
                 )
             hits = engine.search(query, kinds, size)
+            weak = not hits
+            if weak:
+                # Better to look and judge than be told there's nothing, when words may have missed it.
+                hits = engine.search(query, kinds, WEAK_MATCHES_SHOWN, closest_anyway=True)
             coverage = engine.coverage(kinds)
             lines = [coverage] if coverage else []
+            if weak and hits:
+                lines.append(
+                    "Nothing stands out as close in meaning. These are the nearest and may be"
+                    " unrelated, so check them, or use search_mail for exact words."
+                )
+            seen: set[int] = set()
             for hit in hits:
                 if hit.kind == "mail":
                     rows = db.fetch_all(
-                        "SELECT thread_id, subject FROM messages WHERE id = ?", (int(hit.ref),)
+                        "SELECT thread_id, subject, date, from_addr FROM messages WHERE id = ?",
+                        (int(hit.ref),),
                     )
+                    # One conversation once, at its closest message.
+                    if rows and rows[0]["thread_id"] in seen:
+                        continue
                     name = (
-                        f"[thread {rows[0]['thread_id']}] {rows[0]['subject']}" if rows else hit.ref
+                        f"[thread {rows[0]['thread_id']}] {rows[0]['date'][:10]}"
+                        f" | {rows[0]['subject']} | from {rows[0]['from_addr']}"
+                        if rows
+                        else hit.ref
                     )
                     if rows:
+                        seen.add(rows[0]["thread_id"])
                         citations.note(db, session, citations.MAIL, str(rows[0]["thread_id"]))
                 else:
                     name = f"[document {hit.ref}{', ' + hit.place if hit.place else ''}]"
                     citations.note(db, session, citations.DOCUMENT, hit.ref)
                 lines.append(f"{name} ({hit.score:.2f}): {hit.excerpt}")
             if not hits:
-                lines.append("Nothing close in meaning was found.")
+                lines.append(
+                    "Nothing stands out as close in meaning. search_mail finds exact words."
+                )
             return wrap_untrusted("\n".join(lines))
 
         return guard(
@@ -1287,7 +1308,8 @@ def specs(
             semantic_search,
             _MeaningSearch,
             "Find mail and documents by what they're about, in any language, even with no shared "
-            "words. Best for a topic. For an exact name or number, use search_mail.",
+            "words. Best for a topic, in a few words rather than a sentence. For an exact name or "
+            "number, use search_mail.",
         ),
         (
             read_database,

@@ -10,7 +10,8 @@ import { ExpandRow } from "@/ui/primitives/ExpandRow";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Field } from "@/ui/primitives/Field";
-import { Input, Textarea } from "@/ui/primitives/Input";
+import { Input } from "@/ui/primitives/Input";
+import { TextEditor, TextView } from "@/ui/primitives/TextView";
 import { PageHeader } from "@/ui/primitives/PageHeader";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { Tabs } from "@/ui/primitives/Tabs";
@@ -35,10 +36,10 @@ function PromptEditor({ prompt, startsOpen }: { prompt: PromptFile; startsOpen: 
         {prompt.base ? (
           <details className="text-sm text-ink-secondary">
             <summary className="focus-ring cursor-pointer rounded-sm">{t("prompts.base")}</summary>
-            <pre className="mt-2 max-h-popover overflow-auto whitespace-pre-wrap rounded-md bg-surface-sunken p-2 font-mono text-sm">{prompt.base}</pre>
+            <div className="mt-2"><TextView title={t("prompts.base")} text={prompt.base} /></div>
           </details>
         ) : null}
-        <Textarea aria-label={prompt.title} rows={5} value={content} onChange={(event) => setContent(event.target.value)} />
+        <TextEditor label={prompt.title} rows={10} value={content} onChange={setContent} />
         <div><Button type="submit" loading={save.isPending} disabled={content === prompt.content}>{t("settings.save")}</Button></div>
       </form>
     </ExpandRow>
@@ -65,7 +66,7 @@ function MemoryRow({ file }: { file: MemoryFile }) {
   return (
     <li data-testid="memory-file" className="flex flex-col gap-2 rounded-md border border-line-subtle p-3">
       <p className="text-sm text-ink-muted">{file.agent ? t("memory.agentLevel", { agent: file.agent }) : t("memory.userLevel")} · {file.name}</p>
-      <Textarea aria-label={file.name} rows={2} value={content} onChange={(event) => setContent(event.target.value)} />
+      <TextEditor label={file.name} value={content} onChange={setContent} />
       <div className="flex gap-2">
         <Button loading={save.isPending} disabled={content === file.content} onClick={() => save.mutate({ path: file.path, name: file.name, content })}>{t("settings.save")}</Button>
         <Button variant="danger" loading={remove.isPending} onClick={() => remove.mutate(file.path)}>{t("memory.forget")}</Button>

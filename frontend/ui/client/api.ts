@@ -1,4 +1,8 @@
 import type {
+  AgentRegistry,
+  BriefReacted,
+  ListAgents,
+  ReactToBrief,
   AgentKnowledge,
   ChangeLearnedNote,
   DecideMailSuggestion,
@@ -345,6 +349,7 @@ interface Commands {
   "mailAgent.runNow": [RunMailAgent, MailAgentRun];
   "mailAgent.readMore": [ReadMoreMail, AgentDone];
   "memory.confirmNote": [ChangeLearnedNote, AgentDone];
+  "brief.react": [ReactToBrief, BriefReacted];
   "memory.removeNote": [ChangeLearnedNote, AgentDone];
   "suggestions.decide": [DecideMailSuggestion, AgentDone];
   "context.save": [ContextSettings, ContextSettings];
@@ -411,6 +416,7 @@ interface Queries {
   "channel.list": [ListChannel, ChannelList];
   "board.list": [ListBoard, BoardList];
   "agentChannel.list": [ListAgentChannel, AgentChannelList];
+  "agents.registry": [ListAgents, AgentRegistry];
   "tasks.list": [ListTasks, TaskList];
   "reminders.list": [ListReminders, ReminderList];
   "schedules.list": [ListSchedules, ScheduleList];
