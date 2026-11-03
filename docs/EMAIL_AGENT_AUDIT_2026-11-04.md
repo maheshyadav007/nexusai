@@ -118,7 +118,7 @@ Prompt safety instructions are useful but must be backed by actual tool permissi
 
 Physical assembly order: shared system prompt → role prompt → Settings profile → all personal Markdown prompts → corrections (Mail only) → brief preferences (daily-prep only) → mailbox aggregates (Mail only) → selected memory. Runtime then supplies the current run, task/thread and retained conversation context. The Mail prompt explicitly tells the model to prioritize authored personal instructions; concatenation order itself is not a software-enforced policy. `knowledge.view` and preview expose much of this, which is a strong transparency foundation.
 
-Current learning is **feedback-driven context adaptation, not model-weight reinforcement learning**. Corrections become future instructions, repeated category corrections can suggest a rule, and recent brief likes/dislikes/comments influence later briefs. Chat turn ratings are stored, but are not currently a general policy-learning loop.
+The intended design is a **feedback loop implemented through prompt engineering and context updates**. Model-weight training is out of scope. Corrections already become future instructions, repeated category corrections can suggest a rule, and recent brief likes/dislikes/comments influence later briefs. Chat turn ratings are stored, but are not yet incorporated into this prompt-improvement loop.
 
 Problems to fix:
 
@@ -158,7 +158,9 @@ Use stable IDs, a retention policy and derived features; raw email bodies and ke
 
 Pipeline: **observe → aggregate scoped evidence → propose a specific preference → confirm consequential changes → version it → retrieve it on the next relevant run → replay/evaluate → monitor and support undo**. Low-risk presentation preferences can adapt conservatively; actions with consequences still use existing permission checks. Each learned preference should explain “why I think this” and allow an exception.
 
-Do not label this RLHF yet. Actual reinforcement learning updates a policy through a training/optimization process. A later bounded bandit could tune ranking or notification timing with carefully defined outcomes, but must not explore sending, deleting, or concealing urgent mail as experiments.
+The adaptation mechanism stays entirely in prompts and context: translate feedback into a precise, scoped instruction; resolve conflicts with existing preferences; version the change; retrieve it for relevant agents; and check subsequent outcomes. No model-weight training or bandit optimization is planned.
+
+For example, “this recruiter email was important because my job search is active” should produce a candidate instruction such as “While my job search is active, prioritize direct interview and availability requests.” It should not become “all recruiter mail is important.” The instruction can be shared with triage and briefing; the draft helper receives the relevant writing or commitment constraints. When the user says the search has ended, retire that instruction. System safety and permission rules remain outside automatic personalization edits.
 
 ## Recommended chief-of-staff architecture
 
@@ -196,7 +198,6 @@ Track: missed critical/actionable mail (recall), false interruptions, deadline e
 - [Anthropic: Effective context engineering](https://www.anthropic.com/research/effective-context-engineering-for-ai-agents): curate high-signal context and retrieve relevant material instead of growing every prompt indiscriminately. This informs the purpose-specific context service.
 - [Anthropic: Demystifying evals for AI agents](https://www.anthropic.com/research/demystifying-evals-for-ai-agents): evaluate outcomes of the complete agent/harness, using complementary graders and repeated trials. This informs stateful replay and mutation checks.
 - [ACE research paper](https://arxiv.org/abs/2510.04618): structured incremental context adaptation is relevant to preference curation. Its benchmark results are not evidence of improved email management in this app.
-- [InstructGPT / RLHF paper](https://arxiv.org/abs/2203.02155): distinguishes training with human feedback from supplying feedback as inference-time context. No model-weight RL is currently implemented here.
 
 ## Validation performed
 
