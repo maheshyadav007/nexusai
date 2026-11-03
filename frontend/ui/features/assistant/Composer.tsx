@@ -9,7 +9,7 @@ import { BareTextarea, Pressable } from "@/ui/primitives/Pressable";
 const ACTION = "flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-ink-secondary transition-colors duration-fast hover:bg-surface-sunken hover:text-ink-primary disabled:cursor-not-allowed disabled:bg-transparent disabled:text-ink-faint";
 
 /** Where the person writes. Enter sends and Shift+Enter starts a new line. */
-export function Composer({ value, onChange, onSubmit, busy = false, onStop, stopping = false, disabled = false, holdSend = false, placeholder, label, autoFocus = false, inputRef, leading, trailing }: { value: string; onChange: (value: string) => void; onSubmit: () => void; busy?: boolean; onStop?: () => void; stopping?: boolean; disabled?: boolean; holdSend?: boolean; placeholder: string; label: string; autoFocus?: boolean; inputRef?: Ref<HTMLTextAreaElement>; leading?: ReactNode; trailing?: ReactNode }) {
+export function Composer({ value, onChange, onSubmit, busy = false, onStop, stopping = false, disabled = false, holdSend = false, placeholder, label, autoFocus = false, inputRef, leading, trailing, notice }: { value: string; onChange: (value: string) => void; onSubmit: () => void; busy?: boolean; onStop?: () => void; stopping?: boolean; disabled?: boolean; holdSend?: boolean; placeholder: string; label: string; autoFocus?: boolean; inputRef?: Ref<HTMLTextAreaElement>; leading?: ReactNode; trailing?: ReactNode; notice?: ReactNode }) {
   return (
     <form
       className="flex flex-col gap-1 rounded-lg border border-line-subtle bg-surface-raised p-2 shadow-raised transition-colors duration-fast focus-within:border-line-strong"
@@ -34,7 +34,7 @@ export function Composer({ value, onChange, onSubmit, busy = false, onStop, stop
             onSubmit();
           }
         }}
-        className="chat-field w-full bg-transparent px-1 py-1 text-md text-ink-primary outline-none placeholder:text-ink-muted disabled:cursor-not-allowed"
+        className="chat-field w-full bg-transparent px-1 py-1 text-md text-ink-primary outline-none placeholder:text-ink-muted disabled:cursor-not-allowed disabled:opacity-50"
       />
       <div className="flex items-center gap-1">
         {leading}
@@ -53,6 +53,7 @@ export function Composer({ value, onChange, onSubmit, busy = false, onStop, stop
           </Swap>
         </div>
       </div>
+      {notice}
     </form>
   );
 }

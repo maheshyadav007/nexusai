@@ -253,11 +253,11 @@ svg.lucide {
 
 /* A finished AI result keeps a quiet, static identity. Only generation animates. */
 .ai-result {
-  border: 1px solid transparent;
-  box-shadow: 0 0 0 1px theme(colors.ai.three / 10%), 0 0 10px theme(colors.ai.two / 7%);
+  border: 1.5px solid transparent;
+  box-shadow: 0 0 0 1px theme(colors.ai.three / 15%), 0 2px 14px theme(colors.ai.two / 14%);
   background:
     linear-gradient(theme(colors.surface.page), theme(colors.surface.page)) padding-box,
-    linear-gradient(110deg, theme(colors.ai.one / 45%), theme(colors.ai.two / 45%), theme(colors.ai.three / 45%), theme(colors.ai.four / 45%)) border-box;
+    linear-gradient(110deg, theme(colors.ai.one / 65%), theme(colors.ai.two / 65%), theme(colors.ai.three / 65%), theme(colors.ai.four / 65%)) border-box;
 }
 .ai-result legend { background: theme(colors.surface.page); color: theme(colors.ink.secondary); }
 
@@ -265,3 +265,5 @@ svg.lucide {
 @container today (min-width: 48rem) {
   .today-columns { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
 }
+
+.ai-brief-attention::before { opacity: 0.4; }

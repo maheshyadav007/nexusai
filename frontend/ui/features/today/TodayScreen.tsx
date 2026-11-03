@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import appConfig from "@/app.config.json";
 import { useEffect, useState, type ReactNode } from "react";
 import type { ChannelMessage, DueItem, MailCategory, TodayThread, ToolApproval } from "@/ui/client/contracts.generated";
 import { useDateOnly, useDateTime, useShortDate } from "@/ui/client/format";
@@ -388,6 +389,23 @@ function MorningBrief() {
   const rating = (data?.prep_rating ?? null) as "up" | "down" | null;
   const session = data?.prep_session;
   const said = data?.prep_comment ?? "";
+  // Presentation acknowledgement belongs to this exact brief, not to a rating or a future run.
+  const version = session && data?.prep_at ? `${session}:${data.prep_at}` : null;
+  const [interacted, setInteracted] = useState<string[]>([]);
+  useEffect(() => {
+    try {
+      const stored: unknown = JSON.parse(localStorage.getItem(appConfig.storageKeys.briefAttention) ?? "[]");
+      if (Array.isArray(stored)) setInteracted(stored.filter((key): key is string => typeof key === "string").slice(0, 50));
+    } catch { /* Storage being unavailable only resets the visual acknowledgement. */ }
+  }, []);
+  const attended = Boolean(version && interacted.includes(version));
+  const acknowledge = () => {
+    if (!version || attended) return;
+    const next = [version, ...interacted].slice(0, 50);
+    setInteracted(next);
+    try { localStorage.setItem(appConfig.storageKeys.briefAttention, JSON.stringify(next)); } catch { /* Keep the in-memory acknowledgement. */ }
+  };
+
   useEffect(() => setComment(said), [said]);
   if (!data?.prep_text || !session) return null;
   const send = (next: { rating: "up" | "down" | null; comment: string }, after?: () => void) =>
@@ -399,9 +417,10 @@ function MorningBrief() {
     if (next === "down") setTelling(true);
   };
   return (
-    <fieldset aria-label={t("today.prep")} data-testid="morning-brief" className="ai-result flex min-w-0 flex-col gap-3 rounded-lg p-5">
-      <legend className="px-2 text-sm font-medium text-ink-secondary">{t("today.prep")}</legend>
+    <fieldset aria-label={t("today.prep")} data-testid="morning-brief" data-attended={attended} onClick={acknowledge} onCopy={acknowledge} onInput={acknowledge} onFocusCapture={(event) => { if (event.target.matches(":focus-visible")) acknowledge(); }} className={`${attended ? "ai-result" : "ai-surface ai-brief-attention"} flex min-w-0 flex-col gap-3 rounded-lg p-5`}>
+      {attended ? <legend className="px-2 text-sm font-medium text-ink-secondary">{t("today.prep")}</legend> : null}
       <header className="flex items-center justify-between gap-3">
+        {!attended ? <h2 className="flex items-center gap-2 text-lg font-medium text-ink-primary"><Icon name="thinking" className="h-4 w-4 text-accent-default" />{t("today.prep")}</h2> : null}
         {data.prep_at ? <span className="text-sm tabular-nums text-ink-muted">{t("today.brief.when", { when: format(data.prep_at) })}</span> : null}
       </header>
       <div data-testid="today-prep" className="text-md text-ink-primary"><Markdown text={data.prep_text} /></div>

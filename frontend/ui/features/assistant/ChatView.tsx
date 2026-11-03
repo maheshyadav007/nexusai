@@ -442,7 +442,7 @@ export function ChatView({ id, initial, active, footer }: { id: string; initial:
       <div className="flex flex-col gap-2 p-3">
           {!managed ? <AttachedChips items={attached} reading={reading} onRemove={(ref) => setContext.mutate({ id, context: attached.filter((item) => item.ref !== ref).map((item) => item.ref) })} /> : null}
         {chat.error ? <ErrorState title={t("sessions.failed")} description={chat.error.message} /> : null}
-          <div className={managed && !acknowledged && !asking ? "opacity-50" : ""}><Composer
+          <Composer
             value={text}
             onChange={setText}
             onSubmit={submit}
@@ -456,11 +456,12 @@ export function ChatView({ id, initial, active, footer }: { id: string; initial:
             inputRef={editor}
             leading={!managed ? <AttachMenu onAttach={attach} /> : !acknowledged && !asking ? <Icon name="lockedChat" className="h-4 w-4 text-ink-muted" /> : null}
             trailing={!managed ? <ModelPicker value={session.data?.session.model ?? null} onChange={(model) => setModel.mutate({ id, model })} /> : null}
-          /></div>
-          {managed && !asking ? <div data-testid="managed-chat-notice" className="flex items-start justify-between gap-3 px-1">
+            notice={managed && !asking ? <div data-testid="managed-chat-notice" className="flex items-start justify-between gap-3 px-1">
             <p className="text-sm text-ink-muted">{t(acknowledged ? "chat.managed.unlocked" : "chat.managed.warning")}</p>
             <Button variant="quiet" className="shrink-0 py-px" onClick={() => { setAcknowledged(!acknowledged); if (!acknowledged) requestAnimationFrame(() => editor.current?.focus()); }}>{t(acknowledged ? "chat.managed.lock" : "chat.managed.proceed")}</Button>
           </div> : null}
+          />
+
           {footer}
       </div>
     </div>
