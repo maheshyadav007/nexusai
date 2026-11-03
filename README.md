@@ -18,7 +18,7 @@ Needs [`uv`](https://docs.astral.sh/uv/) and Node 22.
 
 ```sh
 make setup
-make dev      # then open http://127.0.0.1:3000
+make dev      # then open http://127.0.0.1:4000
 make check    # lint, types, boundaries, no-hardcoding, tests
 ```
 
@@ -26,7 +26,7 @@ On Windows, which usually has no `make`, install [uv](https://docs.astral.sh/uv/
 
 ```sh
 node scripts/dev.mjs setup
-node scripts/dev.mjs       # then open http://127.0.0.1:3000
+node scripts/dev.mjs       # then open http://127.0.0.1:4000
 ```
 
 Other checks:
@@ -38,3 +38,5 @@ cd frontend && npx playwright install chromium && npm run test:e2e   # browser t
 ```
 
 On first run the app asks where to keep your Home folder, which holds your mail, documents and memory. Set `NEXUSAI_HOME` to use a fixed folder instead.
+
+The app runs on port 4000 and its backend on 4100, on your computer only. To reach it at another address, list it in `NEXUSAI_ALLOWED_ORIGINS`, separated by commas, for example `http://mybox.local:4000`. Other websites stay refused, because any page you visit could otherwise reach your mail.

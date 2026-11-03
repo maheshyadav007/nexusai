@@ -239,6 +239,7 @@ import type {
   TestModel,
   TraceView,
   UpdateSettings, ListPipelines, PausePipeline, PipelineList, RunPipeline, StopHistory, GetMoreMail, SetNeverDelete, ChangeThreadFolder, ChangeThreadCategory, PipelineMore, ListMailFolders, MailFolders } from "./contracts.generated";
+import { t } from "@/ui/strings";
 
 interface Commands {
   "settings.update": [UpdateSettings, Settings];
@@ -443,12 +444,21 @@ export class ApiRequestError extends Error {
 }
 
 export async function post<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(path, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body ?? {}),
-  });
-  if (!response.ok) throw new ApiRequestError((await response.json()) as ApiError);
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    });
+  } catch {
+    // The browser hides why, whether the server is down or the address was refused.
+    throw new ApiRequestError({ code: "request.unreachable", message: t("error.unreachable") });
+  }
+  if (!response.ok) {
+    const refusal = await response.json().catch(() => null);
+    throw new ApiRequestError((refusal as ApiError | null) ?? { code: "request.failed", message: t("error.failed", { status: response.status }) });
+  }
   return (await response.json()) as T;
 }
 

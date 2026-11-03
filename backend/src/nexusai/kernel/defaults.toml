@@ -1,9 +1,9 @@
 # Every tunable value lives here. Environment variables named NEXUSAI_<KEY> override these.
 [server]
 host = "127.0.0.1"
-port = 8765
-allowed_hosts = ["127.0.0.1:8765", "localhost:8765", "127.0.0.1:3000", "localhost:3000"]
-allowed_origins = ["http://127.0.0.1:3000", "http://localhost:3000"]
+port = 4100
+allowed_hosts = ["127.0.0.1:4100", "localhost:4100", "[::1]:4100", "127.0.0.1:4000", "localhost:4000", "[::1]:4000"]
+allowed_origins = ["http://127.0.0.1:4000", "http://localhost:4000", "http://[::1]:4000"]
 
 [home]
 min_free_bytes = 5368709120

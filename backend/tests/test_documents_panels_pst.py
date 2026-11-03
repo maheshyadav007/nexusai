@@ -40,7 +40,7 @@ def app_config(config: Config) -> Config:
 
 @pytest.fixture
 def client(app_config: Config) -> Iterator[TestClient]:
-    with TestClient(create_app(app_config), base_url="http://127.0.0.1:8765") as test:
+    with TestClient(create_app(app_config), base_url="http://127.0.0.1:4100") as test:
         yield test
 
 
@@ -172,7 +172,7 @@ def test_a_filename_cant_choose_where_the_file_lands(client: TestClient, config:
 
 def test_too_large_uploads_are_refused(app_config: Config) -> None:
     with TestClient(
-        create_app(replace(app_config, max_upload_bytes=10)), base_url="http://127.0.0.1:8765"
+        create_app(replace(app_config, max_upload_bytes=10)), base_url="http://127.0.0.1:4100"
     ) as test:
         refused = test.post("/api/documents/upload", params={"name": "big.txt"}, content=b"x" * 11)
         assert refused.status_code == 413
@@ -390,10 +390,10 @@ def test_pst_resumes_by_itself_after_a_restart(
     monkeypatch.setattr(pst, "BATCH", 2)
     monkeypatch.setenv("FAKE_PST_TOTAL", "20")
     monkeypatch.setenv("FAKE_PST_DELAY", "0.05")
-    with TestClient(create_app(app_config), base_url="http://127.0.0.1:8765") as first:
+    with TestClient(create_app(app_config), base_url="http://127.0.0.1:4100") as first:
         job = add_pst(first, tmp_path)
         wait(lambda: imports(first)[0]["position"] >= 2, "some progress")
-    with TestClient(create_app(app_config), base_url="http://127.0.0.1:8765") as second:
+    with TestClient(create_app(app_config), base_url="http://127.0.0.1:4100") as second:
         assert job["id"]
         wait(lambda: status_is(second, "done"), "finish")
         assert imports(second)[0]["imported"] == 20

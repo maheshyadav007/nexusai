@@ -87,7 +87,7 @@ def app_config(config: Config) -> Config:
 
 @pytest.fixture
 def client(app_config: Config, script: Script) -> Iterator[TestClient]:
-    with TestClient(create_app(app_config), base_url="http://127.0.0.1:8765") as test:
+    with TestClient(create_app(app_config), base_url="http://127.0.0.1:4100") as test:
         yield test
 
 
@@ -672,7 +672,7 @@ def test_agent_messages_are_limited_and_topics_can_be_muted(
     app_config: Config, script: Script
 ) -> None:
     limited = replace(app_config, agent=replace(app_config.agent, max_agent_messages_per_run=1))
-    with TestClient(create_app(limited), base_url="http://127.0.0.1:8765") as test:
+    with TestClient(create_app(limited), base_url="http://127.0.0.1:4100") as test:
         session, first = run_tool(
             test, script, ToolCall("c1", "post_to_agents", {"text": "Hi", "topic": "budget"})
         )

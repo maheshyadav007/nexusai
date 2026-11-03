@@ -23,7 +23,7 @@ def data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 @pytest.fixture
 def unset_client(config: Config, data_dir: Path) -> Iterator[TestClient]:
     app = create_app(replace(config, home_dir=None))
-    with TestClient(app, base_url="http://127.0.0.1:8765") as client:
+    with TestClient(app, base_url="http://127.0.0.1:4100") as client:
         yield client
 
 
@@ -54,10 +54,10 @@ def test_choosing_creates_the_layout_and_opens_the_app(
 def test_restart_reopens_the_chosen_home(config: Config, tmp_path: Path, data_dir: Path) -> None:
     target = tmp_path / "MyHome"
     app_config = replace(config, home_dir=None)
-    with TestClient(create_app(app_config), base_url="http://127.0.0.1:8765") as first:
+    with TestClient(create_app(app_config), base_url="http://127.0.0.1:4100") as first:
         first.post("/api/home/choose", json={"path": str(target)})
         first.post("/api/commands/settings.update", json={"theme": "nexus-dark"})
-    with TestClient(create_app(app_config), base_url="http://127.0.0.1:8765") as second:
+    with TestClient(create_app(app_config), base_url="http://127.0.0.1:4100") as second:
         assert status(second)["state"] == "ready"
         assert second.post("/api/queries/settings.get").json()["theme"] == "nexus-dark"
 
@@ -68,7 +68,7 @@ def test_missing_home_is_reported_and_never_recreated(
     gone = tmp_path / "Gone"
     homes.write_pointer(data_dir, gone)
     with TestClient(
-        create_app(replace(config, home_dir=None)), base_url="http://127.0.0.1:8765"
+        create_app(replace(config, home_dir=None)), base_url="http://127.0.0.1:4100"
     ) as client:
         current = status(client)
         assert current["state"] == "missing"
@@ -83,7 +83,7 @@ def test_locating_requires_a_real_home(config: Config, tmp_path: Path, data_dir:
     moved = tmp_path / "Moved"
     homes.create_home(moved)
     with TestClient(
-        create_app(replace(config, home_dir=None)), base_url="http://127.0.0.1:8765"
+        create_app(replace(config, home_dir=None)), base_url="http://127.0.0.1:4100"
     ) as client:
         refused = client.post("/api/home/choose", json={"path": str(plain), "must_exist": True})
         assert refused.status_code == 422

@@ -32,7 +32,7 @@ def client(app_config: Config, script: Script) -> Iterator[TestClient]:
     HOME[0] = app_config.home
     agent = replace(app_config.agent, learn_emails=3)
     with TestClient(
-        create_app(replace(app_config, agent=agent)), base_url="http://127.0.0.1:8765"
+        create_app(replace(app_config, agent=agent)), base_url="http://127.0.0.1:4100"
     ) as test:
         yield test
 
@@ -179,7 +179,7 @@ def test_zero_turns_it_off(script: Script, fake: FakeMail, app_config: Config) -
 
     agent = replace(app_config.agent, learn_emails=0)
     with TestClient(
-        create_app(replace(app_config, agent=agent)), base_url="http://127.0.0.1:8765"
+        create_app(replace(app_config, agent=agent)), base_url="http://127.0.0.1:4100"
     ) as client:
         fake.state.deliver(make_mail(subject="Not read"))
         connect(client, fake)

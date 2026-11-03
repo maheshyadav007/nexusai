@@ -94,15 +94,27 @@ class Config:
         return self.home_dir
 
 
+def _extra_origins() -> frozenset[str]:
+    """Other addresses this app is reached at, named one by one. Never everything: any website a
+    person visits could then read their mail through this local server."""
+    listed = os.environ.get("NEXUSAI_ALLOWED_ORIGINS", "").split(",")
+    return frozenset(origin.strip().rstrip("/") for origin in listed if origin.strip())
+
+
+def _host_of(origin: str) -> str:
+    return origin.split("://", 1)[-1]
+
+
 def load_config(home_dir: Path | None = None) -> Config:
     raw = tomllib.loads(resources.files(__package__).joinpath("defaults.toml").read_text("utf-8"))
     server, events, chatgpt = raw["server"], raw["events"], raw["chatgpt"]
     secrets_test_file = os.environ.get("NEXUSAI_SECRETS_TEST_FILE")
+    extra_origins = _extra_origins()
     return Config(
         host=os.environ.get("NEXUSAI_HOST", server["host"]),
         port=int(os.environ.get("NEXUSAI_PORT", server["port"])),
-        allowed_hosts=frozenset(server["allowed_hosts"]),
-        allowed_origins=frozenset(server["allowed_origins"]),
+        allowed_hosts=frozenset(server["allowed_hosts"]) | {_host_of(o) for o in extra_origins},
+        allowed_origins=frozenset(server["allowed_origins"]) | extra_origins,
         # Normally None: the user's choice is read from the pointer file at startup.
         home_dir=home_dir
         or (Path(fixed).resolve() if (fixed := os.environ.get("NEXUSAI_HOME")) else None),

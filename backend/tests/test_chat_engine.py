@@ -712,7 +712,7 @@ def test_connecting_a_model_starts_waiting_triage_straight_away(
     monkeypatch.setattr(gateway, "resolve_provider", no_model)
     # A timer far longer than the wait below, so only the event can start it.
     slow = replace(app_config, agent=replace(app_config.agent, triage_retry_seconds=600))
-    with TestClient(create_app(slow), base_url="http://127.0.0.1:8765") as live:
+    with TestClient(create_app(slow), base_url="http://127.0.0.1:4100") as live:
         connect(live, fake)
         script.replies = [triage_reply(importance="high")]
         fake.state.deliver(make_mail(subject="Waited for a model"))

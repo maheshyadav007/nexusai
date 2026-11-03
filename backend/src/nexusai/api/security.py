@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import structlog
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from nexusai.contracts.errors import ApiError
 
@@ -20,6 +20,13 @@ TOKEN_FILE = "install-token"
 TOKEN_HEADER = "x-nexusai-token"
 # Only says the server is up, and whatever starts the app needs it before anything else.
 OPEN_PATHS = frozenset({"/api/health"})
+PREFLIGHT = "access-control-request-method"
+PREFLIGHT_SECONDS = "600"
+ALLOWED_METHODS = "GET, POST, PUT, DELETE, OPTIONS"
+REFUSED = (
+    "This address isn't allowed to reach NexusAI. Open the app at http://127.0.0.1:4000, or add"
+    " this address to NEXUSAI_ALLOWED_ORIGINS."
+)
 
 
 def install_token(data_dir: Path) -> str:
@@ -36,6 +43,29 @@ def install_token(data_dir: Path) -> str:
     with os.fdopen(descriptor, "w", encoding="utf-8") as file:
         file.write(token)
     return token
+
+
+def _cross_origin(origin: str) -> dict[str, str]:
+    return {
+        "access-control-allow-origin": origin,
+        "access-control-allow-methods": ALLOWED_METHODS,
+        "access-control-allow-headers": f"content-type, {TOKEN_HEADER}, x-trace-id",
+        "vary": "Origin",
+    }
+
+
+def _answering(send: Send, origin: str) -> Send:
+    """Lets the page read the answer, errors included, so it can say what went wrong."""
+
+    async def sending(message: MutableMapping[str, Any]) -> None:
+        if message["type"] == "http.response.start":
+            added = [
+                (k.encode("latin-1"), v.encode("latin-1")) for k, v in _cross_origin(origin).items()
+            ]
+            message = {**message, "headers": [*message.get("headers", []), *added]}
+        await send(message)
+
+    return sending
 
 
 class LocalOnlyMiddleware:
@@ -65,9 +95,16 @@ class LocalOnlyMiddleware:
         host, origin = headers.get("host"), headers.get("origin")
         if host not in self.allowed_hosts or (origin and origin not in self.allowed_origins):
             log.warning("request_refused", host=host, origin=origin, path=scope["path"])
-            error = ApiError(code="request.refused", message="Request refused")
+            error = ApiError(code="request.refused", message=REFUSED)
             await JSONResponse(error.model_dump(), status_code=403)(scope, receive, send)
             return
+        # A browser asks first, and that question can't carry the token.
+        if origin and scope["method"] == "OPTIONS" and PREFLIGHT in headers:
+            allowed = {**_cross_origin(origin), "access-control-max-age": PREFLIGHT_SECONDS}
+            await Response(status_code=204, headers=allowed)(scope, receive, send)
+            return
+        if origin:
+            send = _answering(send, origin)
         if (
             self.token
             and scope["path"] not in OPEN_PATHS

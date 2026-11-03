@@ -301,7 +301,7 @@ test("only the app's own pages get through to the backend", async ({ page, reque
   await page.goto("/today");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 
-  const direct = await request.post("http://127.0.0.1:8765/api/queries/settings.get", { data: {} });
+  const direct = await request.post("http://127.0.0.1:4100/api/queries/settings.get", { data: {} });
   expect(direct.status()).toBe(401);
   const otherSite = await request.post("/api/queries/settings.get", { data: {}, headers: { "sec-fetch-site": "cross-site" } });
   expect(otherSite.status()).toBe(403);

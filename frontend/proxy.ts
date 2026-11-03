@@ -25,11 +25,20 @@ function installToken(): string | null {
   return token;
 }
 
+const REFUSED = "This address isn't allowed to reach NexusAI. Open the app at http://127.0.0.1:4000, or add this address to NEXUSAI_ALLOWED_ORIGINS.";
+
+function allowedOrigins(): string[] {
+  const extra = (process.env.NEXUSAI_ALLOWED_ORIGINS ?? "").split(",").map((origin) => origin.trim().replace(/\/$/, ""));
+  return [...appConfig.allowedOrigins, ...extra.filter(Boolean)];
+}
+
 /** Hands this install's token to requests from the app's own pages, and to nothing else. */
 export function proxy(request: NextRequest) {
   const site = request.headers.get("sec-fetch-site");
-  if (site === "cross-site" || site === "same-site") {
-    return NextResponse.json({ code: "request.refused", message: "Request refused" }, { status: 403 });
+  const origin = request.headers.get("origin");
+  // Any website can make a browser send this, so only the addresses named get the token.
+  if ((site === "cross-site" || site === "same-site") && !(origin && allowedOrigins().includes(origin))) {
+    return NextResponse.json({ code: "request.refused", message: REFUSED }, { status: 403 });
   }
   const headers = new Headers(request.headers);
   const value = installToken();

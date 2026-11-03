@@ -36,7 +36,7 @@ def client(config: Config, fake: tuple[str, dict[str, Any]]) -> Iterator[TestCli
     url, _ = fake
     chatgpt = replace(config.chatgpt, issuer=url, base_url=f"{url}/codex", min_poll_seconds=0.01)
     with TestClient(
-        create_app(replace(config, chatgpt=chatgpt)), base_url="http://127.0.0.1:8765"
+        create_app(replace(config, chatgpt=chatgpt)), base_url="http://127.0.0.1:4100"
     ) as test_client:
         yield test_client
 

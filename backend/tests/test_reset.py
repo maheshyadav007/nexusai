@@ -37,7 +37,7 @@ def setup(tmp_path: Path, config: Config, monkeypatch: pytest.MonkeyPatch, scrip
             config.mail, connect_timeout_seconds=3, reconnect_min_seconds=0.1, check_every_seconds=1
         ),
     )
-    with TestClient(create_app(fresh), base_url="http://127.0.0.1:8765") as client:
+    with TestClient(create_app(fresh), base_url="http://127.0.0.1:4100") as client:
         assert client.post("/api/home/choose", json={"path": str(home)}).is_success
         yield client, home, secrets, data
 

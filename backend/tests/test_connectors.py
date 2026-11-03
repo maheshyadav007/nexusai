@@ -270,7 +270,7 @@ def test_download_progress_counts_what_has_come_down(
         fake.state.deliver(make_mail(subject=f"Old {number}"))
     small = replace(app_config.mail, initial_batch=2, backfill_batch=1)
     config = replace(app_config, mail=small)
-    with TestClient(create_app(config), base_url="http://127.0.0.1:8765") as client:
+    with TestClient(create_app(config), base_url="http://127.0.0.1:4100") as client:
         connect(client, fake)
         wait(lambda: client.post("/api/queries/mail.status").json()["messages"] == 5, "history")
         bus = client.app.state.bus  # type: ignore[attr-defined]

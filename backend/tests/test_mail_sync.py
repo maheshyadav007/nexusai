@@ -29,7 +29,7 @@ def client(config: Config) -> Iterator[TestClient]:
         config.mail, connect_timeout_seconds=3, reconnect_min_seconds=0.1, check_every_seconds=1
     )
     with TestClient(
-        create_app(replace(config, mail=mail)), base_url="http://127.0.0.1:8765"
+        create_app(replace(config, mail=mail)), base_url="http://127.0.0.1:4100"
     ) as test:
         yield test
 
@@ -235,11 +235,11 @@ def test_sync_resumes_after_restart_without_repeats(config: Config, fake: FakeMa
     )
     app_config = replace(config, mail=mail)
     fake.state.deliver(make_mail(subject="Before restart"))
-    with TestClient(create_app(app_config), base_url="http://127.0.0.1:8765") as first:
+    with TestClient(create_app(app_config), base_url="http://127.0.0.1:4100") as first:
         connect(first, fake)
         thread_with(first, "Before restart")
     fake.state.deliver(make_mail(subject="While closed"))
-    with TestClient(create_app(app_config), base_url="http://127.0.0.1:8765") as second:
+    with TestClient(create_app(app_config), base_url="http://127.0.0.1:4100") as second:
         thread_with(second, "While closed")
         assert status(second)["messages"] == 2
         assert len(threads(second)) == 2
@@ -759,12 +759,12 @@ def test_stopping_and_pausing_stay_as_they_were_after_a_restart(
         config.mail, connect_timeout_seconds=3, reconnect_min_seconds=0.1, check_every_seconds=1
     )
     settings = replace(config, mail=mail)
-    with TestClient(create_app(settings), base_url="http://127.0.0.1:8765") as first:
+    with TestClient(create_app(settings), base_url="http://127.0.0.1:4100") as first:
         connect(first, fake)
         first.post("/api/commands/mail.history.stop", json={})
         first.post("/api/commands/pipelines.pause", json={"id": "mail-sync", "paused": True})
     logins = fake.state.logins
-    with TestClient(create_app(settings), base_url="http://127.0.0.1:8765") as second:
+    with TestClient(create_app(settings), base_url="http://127.0.0.1:4100") as second:
         assert status(second)["state"] == "paused"
         assert status(second)["history_budget"] == 0
         assert fake.state.logins == logins

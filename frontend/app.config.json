@@ -1,7 +1,8 @@
 {
-  "backendUrl": "http://127.0.0.1:8765",
+  "backendUrl": "http://127.0.0.1:4100",
   "installToken": { "file": "install-token", "header": "x-nexusai-token" },
-  "devOrigins": ["127.0.0.1"],
+  "devOrigins": ["127.0.0.1", "localhost", "[::1]"],
+  "allowedOrigins": ["http://127.0.0.1:4000", "http://localhost:4000", "http://[::1]:4000"],
   "defaultTheme": "nexus-light",
   "systemThemes": { "light": "nexus-light", "dark": "nexus-dark" },
   "storageKeys": { "appearance": "nexusai.appearance", "sidebar": "nexusai.sidebar", "assistant": "nexusai.assistant" }

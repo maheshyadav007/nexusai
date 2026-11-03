@@ -61,7 +61,7 @@ def app_config(config: Config) -> Config:
 
 @pytest.fixture
 def client(app_config: Config, script: Script) -> Iterator[TestClient]:
-    with TestClient(create_app(app_config), base_url="http://127.0.0.1:8765") as test:
+    with TestClient(create_app(app_config), base_url="http://127.0.0.1:4100") as test:
         yield test
 
 
@@ -488,7 +488,7 @@ def test_stop_ends_a_running_command(client: TestClient, script: Script) -> None
 
 def test_commands_time_out_and_say_so(app_config: Config, script: Script) -> None:
     quick = replace(app_config, agent=replace(app_config.agent, command_timeout_seconds=0.3))
-    with TestClient(create_app(quick), base_url="http://127.0.0.1:8765") as test:
+    with TestClient(create_app(quick), base_url="http://127.0.0.1:4100") as test:
         session = new_session(test)
         test.post("/api/commands/permissions.save", json=Permissions(command="allow").model_dump())
         script.replies = [
@@ -502,7 +502,7 @@ def test_commands_time_out_and_say_so(app_config: Config, script: Script) -> Non
 def test_waiting_sessions_survive_a_restart_and_finish_when_approved(
     app_config: Config, script: Script
 ) -> None:
-    with TestClient(create_app(app_config), base_url="http://127.0.0.1:8765") as first:
+    with TestClient(create_app(app_config), base_url="http://127.0.0.1:4100") as first:
         session = new_session(first)
         marker = app_config.home / "scratch" / session / "ran.txt"
         script.replies = [
@@ -512,7 +512,7 @@ def test_waiting_sessions_survive_a_restart_and_finish_when_approved(
         start_turn(first, session, "Run it")
         pending = wait(lambda: approvals(first), "approval")[0]
         wait(lambda: status(first, session) == "waiting", "waiting")
-    with TestClient(create_app(app_config), base_url="http://127.0.0.1:8765") as second:
+    with TestClient(create_app(app_config), base_url="http://127.0.0.1:4100") as second:
         assert status(second, session) == "waiting"
         assert approvals(second)[0]["id"] == pending["id"]
         second.post("/api/commands/approvals.decide", json={"id": pending["id"], "choice": "once"})
@@ -523,7 +523,7 @@ def test_waiting_sessions_survive_a_restart_and_finish_when_approved(
 
 def test_a_running_session_resumes_after_a_restart(app_config: Config, script: Script) -> None:
     script.gate = threading.Event()
-    with TestClient(create_app(app_config), base_url="http://127.0.0.1:8765") as first:
+    with TestClient(create_app(app_config), base_url="http://127.0.0.1:4100") as first:
         session = new_session(first)
         script.replies = [[TextChunk("Interrupted")]]
         start_turn(first, session, "Long job")
@@ -533,7 +533,7 @@ def test_a_running_session_resumes_after_a_restart(app_config: Config, script: S
             pass
         threading.Timer(0.3, script.gate.set).start()
     script.gate = None
-    with TestClient(create_app(app_config), base_url="http://127.0.0.1:8765") as second:
+    with TestClient(create_app(app_config), base_url="http://127.0.0.1:4100") as second:
         wait(lambda: status(second, session) in {"done", "failed"}, "resume or finish")
         assert status(second, session) == "done"
 

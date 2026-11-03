@@ -273,7 +273,7 @@ def small_read(app_config: Config, script: Script) -> Any:
 
     agent = replace(app_config.agent, learn_emails=2)
     with TestClient(
-        create_app(replace(app_config, agent=agent)), base_url="http://127.0.0.1:8765"
+        create_app(replace(app_config, agent=agent)), base_url="http://127.0.0.1:4100"
     ) as test:
         yield test
 

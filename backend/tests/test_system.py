@@ -14,7 +14,7 @@ from nexusai.kernel.logging import REMOVED, clean_fields, sink
 
 @pytest.fixture
 def client(config: Config) -> Iterator[TestClient]:
-    with TestClient(create_app(config), base_url="http://127.0.0.1:8765") as test_client:
+    with TestClient(create_app(config), base_url="http://127.0.0.1:4100") as test_client:
         yield test_client
 
 

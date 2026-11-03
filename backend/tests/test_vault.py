@@ -20,7 +20,7 @@ KEY = "ab" * 32
 
 @contextmanager
 def running(config: Config) -> Iterator[TestClient]:
-    with TestClient(create_app(config), base_url="http://127.0.0.1:8765") as client:
+    with TestClient(create_app(config), base_url="http://127.0.0.1:4100") as client:
         yield client
 
 
