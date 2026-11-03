@@ -6,6 +6,7 @@ Status: in development. The web app comes first, then an Electron desktop app.
 
 | Folder | Contents |
 |---|---|
+| `docs/` | [Product vision](docs/PRODUCT_VISION.md), [features](docs/FEATURES.md), [architecture](docs/ARCHITECTURE.md), [component plan](docs/COMPONENT_PLAN.md), [tech stack](docs/TECH_STACK.md), [known problems](docs/KNOWN_PROBLEMS.md), design reference |
 | `backend/` | Local Python backend: FastAPI, event bus, modules. Managed with `uv` |
 | `frontend/` | Next.js UI: theme files, typed client, screens |
 | `scripts/` | `dev.mjs`, for setup and running without `make` |
