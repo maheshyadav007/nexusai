@@ -195,6 +195,7 @@ async function start() {
   backendUrl = `http://127.0.0.1:${backendPort}`;
   origin = `http://127.0.0.1:${frontendPort}`;
   const env = { ...process.env, NEXUSAI_APP_DATA: dataDir, NEXUSAI_HOST: '127.0.0.1',
+    TZ: process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone,
     NEXUSAI_PORT: String(backendPort), NEXUSAI_ALLOWED_ORIGINS: `${origin},${backendUrl}`,
     NEXUSAI_ENV_FILE: path.join(dataDir, 'company.env'), PYTHONUTF8: '1', PYTHONNOUSERSITE: '1',
     NEXUSAI_ENV_DEFAULTS_FILE: path.join(resources, 'deployment.env'),

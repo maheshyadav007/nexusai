@@ -21,6 +21,12 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - name: Use a non-UTC Windows timezone
+        shell: powershell
+        run: |
+          Set-TimeZone -Id 'India Standard Time'
+          Remove-Item Env:TZ -ErrorAction SilentlyContinue
+          'NEXUSAI_TEST_WINDOWS_ZONE=Asia/Kolkata' >> $env:GITHUB_ENV
       - name: Build, install and update A to B
         shell: powershell
         run: .\desktop.cmd ci

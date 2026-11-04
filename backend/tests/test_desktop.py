@@ -18,10 +18,11 @@ from nexusai.kernel.config import load_config
 def test_scheduling_without_system_timezone_database() -> None:
     """Windows has no system IANA database; installed runtime data must suffice."""
     script = """
+import os
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo, TZPATH
 from nexusai.contracts.agent import Schedule
-from nexusai.modules.agent.scheduler import next_scheduled_run
+from nexusai.modules.agent.scheduler import next_scheduled_run, system_timezone
 
 assert not TZPATH
 for name in ("UTC", "Asia/Kolkata", "America/New_York"):
@@ -31,10 +32,18 @@ assert datetime(2026, 1, 1, tzinfo=ZoneInfo("Asia/Kolkata")).utcoffset() == time
 new_york = ZoneInfo("America/New_York")
 assert datetime(2026, 1, 1, tzinfo=new_york).utcoffset() == timedelta(hours=-5)
 assert datetime(2026, 7, 1, tzinfo=new_york).utcoffset() == timedelta(hours=-4)
+if expected := os.environ.get("NEXUSAI_TEST_WINDOWS_ZONE"):
+    assert "TZ" not in os.environ
+    detected = ZoneInfo(system_timezone())
+    for month in (1, 7):
+        local = datetime(2026, month, 1)
+        assert detected.utcoffset(local) == ZoneInfo(expected).utcoffset(local)
 """
+    env = {**os.environ, "PYTHONTZPATH": ""}
+    env.pop("TZ", None)
     result = subprocess.run(
         [sys.executable, "-c", script],
-        env={**os.environ, "PYTHONTZPATH": ""},
+        env=env,
         capture_output=True,
         text=True,
         timeout=30,
