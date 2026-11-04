@@ -8,6 +8,8 @@ Node is pinned to **22.23.4** in `desktop/toolchain.json` and `.nvmrc`. Frontend
 
 Scheduling uses `tzlocal` to discover the OS IANA timezone, including Windows registry mappings, while `tzdata` supplies the named-zone database. An explicit `TZ` takes precedence. The Electron launcher also passes its detected IANA zone to child services when `TZ` is unset, and the scheduler preserves the OS clock offset. Hosted CI now sets the disposable runner to India Standard Time, tests backend detection without `TZ`, and runs scheduler/mail reliability checks before packaging. Previously saved schedules may already contain an incorrect explicit `UTC` zone; inspect and re-save those schedules with the intended timezone. The app does not silently rewrite saved UTC schedules, since UTC may have been chosen intentionally.
 
+Latest validation: the [expanded non-UTC Windows run](https://github.com/maheshyadav007/nexusai/actions/runs/41831647703) passed timezone detection and scheduler regressions, but stopped at backend tests with 117 passed and two email-reliability failures. It did not create an installer or exercise updates for the timezone-fixed source. Investigate stale-judgment counting and digest cursor/completion synchronization as recorded in [Known Problems](KNOWN_PROBLEMS.md#windows-email-reliability-validation). Source fixes may be merged while this investigation remains open; distribution acceptance still requires a green full run and target-device checks.
+
 ## 1. Validate the generic Windows app first
 
 Commit the source, desktop tools and workflow. From a development checkout on macOS or Linux:
