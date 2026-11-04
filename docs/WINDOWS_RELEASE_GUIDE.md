@@ -2,7 +2,7 @@
 
 NexusAI separates generic source development, deployment customization, and distribution. This manual describes the checked-in automation and its acceptance gates. It contains no deployment-specific hostnames, accounts or credentials.
 
-Status: the scripts and GitHub workflow are implemented. Mac checks have passed; the GitHub Windows job and a real organization-device update must still pass before distribution is considered verified.
+Status: the scripts and GitHub workflow are implemented. The first hosted Windows run found missing IANA timezone data during backend startup. The backend now declares `tzdata` as a runtime dependency; a regression test disables system timezone lookup, and the bundled-Python check verifies named zones before packaging. A successful Windows job and a real organization-device update are still required before distribution is considered verified.
 
 ## 1. Validate the generic Windows app first
 

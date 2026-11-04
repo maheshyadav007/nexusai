@@ -29,6 +29,7 @@ dependencies = [
     "striprtf>=0.0.35",
     "structlog>=26.1.0",
     "tokenizers>=0.20",
+    "tzdata>=2025.2",
     "uvicorn[standard]>=0.54.0",
     "watchdog>=7",
     "xlrd>=2.0.2",

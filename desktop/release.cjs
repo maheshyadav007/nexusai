@@ -130,7 +130,7 @@ async function build(config) {
   const wheel = (await fsp.readdir(wheels)).find((file) => file.endsWith('.whl'));
   if (!wheel) throw new Error('Backend wheel was not produced.');
   await run(uv, ['pip', 'install', '--python', python, '--target', site, '--no-deps', path.join(wheels, wheel)]);
-  await run(python, ['-c', 'import sqlcipher3, pypff, cryptography, onnxruntime, tokenizers; from nexusai.kernel.config import load_config; from nexusai.api.desktop import DesktopControl; c=sqlcipher3.connect(":memory:"); c.execute("PRAGMA key=\'smoke\'"); assert c.execute("PRAGMA cipher_version").fetchone(); load_config(); print("Bundled native dependencies and backend imports OK")']);
+  await run(python, ['-c', 'import sqlcipher3, pypff, cryptography, onnxruntime, tokenizers; from zoneinfo import ZoneInfo, reset_tzpath; reset_tzpath([]); [ZoneInfo(z) for z in ("UTC", "Asia/Kolkata", "America/New_York")]; from nexusai.kernel.config import load_config; from nexusai.api.desktop import DesktopControl; c=sqlcipher3.connect(":memory:"); c.execute("PRAGMA key=\'smoke\'"); assert c.execute("PRAGMA cipher_version").fetchone(); load_config(); print("Bundled native dependencies and backend imports OK")']);
   await fsp.mkdir(path.join(resources, 'node'), { recursive: true });
   await fsp.copyFile(process.execPath, path.join(resources, 'node', 'node.exe'));
   const env = { ...process.env, NEXUSAI_DESKTOP_BUILD: '1', NODE_ENV: 'production' };
