@@ -31,7 +31,7 @@ Implementation and validation results will be recorded here. A successful instal
 - Custom monochrome Posty artwork and eye animation are explicitly deferred by the operator. Icon is a temporary Lucide outline robot; app name stays NexusAI.
 - Target-device mail, corporate model/download connectivity, sound policy, first-launch timing and internal update-feed acceptance remain operator tests.
 
-- Additional UI acceptance checks now cover password visibility, a populated/scrolling category list with Agent and Planner remaining visible, integrated desktop-header actions, Settings drop-up and staged update controls. Screenshots are retained in the isolated QA output. Native Windows buttons are verified separately by packaged Windows evidence.
+- Additional UI acceptance checks now cover password visibility, a populated/scrolling category list with Agent and Planner remaining visible, integrated desktop-header actions, Settings drop-up and staged update controls. Screenshots are retained in the isolated QA output. Packaged Windows evidence verifies app rendering; Electron page captures exclude native caption buttons, whose appearance/interaction remains a target-device check.
 - The full local backend run exposed an additional setup race in the digest test: initial mail queue settlement must precede asking Run now for a digest. The superseded Beta run was cancelled before publication; the setup wait was corrected without changing product behavior.
 
 
@@ -44,3 +44,16 @@ Implementation and validation results will be recorded here. A successful instal
 - The superseded release run was cancelled before publication. The replacement [Windows Beta validation](https://github.com/maheshyadav007/nexusai/actions/runs/41850625879) uses source commit `c762d16`; publication remains gated on its result.
 
 - Windows run `41850625879` passed 120 checks, including both previous email failures, native certificate verification and timezone regressions. Its sole failure was the event-pruning test's unsynchronized cursor edits/deletion count while the live scheduler and listeners were running. The test now holds the database's existing serialized lock across that controlled snapshot; assertions are unchanged and no production code was altered for this correction. A replacement Windows gate is required.
+
+
+## Windows acceptance — 4 November 2026
+
+- [Run 41853092074](https://github.com/maheshyadav007/nexusai/actions/runs/41853092074), source `129833b`, passed the complete build/install/update job in India Standard Time.
+- **121 backend checks passed**, including both prior email failures, event pruning, native certificate verification and timezone regressions. Frontend's 19 tests and production builds passed on Windows.
+- Installed A → B auto-update passed with preserved database settings, browser storage, app-data marker and open Home.
+- The separate **NexusAI Beta 0.1.0** build passed packaged startup/render/shutdown smoke. It contains no CI-only feed or internal profile.
+- These results supersede the pending automated gates above. Real-device sound, startup timing, internal CA/download access, real mail and a persistent internal update feed remain target-device acceptance items. Custom Posty artwork remains deferred.
+
+- Publication passed: [NexusAI Beta 0.1.0](https://github.com/maheshyadav007/nexusai/releases/tag/desktop-beta/0.1.0/2026-11-04T14-59-26-117Z). Installer SHA-256: `0978de11f265b97782beda979341c99ec3acfbfe78990bfc1a4456fa9c89db7a`. The release contains the `.exe` and checksum file.
+
+- Downloaded Windows evidence was reviewed: the Beta landing page renders correctly; all three packaged/installed smoke results have no renderer errors. The update probe screenshot captured a workspace loading state, so it does not establish the final workspace layout; browser acceptance checks cover that layout and the target-device review remains required. Installer SHA-256 independently matched the manifest and GitHub asset digest. Hosted Beta startup measured **3.457 seconds**; target-device performance can differ. Native Windows caption buttons are outside Electron page captures and still require visual/interaction acceptance on the laptop.
