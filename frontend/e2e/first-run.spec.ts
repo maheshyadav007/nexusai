@@ -8,6 +8,7 @@ const noViolations = async (page: Page) => {
 
 // Runs before the other files: the backend starts with no Home, as on a new computer.
 test("a new person goes from landing through setup into the app, and setup resumes", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/");
   await expect(page).toHaveURL(/\/welcome$/);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
@@ -37,7 +38,10 @@ test("a new person goes from landing through setup into the app, and setup resum
 
   await expect(page.getByRole("heading", { name: "Tell NexusAI about you" })).toBeVisible();
   // How it looks is chosen here too, and takes effect right away.
-  await expect(page.getByRole("radiogroup", { name: "Theme" })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Theme" })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Accent" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue", exact: true })).toBeInViewport({ ratio: 1 });
+  await page.screenshot({ path: "test-results/review-profile.png" });
   await page.getByRole("textbox", { name: "Name", exact: true }).fill("Asha Rao");
   await noViolations(page);
   await page.getByRole("button", { name: "Continue" }).click();

@@ -7,7 +7,7 @@ const VARIANTS = {
   quiet: "text-ink-secondary hover:bg-surface-sunken hover:text-ink-primary",
   danger: "border border-status-danger text-status-danger hover:bg-surface-sunken",
   // Anything an agent does for the person.
-  ai: "ai-glow text-ink-primary",
+  ai: "ai-glow relative text-ink-primary",
 } as const;
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

@@ -36,7 +36,6 @@ function NewCategory() {
             { name: name.trim(), in_priority: priority, ...(sender.trim() ? { sender: sender.trim() } : {}) },
             {
               onSuccess: () => {
-                // It has no mail yet, so it's only in the sidebar while it's open.
                 router.push(`/mail/category/${encodeURIComponent(name.trim())}`);
                 setOpen(false);
                 setName("");
@@ -60,6 +59,11 @@ function NewCategory() {
   );
 }
 
+export function CategoryNavActions({ collapsed }: { collapsed: boolean }) {
+  if (collapsed) return null;
+  return <div className="flex shrink-0 items-center justify-between px-2 text-sm text-ink-muted"><span>{t("nav.categories")}</span><NewCategory /></div>;
+}
+
 /** Folders the person or an agent made. They live in the sidebar beside the fixed ones. */
 export function CategoryNav({ collapsed }: { collapsed: boolean }) {
   const categories = useCategories();
@@ -68,8 +72,8 @@ export function CategoryNav({ collapsed }: { collapsed: boolean }) {
   const update = useUpdateCategory();
   if (collapsed) return null;
   const hrefOf = (name: string) => `/mail/category/${encodeURIComponent(name)}`;
-  // One with no mail is only clutter, unless it's the one open. Settings still lists them all.
-  const rows = (categories.data?.categories ?? []).filter((item) => !item.proposed && ((item.count ?? 0) > 0 || pathname.startsWith(hrefOf(item.name))));
+  // A created folder must remain reachable even before any mail is assigned to it.
+  const rows = (categories.data?.categories ?? []).filter((item) => !item.proposed);
   return (
     <section aria-label={t("nav.categories")}>
       <ul className="flex flex-col gap-px">
@@ -91,9 +95,6 @@ export function CategoryNav({ collapsed }: { collapsed: boolean }) {
             </li>
           );
         })}
-        <li className="flex justify-end pr-1">
-          <NewCategory />
-        </li>
       </ul>
     </section>
   );

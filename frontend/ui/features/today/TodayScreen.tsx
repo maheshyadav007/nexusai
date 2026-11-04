@@ -94,7 +94,7 @@ function ThreadList({ id, icon, title, hint, urgent = false, threads, empty, cha
                 {thread.why ? <span className="truncate text-sm text-ink-secondary">{thread.why}</span> : null}
               </Link>
               <span className="flex flex-wrap items-center gap-2">
-                {chase ? <AskAgent context={[`mail:${thread.id}`]} title={t("today.chase.title")} label={t("today.chase.draft")} text={t("today.chase.ask")} /> : <Link href={`/mail/all/${thread.id}?draft`} data-testid="today-draft" className="focus-ring press ai-glow inline-flex items-center rounded-md px-3 py-2 text-md font-medium text-ink-primary">{t("mail.draftReply")}</Link>}
+                {chase ? <AskAgent context={[`mail:${thread.id}`]} title={t("today.chase.title")} label={t("today.chase.draft")} text={t("today.chase.ask")} /> : <Link href={`/mail/all/${thread.id}?draft`} data-testid="today-draft" className="focus-ring press ai-glow relative inline-flex items-center rounded-md px-3 py-2 text-md font-medium text-ink-primary">{t("mail.draftReply")}</Link>}
                 <Button onClick={() => setStatus.mutate({ id: thread.id, status: "resolved" })}>{t("today.done")}</Button>
                 {thread.importance !== "low" && !chase ? <Button variant="quiet" onClick={() => setImportance.mutate({ id: thread.id, importance: "low" })}>{t("today.notImportant")}</Button> : null}
               </span>

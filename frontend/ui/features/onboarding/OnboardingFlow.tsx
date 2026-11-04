@@ -102,20 +102,20 @@ function Frame({ step, index, actions, children }: { step: Step; index: number; 
     seen.current = index;
   }, [index]);
   return (
-    <div className="flex min-h-screen bg-surface-page text-ink-primary">
-      <aside className="sticky top-0 hidden h-screen w-sidebar shrink-0 flex-col gap-6 border-r border-line-subtle p-5 lg:flex">
+    <div className="flex h-screen overflow-hidden bg-surface-page text-ink-primary">
+      <aside className="hidden h-full w-sidebar shrink-0 flex-col gap-6 overflow-y-auto overscroll-contain border-r border-line-subtle p-5 lg:flex">
         <span className="text-lg font-medium">{t("app.name")}</span>
         <StepRail label={t("setup.progress")} steps={STEPS.map((item) => t(item.label))} current={index} skipped={skipped} skippedLabel={t("setup.skipped")} />
         <p className="mt-auto text-sm text-ink-muted">{t("setup.time")}</p>
       </aside>
-      <main className="flex min-w-0 flex-1 flex-col gap-6 p-6">
+      <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain p-4 md:p-5">
         <header className="flex flex-col gap-4 lg:hidden">
           <span className="text-lg font-medium">{t("app.name")}</span>
           <Stepper label={t("setup.progress")} steps={STEPS.map((item) => t(item.label))} current={index} skipped={skipped} />
         </header>
-        <div className="mx-auto w-full max-w-reading py-5">
+        <div className={`mx-auto w-full ${step.id === "profile" ? "max-w-content py-2" : "max-w-reading py-4"}`}>
           <Steps step={step.id} forward={forward}>
-            <section className="flex flex-col gap-5">
+            <section className={`flex flex-col ${step.id === "profile" ? "gap-3" : "gap-5"}`}>
               <div>
                 <h1 className="font-serif text-display">{t(step.title)}</h1>
                 <p className="mt-2 text-md text-ink-secondary">{t(step.description)}</p>
@@ -192,9 +192,9 @@ export function OnboardingFlow() {
   }
   if (step.id === "profile") {
     return (
-      <Frame step={step} index={index} actions={back}>
+      <Frame step={step} index={index}>
         <AppearanceSettings brief />
-        <ProfileForm action={t("setup.next")} onSaved={goNext} />
+        <ProfileForm compact actions={back} action={t("setup.next")} onSaved={goNext} />
       </Frame>
     );
   }

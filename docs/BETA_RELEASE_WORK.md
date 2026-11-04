@@ -57,3 +57,8 @@ Implementation and validation results will be recorded here. A successful instal
 - Publication passed: [NexusAI Beta 0.1.0](https://github.com/maheshyadav007/nexusai/releases/tag/desktop-beta/0.1.0/2026-11-04T14-59-26-117Z). Installer SHA-256: `0978de11f265b97782beda979341c99ec3acfbfe78990bfc1a4456fa9c89db7a`. The release contains the `.exe` and checksum file.
 
 - Downloaded Windows evidence was reviewed: the Beta landing page renders correctly; all three packaged/installed smoke results have no renderer errors. The update probe screenshot captured a workspace loading state, so it does not establish the final workspace layout; browser acceptance checks cover that layout and the target-device review remains required. Installer SHA-256 independently matched the manifest and GitHub asset digest. Hosted Beta startup measured **3.457 seconds**; target-device performance can differ. Native Windows caption buttons are outside Electron page captures and still require visual/interaction acceptance on the laptop.
+
+
+## Follow-up UI review
+
+The isolated onboarding review found and corrected six reported UX gaps plus the related desktop chat/header overlap. See [Onboarding UI review](ONBOARDING_UI_REVIEW.md) for causes, scope and evidence. These corrections are on `codex/onboarding-sandbox` and are not part of the already-published Beta 0.1.0.

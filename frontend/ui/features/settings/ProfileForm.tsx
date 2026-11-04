@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useProfile, useSaveProfile } from "@/ui/client/onboarding";
 import type { Profile } from "@/ui/client/contracts.generated";
 import { Button } from "@/ui/primitives/Button";
@@ -17,7 +17,7 @@ const TONES = [
   { value: "brief", label: t("profile.tone.brief") },
 ];
 
-export function ProfileForm({ action, onSaved }: { action: string; onSaved?: () => void }) {
+export function ProfileForm({ action, onSaved, compact = false, actions }: { action: string; onSaved?: () => void; compact?: boolean; actions?: ReactNode }) {
   const profile = useProfile();
   const save = useSaveProfile();
   const [draft, setDraft] = useState<Profile | null>(null);
@@ -29,13 +29,13 @@ export function ProfileForm({ action, onSaved }: { action: string; onSaved?: () 
   const set = (changes: Partial<Profile>) => setDraft({ ...draft, ...changes });
   return (
     <form
-      className="flex flex-col gap-4"
+      className={compact ? "grid gap-3 md:grid-cols-2" : "flex flex-col gap-4"}
       onSubmit={(event) => {
         event.preventDefault();
         save.mutate(draft, onSaved ? { onSuccess: onSaved } : {});
       }}
     >
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className={`grid gap-3 md:grid-cols-2 ${compact ? "md:col-span-2" : ""}`}>
         <Field label={t("profile.name")}>{({ invalid, ...control }) => <Input invalid={invalid} autoComplete="name" value={draft.name ?? ""} onChange={(event) => set({ name: event.target.value })} {...control} />}</Field>
         <Field label={t("profile.role")}>{({ invalid, ...control }) => <Input invalid={invalid} autoComplete="organization-title" value={draft.role ?? ""} onChange={(event) => set({ role: event.target.value })} {...control} />}</Field>
       </div>
@@ -44,9 +44,10 @@ export function ProfileForm({ action, onSaved }: { action: string; onSaved?: () 
       </Field>
       <Field label={t("profile.signature")}>{({ invalid, ...control }) => <Textarea invalid={invalid} rows={2} value={draft.signature ?? ""} onChange={(event) => set({ signature: event.target.value })} {...control} />}</Field>
       <Field label={t("profile.vips")} hint={t("profile.vips.hint")}>{({ invalid, ...control }) => <Textarea invalid={invalid} rows={2} value={draft.vips ?? ""} onChange={(event) => set({ vips: event.target.value })} {...control} />}</Field>
-      <Field label={t("profile.about")} hint={t("profile.about.hint")}>{({ invalid, ...control }) => <Textarea invalid={invalid} rows={3} value={draft.about ?? ""} onChange={(event) => set({ about: event.target.value })} {...control} />}</Field>
+      <Field label={t("profile.about")} hint={t("profile.about.hint")}>{({ invalid, ...control }) => <Textarea invalid={invalid} rows={compact ? 2 : 3} value={draft.about ?? ""} onChange={(event) => set({ about: event.target.value })} {...control} />}</Field>
       {save.isError ? <ErrorState title={t("profile.saveError")} /> : null}
-      <div>
+      <div className={`flex items-center gap-3 ${compact ? "md:col-span-2" : ""}`}>
+        {actions}
         <Button type="submit" variant="primary" loading={save.isPending}>
           {action}
         </Button>

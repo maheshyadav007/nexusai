@@ -3,6 +3,8 @@
 import { useSettings, useUpdateSettings } from "@/ui/client/settings";
 import { Card } from "@/ui/primitives/Card";
 import { Segmented } from "@/ui/primitives/Segmented";
+import { Select } from "@/ui/primitives/Select";
+import { Field } from "@/ui/primitives/Field";
 import { SettingRow } from "@/ui/primitives/SettingRow";
 import { TileGroup } from "@/ui/primitives/TileGroup";
 import { t } from "@/ui/strings";
@@ -60,6 +62,11 @@ export function AppearanceSettings({ brief = false }: { brief?: boolean }) {
   const update = useUpdateSettings();
   const accent = settings.data?.accent ?? ACCENTS[0].value;
   const current = settings.data?.theme && settings.data.theme !== "system" ? settings.data.theme : THEMES[0]?.id ?? "";
+  if (brief) return <div className="grid gap-3 border-y border-line-subtle py-3 md:grid-cols-2" aria-busy={settings.isPending}>
+    <Field label={t("settings.theme")}>{({ id }) => <Select id={id} value={settings.data?.theme ?? "system"} options={[...THEMES.map(theme => ({ value: theme.id as string, label: theme.name })), { value: "system", label: t("settings.theme.system") }]} onChange={theme => update.mutate({ theme })} />}</Field>
+    <Field label={t("settings.accent")}>{({ id }) => <Select id={id} value={accent} options={ACCENTS} onChange={accent => update.mutate({ accent: accent as typeof ACCENTS[number]["value"] })} />}</Field>
+    {update.isError || settings.isError ? <p role="alert" className="text-sm text-status-danger">{t("settings.error")}</p> : null}
+  </div>;
   return (
     <div className="flex flex-col gap-5" aria-busy={settings.isPending}>
       <Card title={t("settings.theme")} description={t("settings.appearance.description")}>
@@ -76,7 +83,6 @@ export function AppearanceSettings({ brief = false }: { brief?: boolean }) {
       <Card title={t("settings.accent")}>
         <TileGroup label={t("settings.accent")} value={settings.data?.accent} onChange={(accent) => update.mutate({ accent })} tiles={ACCENTS.map((accent) => ({ value: accent.value, label: accent.label, preview: <AccentPreview accent={accent.value} theme={current} /> }))} />
       </Card>
-      {brief ? null : (
       <Card title={t("settings.appearance.layout")}>
         <SettingRow label={t("settings.density")} wide>
           <Segmented hideLabel label={t("settings.density")} value={settings.data?.density} options={DENSITIES} onChange={(density) => update.mutate({ density })} />
@@ -85,7 +91,6 @@ export function AppearanceSettings({ brief = false }: { brief?: boolean }) {
           <Segmented hideLabel label={t("settings.textSize")} value={settings.data?.text_size} options={TEXT_SIZES} onChange={(text_size) => update.mutate({ text_size })} />
         </SettingRow>
       </Card>
-      )}
       {update.isError || settings.isError ? (
         <p role="alert" className="text-sm text-status-danger">
           {t("settings.error")}

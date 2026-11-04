@@ -38,6 +38,10 @@ test("desktop header integrates actions and exposes staged update controls", asy
   await expect(nav.getByRole("link", { name: "Tasks", exact: true })).toBeInViewport();
   await expect(nav.getByRole("link", { name: "Sessions", exact: true })).toBeInViewport();
   await page.screenshot({ path: "test-results/beta-today-desktop.png", fullPage: true });
+  await page.getByTestId("assistant-pill").click();
+  const caption = await page.locator(".desktop-caption").boundingBox();
+  await expect(page.getByTestId("assistant-dock")).toHaveCSS("top", `${caption!.y + caption!.height}px`);
+  await page.getByRole("button", { name: "Minimize", exact: true }).click();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(page.getByRole("menuitem", { name: "Restart NexusAI" })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Quit NexusAI" })).toBeVisible();
@@ -47,4 +51,48 @@ test("desktop header integrates actions and exposes staged update controls", asy
   await page.getByRole("button", { name: "Download update", exact: true }).click();
   await expect(page.getByRole("button", { name: "Restart to install", exact: true })).toBeVisible();
   await page.screenshot({ path: "test-results/beta-about-updates.png", fullPage: true });
+});
+
+test("chat launcher stays fixed at the right and the document does not scroll", async ({ page }) => {
+  await page.setViewportSize({ width: 1080, height: 720 });
+  await page.goto("/today");
+  const pill = page.getByTestId("assistant-pill");
+  await expect(pill).toBeInViewport({ ratio: 1 });
+  await expect(pill).toHaveCSS("position", "fixed");
+  const box = await pill.boundingBox();
+  expect(box!.x).toBeGreaterThan(800);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(720);
+  expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(720);
+  await expect(page.locator("html")).toHaveCSS("overscroll-behavior", "none");
+  await page.mouse.move(900, 400);
+  await page.mouse.wheel(0, 1000);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  await expect(pill).toBeInViewport({ ratio: 1 });
+  await page.screenshot({ path: "test-results/review-today.png" });
+});
+
+test("empty categories remain in the sidebar after creating another and navigating away", async ({ page }) => {
+  await page.goto("/today");
+  const names = [`Review empty A ${Date.now()}`, `Review empty B ${Date.now()}`];
+  for (const name of names) {
+    await page.getByRole("button", { name: "New category", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("textbox", { name: "Name", exact: true }).fill(name);
+    await dialog.getByRole("button", { name: "Create category", exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(encodeURIComponent(name) + "$"));
+  }
+  await page.getByRole("link", { name: "Today", exact: true }).click();
+  const nav = page.getByRole("navigation", { name: "Main navigation" });
+  for (const name of names) await expect(nav.getByRole("link", { name, exact: true })).toBeVisible();
+  await page.reload();
+  for (const name of names) await expect(nav.getByRole("link", { name, exact: true })).toBeVisible();
+});
+
+test("web settings offer browser actions instead of desktop process controls", async ({ page }) => {
+  await page.goto("/today");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(page.getByRole("menuitem", { name: "Close tab", exact: true })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Quit NexusAI" })).toHaveCount(0);
+  await page.getByRole("menuitem", { name: "Reload tab", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 });
