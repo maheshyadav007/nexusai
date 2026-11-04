@@ -103,4 +103,6 @@ jobs:
 
           This generic Beta installer contains no internal credentials and no configured update server. About & Updates explains that updates are manual until an internal feed is configured. The auto-update gate uses a separate CI-only app and local feed. Windows notification policies, internal model/download access and real-mail behavior still need testing on the target device. Custom Posty artwork is deferred.
           EOF
-          gh release create "$GITHUB_REF_NAME" evidence/artifacts/unsigned/*/*.exe evidence/artifacts/unsigned/*/SHA256SUMS.txt --title "NexusAI Beta ${GITHUB_REF_NAME#desktop-beta/}" --prerelease --notes-file notes.md
+          beta_version="${GITHUB_REF_NAME#desktop-beta/}"
+          beta_version="${beta_version%%/*}"
+          gh release create "$GITHUB_REF_NAME" evidence/artifacts/unsigned/*/*.exe evidence/artifacts/unsigned/*/SHA256SUMS.txt --title "NexusAI Beta $beta_version" --prerelease --notes-file notes.md
