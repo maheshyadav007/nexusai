@@ -152,7 +152,9 @@ def remove_file(home: Path, relative: str) -> None:
     _safe(home, relative).unlink(missing_ok=True)
 
 
-def relevant(home: Path, agent: str, task_text: str, limit: int) -> str:
+def relevant(
+    home: Path, agent: str, task_text: str, limit: int, include_learned: bool = True
+) -> str:
     """Memories sharing the most words with this task, within the size limit."""
     words = {word.lower() for word in WORD.findall(task_text)}
     scored: list[tuple[int, str, str]] = []
@@ -161,8 +163,15 @@ def relevant(home: Path, agent: str, task_text: str, limit: int) -> str:
             continue
         overlap = len(words & {word.lower() for word in WORD.findall(file.content)})
         if file.path == CONFIRMED_PATH:
-            scored.append((1 << 31, file.name, file.content.strip()))
+            # Keep individual constraints when the file outgrows the context budget.
+            scored.extend(
+                (1 << 31, file.name, line.strip())
+                for line in file.content.splitlines()
+                if line.strip()
+            )
         elif file.path == LEARNED_PATH:
+            if not include_learned:
+                continue
             # It's about the person, so it's always relevant, and it's only ever data.
             kept = _fit_learned(file.content.strip(), words, int(limit * LEARNED_SHARE))
             scored.append((1 << 30, file.name, f"<untrusted>\n{kept}\n</untrusted>"))

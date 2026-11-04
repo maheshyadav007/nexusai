@@ -510,6 +510,29 @@ class _AgentPost(BaseModel):
         default=None, description="A session ID, or leave empty to post to a topic."
     )
     topic: str | None = Field(default=None, description="A short topic name.")
+    purpose: str | None = Field(
+        default=None,
+        max_length=500,
+        description="A concrete assignment, only for a named recipient.",
+    )
+    expected_output: str | None = Field(default=None, max_length=500)
+    evidence: list[str] = Field(default_factory=list, max_length=20)
+    tool_call_id: Annotated[str, InjectedToolCallId]
+
+
+class _HandoffOutcome(BaseModel):
+    id: int
+    state: Literal["acknowledged", "reported", "blocked"]
+    outcome: str = Field(min_length=1, max_length=2000)
+    tool_call_id: Annotated[str, InjectedToolCallId]
+
+
+class _PreferenceProposal(BaseModel):
+    instruction: str = Field(min_length=1, max_length=4000)
+    purpose: Literal["all", "mail", "draft", "brief"] = "mail"
+    sender: str | None = None
+    topic: str | None = None
+    evidence: list[str] = Field(min_length=1, max_length=20)
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
@@ -580,6 +603,12 @@ class _FoldSuggestions(BaseModel):
 
 
 class _RecordTriage(BaseModel):
+    confidence: Literal["high", "medium", "low"] = "medium"
+    review_reason: str | None = Field(default=None, max_length=500)
+    source_messages: list[int] = Field(
+        default_factory=list,
+        description="Message IDs actually read from this conversation. Never invent IDs.",
+    )
     category: str | None = Field(default=None, description="A short category name.")
     importance: Literal["low", "normal", "high"] = "normal"
     status: Literal["waiting_on_you", "waiting_on_others", "resolved", "fyi"] = "fyi"
@@ -651,6 +680,9 @@ MAIL_AGENT_TOOLS = frozenset(
         "read_work_board",
         "write_work_board",
         "read_agent_messages",
+        "report_handoff",
+        "read_feedback",
+        "propose_preference",
         "list_categories",
         "list_tasks",
         "list_reminders",
@@ -1148,15 +1180,122 @@ def build_tools(
         return "Added."
 
     def post_to_agents(
-        text: str, tool_call_id: str, to_session: str | None = None, topic: str | None = None
+        text: str,
+        tool_call_id: str,
+        to_session: str | None = None,
+        topic: str | None = None,
+        purpose: str | None = None,
+        expected_output: str | None = None,
+        evidence: list[str] | None = None,
     ) -> str:
-        sent = ctx.bus.db.fetch_all(
-            "SELECT COUNT(*) AS n FROM agent_channel WHERE sender = ?", (session,)
-        )[0]["n"]
-        if sent >= ctx.config.agent.max_agent_messages_per_run:
-            return "Not sent: this session has reached its limit of agent messages."
-        channel.agent_post(ctx, session, to_session, topic, text, _is_untrusted(ctx, session))
-        return "Posted."
+        turns = ctx.bus.db.fetch_all(
+            "SELECT id FROM agent_turns WHERE session=? AND closed=0 ORDER BY id DESC LIMIT 1",
+            (session,),
+        )
+        if not turns:
+            return "Not posted: no active run."
+        run = turns[0]["id"]
+        with ctx.bus.unit_of_work() as work:
+            duplicate = work.tx.execute(
+                "SELECT id FROM agent_channel WHERE sender=? AND run=? AND tool_call=?",
+                (session, run, tool_call_id),
+            ).fetchone()
+            if duplicate:
+                return f"Already posted: handoff {duplicate['id']}."
+            sent = work.tx.execute(
+                "SELECT COUNT(*) FROM agent_channel WHERE sender=? AND run=?", (session, run)
+            ).fetchone()[0]
+            if sent >= ctx.config.agent.max_agent_messages_per_run:
+                return "Not sent: this run has reached its limit of agent messages."
+            if purpose and (not to_session or to_session == session or not expected_output):
+                return "An assignment needs another recipient and an expected output."
+            if (
+                to_session
+                and not work.tx.execute(
+                    "SELECT 1 FROM agent_sessions WHERE id=? AND archived=0", (to_session,)
+                ).fetchone()
+            ):
+                return "The recipient session does not exist."
+            cursor = work.tx.execute(
+                "INSERT INTO agent_channel(sender,recipient,topic,text,time,untrusted,run,tool_call,purpose,expected_output,evidence,state) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    session,
+                    to_session,
+                    topic,
+                    text,
+                    datetime.now(UTC).isoformat(),
+                    int(_is_untrusted(ctx, session)),
+                    run,
+                    tool_call_id,
+                    purpose,
+                    expected_output,
+                    json.dumps(evidence or []),
+                    "queued" if purpose else "note",
+                ),
+            )
+            work.emit(
+                "agentChannel.posted",
+                {"id": cursor.lastrowid, "topic": topic},
+                source="agent",
+                trace_id=ctx.trace_id,
+            )
+        return f"Posted: handoff {cursor.lastrowid}."
+
+    def report_handoff(id: int, state: str, outcome: str, tool_call_id: str) -> str:
+        with ctx.bus.unit_of_work() as work:
+            row = work.tx.execute(
+                "SELECT * FROM agent_channel WHERE id=? AND recipient=? AND purpose IS NOT NULL",
+                (id, session),
+            ).fetchone()
+            if not row or row["state"] not in {"running", "acknowledged", "blocked"}:
+                return "That assignment is not open for this session."
+            work.tx.execute(
+                "UPDATE agent_channel SET state=?,outcome=? WHERE id=?", (state, outcome, id)
+            )
+            work.emit("agentChannel.posted", {"id": id}, source="agent", trace_id=ctx.trace_id)
+        return "Outcome recorded. Reported outcomes remain distinguishable from verified completed actions."
+
+    def read_feedback(tool_call_id: str) -> str:
+        from nexusai.modules.mail import accounts
+
+        rows = ctx.bus.db.fetch_all(
+            "SELECT id,time,action,artifact,artifact_id,new_value FROM interaction_events WHERE actor='person' AND (account=? OR account IS NULL) ORDER BY time DESC LIMIT 30",
+            (accounts.current_account(ctx.config),),
+        )
+        return _untrusted(json.dumps([dict(r) for r in rows]))
+
+    def propose_preference(
+        instruction: str,
+        evidence: list[str],
+        tool_call_id: str,
+        purpose: str = "mail",
+        sender: str | None = None,
+        topic: str | None = None,
+    ) -> str:
+        from nexusai.contracts.agent import SavePreference
+        from nexusai.modules.agent import personalization
+        from nexusai.modules.mail import accounts
+
+        account = accounts.current_account(ctx.config)
+        rows = ctx.bus.db.fetch_all(
+            "SELECT id FROM interaction_events WHERE actor='person' AND (account=? OR account IS NULL)",
+            (account,),
+        )
+        valid = {row["id"] for row in rows}
+        if not evidence or not set(evidence) <= valid:
+            return "A preference needs genuine user-feedback evidence from this account. Use read_feedback first."
+        proposal = SavePreference.model_validate(
+            dict(
+                purpose=purpose,
+                account=account,
+                sender=sender,
+                topic=topic,
+                instruction=instruction,
+                evidence=evidence,
+            )
+        )
+        item = personalization.save(ctx, proposal, proposed=True)
+        return f"Proposed preference {item.id}. It will affect prompts only after the person approves it."
 
     def read_agent_messages(tool_call_id: str) -> str:
         rows = channel.agent_inbox(ctx.bus.db, session)
@@ -1221,7 +1360,14 @@ def build_tools(
         def save() -> str:
             folder = ctx.config.home / "prompts" / "personal"
             folder.mkdir(parents=True, exist_ok=True)
-            (folder / f"{name}.md").write_text(content, "utf-8")
+            from nexusai.modules.agent import personalization
+
+            path = folder / f"{name}.md"
+            personalization.save_prompt_version(
+                ctx, "personal", name, path.read_text("utf-8") if path.exists() else ""
+            )
+            path.write_text(content, "utf-8")
+            personalization.save_prompt_version(ctx, "personal", name, content)
             with ctx.bus.unit_of_work() as work:
                 work.emit("prompts.changed", {"name": name}, source="agent", trace_id=ctx.trace_id)
             return f"Saved {name}. The person can edit it in Prompts and memory."
@@ -1363,6 +1509,21 @@ def build_tools(
             _AgentPost,
             "Send a message to another session or a topic. Point to items by ID rather than "
             "copying their text.",
+        ),
+        (
+            report_handoff,
+            _HandoffOutcome,
+            "Acknowledge, report or block your assignment with an evidence-based outcome. Reporting is not verification of a completed action.",
+        ),
+        (
+            read_feedback,
+            _Nothing,
+            "Read actual user-feedback observations. Opens are weak evidence; inactivity means unknown.",
+        ),
+        (
+            propose_preference,
+            _PreferenceProposal,
+            "Propose a scoped instruction from genuine feedback. The person edits and approves before any prompt changes.",
         ),
         (
             read_agent_messages,

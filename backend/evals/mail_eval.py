@@ -4,10 +4,13 @@
     cd backend && uv run python evals/mail_eval.py recruiter card  only cases matching a word
     cd backend && uv run python evals/mail_eval.py --thread 291    a real conversation, read only
 
-It uses the connected model and counts towards its usage, about 3,000 tokens a case. Nothing else
-in the Home changes. The cases are invented, so no real mail is kept in this file.
+It uses the connected model and counts towards its usage, about 3,000 tokens a case.
+Usage/generation events are recorded; no mail, tasks or preferences are changed.
+The cases are invented, so no real mail is kept in this file.
 """
 
+import argparse
+import hashlib
 import json
 import sys
 import tempfile
@@ -20,6 +23,8 @@ from typing import Any
 from nexusai.kernel import vault
 from nexusai.kernel.config import load_config
 from nexusai.kernel.database import Database
+from nexusai.kernel.event_bus import EventBus
+from nexusai.kernel.home import app_data_dir, default_home, read_pointer
 from nexusai.kernel.module import Context
 from nexusai.kernel.secrets import secret_store
 from nexusai.modules.agent import gateway, knowledge, mail_agent, prompts_builder, tools
@@ -68,7 +73,8 @@ def _case_task(case: dict[str, Any]) -> str:
 def _missed(want: dict[str, Any], got: dict[str, Any]) -> list[str]:
     missed = []
     for field in ("status", "next_action", "importance", "notify"):
-        if field in want and got.get(field) not in want[field]:
+        actual = bool(got.get(field)) if field == "notify" else got.get(field)
+        if field in want and actual not in want[field]:
             missed.append(f"{field}={got.get(field)} wanted {want[field]}")
     if want.get("tasks") and not got.get("tasks"):
         missed.append("no task")
@@ -100,16 +106,29 @@ def _layers_for_cases(ctx: Context, persona: dict[str, str], home: Path) -> list
     return [*layers, Layer("This run", f"New mail arrived.\nNow: {now}")]
 
 
-def _run_cases(ctx: Context, words: list[str]) -> int:
-    data = json.loads(CASES.read_text(encoding="utf-8"))
+def _run_cases(
+    ctx: Context, words: list[str], cases: Path = CASES, repeat: int = 1, report: Path | None = None
+) -> int:
+    data = json.loads(cases.read_text(encoding="utf-8"))
+    records = []
     chosen = [c for c in data["cases"] if not words or any(w in c["id"] for w in words)]
     failed = 0
     with tempfile.TemporaryDirectory() as folder:
         layers = _layers_for_cases(ctx, data["persona"], Path(folder))
-        for case in chosen:
+        for case in [case for case in chosen for _ in range(repeat)]:
             told = mail_agent._template("mail-sent-model" if case.get("sent") else "mail-model")
             got = _judge(ctx, layers, told, _case_task(case))
             missed = _missed(case["want"], got)
+            records.append(
+                {
+                    "case": case["id"],
+                    "got": got,
+                    "missed": missed,
+                    "prompt_digest": hashlib.sha256(
+                        "\n".join(layer.text for layer in layers).encode()
+                    ).hexdigest(),
+                }
+            )
             failed += bool(missed)
             shown = [
                 got.get(k) for k in ("status", "next_action", "importance", "notify", "category")
@@ -118,7 +137,23 @@ def _run_cases(ctx: Context, words: list[str]) -> int:
             print(f"       why: {got.get('reason')}")
             for line in missed:
                 print(f"       >> {line}")
-    print(f"\n{len(chosen) - failed} of {len(chosen)} as wanted")
+    total = len(chosen) * repeat
+    print(f"\n{total - failed} of {total} as wanted")
+    if report:
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text(
+            json.dumps(
+                {
+                    "suite": str(cases),
+                    "trials": repeat,
+                    "total": total,
+                    "failed": failed,
+                    "results": records,
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
     return failed
 
 
@@ -132,18 +167,26 @@ def _run_thread(ctx: Context, thread: int) -> None:
 
 
 def main() -> None:
-    home = Path.home() / "NexusAI"
+    home = read_pointer(app_data_dir()) or default_home()
     config = load_config(home)
     key = vault.open_key(home, secret_store(config.secrets_test_file))
     db = Database(home / "system" / "nexusai.db", key)
     config = replace(config, database_key=key)
-    ctx = Context(bus=SimpleNamespace(db=db), config=config, trace_id="eval")  # type: ignore[arg-type]
+    ctx = Context(bus=EventBus(db, config), config=config, trace_id="eval")
     arguments = sys.argv[1:]
     if arguments[:1] == ["--thread"]:
         for thread in arguments[1:]:
             _run_thread(ctx, int(thread))
         return
-    sys.exit(1 if _run_cases(ctx, arguments) else 0)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("words", nargs="*")
+    parser.add_argument("--cases", type=Path, default=CASES)
+    parser.add_argument("--repeat", type=int, default=1, choices=range(1, 11))
+    parser.add_argument("--json", type=Path)
+    options = parser.parse_args(arguments)
+    sys.exit(
+        1 if _run_cases(ctx, options.words, options.cases, options.repeat, options.json) else 0
+    )
 
 
 if __name__ == "__main__":

@@ -92,9 +92,15 @@ class Database:
             for migration in migrations:
                 if migration.id not in applied:
                     with self.transaction() as tx:
-                        for statement in migration.sql.split(";"):
-                            if statement.strip():
-                                tx.execute(statement)
+                        statement = ""
+                        for fragment in migration.sql.split(";"):
+                            statement += fragment + ";"
+                            if sqlite3.complete_statement(statement):
+                                if statement.strip("; \n\t"):
+                                    tx.execute(statement)
+                                statement = ""
+                        if statement.strip("; \n\t"):
+                            tx.execute(statement)
                         tx.execute("INSERT INTO migrations (id) VALUES (?)", (migration.id,))
 
     @contextmanager
@@ -107,6 +113,12 @@ class Database:
                 self._conn.execute("ROLLBACK")
                 raise
             self._conn.execute("COMMIT")
+
+    @contextmanager
+    def serialized(self) -> Iterator[None]:
+        """Keep a read/validate/write sequence together across existing transactions."""
+        with self._lock:
+            yield
 
     def fetch_all(self, sql: str, params: Sequence[object] = ()) -> list[sqlite3.Row]:
         with self._lock:

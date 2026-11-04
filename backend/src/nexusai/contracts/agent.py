@@ -1,6 +1,8 @@
+from datetime import datetime
 from typing import Any, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 GuardAction = Literal["mask", "block"]
 
@@ -490,6 +492,11 @@ class BoardList(BaseModel):
 
 
 class AgentChannelMessage(BaseModel):
+    purpose: str | None = None
+    expected_output: str | None = None
+    state: str = "note"
+    outcome: str | None = None
+    evidence: list[str] = Field(default_factory=list)
     id: int
     sender: str
     recipient: str | None
@@ -573,6 +580,8 @@ class DraftedReply(BaseModel):
 
 
 class ThreadSummary(BaseModel):
+    partial: bool = False
+    changed: bool = False
     thread: int
     text: str | None
     covered: int
@@ -871,6 +880,24 @@ class MailAgentRun(BaseModel):
 
 
 class Schedule(BaseModel):
+    timezone: str | None = None
+
+    @field_validator("timezone")
+    @classmethod
+    def valid_timezone(cls, value: str | None) -> str | None:
+        if value is not None:
+            try:
+                ZoneInfo(value)
+            except (ZoneInfoNotFoundError, ValueError) as error:
+                raise ValueError("Use a named timezone, such as Asia/Kolkata.") from error
+        return value
+
+    @field_validator("time")
+    @classmethod
+    def valid_time(cls, value: str) -> str:
+        datetime.strptime(value, "%H:%M")
+        return value
+
     id: int | None = None
     title: str = Field(min_length=1, max_length=200)
     prompt: str = Field(default="", max_length=20000)
@@ -962,6 +989,7 @@ class ReactToBrief(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     session: str = Field(max_length=64)
+    artifact: int | None = None
     rating: Literal["up", "down"] | None = None
     comment: str = Field(default="", max_length=2000)
 
@@ -981,7 +1009,7 @@ class AgentEntry(BaseModel):
     id: str
     name: str
     does: str
-    state: Literal["running", "active", "finished", "off", "past"]
+    state: Literal["running", "active", "finished", "off", "past", "failed"]
     when: str
     next_run: str | None = None
     # What it's waiting for, when that isn't a time.
@@ -1009,6 +1037,8 @@ class TodayView(BaseModel):
     prep_session: str | None
     prep_text: str | None
     prep_at: str | None = None
+    prep_artifact: int | None = None
+    prep_freshness: Literal["fresh", "stale", "partial", "failed", "none"] = "none"
     prep_rating: str | None = None
     prep_comment: str = ""
     due: list[DueItem] = Field(default_factory=list)
@@ -1064,6 +1094,10 @@ class CorrectionRow(BaseModel):
 
 
 class LearnedNote(BaseModel):
+    account: str | None = None
+    seen_at: str | None = None
+    expires_at: str | None = None
+    revision: int = 1
     line: str
     text: str
     section: str
@@ -1125,3 +1159,169 @@ class GetToday(BaseModel):
 
 
 MemoryList.model_rebuild()
+
+
+class Preference(BaseModel):
+    id: int
+    purpose: Literal["all", "mail", "draft", "brief"]
+    account: str | None = None
+    sender: str | None = None
+    topic: str | None = None
+    instruction: str
+    status: Literal["proposed", "active", "declined", "retired", "expired"]
+    revision: int
+    evidence: list[str] = Field(default_factory=list)
+    expires_at: str | None = None
+    created: str
+    updated: str
+
+
+class SavePreference(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: int | None = None
+    revision: int | None = None
+    purpose: Literal["all", "mail", "draft", "brief"] = "all"
+    account: str | None = Field(default=None, max_length=128)
+    sender: str | None = Field(default=None, max_length=320)
+    topic: str | None = Field(default=None, max_length=200)
+    instruction: str = Field(min_length=1, max_length=4000)
+    status: Literal["active", "declined", "retired"] = "active"
+    evidence: list[str] = Field(default_factory=list, max_length=100)
+    expires_at: str | None = None
+
+    @field_validator("expires_at")
+    @classmethod
+    def valid_expiry(cls, value: str | None) -> str | None:
+        if value:
+            from datetime import UTC
+
+            parsed = datetime.fromisoformat(value)
+            if parsed.tzinfo is None:
+                raise ValueError("An expiry must include its timezone.")
+            return parsed.astimezone(UTC).isoformat()
+        return value
+
+    @field_validator("instruction")
+    @classmethod
+    def nonempty_instruction(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Write an instruction before saving.")
+        return value.strip()
+
+
+class GetPreferences(BaseModel):
+    pass
+
+
+class PreferenceList(BaseModel):
+    preferences: list[Preference]
+
+
+class PreferenceHistory(BaseModel):
+    id: int
+
+
+class PreferenceEvidence(BaseModel):
+    time: str
+    action: str
+    artifact: str
+    artifact_id: str
+    old_value: str | None = None
+    new_value: str | None = None
+
+
+class PreferenceVersions(BaseModel):
+    versions: list[Preference]
+    evidence: list[PreferenceEvidence] = Field(default_factory=list)
+
+
+class RestorePreference(BaseModel):
+    id: int
+    revision: int
+    restore_revision: int
+
+
+class RecordInteraction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(min_length=1, max_length=128)
+    thread: int
+    action: Literal["opened"]
+
+
+class PromptHistory(BaseModel):
+    kind: Literal["personal", "agent"]
+    name: str = Field(pattern=r"^[a-z0-9-]+$", max_length=64)
+
+
+class PromptVersion(BaseModel):
+    id: int
+    content: str
+    time: str
+
+
+class PromptVersions(BaseModel):
+    versions: list[PromptVersion]
+
+
+class RestorePrompt(PromptHistory):
+    version: int
+
+
+class PreviewPreference(SavePreference):
+    pass
+
+
+class PreferencePreview(BaseModel):
+    matched: int
+    total: int
+    examples: list[str]
+    instruction: str
+    explanation: str
+
+
+class AgentQueueItem(BaseModel):
+    id: int
+    title: str
+    status: str
+    time: str
+    error: str | None = None
+    session: str | None = None
+
+
+class GetAgentQueue(BaseModel):
+    pass
+
+
+class AgentQueue(BaseModel):
+    pending: int
+    running: int
+    failed: int
+    oldest_pending: str | None = None
+    items: list[AgentQueueItem]
+
+
+class QueueAction(BaseModel):
+    id: int
+    action: Literal["retry", "cancel"]
+
+
+class ExpireLearnedNote(BaseModel):
+    line: str = Field(max_length=3000)
+    revision: int
+    expires_at: datetime | None = None
+
+
+class SimulatePreference(SavePreference):
+    pass
+
+
+class PreferenceDecision(BaseModel):
+    thread: int
+    subject: str
+    before: str
+    after: str
+    reason: str
+
+
+class PreferenceSimulation(BaseModel):
+    decisions: list[PreferenceDecision]

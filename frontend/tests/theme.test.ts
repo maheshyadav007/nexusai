@@ -76,7 +76,7 @@ describe("sidebar layout", () => {
 describe("fonts", () => {
   it("a theme chooses its font by name, and the CSS follows", () => {
     const swapped = { ...light, type: { ...light.type, family: { ...light.type.family, sans: "space-grotesk" as const } } };
-    expect(themeToCss(light, true)).toContain("--type-family-sans: var(--font-instrument-sans);");
+    expect(themeToCss(light, true)).toContain("--type-family-sans: var(--font-inter);");
     expect(themeToCss(swapped, true)).toContain("--type-family-sans: var(--font-space-grotesk);");
   });
 

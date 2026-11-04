@@ -1,5 +1,6 @@
 """What the person changed after the agent judged. It's the plainest evidence of what they want."""
 
+import json
 import re
 from collections import Counter
 from datetime import UTC, datetime
@@ -39,7 +40,14 @@ def _say(field: str, value: str) -> str:
 
 
 def note(
-    db: Database, thread: int, field: str, value: Any, own: set[str]
+    db: Database,
+    thread: int,
+    field: str,
+    value: Any,
+    own: set[str],
+    *,
+    event_id: str | None = None,
+    old_value: Any = None,
 ) -> tuple[str, str] | None:
     """Saves what the person did. Says who sent it and the choice, when it's a habit by now."""
     if field not in FIELDS or not value:
@@ -51,10 +59,20 @@ def note(
     if sender is None:
         return None
     with db.transaction() as tx:
-        tx.execute(
-            "INSERT INTO mail_feedback (time, sender, thread, field, value) VALUES (?, ?, ?, ?, ?)",
-            (datetime.now(UTC).isoformat(), sender, thread, field, str(value)),
+        inserted = tx.execute(
+            "INSERT OR IGNORE INTO mail_feedback(time,sender,thread,field,value,event_id,old_value) VALUES(?,?,?,?,?,?,?)",
+            (
+                datetime.now(UTC).isoformat(),
+                sender,
+                thread,
+                field,
+                str(value),
+                event_id,
+                json.dumps(old_value),
+            ),
         )
+        if not inserted.rowcount:
+            return None
     if field != "category":
         return None
     same = db.fetch_all(
@@ -64,12 +82,12 @@ def note(
     return (sender, str(value)) if same >= HABIT else None
 
 
-def recent(db: Database) -> list[CorrectionRow]:
+def recent(db: Database, account: str | None = None) -> list[CorrectionRow]:
     rows = db.fetch_all(
         "SELECT sender, field, value, COUNT(DISTINCT thread) AS times, MAX(time) AS latest FROM"
-        " (SELECT * FROM mail_feedback ORDER BY id DESC LIMIT ?)"
+        " (SELECT f.* FROM mail_feedback f JOIN threads t ON t.id=f.thread WHERE (? IS NULL OR t.account=?) ORDER BY f.id DESC LIMIT ?)"
         " GROUP BY sender, field, value ORDER BY latest DESC LIMIT ?",
-        (RECENT, MOST_SHOWN),
+        (account, account, RECENT, MOST_SHOWN),
     )
     return [
         CorrectionRow(
@@ -84,18 +102,23 @@ def recent(db: Database) -> list[CorrectionRow]:
     ]
 
 
-def layer(db: Database) -> str:
+def layer(db: Database, account: str | None = None) -> str:
     """Their corrections, for every judgement, so the same mistake isn't made twice."""
-    lines = [f"- Mail from {item.sender}: {item.said}, {item.times}x" for item in recent(db)]
+    lines = [
+        f"- Mail from {item.sender}: {item.said}, {item.times}x" for item in recent(db, account)
+    ]
     if not lines:
         return ""
-    return "What the person changed after you judged. Do the same from now on:\n" + "\n".join(lines)
+    return (
+        "Observed corrections to specific decisions, not permanent sender rules. Use similar context, resolve conflicts by recency, and prefer approved instructions:\n"
+        + "\n".join(lines)
+    )
 
 
-def for_sender(db: Database, sender: str) -> str:
+def for_sender(db: Database, sender: str, account: str | None = None) -> str:
     rows = db.fetch_all(
-        "SELECT field, value FROM mail_feedback WHERE sender = ? ORDER BY id DESC LIMIT 20",
-        (sender,),
+        "SELECT f.field,f.value FROM mail_feedback f JOIN threads t ON t.id=f.thread WHERE f.sender=? AND (? IS NULL OR t.account=?) ORDER BY f.id DESC LIMIT 20",
+        (sender, account, account),
     )
     counted = Counter((row["field"], row["value"]) for row in rows)
     return "; ".join(f"{_say(*key)} {times}x" for key, times in counted.most_common(3))
@@ -121,7 +144,7 @@ def save_brief_reaction(
         tx.execute(
             "INSERT INTO brief_feedback (session, day, rating, comment, brief, time)"
             " VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (session, day) DO UPDATE SET"
-            " rating = excluded.rating, comment = excluded.comment, time = excluded.time",
+            " rating = excluded.rating, comment = excluded.comment, brief = excluded.brief, time = excluded.time",
             (session, day, rating, comment.strip(), brief[:BRIEF_SHOWN_CHARS], now),
         )
 
@@ -135,7 +158,7 @@ def brief_reaction(db: Database, session: str, day: str) -> tuple[str | None, st
 
 def brief_reactions(db: Database) -> list[BriefReaction]:
     rows = db.fetch_all(
-        "SELECT day, rating, comment FROM brief_feedback ORDER BY day DESC LIMIT ?",
+        "SELECT day,rating,comment FROM (SELECT day,rating,comment,time FROM brief_feedback UNION ALL SELECT substr(a.created,1,10),f.rating,f.comment,f.updated FROM brief_artifact_feedback f JOIN brief_artifacts a ON a.id=f.artifact) ORDER BY time DESC LIMIT ?",
         (BRIEFS_REMEMBERED,),
     )
     return [BriefReaction(day=r["day"], rating=r["rating"], comment=r["comment"]) for r in rows]
@@ -160,8 +183,7 @@ def brief_layer(db: Database) -> str:
 def briefs_with_reactions(db: Database) -> str:
     """What each rated brief said, for the task, since those words came from reading mail."""
     rows = db.fetch_all(
-        "SELECT day, rating, brief FROM brief_feedback WHERE rating IS NOT NULL AND brief != ''"
-        " ORDER BY day DESC LIMIT ?",
+        "SELECT day,rating,brief FROM (SELECT day,rating,brief,time FROM brief_feedback UNION ALL SELECT substr(a.created,1,10),f.rating,substr(a.text,1,300),f.updated FROM brief_artifact_feedback f JOIN brief_artifacts a ON a.id=f.artifact) WHERE rating IS NOT NULL AND brief != '' ORDER BY time DESC LIMIT ?",
         (BRIEFS_REMEMBERED,),
     )
     return "\n".join(

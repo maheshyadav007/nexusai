@@ -10,6 +10,8 @@ from nexusai.contracts.agent import (
     AgentChannelList,
     AgentDone,
     AgentKnowledge,
+    AgentQueue,
+    AgentQueueItem,
     AgentRegistry,
     AnswerSession,
     ApprovalList,
@@ -32,8 +34,10 @@ from nexusai.contracts.agent import (
     DraftedReply,
     DraftThreadReply,
     DueItem,
+    ExpireLearnedNote,
     GenerationState,
     GetAgentKnowledge,
+    GetAgentQueue,
     GetCockpit,
     GetCockpitEvents,
     GetContextSettings,
@@ -42,6 +46,7 @@ from nexusai.contracts.agent import (
     GetMailAgentSettings,
     GetModelCall,
     GetPermissions,
+    GetPreferences,
     GetQuietHours,
     GetThreadRuns,
     GetToday,
@@ -77,22 +82,37 @@ from nexusai.contracts.agent import (
     Permissions,
     PipelineList,
     PipelineMore,
+    PreferenceDecision,
+    PreferenceHistory,
+    PreferenceList,
+    PreferencePreview,
+    PreferenceSimulation,
+    PreferenceVersions,
     PreviewMail,
+    PreviewPreference,
     PromptFile,
+    PromptHistory,
     PromptList,
+    PromptVersion,
+    PromptVersions,
+    QueueAction,
     QuietHours,
     RateMessage,
     ReactToBrief,
     ReadMoreMail,
+    RecordInteraction,
     RemoveMemory,
     RemoveSchedule,
     RemoveTrigger,
     RenameSession,
     RespondChannel,
+    RestorePreference,
+    RestorePrompt,
     RunMailAgent,
     RunPipeline,
     RunSchedule,
     SaveMemory,
+    SavePreference,
     SavePrompt,
     SaveTrigger,
     Schedule,
@@ -107,6 +127,7 @@ from nexusai.contracts.agent import (
     SetSessionContext,
     SetSessionModel,
     SetTopicMuted,
+    SimulatePreference,
     SinceLastLook,
     SummarizeThread,
     TestGuardRules,
@@ -130,16 +151,19 @@ from nexusai.kernel import backups
 from nexusai.kernel.database import Migration
 from nexusai.kernel.module import CommandError, Context, Module
 from nexusai.modules.agent import (
+    briefs,
     channel,
     citations,
     cockpit,
     context,
+    facts,
     feedback,
     gateway,
     guard,
     knowledge,
     mail_agent,
     memory,
+    personalization,
     pipelines,
     policy,
     prompts_builder,
@@ -149,6 +173,7 @@ from nexusai.modules.agent import (
     scheduler,
     signals,
     suggestions,
+    summaries,
     tools,
     triggers,
 )
@@ -186,8 +211,10 @@ agent_module = Module(
         memory.MIGRATION,
         channel.MIGRATION,
         channel.QUESTIONS_MIGRATION,
+        channel.HANDOFF_MIGRATION,
         mail_agent.MIGRATION,
         mail_agent.TRIGGER_MIGRATION,
+        mail_agent.EVIDENCE_MIGRATION,
         scheduler.MIGRATION,
         scheduler.TIMES_MIGRATION,
         scheduler.CONTEXT_MIGRATION,
@@ -201,6 +228,17 @@ agent_module = Module(
             " WHERE agent = 'interview' AND title = 'Interview';",
         ),
         suggestions.MIGRATION,
+        scheduler.RELIABILITY_MIGRATION,
+        personalization.MIGRATION,
+        briefs.MIGRATION,
+        facts.MIGRATION,
+        summaries.MIGRATION,
+        Migration(
+            "agent_friendly_names_001",
+            "UPDATE schedules SET title='Your brief' WHERE kind='mail-brief' AND title='Morning brief';"
+            "UPDATE agent_sessions SET title='Your brief' WHERE agent='daily-prep' AND title='Morning brief';"
+            "UPDATE agent_sessions SET title='First meeting' WHERE agent='interview' AND title='Know you better';",
+        ),
     ],
 )
 _runtime: runtime.SessionRuntime | None = None
@@ -261,6 +299,15 @@ def needs_triage(event: AppEvent, ctx: Context) -> None:
 def person_replied(event: AppEvent, ctx: Context) -> None:
     message, thread = int(event.payload["message_id"]), int(event.payload["thread_id"])
     mail_agent.person_replied(ctx, thread)
+    personalization.observe(
+        ctx,
+        "sent",
+        "thread",
+        str(thread),
+        new={"message": message},
+        origin="mail.sent",
+        event_id=event.id,
+    )
     if mail_agent.enabled(ctx):
         mail_agent.enqueue(ctx, message, thread, event=f"{mail_agent.SENT_PREFIX}{message}")
         if _triggers:
@@ -277,13 +324,56 @@ def learn_from_corrections(event: AppEvent, ctx: Context) -> None:
     """What the person changes teaches the agent. What an agent changes doesn't count."""
     if event.payload.get("by", "person") != "person":
         return
+    thread = int(event.payload["thread_id"])
+    field = str(event.payload["field"])
+    state = ctx.bus.db.fetch_all(
+        "SELECT account,decision_version FROM threads WHERE id=?", (thread,)
+    )
+    if not state:
+        return
+    personalization.observe(
+        ctx,
+        "corrected" if field in feedback.FIELDS else field,
+        "thread",
+        str(thread),
+        account=state[0]["account"],
+        version=str(state[0]["decision_version"]),
+        old=event.payload.get("old_value"),
+        new={"field": field, "value": event.payload.get("value")},
+        event_id=event.id,
+    )
     habit = feedback.note(
         ctx.bus.db,
         int(event.payload["thread_id"]),
         str(event.payload["field"]),
         event.payload.get("value"),
         signals.own_addresses(ctx),
+        event_id=event.id,
+        old_value=event.payload.get("old_value"),
     )
+    if field in feedback.FIELDS:
+        rows = ctx.bus.db.fetch_all(
+            "SELECT f.id,f.sender,f.value,f.thread FROM mail_feedback f JOIN threads t ON t.id=f.thread WHERE t.account=? AND f.field=? ORDER BY f.id DESC LIMIT 200",
+            (state[0]["account"], field),
+        )
+        sender = next((r["sender"] for r in rows if r["thread"] == thread), None)
+        if sender:
+            latest_by_thread: dict[int, Any] = {}
+            for row in rows:
+                if row["sender"] == sender:
+                    latest_by_thread.setdefault(row["thread"], row)
+            recent = list(latest_by_thread.values())[: feedback.HABIT]
+            if len(recent) == feedback.HABIT and all(
+                r["value"] == str(event.payload.get("value")) for r in recent
+            ):
+                personalization.propose_from_correction(
+                    ctx,
+                    sender,
+                    field,
+                    str(event.payload["value"]),
+                    state[0]["account"],
+                    [f"correction:{r['id']}" for r in recent],
+                )
     if habit:
         sender, category = habit
         suggestions.add(
@@ -569,7 +659,12 @@ def list_prompts(query: ListPrompts, ctx: Context) -> PromptList:
 def save_prompt(command: SavePrompt, ctx: Context) -> AgentDone:
     folder = ctx.config.home / "prompts" / ("personal" if command.kind == "personal" else "agents")
     folder.mkdir(parents=True, exist_ok=True)
-    (folder / f"{command.name}.md").write_text(command.content, "utf-8")
+    path = folder / f"{command.name}.md"
+    personalization.save_prompt_version(
+        ctx, command.kind, command.name, path.read_text("utf-8") if path.exists() else ""
+    )
+    path.write_text(command.content, "utf-8")
+    personalization.save_prompt_version(ctx, command.kind, command.name, command.content)
     with ctx.bus.unit_of_work() as work:
         work.emit("prompts.changed", {"name": command.name}, source="agent", trace_id=ctx.trace_id)
     return AgentDone()
@@ -750,11 +845,18 @@ def list_schedules(query: ListSchedules, ctx: Context) -> ScheduleList:
 def save_schedule(command: Schedule, ctx: Context) -> ScheduleList:
     if command.kind in scheduler.BUILT_IN_KINDS:
         raise CommandError("schedule.reserved", "That schedule belongs to the Mail agent.", 422)
-    next_run = (
-        scheduler.next_run_after(command, datetime.now().astimezone().replace(tzinfo=None))
-        if command.enabled
-        else None
-    )
+    if command.timezone is None:
+        previous = (
+            ctx.bus.db.fetch_all("SELECT timezone FROM schedules WHERE id=?", (command.id,))
+            if command.id
+            else []
+        )
+        command = command.model_copy(
+            update={
+                "timezone": previous[0]["timezone"] if previous else scheduler.system_timezone()
+            }
+        )
+    next_run = scheduler.next_scheduled_run(command, datetime.now(UTC)) if command.enabled else None
     values = (
         command.title,
         command.prompt,
@@ -768,19 +870,25 @@ def save_schedule(command: Schedule, ctx: Context) -> ScheduleList:
         next_run,
         command.context_mode,
         command.keep_messages,
+        command.timezone,
     )
     now = datetime.now(UTC).isoformat()
     with ctx.bus.unit_of_work() as work:
         if command.id is None:
             work.tx.execute(
-                "INSERT INTO schedules (title, prompt, kind, every, time, weekday, date, enabled, token_limit, next_run, context_mode, keep_messages, created, updated)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO schedules (title, prompt, kind, every, time, weekday, date, enabled, token_limit, next_run, context_mode, keep_messages, timezone, created, updated)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (*values, now, now),
             )
         else:
             work.tx.execute(
-                "UPDATE schedules SET title = ?, prompt = ?, kind = ?, every = ?, time = ?, weekday = ?, date = ?, enabled = ?, token_limit = ?, next_run = ?, context_mode = ?, keep_messages = ?, updated = ? WHERE id = ?",
+                "UPDATE schedules SET title = ?, prompt = ?, kind = ?, every = ?, time = ?, weekday = ?, date = ?, enabled = ?, token_limit = ?, next_run = ?, context_mode = ?, keep_messages = ?, timezone = ?, updated = ? WHERE id = ?",
                 (*values, now, command.id),
+            )
+        if command.id is not None and not command.enabled:
+            work.tx.execute(
+                "UPDATE trigger_runs SET status = 'skipped', error = 'Schedule paused' WHERE schedule = ? AND status = 'pending' AND manual = 0",
+                (command.id,),
             )
         work.emit("schedule.changed", {}, source="agent", trace_id=ctx.trace_id)
     if _scheduler:
@@ -808,7 +916,7 @@ def run_schedule_now(command: RunSchedule, ctx: Context) -> AgentDone:
         )
         work.emit("schedule.changed", {}, source="agent", trace_id=ctx.trace_id)
     if _triggers:
-        _triggers.fire_schedule(uuid.uuid4().hex, command.id)
+        _triggers.fire_schedule(uuid.uuid4().hex, command.id, manual=True)
         _triggers.tick()
     return AgentDone()
 
@@ -869,14 +977,24 @@ def mail_agent_read_more(command: ReadMoreMail, ctx: Context) -> AgentDone:
 
 @agent_module.command("memory.removeNote")
 def remove_note(command: ChangeLearnedNote, ctx: Context) -> AgentDone:
-    memory.remove_learned(ctx.config.home, command.line)
+    facts.sync(ctx)
+    managed = ctx.bus.db.fetch_all("SELECT 1 FROM learned_facts WHERE line=?", (command.line,))
+    if managed:
+        facts.change(ctx, command.line, "retired")
+    if (
+        command.line in memory.learned(ctx.config.home).splitlines()
+        or command.line in memory.confirmed(ctx.config.home).splitlines()
+    ):
+        memory.remove_learned(ctx.config.home, command.line)
     _memory_changed(ctx)
     return AgentDone()
 
 
 @agent_module.command("memory.confirmNote")
 def confirm_note(command: ChangeLearnedNote, ctx: Context) -> AgentDone:
-    memory.confirm_learned(ctx.config.home, command.line)
+    facts.change(ctx, command.line, "confirmed")
+    if command.line in memory.learned(ctx.config.home).splitlines():
+        memory.remove_learned(ctx.config.home, command.line)
     _memory_changed(ctx)
     return AgentDone()
 
@@ -930,16 +1048,35 @@ def _brief_text(parts: list[dict[str, Any]]) -> str | None:
 @agent_module.command("brief.react")
 def react_to_brief(command: ReactToBrief, ctx: Context) -> BriefReacted:
     """The next brief reads this, and the person sees it under What it knows."""
-    rows = ctx.bus.db.fetch_all(
-        "SELECT updated FROM agent_sessions WHERE id = ?", (command.session,)
+    artifact = (
+        ctx.bus.db.fetch_all(
+            "SELECT * FROM brief_artifacts WHERE id=? AND session=?",
+            (command.artifact, command.session),
+        )
+        if command.artifact
+        else []
     )
-    if not rows:
-        raise CommandError("brief.not_found", "That brief is no longer here.", 404)
-    view = current().view(command.session)
-    last = [m for m in view.messages if m["role"] == "assistant"]
-    text = (_brief_text(last[-1]["parts"]) or "") if last else ""
-    feedback.save_brief_reaction(
-        ctx.bus.db, command.session, rows[0]["updated"][:10], command.rating, command.comment, text
+    if not artifact:
+        latest = briefs.latest(ctx)
+        if command.artifact or not latest or latest["session"] != command.session:
+            raise CommandError(
+                "brief.not_found", "That brief is no longer available. Reload and try again.", 404
+            )
+        artifact = [latest]
+    item = artifact[0]
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO brief_artifact_feedback(artifact,rating,comment,updated) VALUES(?,?,?,?) ON CONFLICT(artifact) DO UPDATE SET rating=excluded.rating,comment=excluded.comment,updated=excluded.updated",
+            (item["id"], command.rating, command.comment.strip(), personalization.now()),
+        )
+    personalization.observe(
+        ctx,
+        "brief_rated",
+        "brief",
+        str(item["id"]),
+        account=item["account"],
+        version=str(item["turn"]),
+        new={"rating": command.rating, "comment": command.comment},
     )
     return BriefReacted(rating=command.rating, comment=command.comment.strip())
 
@@ -1294,24 +1431,26 @@ def today_view(query: GetToday, ctx: Context) -> TodayView:
         "SELECT COUNT(*) AS n FROM threads WHERE account = ? AND in_inbox = 1 AND unread_count > 0 AND category_source = 'rule'",
         (account,),
     )[0]["n"]
-    prep = db.fetch_all(
-        "SELECT id, updated FROM agent_sessions WHERE agent = 'daily-prep' AND status = 'done' ORDER BY updated DESC LIMIT 1"
-    )
-    prep_session = prep[0]["id"] if prep else None
-    prep_text = None
-    prep_at = None
-    if prep_session:
-        view = current().view(prep_session)
-        prep_at = prep[0]["updated"]
-        last = [m for m in view.messages if m["role"] == "assistant"]
-        if last:
-            prep_text = _brief_text(last[-1]["parts"])
+    artifact = briefs.latest(ctx)
+    prep_session = artifact["session"] if artifact else None
+    prep_text = artifact["text"] if artifact else None
+    prep_at = artifact["created"] if artifact else None
+    rating, comment = (artifact["rating"], artifact["comment"] or "") if artifact else (None, "")
+    freshness = "none"
+    if artifact:
+        local_created = (
+            datetime.fromisoformat(artifact["created"]).astimezone().strftime("%Y-%m-%d")
+        )
+        freshness = (
+            "stale" if local_created != local_day else "partial" if artifact["partial"] else "fresh"
+        )
+        failed = db.fetch_all(
+            "SELECT 1 FROM trigger_runs r JOIN schedules s ON s.id=r.schedule WHERE s.kind='mail-brief' AND r.status='failed' AND r.time > ? LIMIT 1",
+            (artifact["created"],),
+        )
+        if failed:
+            freshness = "failed"
     due = _due_items(ctx)
-    rating, comment = (
-        feedback.brief_reaction(db, prep_session, prep_at[:10])
-        if prep_session and prep_at
-        else (None, "")
-    )
     return TodayView(
         brief=_brief(_waiting_for_person(ctx), due, len(needs)),
         needs_you=[_today_thread(row) for row in needs],
@@ -1321,6 +1460,8 @@ def today_view(query: GetToday, ctx: Context) -> TodayView:
         prep_session=prep_session,
         prep_text=prep_text,
         prep_at=prep_at,
+        prep_artifact=artifact["id"] if artifact else None,
+        prep_freshness=freshness,
         prep_rating=rating,
         prep_comment=comment,
         due=due,
@@ -1468,3 +1609,340 @@ def tool_catalog(query: GetToolCatalog, ctx: Context) -> ToolCatalog:
             for entry in policy.TOOL_ENTRIES
         ]
     )
+
+
+@agent_module.query("preferences.list")
+def list_preferences(query: GetPreferences, ctx: Context) -> PreferenceList:
+    return PreferenceList(preferences=personalization.listing(ctx))
+
+
+@agent_module.command("preferences.save")
+def save_preference(command: SavePreference, ctx: Context) -> PreferenceList:
+    if ctx.actor != "person":
+        raise CommandError("preference.review", "Only the person can approve an instruction.", 403)
+    personalization.save(ctx, command)
+    return PreferenceList(preferences=personalization.listing(ctx))
+
+
+@agent_module.query("preferences.history")
+def preference_history(query: PreferenceHistory, ctx: Context) -> PreferenceVersions:
+    from nexusai.contracts.agent import Preference, PreferenceEvidence
+
+    rows = ctx.bus.db.fetch_all(
+        "SELECT snapshot FROM preference_versions WHERE preference=? ORDER BY revision DESC",
+        (query.id,),
+    )
+    versions = [Preference.model_validate_json(row["snapshot"]) for row in rows]
+    identifiers = list(
+        dict.fromkeys(identifier for version in versions for identifier in version.evidence)
+    )
+    evidence = (
+        ctx.bus.db.fetch_all(
+            "SELECT time,action,artifact,artifact_id,old_value,new_value FROM interaction_events WHERE id IN ("
+            + ",".join("?" for _ in identifiers)
+            + ") ORDER BY time DESC",
+            identifiers,
+        )
+        if identifiers
+        else []
+    )
+    return PreferenceVersions(
+        versions=versions,
+        evidence=[PreferenceEvidence.model_validate(dict(row)) for row in evidence],
+    )
+
+
+@agent_module.command("preferences.restore")
+def restore_preference(command: RestorePreference, ctx: Context) -> PreferenceList:
+    rows = ctx.bus.db.fetch_all(
+        "SELECT snapshot FROM preference_versions WHERE preference=? AND revision=?",
+        (command.id, command.restore_revision),
+    )
+    if not rows:
+        raise CommandError("preference.not_found", "That version no longer exists.", 404)
+    data = json.loads(rows[0]["snapshot"])
+    data.update(revision=command.revision, status="active")
+    for key in ("created", "updated"):
+        data.pop(key, None)
+    return cast(PreferenceList, save_preference(SavePreference.model_validate(data), ctx))
+
+
+@agent_module.command("preferences.preview")
+def preview_preference(command: PreviewPreference, ctx: Context) -> PreferencePreview:
+    # A scope preview is deterministic. It never promises a model decision changed.
+
+    account = command.account
+    rows = ctx.bus.db.fetch_all(
+        "SELECT id,subject FROM threads WHERE (? IS NULL OR account=?) AND in_trash=0 ORDER BY last_date DESC LIMIT 100",
+        (account, account),
+    )
+    matched = []
+    for row in rows:
+        senders = ctx.bus.db.fetch_all(
+            "SELECT from_addr FROM messages WHERE thread_id=?", (row["id"],)
+        )
+        if command.sender and not any(
+            r["from_addr"].lower() == command.sender.lower() for r in senders
+        ):
+            continue
+        if command.topic:
+            _, _, task = mail_agent.task_for(ctx, row["id"])
+            if command.topic.casefold() not in task.casefold():
+                continue
+        matched.append(row)
+    return PreferencePreview(
+        matched=len(matched),
+        total=len(rows),
+        examples=[r["subject"] for r in matched[:5]],
+        instruction=command.instruction,
+        explanation="Scope preview of the most recent 100 conversations. It shows where this instruction could apply; it does not predict or change model decisions.",
+    )
+
+
+@agent_module.command("interactions.record")
+def record_interaction(command: RecordInteraction, ctx: Context) -> AgentDone:
+    rows = ctx.bus.db.fetch_all(
+        "SELECT account,decision_version FROM threads WHERE id=?", (command.thread,)
+    )
+    if not rows:
+        raise CommandError("thread.not_found", "That conversation no longer exists.", 404)
+    personalization.observe(
+        ctx,
+        command.action,
+        "thread",
+        str(command.thread),
+        account=rows[0]["account"],
+        version=str(rows[0]["decision_version"]),
+        event_id=command.id,
+    )
+    return AgentDone()
+
+
+@agent_module.query("prompts.history")
+def prompt_history(query: PromptHistory, ctx: Context) -> PromptVersions:
+    rows = ctx.bus.db.fetch_all(
+        "SELECT id,content,time FROM prompt_versions WHERE kind=? AND name=? ORDER BY id DESC LIMIT 50",
+        (query.kind, query.name),
+    )
+    return PromptVersions(versions=[PromptVersion(**dict(row)) for row in rows])
+
+
+@agent_module.command("prompts.restore")
+def restore_prompt(command: RestorePrompt, ctx: Context) -> AgentDone:
+    rows = ctx.bus.db.fetch_all(
+        "SELECT content FROM prompt_versions WHERE id=? AND kind=? AND name=?",
+        (command.version, command.kind, command.name),
+    )
+    if not rows:
+        raise CommandError("prompt.not_found", "That prompt version no longer exists.", 404)
+    return cast(
+        AgentDone,
+        save_prompt(
+            SavePrompt(kind=command.kind, name=command.name, content=rows[0]["content"]), ctx
+        ),
+    )
+
+
+@agent_module.query("agentQueue.get")
+def get_agent_queue(query: GetAgentQueue, ctx: Context) -> AgentQueue:
+    counts = {
+        row["status"]: row["n"]
+        for row in ctx.bus.db.fetch_all(
+            "SELECT status,COUNT(*) n FROM trigger_runs GROUP BY status"
+        )
+    }
+    oldest = ctx.bus.db.fetch_all("SELECT MIN(time) time FROM trigger_runs WHERE status='pending'")[
+        0
+    ]["time"]
+    rows = ctx.bus.db.fetch_all(
+        "SELECT r.id,COALESCE(s.title,t.title,r.trigger) title,r.status,r.time,r.error,r.session FROM trigger_runs r LEFT JOIN schedules s ON s.id=r.schedule LEFT JOIN agent_triggers t ON t.id=r.trigger WHERE r.status IN ('pending','running','failed') ORDER BY CASE r.status WHEN 'failed' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END,r.time LIMIT 30"
+    )
+    return AgentQueue(
+        pending=counts.get("pending", 0),
+        running=counts.get("running", 0),
+        failed=counts.get("failed", 0),
+        oldest_pending=oldest,
+        items=[AgentQueueItem(**dict(row)) for row in rows],
+    )
+
+
+@agent_module.command("agentQueue.act")
+def act_agent_queue(command: QueueAction, ctx: Context) -> AgentDone:
+    with ctx.bus.unit_of_work() as work:
+        row = work.tx.execute(
+            "SELECT status FROM trigger_runs WHERE id=?", (command.id,)
+        ).fetchone()
+        if not row:
+            raise CommandError("queue.not_found", "That work is no longer available.", 404)
+        allowed = {"failed", "skipped"} if command.action == "retry" else {"pending"}
+        if row["status"] not in allowed:
+            raise CommandError(
+                "queue.changed", "This work changed. Reload before trying again.", 409
+            )
+        work.tx.execute(
+            "UPDATE trigger_runs SET status=?,error=?,turn=NULL,session=NULL,manual=1 WHERE id=?",
+            (
+                "pending" if command.action == "retry" else "skipped",
+                None if command.action == "retry" else "Cancelled by the person",
+                command.id,
+            ),
+        )
+        work.emit("queue.changed", {}, source="agent", trace_id=ctx.trace_id)
+    if _triggers:
+        _triggers.wake.set()
+    return AgentDone()
+
+
+@agent_module.on("tasks.changed", "agent.observe_task_outcomes")
+def observe_task_outcomes(event: AppEvent, ctx: Context) -> None:
+    if event.payload.get("by") != "person" or not event.payload.get("id"):
+        return
+    changes = event.payload.get("changes", {})
+    old = event.payload.get("old", {})
+    if changes.get("status") == "done" and old.get("status") != "done":
+        action = "task_completed"
+    elif old.get("status") == "done" and changes.get("status") != "done":
+        action = "task_reopened"
+    elif changes.get("proposed") is False and old.get("proposed"):
+        action = "task_accepted"
+    else:
+        return
+    thread = event.payload.get("thread")
+    found = (
+        ctx.bus.db.fetch_all("SELECT account FROM threads WHERE id=?", (thread,)) if thread else []
+    )
+    personalization.observe(
+        ctx,
+        action,
+        "task",
+        str(event.payload["id"]),
+        account=found[0]["account"] if found else None,
+        old=old,
+        new=changes,
+        origin="planner",
+        event_id=event.id,
+    )
+
+
+@agent_module.command("memory.expireNote")
+def expire_note(command: ExpireLearnedNote, ctx: Context) -> AgentDone:
+    if command.expires_at and command.expires_at.tzinfo is None:
+        raise CommandError("memory.expiry", "Choose an expiry with a timezone.", 422)
+    facts.change(
+        ctx,
+        command.line,
+        expires_at=command.expires_at.astimezone(UTC).isoformat() if command.expires_at else None,
+        revision=command.revision,
+    )
+    _memory_changed(ctx)
+    return AgentDone()
+
+
+@agent_module.command("mailAgent.retryLearning")
+def retry_learning(command: GetMailAgentSettings, ctx: Context) -> AgentDone:
+    if mail_agent.learning_state(ctx) != "failed":
+        raise CommandError("learning.changed", "There is no failed learning wrap-up to retry.", 409)
+    mail_agent.set_learning_state(ctx, "reading")
+    if _triggers:
+        _triggers.wake.set()
+    return AgentDone()
+
+
+@agent_module.command("preferences.simulate")
+def simulate_preference(command: SimulatePreference, ctx: Context) -> PreferenceSimulation:
+    """Read-only, bounded model preview. It cannot execute the model's tool calls."""
+
+    if command.purpose not in {"mail", "all"}:
+        raise CommandError(
+            "preference.preview_scope",
+            "Decision previews apply to mail judgement instructions.",
+            422,
+        )
+    account = command.account
+    candidates = ctx.bus.db.fetch_all(
+        "SELECT id,account,subject,status,importance,next_action,importance_user_message,status_user_message,(SELECT MAX(id) FROM messages WHERE thread_id=threads.id) latest_message FROM threads WHERE (? IS NULL OR account=?) AND in_trash=0 ORDER BY last_date DESC LIMIT 100",
+        (account, account),
+    )
+    schema = tools._RecordTriage.model_json_schema()
+    schema["properties"].pop("tool_call_id", None)
+    schema["required"] = [field for field in schema.get("required", []) if field != "tool_call_id"]
+    specification = providers.ToolSpec(
+        "record_triage", "Return a preview judgement. This is not applied.", schema
+    )
+    results = []
+    for row in candidates:
+        senders = ctx.bus.db.fetch_all(
+            "SELECT from_addr FROM messages WHERE thread_id=?", (row["id"],)
+        )
+        if command.sender and not any(
+            sender["from_addr"].casefold() == command.sender.casefold() for sender in senders
+        ):
+            continue
+        subject, _, task = mail_agent.task_for(ctx, row["id"])
+        if command.topic and command.topic.casefold() not in task.casefold():
+            continue
+        layers = knowledge.layers_for(
+            ctx, "mail", task, account=row["account"], exclude_preference=command.id
+        )
+        layers.append(
+            gateway.Layer(
+                "Candidate instruction — preview only",
+                f"Use for {command.purpose}; sender {command.sender or 'any'}; topic {command.topic or 'any'}: {command.instruction}",
+            )
+        )
+        try:
+            result = gateway.call_model(
+                ctx,
+                agent="preference-preview",
+                session=None,
+                layers=layers,
+                messages=[providers.Message("user", task + "\n\n" + mail_agent.live_instruction())],
+                tools=[specification],
+            )
+        except (
+            providers.ModelUnavailable,
+            providers.ModelNotConfigured,
+            providers.ModelFlagged,
+            gateway.DailyCapReached,
+            guard.GuardBlocked,
+        ) as error:
+            raise CommandError("preference.preview_failed", str(error), 502) from error
+        judgement = next(
+            (call.arguments for call in result.tool_calls if call.name == "record_triage"), {}
+        )
+        protected = []
+        if (
+            row["importance_user_message"] is not None
+            and row["importance_user_message"] >= row["latest_message"]
+        ):
+            judgement["importance"] = row["importance"]
+            protected.append("importance")
+        if (
+            row["status_user_message"] is not None
+            and row["status_user_message"] >= row["latest_message"]
+        ):
+            judgement.update(status=row["status"], next_action=row["next_action"])
+            protected.append("status")
+        if protected:
+            judgement["reason"] = (
+                str(judgement.get("reason") or "")
+                + " Your explicit choices remain protected: "
+                + ", ".join(protected)
+                + "."
+            )
+        before = f"{row['importance']} · {row['status']} · {row['next_action'] or 'none'}"
+        after = f"{judgement.get('importance', 'unknown')} · {judgement.get('status', 'unknown')} · {judgement.get('next_action', 'none')}"
+        results.append(
+            PreferenceDecision(
+                thread=row["id"],
+                subject=subject,
+                before=before,
+                after=after,
+                reason=str(
+                    judgement.get("reason") or "The model did not return a structured judgement."
+                ),
+            )
+        )
+        if len(results) == 3:
+            break
+    return PreferenceSimulation(decisions=results)

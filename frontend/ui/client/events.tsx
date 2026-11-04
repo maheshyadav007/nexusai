@@ -31,12 +31,13 @@ const INVALIDATES: Record<string, readonly string[]> = {
   "document.indexed": ["documents", "document", "search"],
   "pst.progress": ["pst", "mail-status", "jobs"],
   "panels.changed": ["panels"],
-  "session.changed": ["sessions", "session", "session-context", "jobs", "usage", "cockpit"],
+  "session.changed": ["sessions", "session", "session-context", "jobs", "usage", "cockpit", "agent-queue"],
   "agent.triggered": ["sessions", "jobs", "cockpit"],
   "agent.held": ["jobs"],
   "mailAgent.changed": ["mail-agent", "schedules"],
   "context.changed": ["context"],
-  "schedule.due": ["schedules"],
+  "schedule.due": ["schedules", "agent-queue"],
+  "queue.changed": ["agent-queue", "cockpit"],
   "channel.posted": ["channel", "today"],
   "board.changed": ["board", "today"],
   "tasks.changed": ["tasks", "today"],
@@ -46,7 +47,9 @@ const INVALIDATES: Record<string, readonly string[]> = {
   "activity.added": ["activity"],
   "memory.changed": ["memory", "knowledge"],
   "suggestions.changed": ["suggestions", "today"],
-  "prompts.changed": ["prompts"],
+  "prompts.changed": ["prompts", "prompt-history", "knowledge"],
+  "preferences.changed": ["preferences", "preference-history", "knowledge", "today"],
+  "brief.ready": ["today"],
   "agentChannel.posted": ["agent-channel"],
   "summary.ready": ["summary"],
   "mail.triaged": ["threads", "thread", "today", "runs", "jobs", "triage-estimate"],
@@ -54,6 +57,8 @@ const INVALIDATES: Record<string, readonly string[]> = {
   "permissions.changed": ["permissions"],
   "notifications.changed": ["notifications"],
 };
+
+const EVENT_RECONNECT_MS = 3000;
 
 type Listener = (event: AppEvent) => void;
 
@@ -87,45 +92,61 @@ export function EventsProvider({ children }: { children: ReactNode }) {
       setConnected(reachable);
       return;
     }
-    // EventSource reconnects by itself and sends Last-Event-ID, so nothing is missed.
+    // Native reconnect covers ordinary disconnects; a proxy HTTP error can close it permanently.
     let source: EventSource | null = null;
     let cancelled = false;
-    void latestSeq().then((seq) => {
+    let reconnect: ReturnType<typeof setTimeout> | undefined;
+    let seq: number | null = null;
+    const retry = () => {
       if (cancelled) return;
-      source = new EventSource(`${EVENTS_URL}?since=${seq}`);
-      source.onopen = () => {
-        setConnected(true);
-        // Anything could have changed before this connection opened.
-        void refresh(client);
-      };
-      source.onerror = () => setConnected(false);
-      source.onmessage = (message) => {
-        const event = JSON.parse(message.data as string) as AppEvent;
-        if (event.type === "generation.changed") {
-          const state = event.payload as GenerationState;
-          for (const key of [state.trace_id ? ["generation", "trace", state.trace_id] : null, state.session ? ["generation", "session", state.session] : null]) {
-            if (!key) continue;
-            // A snapshot taken before this event mustn't replace a newer phase when it arrives.
-            void client.cancelQueries({ queryKey: key });
-            client.setQueryData<GenerationState>(key, (previous) => (previous?.call_id ?? 0) > (state.call_id ?? 0) ? previous : state);
+      clearTimeout(reconnect);
+      reconnect = setTimeout(() => void connect(), EVENT_RECONNECT_MS);
+    };
+    const connect = async () => {
+      try {
+        seq ??= await latestSeq();
+        if (cancelled) return;
+        source = new EventSource(`${EVENTS_URL}?since=${seq}`);
+        source.onopen = () => {
+          setConnected(true);
+          // Anything could have changed before this connection opened.
+          void refresh(client);
+        };
+        source.onerror = () => {
+          setConnected(false);
+          if (source?.readyState === EventSource.CLOSED) retry();
+        };
+        source.onmessage = (message) => {
+          const event = JSON.parse(message.data as string) as AppEvent;
+          seq = Math.max(seq ?? 0, event.seq);
+          if (event.type === "generation.changed") {
+            const state = event.payload as GenerationState;
+            for (const key of [state.trace_id ? ["generation", "trace", state.trace_id] : null, state.session ? ["generation", "session", state.session] : null]) {
+              if (!key) continue;
+              // A snapshot taken before this event mustn't replace a newer phase when it arrives.
+              void client.cancelQueries({ queryKey: key });
+              client.setQueryData<GenerationState>(key, (previous) => (previous?.call_id ?? 0) > (state.call_id ?? 0) ? previous : state);
+            }
           }
-        }
-        // This event carries the new list and counts, so nothing has to go and ask.
-        if (event.type === "semantic.changed") {
-          void client.cancelQueries({ queryKey: ["semantic"] });
-          client.setQueryData(["semantic"], event.payload);
-          void refresh(client, { queryKey: ["jobs"] });
-        }
-        if (event.type === "categories.changed" && event.payload.categories) {
-          void client.cancelQueries({ queryKey: ["categories"] });
-          client.setQueryData(["categories"], { categories: event.payload.categories });
-        }
-        for (const key of INVALIDATES[event.type] ?? []) void refresh(client, { queryKey: [key] });
-        for (const listener of listeners.current) listener(event);
-      };
-    });
+          // This event carries the new list and counts, so nothing has to go and ask.
+          if (event.type === "semantic.changed") {
+            void client.cancelQueries({ queryKey: ["semantic"] });
+            client.setQueryData(["semantic"], event.payload);
+            void refresh(client, { queryKey: ["jobs"] });
+          }
+          if (event.type === "categories.changed" && event.payload.categories) {
+            void client.cancelQueries({ queryKey: ["categories"] });
+            client.setQueryData(["categories"], { categories: event.payload.categories });
+          }
+          for (const key of INVALIDATES[event.type] ?? []) void refresh(client, { queryKey: [key] });
+          for (const listener of listeners.current) listener(event);
+        };
+      } catch { setConnected(false); retry(); }
+    };
+    void connect();
     return () => {
       cancelled = true;
+      clearTimeout(reconnect);
       source?.close();
     };
   }, [client, ready, reachable]);

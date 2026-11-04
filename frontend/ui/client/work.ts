@@ -1,5 +1,7 @@
 "use client";
 
+import type { SimulatePreference, ExpireLearnedNote, QueueAction, SavePreference, RestorePreference, RecordInteraction, PromptHistory, RestorePrompt, PreviewPreference } from "./contracts.generated";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { command, query } from "./api";
 import type { ContextSettings, SaveTrigger, GetCockpitEvents, MailAgentSettings, QuietHours, Schedule, SaveMemory, SavePrompt, SaveReminder, SaveTask, SendCheckSettings, SetSessionContext, GuardRules, SaveModelProvider, ListProviderModels } from "./contracts.generated";
@@ -73,7 +75,7 @@ export const useConfirmNote = () => useCommand(["knowledge", "memory"], (line: s
 export const useRemoveNote = () => useCommand(["knowledge", "memory"], (line: string) => command("memory.removeNote", { line }));
 export const useSuggestions = () => useReady(["suggestions"], () => query("suggestions.list", {}));
 export const useDecideSuggestion = () => useCommand(["suggestions", "today", "threads", "categories"], (input: { id: number; accept: boolean }) => command("suggestions.decide", input));
-export const useReactToBrief = () => useCommand(["today", "knowledge"], (input: { session: string; rating: "up" | "down" | null; comment: string }) => command("brief.react", input));
+export const useReactToBrief = () => useCommand(["today", "knowledge"], (input: { session: string; artifact?: number; rating: "up" | "down" | null; comment: string }) => command("brief.react", input));
 export const useAgents = () => useReady(["agents"], () => query("agents.registry", {}));
 export const useRunMailAgent = () => useCommand(["sessions"], () => command("mailAgent.runNow", {}));
 export const useContextSettings = () => useReady(["context"], () => query("context.get", {}));
@@ -116,7 +118,7 @@ export const useActivity = () => useReady(["activity"], () => query("activity.li
 export const useUndo = () => useCommand(["activity"], (id: number) => command("activity.undo", { id }));
 
 export const usePrompts = () => useReady(["prompts"], () => query("prompts.list", {}));
-export const useSavePrompt = () => useCommand(["prompts"], (input: SavePrompt) => command("prompts.save", input));
+export const useSavePrompt = () => useCommand(["prompts", "prompt-history", "knowledge"], (input: SavePrompt) => command("prompts.save", input));
 export const useStarterPrompts = () => useCommand(["prompts"], () => command("prompts.useStarters", {}));
 export const useMemory = (search: string) => useReady(["memory", search], () => query("memory.list", { query: search }));
 export const useSaveMemory = () => useCommand(["memory"], (input: SaveMemory) => command("memory.save", input));
@@ -184,3 +186,21 @@ export function useWaitingCount(): number {
     (suggestions.data?.suggestions.length ?? 0)
   );
 }
+
+export const usePreferences = () => useReady(["preferences"], () => query("preferences.list", {}));
+export const useSavePreference = () => useCommand(["preferences", "knowledge"], (input: SavePreference) => command("preferences.save", input));
+export const usePreferenceHistory = (id: number) => useReady(["preference-history", id], () => query("preferences.history", {id}));
+export const useRestorePreference = () => useCommand(["preferences", "preference-history", "knowledge"], (input: RestorePreference) => command("preferences.restore", input));
+export const usePreferencePreview = () => useCommand([], (input: PreviewPreference) => command("preferences.preview", input));
+export const useRecordInteraction = () => useMutation({ mutationFn: (input: RecordInteraction) => command("interactions.record", input) });
+export const usePromptHistory = (input: PromptHistory) => useReady(["prompt-history", input.kind, input.name], () => query("prompts.history", input));
+export const useRestorePrompt = () => useCommand(["prompts", "prompt-history", "knowledge"], (input: RestorePrompt) => command("prompts.restore", input));
+
+export const useAgentQueue = () => useReady(["agent-queue"], () => query("agentQueue.get", {}));
+export const useQueueAction = () => useCommand(["agent-queue", "cockpit", "jobs"], (input: QueueAction) => command("agentQueue.act", input));
+
+export const useExpireNote = () => useCommand(["knowledge"], (input: ExpireLearnedNote) => command("memory.expireNote",input));
+
+export const useRetryLearning = () => useCommand(["knowledge", "mail-agent"], () => command("mailAgent.retryLearning",{}));
+
+export const useSimulatePreference = () => useGenerationCommand((input: SimulatePreference,trace:string) => command("preferences.simulate",input,trace));

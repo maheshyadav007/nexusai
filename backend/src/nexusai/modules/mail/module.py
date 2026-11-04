@@ -663,10 +663,14 @@ def _thread_messages(ctx: Context, thread: int) -> list[dict[str, object]]:
     return [dict(row) for row in rows]
 
 
-def _changed(work: object, ctx: Context, thread: int, field: str, value: object) -> None:
+def _changed(
+    work: object, ctx: Context, thread: int, field: str, value: object, old_value: object = None
+) -> None:
     work.emit(  # type: ignore[attr-defined]
         "thread.updated",
-        ThreadUpdated(thread_id=thread, field=field, value=value, by=ctx.actor).model_dump(),
+        ThreadUpdated(
+            thread_id=thread, field=field, value=value, old_value=old_value, by=ctx.actor
+        ).model_dump(),
         source="mail",
         trace_id=ctx.trace_id,
     )
@@ -885,8 +889,17 @@ def remove_thread_category(command: ChangeThreadCategory, ctx: Context) -> MailD
 def set_status(command: SetThreadStatus, ctx: Context) -> MailDone:
     _thread_messages(ctx, command.id)
     with ctx.bus.unit_of_work() as work:
-        work.tx.execute("UPDATE threads SET status = ? WHERE id = ?", (command.status, command.id))
-        _changed(work, ctx, command.id, "status", command.status)
+        old = work.tx.execute("SELECT status FROM threads WHERE id=?", (command.id,)).fetchone()[0]
+        work.tx.execute(
+            "UPDATE threads SET status = ?, next_action = CASE WHEN ?='waiting_on_you' THEN next_action ELSE NULL END, follow_up_on = CASE WHEN ?='waiting_on_others' THEN follow_up_on ELSE NULL END WHERE id = ?",
+            (command.status, command.status, command.status, command.id),
+        )
+        if ctx.actor == "person":
+            work.tx.execute(
+                "UPDATE threads SET status_user_message=(SELECT MAX(id) FROM messages WHERE thread_id=?) WHERE id=?",
+                (command.id, command.id),
+            )
+        _changed(work, ctx, command.id, "status", command.status, old)
     return MailDone()
 
 
@@ -894,10 +907,18 @@ def set_status(command: SetThreadStatus, ctx: Context) -> MailDone:
 def set_importance(command: SetThreadImportance, ctx: Context) -> MailDone:
     _thread_messages(ctx, command.id)
     with ctx.bus.unit_of_work() as work:
+        old = work.tx.execute(
+            "SELECT importance FROM threads WHERE id=?", (command.id,)
+        ).fetchone()[0]
         work.tx.execute(
             "UPDATE threads SET importance = ? WHERE id = ?", (command.importance, command.id)
         )
-        _changed(work, ctx, command.id, "importance", command.importance)
+        if ctx.actor == "person":
+            work.tx.execute(
+                "UPDATE threads SET importance_user_message=(SELECT MAX(id) FROM messages WHERE thread_id=?) WHERE id=?",
+                (command.id, command.id),
+            )
+        _changed(work, ctx, command.id, "importance", command.importance, old)
     return MailDone()
 
 
@@ -905,13 +926,16 @@ def set_importance(command: SetThreadImportance, ctx: Context) -> MailDone:
 def set_category(command: SetThreadCategory, ctx: Context) -> MailDone:
     _thread_messages(ctx, command.id)
     with ctx.bus.unit_of_work() as work:
+        old = work.tx.execute("SELECT category FROM threads WHERE id=?", (command.id,)).fetchone()[
+            0
+        ]
         source = "user" if command.category else None
         why = "You chose this category" if command.category else None
         work.tx.execute(
             "UPDATE threads SET category = ?, category_source = ?, why = ? WHERE id = ?",
             (command.category, source, why, command.id),
         )
-        _changed(work, ctx, command.id, "category", command.category)
+        _changed(work, ctx, command.id, "category", command.category, old)
     return MailDone()
 
 

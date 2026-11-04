@@ -1,5 +1,7 @@
 "use client";
 
+import { newId } from "@/ui/client/browser";
+
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ApiRequestError } from "@/ui/client/api";
@@ -7,7 +9,7 @@ import type { Importance, Draft, MessageView } from "@/ui/client/contracts.gener
 import { useDateTime } from "@/ui/client/format";
 import type { GenerationPhase } from "@/ui/client/generation";
 import { useCategories, useMoveThread, useReplyDraft, useSetCategory, useSetImportance, useSetFlag, useSetRead, useSetStatus, useThread, type ThreadStatus } from "@/ui/client/mail";
-import { useDraftReply, useSummarize, useThreadRuns, useThreadSummary } from "@/ui/client/work";
+import { useDraftReply, useSummarize, useThreadRuns, useThreadSummary, useRecordInteraction } from "@/ui/client/work";
 import { AskAgent } from "@/ui/features/agent/AskAgent";
 import { Icon } from "@/ui/icons";
 import { Avatar } from "@/ui/primitives/Avatar";
@@ -122,7 +124,9 @@ function SummaryBlock({ id, pending, phase, error, retry }: { id: number; pendin
         <p data-testid="summary-text" className="whitespace-pre-wrap text-md text-ink-primary">{data.text}</p>
       </fieldset> : null}
       {error ? <ErrorState title={t("generation.summaryFailed")} description={error} onRetry={retry} /> : null}
-      {data?.text && data.new_messages ? <p className="text-sm text-ink-secondary">{tn("summary.new", data.new_messages)}</p> : null}
+      {data?.text && data.changed ? <p className="text-sm text-ink-secondary">{t("summary.changed")}</p> : null}
+      {data?.text && data.partial ? <p className="text-sm text-ink-secondary">{t("summary.partial")}</p> : null}
+      {data?.text && data.new_messages && !data.changed ? <p className="text-sm text-ink-secondary">{tn("summary.new", data.new_messages)}</p> : null}
     </section>
   );
 }
@@ -204,6 +208,14 @@ export function ThreadScreen({ id, onLeave, folder: backTo }: { id: number; onLe
   const pathname = usePathname();
   const folder = backTo ?? pathname.slice(0, pathname.lastIndexOf("/"));
   const thread = useThread(id);
+  const recordInteraction = useRecordInteraction();
+  const observed = useRef<number | null>(null);
+  useEffect(() => {
+    if (thread.isSuccess && observed.current !== id) {
+      observed.current = id;
+      recordInteraction.mutate({id: newId(), thread: id, action: "opened"});
+    }
+  }, [id, thread.isSuccess, recordInteraction]);
   const setRead = useSetRead();
   const setFlag = useSetFlag();
   const move = useMoveThread();

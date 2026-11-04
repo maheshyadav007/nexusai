@@ -2,9 +2,10 @@
 
 import { newId } from "@/ui/client/browser";
 import { useEffect, useState } from "react";
+import { Preferences } from "./Preferences";
 import { AgentKnows, AgentSees } from "./AgentKnows";
 import type { MemoryFile, PromptFile } from "@/ui/client/contracts.generated";
-import { useDecideMemory, useMemory, usePrompts, useRemoveMemory, useSaveMemory, useSavePrompt } from "@/ui/client/work";
+import { useDecideMemory, useMemory, usePrompts, useRemoveMemory, useSaveMemory, useSavePrompt, usePromptHistory, useRestorePrompt } from "@/ui/client/work";
 import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
 import { ExpandRow } from "@/ui/primitives/ExpandRow";
@@ -22,6 +23,8 @@ import { t } from "@/ui/strings";
 function PromptEditor({ prompt, startsOpen }: { prompt: PromptFile; startsOpen: boolean }) {
   const toast = useToast();
   const save = useSavePrompt();
+  const history = usePromptHistory({kind:prompt.kind,name:prompt.name});
+  const restore = useRestorePrompt();
   const [content, setContent] = useState(prompt.content);
   useEffect(() => setContent(prompt.content), [prompt.content]);
   const summary = prompt.content.trim().split("\n")[0];
@@ -34,6 +37,11 @@ function PromptEditor({ prompt, startsOpen }: { prompt: PromptFile; startsOpen: 
           save.mutate({ kind: prompt.kind, name: prompt.name, content }, { onSuccess: () => toast({ title: t("prompts.saved") }) });
         }}
       >
+        <details className="text-sm text-ink-secondary"><summary className="focus-ring cursor-pointer">{t("prompts.history")}</summary>
+          {history.data?.versions.length === 0 ? <p>{t("prompts.history.empty")}</p> : null}
+          {history.data?.versions.map(version => <div key={version.id} className="my-3 border-t border-line-subtle pt-3"><TextView title={version.time} text={version.content} /><Button loading={restore.isPending} onClick={() => restore.mutate({kind:prompt.kind,name:prompt.name,version:version.id})}>{t("prompts.restore")}</Button></div>)}
+          {history.isError || restore.isError ? <ErrorState title={t("prompts.error")} /> : null}
+        </details>
         {prompt.base ? (
           <details className="text-sm text-ink-secondary">
             <summary className="focus-ring cursor-pointer rounded-sm">{t("prompts.base")}</summary>
@@ -127,7 +135,7 @@ export function MemoryScreen() {
   return (
     <div className="mx-auto flex max-w-reading flex-col gap-5 p-6">
       <PageHeader title={t("nav.memory")} />
-      <Tabs label={t("nav.memory")} tabs={[{ value: "knows", label: t("knows.title"), content: <AgentKnows /> }, { value: "prompts", label: t("prompts.title"), content: <PromptsEditor /> }, { value: "memory", label: t("memory.title"), content: <MemoryBrowser /> }, { value: "sees", label: t("knows.sees.title"), content: <AgentSees /> }]} />
+      <Tabs defaultValue="knows" label={t("nav.memory")} tabs={[{value:"preferences",label:t("preferences.title"),content:<Preferences />}, { value: "knows", label: t("knows.title"), content: <AgentKnows /> }, { value: "prompts", label: t("prompts.title"), content: <PromptsEditor /> }, { value: "memory", label: t("memory.title"), content: <MemoryBrowser /> }, { value: "sees", label: t("knows.sees.title"), content: <AgentSees /> }]} />
     </div>
   );
 }

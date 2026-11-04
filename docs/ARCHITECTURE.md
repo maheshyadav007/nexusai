@@ -317,10 +317,11 @@ What it knows, strongest first, and how far each is trusted. `modules/agent/know
 | Layer | Comes from | Trust |
 |---|---|---|
 | About the person, Personalized prompts | Profile and prompt files | The person's own words, and they always win |
-| What you corrected | `mail_feedback`, from their own changes. An agent's changes don't count | Theirs |
+| What you corrected | Account-scoped `mail_feedback` observations, with old/new values and interaction IDs | Evidence about the decision; not an unconditional permanent rule |
 | What the mailbox shows, and the facts with each email | Counted by `modules/agent/signals.py` with no model | Reliable |
 | Memory: confirmed | `memory/user/` | Theirs |
-| Memory: learned | `memory/agents/mail/learned.md`, each note marked with the mail it came from | Untrusted hints, because anyone can send mail |
+| Scoped facts | `learned_facts`, imported from learned notes, with source account/thread, revision and expiry | Inferred facts are untrusted; confirmation is explicit |
+| Approved preferences | Versioned `preferences`, selected by purpose/account and address/topic in the supplied context | Instructions approved by the person; expired/paused proposals are excluded |
 | The email | The server | Untrusted, and the weakest evidence of its own importance |
 
 - **Who has the next move** is status, and what they'd do is `next_action`. Interrupting is `notify`, decided apart from importance. Questions stop at three open.
@@ -343,7 +344,9 @@ Mail search runs in three steps. The search page, the palette, folder filters an
 
 ## The morning brief
 
-A daily schedule writes the brief from what's on the person's plate, and it shows first on Today. Reactions are kept per brief in `brief_feedback`. Their ratings and own words reach the next run as the trusted layer "How they want the brief", while what each rated brief said goes in the task as untrusted, because it came from reading mail.
+A daily schedule writes **Your brief**, shown on Today, without requiring optional history reading or First meeting. `brief_inputs` records the account and input snapshot before submission; `brief_artifacts` stores each successful output independently of later chat replies. Feedback is keyed to the exact artifact in `brief_artifact_feedback`; legacy reactions remain readable. A new same-day artifact has its own rating and attention glow.
+
+The snapshot includes tasks, reminders, open shared obligations, unfinished mail (including archived conversations), pending decisions and historical-learning state. Each obligations section reports its total and shows at most 100 detailed records; tools can retrieve more. Known unfinished sync/judgement or omitted detail marks the artifact partial. Today distinguishes fresh, stale, partial and failed generation. These describe available local evidence, not guaranteed completeness of the remote mailbox. Reactions and explicit requests inform later briefs; clicking the glow only acknowledges the presentation.
 
 Prompts can only change from a session that read mail if the person approves the exact words, and that approval can't extend to the rest of the session.
 
@@ -353,3 +356,22 @@ Prompts can only change from a session that read mail if the person approves the
 System preparation uses neutral spinners and skeletons. AI identity rims stay still. The model gateway records and emits `generation.changed` for queued, generating and terminal phases, scoped to the request trace and session. Only generating moves the coloured light across an output surface; rate-limit waits keep a static rim. `generation.get` supplies a snapshot when a view opens or reconnects, and startup clears interrupted calls.
 
 Summaries reserve their output card immediately, draft replies prepare an editable recipient/subject form before calling the model, and Ask agent opens its neutral shell before session loading completes. Chat, compaction, schedules and Mail agent views use the same generation state. Cached replies and opening a chat alone never show generation. Reduced motion keeps the status text and static colours without the moving light.
+
+
+## Durable orchestration and prompt adaptation
+
+A dispatch transaction creates its turn and reserves trigger inputs before the worker is submitted. Bounded custom-event batches claim only the conversations actually supplied. Thread decision versions fence model output against changed messages or person-owned decisions; stale triage is requeued, stale draft/summary generation is rejected. Overdue notification has a separate timestamp and never completes an obligation.
+
+Digest catch-up uses a separate monotonic judgement ID cursor for each mail account, at most 100 judgement records per batch. The completed cursor advances only after an output is recorded successfully; outages do not impose a one-hour loss window. Review completion similarly follows a successful result. Failed learning wrap-up is visible and retryable.
+
+`interaction_events` stores actor, account, artifact/version, run, old/new values, origin and optional undo linkage. Mail changes, actual sends, task actions, chat ratings, brief reactions and explicit UI opens are observations. Marked-read counts do not claim foreground reading; inactivity is not dislike. Repeated corrections can propose a scoped instruction, and the review agent can propose instructions with valid observation evidence. Only the person can activate one. No weight training or bandit policy is involved.
+
+Preferences have purpose/account/address/topic scopes, expiry, optimistic revision checks and immutable version snapshots. Check scope is deterministic. AI decision preview is bounded to three matching local conversations and never executes returned tools or changes mail/tasks/preferences. Preview context excludes the old edited instruction. Restoring creates a new active revision. Version history includes available source observations; actual run context remains inspectable. Legacy authored prompt Markdown remains broadly included; new scoped preferences are the precise routing mechanism.
+
+The shared knowledge builder supplies profile/tone/signature to agent runs and manual drafts, then budgeted authored memory and source-scoped facts, plus approved purpose-specific instructions. Confirming a fact preserves its expiry. Legacy source-less notes stay explicitly untrusted when inferred. Personal prompt files also have save/restore history; edits made outside the app are not a full filesystem audit trail.
+
+Typed channel assignments record recipient, purpose, expected output, evidence, owner turn and state. Only the recipient reports its outcome; an unreported/failed run becomes blocked. Posting budgets apply per run, not to the lifetime of a chat. This is bounded deterministic coordination, not a separate autonomous chief model.
+
+Live mail has priority; background work uses available runtime capacity and pending age. Cockpit exposes pending/running/failed counts, queue age, errors and retry/cancel. Pausing a schedule cancels pending automatic work while retaining provenance for explicit Run now. Named IANA schedule timezones persist across travel: a missing spring time moves forward by the DST gap; an ambiguous autumn time uses its first occurrence once. Existing schedules retain the detected local zone (UTC fallback when unavailable).
+
+Thread summaries track canonical message identity, content hashes and supplied character offsets. Older backfills and changed/deleted sources are detected. Bounded calls expose partial coverage and continue oversized sources; they never certify omitted text.

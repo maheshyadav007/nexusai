@@ -110,14 +110,35 @@ def _knowing_you(ctx: Context, is_running: Any) -> AgentEntry:
     )
     session = rows[0]["id"] if rows else None
     last, tokens = _session_facts(ctx, session)
-    state = "running" if session and is_running(session) else "finished" if session else "active"
+    status = (
+        ctx.bus.db.fetch_all("SELECT status FROM agent_sessions WHERE id=?", (session,))
+        if session
+        else []
+    )
+    waiting = bool(status and status[0]["status"] == "waiting")
+    failed = bool(status and status[0]["status"] == "failed")
+    state = (
+        "failed"
+        if failed
+        else "running"
+        if session and is_running(session)
+        else "active"
+        if waiting
+        else "finished"
+        if session
+        else "active"
+    )
     return AgentEntry(
         id="know-you-better",
-        name="Know you better",
+        name="First meeting",
         does="Asks a few questions so the agents judge your mail the way you would.",
         state=state,
         when="Once, after it has read your past mail",
-        next_condition="Waiting for the Mail agent to finish reading" if not session else None,
+        next_condition="Waiting for your answer or approval"
+        if waiting
+        else "Waiting for the Mail agent to finish reading"
+        if not session
+        else None,
         last_run=last,
         session=session,
         tokens=tokens,
@@ -131,9 +152,19 @@ def _reader(ctx: Context) -> AgentEntry:
         id="mail-reader",
         name="Reading past mail",
         does="Reads your own conversations first, and notes what matters about you.",
-        state="running" if state in {"reading", "wrapping"} else "finished" if state else "active",
+        state="failed"
+        if state == "failed"
+        else "running"
+        if state in {"reading", "wrapping"}
+        else "finished"
+        if state
+        else "active",
         when="Once after mail syncs, and again when you ask it to read more",
-        next_condition=f"{done} of {total} read" if state == "reading" else None,
+        next_condition="Learning wrap-up failed. Retry from Prompts and memory."
+        if state == "failed"
+        else f"{done} of {total} read"
+        if state == "reading"
+        else None,
         last_run=None,
         session=mail_agent.SESSION_ID if state else None,
     )
@@ -196,5 +227,5 @@ def entries(ctx: Context, is_running: Any) -> list[AgentEntry]:
         *_custom_triggers(ctx, is_running),
     ]
     known = {row["last_session"] for row in schedules}
-    order = {"running": 0, "active": 1, "finished": 2, "off": 3, "past": 4}
+    order = {"failed": -1, "running": 0, "active": 1, "finished": 2, "off": 3, "past": 4}
     return sorted([*shown, *_past(ctx, known)], key=lambda entry: order[entry.state])

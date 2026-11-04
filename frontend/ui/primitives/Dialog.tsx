@@ -6,12 +6,12 @@ import { t } from "@/ui/strings";
 import { IconButton } from "./IconButton";
 
 const SHAPES = {
-  dialog: { overlay: "grid place-items-center p-5", panel: "w-dialog max-w-full animate-dialog-in rounded-lg data-[state=closed]:animate-dialog-out" },
+  dialog: { overlay: "grid grid-cols-1 place-items-center p-5", panel: "w-dialog max-w-full animate-dialog-in rounded-lg data-[state=closed]:animate-dialog-out" },
   drawer: { overlay: "flex justify-end", panel: "h-full w-drawer max-w-full animate-drawer-in border-l data-[state=closed]:animate-drawer-out" },
   // Frosted and roomy, for what needs space: settings, and reading a document.
   palette: { overlay: "glass-backdrop bg-surface-scrim/40 flex justify-center p-5 pt-10", panel: "surface-glass flex max-h-full w-dialog max-w-full animate-dialog-in flex-col self-start rounded-lg border data-[state=closed]:animate-dialog-out" },
   // The backdrop does the blurring: browsers only blur what's inside the nearest layer.
-  glass: { overlay: "glass-backdrop bg-surface-scrim/40 grid place-items-center p-5", panel: "surface-glass flex h-modal-height max-h-full w-modal max-w-full animate-dialog-in flex-col rounded-lg border data-[state=closed]:animate-dialog-out" },
+  glass: { overlay: "glass-backdrop bg-surface-scrim/40 grid grid-cols-1 place-items-center p-5", panel: "surface-glass flex h-modal-height max-h-full w-modal max-w-full animate-dialog-in flex-col rounded-lg border data-[state=closed]:animate-dialog-out" },
 } as const;
 
 /** A centered dialog, or a drawer from the right edge. Focus, Escape and scroll lock come from Radix. */

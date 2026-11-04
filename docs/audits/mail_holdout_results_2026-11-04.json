@@ -1,0 +1,1052 @@
+{
+  "suite": "backend/evals/mail_holdout_2026_11_04.json",
+  "trials": 2,
+  "total": 24,
+  "failed": 0,
+  "results": [
+    {
+      "case": "orion-decision-today",
+      "got": {
+        "confidence": "high",
+        "review_reason": null,
+        "source_messages": [],
+        "category": "Project Orion",
+        "importance": "high",
+        "status": "waiting_on_you",
+        "next_action": "decide",
+        "follow_up_on": null,
+        "notify": true,
+        "summary": "Orion is blocked pending your ship decision by 15:00 today.",
+        "reason": "Project Orion is critical, a regular correspondent is asking you directly, and the release cannot proceed until you decide today.",
+        "facts": [
+          "Release is blocked until Alex confirms whether to ship Orion.",
+          "Decision requested by 15:00 on 2026-11-04."
+        ],
+        "suggested_action": "Review the blocker and confirm the Orion ship/no-ship decision before 15:00 today.",
+        "deadlines": [
+          {
+            "what": "Decide whether to ship Orion",
+            "due": "2026-11-04"
+          }
+        ],
+        "tasks": [
+          {
+            "title": "Decide and confirm whether to ship Orion by 15:00",
+            "due": "2026-11-04"
+          }
+        ],
+        "reminders": [],
+        "draft": "I\u2019ll review this and confirm the ship/no-ship decision by 15:00 today.",
+        "memory": null,
+        "learned": [],
+        "suggest_category": {
+          "name": "Project Orion",
+          "sender": "sam@example.com",
+          "reason": "Direct release decisions and blockers for the active Orion project belong together."
+        },
+        "question": null
+      },
+      "missed": [],
+      "prompt_digest": "7e4d040c7501731e190bbd46c7dd8304c8f053d50f627ae5931d401fbe69cce7"
+    },
+    {
+      "case": "orion-decision-today",
+      "got": {
+        "confidence": "high",
+        "review_reason": null,
+        "source_messages": [],
+        "category": "Project Orion",
+        "importance": "high",
+        "status": "waiting_on_you",
+        "next_action": "decide",
+        "follow_up_on": null,
+        "notify": true,
+        "summary": "Orion is blocked pending your ship decision by 15:00 today.",
+        "reason": "A regular correspondent asks you directly for a same-day release decision on the active, critical Orion project, and the release cannot proceed without it.",
+        "facts": [
+          "Release is blocked until Alex confirms whether Orion should ship.",
+          "Decision requested by 15:00 on 2026-11-04."
+        ],
+        "suggested_action": "Decide whether to ship Orion and reply before 15:00 today.",
+        "deadlines": [
+          {
+            "what": "Confirm whether Orion will ship",
+            "due": "2026-11-04"
+          }
+        ],
+        "tasks": [
+          {
+            "title": "Decide whether to ship Orion and confirm the decision",
+            "due": "2026-11-04"
+          }
+        ],
+        "reminders": [],
+        "draft": "Decision: [ship / hold]. [Brief rationale or conditions].",
+        "memory": null,
+        "learned": [],
+        "suggest_category": {
+          "name": "Project Orion",
+          "sender": "sam@example.com",
+          "reason": "Messages from this regular correspondent concern the active, critical Orion project."
+        },
+        "question": null
+      },
+      "missed": [],
+      "prompt_digest": "7e4d040c7501731e190bbd46c7dd8304c8f053d50f627ae5931d401fbe69cce7"
+    },
+    {
+      "case": "manager-fyi-no-action",
+      "got": {
+        "confidence": "high",
+        "review_reason": null,
+        "source_messages": [],
+        "category": "Updates",
+        "importance": "normal",
+        "status": "fyi",
+        "next_action": "read",
+        "follow_up_on": null,
+        "notify": false,
+        "summary": "The team survey results have been published, with no response or action needed.",
+        "reason": "This is an informational team update from a regular contact and explicitly requires no action.",
+        "facts": [
+          "Team survey results have been published.",
+          "No response or action is needed."
+        ],
+        "suggested_action": "Read the survey results when convenient.",
+        "deadlines": [],
+        "tasks": [],
+        "reminders": [],
+        "draft": null,
+        "memory": null,
+        "learned": [],
+        "suggest_category": null,
+        "question": null
+      },
+      "missed": [],
+      "prompt_digest": "7e4d040c7501731e190bbd46c7dd8304c8f053d50f627ae5931d401fbe69cce7"
+    },
+    {
+      "case": "manager-fyi-no-action",
+      "got": {
+        "category": "Updates",
+        "importance": "normal",
+        "status": "fyi",
+        "next_action": "read",
+        "follow_up_on": null,
+        "notify": false,
+        "summary": "Team survey results have been published, with no response or action needed.",
+        "reason": "A regular correspondent sent this directly to you as an informational team update and explicitly says no action is required.",
+        "facts": [
+          "The team survey results have been published.",
+          "No response or action is needed."
+        ],
+        "suggested_action": "Read the survey results when convenient.",
+        "deadlines": [],
+        "tasks": [],
+        "reminders": [],
+        "draft": null,
+        "memory": null,
+        "learned": [],
+        "suggest_category": null,
+        "question": null,
+        "confidence": "high",
+        "review_reason": null,
+        "source_messages": []
+      },
+      "missed": [],
+      "prompt_digest": "7e4d040c7501731e190bbd46c7dd8304c8f053d50f627ae5931d401fbe69cce7"
+    },
+    {
+      "case": "new-sender-real-blocker",
+      "got": {
+        "confidence": "high",
+        "source_messages": [],
+        "category": "Project Orion",
+        "importance": "high",
+        "status": "waiting_on_you",
+        "next_action": "decide",
+        "follow_up_on": null,
+        "notify": true,
+        "summary": "Orion deployment is blocked pending your approval of the callback URL today.",
+        "reason": "Project Orion is critical, the deployment is blocked, and the sender requests your approval today.",
+        "facts": [
+          "The Orion deployment cannot be completed until the callback URL is approved.",
+          "Approval is requested today, 2026-11-04.",
+          "The email does not include the callback URL or target environment."
+        ],
+        "suggested_action": "Review and approve or reject the callback URL today, asking for the exact URL and environment if you do not already have them.",
+        "deadlines": [
+          {
+            "what": "Approve or reject the Orion callback URL",
+            "due": "2026-11-04"
+          }
+        ],
+        "tasks": [
+          {
+            "title": "Review and decide on the Orion callback URL",
+            "due": "2026-11-04"
+          }
+        ],
+        "reminders": [],
+        "draft": "Could you send the exact callback URL and target environment for approval?",
+        "memory": null,
+        "learned": [],
+        "suggest_category": null,
+        "question": null
+      },
+      "missed": [],
+      "prompt_digest": "7e4d040c7501731e190bbd46c7dd8304c8f053d50f627ae5931d401fbe69cce7"
+    },
+    {
+      "case": "new-sender-real-blocker",
+      "got": {
+        "confidence": "high",
+        "review_reason": "The exact callback URL is not included in the provided message, so Alex may need to obtain or locate it before approving.",
+        "source_messages": [],
+        "category": "Project Orion",
+        "importance": "high",
+        "status": "waiting_on_you",
+        "next_action": "decide",
+        "follow_up_on": null,
+        "notify": true,
+        "summary": "Orion deployment is blocked pending Alex\u2019s approval of a callback URL today.",
+        "reason": "Project Orion is critical, the deployment is currently blocked, and the sender asks Alex directly for approval today.",
+        "facts": [
+          "Orion deployment cannot be completed until the callback URL is approved.",
+          "Approval is requested today, 2026-11-04.",
+          "The provided message does not state the exact callback URL."
+        ],
+        "suggested_action": "Review the exact callback URL, approve it if valid, and confirm the decision to the sender today.",
+        "deadlines": [
+          {
+            "what": "Approve and confirm the Orion callback URL",
+            "due": "2026-11-04"
+          }
+        ],
+        "tasks": [
+          {
+            "title": "Review and approve the Orion callback URL, then confirm to vendor@example.net",
+            "due": "2026-11-04"
+          }
+        ],
+        "reminders": [],
+        "draft": "Please send the exact callback URL you need approved.",
+        "memory": null,
+        "learned": [],
+        "suggest_category": {
+          "name": "Project Orion",
+          "sender": "vendor@example.net",
+          "reason": "This sender is writing about a deployment blocker for the active critical Orion project."
+        },
+        "question": null
+      },
+      "missed": [],
+      "prompt_digest": "7e4d040c7501731e190bbd46c7dd8304c8f053d50f627ae5931d401fbe69cce7"
+    },
+    {
+      "case": "retracted-request",
+      "got": {
+        "confidence": "high",
+        "review_reason": null,
+        "source_messages": [],
+        "category": "Updates",
+        "importance": "normal",
+        "status": "resolved",
+        "next_action": "none",
+        "follow_up_on": null,
+        "notify": false,
+        "summary": "The sender completed the release-notes review, so Alex no longer needs to review them.",
+        "reason": "The latest update explicitly withdraws the earlier request and says there is nothing left for Alex to do.",
+        "facts": [
+          "The release-notes review was completed by sam@example.com.",
+          "Alex's review is no longer needed."
+        ],
+        "suggested_action": null,
+        "deadlines": [],
+        "tasks": [],
+        "reminders": [],
+        "draft": null,
+        "memory": null,
+        "learned": [],
+        "suggest_category": null,
+        "question": null
+      },
+      "missed": [],
+      "prompt_digest": "7e4d040c7501731e190bbd46c7dd8304c8f053d50f627ae5931d401fbe69cce7"
+    },
+    {
+      "case": "retracted-request",
+      "got": {
+        "confidence": "high",
+        "review_reason": null,
+        "category": "Updates",
+        "importance": "low",
+        "status": "resolved",
+        "next_action": "none",
+        "follow_up_on": null,
+        "notify": false,
+        "summary": "The release-notes review was completed by sam@example.com, so Alex no longer needs to review it.",
+        "reason": "The latest message explicitly withdraws the earlier request and says there is nothing left for Alex to do.",
+        "facts": [
+          "sam@example.com completed the release-notes review.",
+          "Alex's review is no longer needed."
+        ],
+        "suggested_action": null,
+        "deadlines": [],
+        "tasks": [],
+        "reminders": [],
+        "draft": null,
+        "memory": null,
+        "learned": [],
+        "suggest_category": null,
+        "question": null
+      },
+      "missed": [],
+      "prompt_digest": "7e4d040c7501731e190bbd46c7dd8304c8f053d50f627ae5931d401fbe69cce7"
+    },
+    {
+      "case": "deadline-changed-later",
+      "got": {
+        "confidence": "medium",
+        "review_reason": "The message clearly postpones today's obligation, but it does not state the exact new review date or identify the planning item.",
+        "source_messages": [],
+        "category": "Planning",
+        "importance": "normal",
+        "status": "waiting_on_you",
+        "next_action": "read",
+        "follow_up_on": null,
+        "notify": false,
+        "summary": "The planning review deadline has moved from today to next month, when Alex should review it.",
+        "reason": "A regular correspondent explicitly says nothing is needed today but asks for review by a new, unspecified date next month.",
+        "facts": [
+          "The earlier request was due today.",
+          "The planning review has moved to next month.",
+          "No decision or action is needed today.",
+          "The exact new date is not included."
+        ],
+        "suggested_action": "Review the planning item next month once the exact new date is confirmed.",
+        "deadlines": [],
+        "tasks": [
+          {
+            "title": "Review the rescheduled planning item",
+            "due": null
+          }
+        ],
+        "reminders": [],
+        "draft": null,
+        "memory": null,
+        "learned": [],
+        "suggest_category": null,
+        "question": null
+      },
+      "missed": [],
+      "prompt_digest": "7e4d040c7501731e190bbd46c7dd8304c8f053d50f627ae5931d401fbe69cce7"
+    },
+    {
+      "case": "deadline-changed-later",
+      "got": {
+        "confidence": "medium",
+        "review_reason": "The message creates a review obligation but does not state the new date or identify the planning project, so the exact deadline and whether this concerns Project Orion are unclear.",
+        "source_messages": [],
+        "category": "Planning",
+        "importance": "normal",
+        "status": "waiting_on_you",
+        "next_action": "reply",
+        "follow_up_on": null,
+        "notify": false,
+        "summary": "The planning review was postponed from today to next month, but the new review date is not included.",
+        "reason": "A regular correspondent says no action is needed today but asks for review by an unspecified new date next month.",
+        "facts": [
+          "The earlier deadline was today.",
+          "The planning review has moved to next month.",
+          "No decision or action is needed today.",
+          "The new review date is not stated."
+        ],
+        "suggested_action": "Ask for the specific new review date, then schedule the review.",
+        "deadlines": [],
+        "tasks": [
+          {
+            "title": "Review the planning materials once the new date is confirmed",
+            "due": null
+          }
+        ],
+        "reminders": [],
+        "draft": "Thanks for the update. What is the new review date?",
+        "memory": null,
+        "learned": [],
+        "suggest_category": {
+          "name": "Planning",
+          "sender": "sam@example.com",
+          "reason": "Planning reviews and deadline changes from this regular correspondent belong together."
+        },
+        "question": null
+      },
+      "missed": [],
+      "prompt_digest": "7e4d040c7501731e190bbd46c7dd8304c8f053d50f627ae5931d401fbe69cce7"
+    },
+    {
+      "case": "broadcast-addressed-to-team",
+      "got": {
+        "category": "Updates",
+        "importance": "low",
+        "status": "fyi",
+        "next_action": "none",
+        "notify": false,
+        "summary": "A weekly digest sent to everyone shares general highlights and requests no response.",
+        "reason": "This is a broadcast digest with no requested action and no stated connection to Project Orion or another priority.",
+        "facts": [
+          "Sent to everyone",
+          "No response requested"
+        ],
+        "deadlines": [],
+        "tasks": [],
+        "reminders": [],
+        "draft": null,
+        "learned": [],
+        "confidence": "high",
+        "review_reason": null,
+        "suggested_action": null,
+        "follow_up_on": null,
+        "memory": null,
+        "suggest_category": null,
+        "question": null
+      },
+      "missed": [],
+      "prompt_digest": "7e4d040c7501731e190bbd46c7dd8304c8f053d50f627ae5931d401fbe69cce7"
+    },
+    {
+      "case": "broadcast-addressed-to-team",
+      "got": {
+        "category": "Updates",
+        "importance": "low",
+        "status": "fyi",
+        "next_action": "none",
+        "notify": false,
+        "summary": "A weekly digest sent to everyone shares highlights and requests no response.",
+        "reason": "This is a general broadcast with no action requested and no indication that it affects Project Orion or another active priority.",
+        "facts": [
+          "The digest goes to everyone.",
+          "No response is requested."
+        ],
+        "deadlines": [],
+        "tasks": [],
+        "reminders": [],
+        "draft": null,
+        "memory": null,
+        "learned": [],
+        "suggest_category": null,
+        "question": null,
+        "confidence": "high",
+        "review_reason": null
+      },
+      "missed": [],
+      "prompt_digest": "7e4d040c7501731e190bbd46c7dd8304c8f053d50f627ae5931d401fbe69cce7"
+    },
+    {
+      "case": "no-reply-consequence",
+      "got": {
+        "confidence": "high",
+        "review_reason": null,
+        "category": "Project Orion",
+        "importance": "high",
+        "status": "waiting_on_you",
+        "next_action": "do",
+        "follow_up_on": null,
+        "notify": true,
+        "summary": "The active Orion build workspace will be suspended tomorrow unless its renewal is confirmed in the console.",
+        "reason": "Project Orion is critical, and failing to confirm renewal by tomorrow would suspend a workspace you actively use.",
+        "facts": [
+          "The Orion build workspace is described as actively used.",
+          "Suspension is scheduled for 2026-11-05 unless renewal is confirmed.",
+          "Confirmation must be completed in the console; the sender does not accept replies."
+        ],
+        "suggested_action": "Open the console today and confirm the Orion workspace renewal.",
+        "deadlines": [
+          {
+            "what": "Confirm renewal of the Orion build workspace",
+            "due": "2026-11-05"
+          }
+        ],
+        "tasks": [
+          {
+            "title": "Confirm the Orion build workspace renewal in the console",
+            "due": "2026-11-05"
+          }
+        ],
+        "reminders": [],
+        "draft": null,
+        "memory": null,
+        "learned": [],
+        "suggest_category": {
+          "name": "Project Orion",
+          "sender": "no-reply@example.org",
+          "reason": "Notices from this sender concern the active, critical Orion workspace."
+        },
+        "question": null
+      },
+      "missed": [],
+      "prompt_digest": "7e4d040c7501731e190bbd46c7dd8304c8f053d50f627ae5931d401fbe69cce7"
+    },
+    {
+      "case": "no-reply-consequence",
+      "got": {
+        "confidence": "high",
+        "review_reason": null,
+        "source_messages": [],
+        "category": "Project Orion",
+        "importance": "high",
+        "status": "waiting_on_you",
+        "next_action": "do",
+        "follow_up_on": null,
+        "notify": true,
+        "summary": "Confirm renewal of the Orion build workspace in the console to prevent suspension tomorrow.",
+        "reason": "Project Orion is critical, and the actively used build workspace will be suspended on November 5 unless renewal is confirmed.",
+        "facts": [
+          "The Orion build workspace is described as actively used.",
+          "Suspension is scheduled for tomorrow unless renewal is confirmed.",
+          "Confirmation must be completed in the console; the sender says not to reply."
+        ],
+        "suggested_action": "Open the console and confirm the workspace renewal today.",
+        "deadlines": [
+          {
+            "what": "Confirm Orion build workspace renewal",
+            "due": "2026-11-05"
+          }
+        ],
+        "tasks": [
+          {
+            "title": "Confirm renewal of the Orion build workspace in the console",
+            "due": "2026-11-05"
+          }
+        ],
+        "reminders": [],
+        "draft": null,
+        "memory": null,
+        "learned": [],
+        "suggest_category": {
+          "name": "Project Orion",
+          "sender": "no-reply@example.org",
+          "reason": "Operational notices from this sender concern the active, critical Orion workspace."
+        },
+        "question": null
+      },
+      "missed": [],
+      "prompt_digest": "7e4d040c7501731e190bbd46c7dd8304c8f053d50f627ae5931d401fbe69cce7"
+    },
+    {
+      "case": "sent-promise-and-question",
+      "got": {
+        "confidence": "high",
+        "status": "waiting_on_others",
+        "next_action": "none",
+        "follow_up_on": "2026-11-09",
+        "summary": "You committed to send the deck by Thursday and are waiting for confirmation of the meeting room.",
+        "reason": "Your sent message asks for the room to be confirmed and promises the deck by Thursday.",
+        "facts": [
+          "Deck promised by Thursday, November 5, 2026",
+          "Meeting room confirmation requested"
+        ],
+        "tasks": [
+          {
+            "title": "Send the deck",
+            "due": "2026-11-05"
+          }
+        ],
+        "suggested_action": "Send the deck by Thursday and follow up Monday if the room is still unconfirmed.",
+        "learned": []
+      },
+      "missed": [],
+      "prompt_digest": "7e4d040c7501731e190bbd46c7dd8304c8f053d50f627ae5931d401fbe69cce7"
+    },
+    {
+      "case": "sent-promise-and-question",
+      "got": {
+        "confidence": "high",
+        "source_messages": [],
+        "importance": "normal",
+        "status": "waiting_on_others",
+        "next_action": "none",
+        "follow_up_on": "2026-11-09",
+        "summary": "You promised to send the deck by Thursday and are waiting for confirmation of the meeting room.",
+        "reason": "Your latest message asks for the room to be confirmed and commits to sending the deck by Thursday.",
+        "facts": [
+          "Deck promised by Thursday, 2026-11-05",
+          "Meeting room confirmation requested"
+        ],
+        "suggested_action": "Send the deck by Thursday and follow up on the room confirmation Monday if needed.",
+        "deadlines": [
+          {
+            "what": "Send the deck",
+            "due": "2026-11-05"
+          }
+        ],
+        "tasks": [
+          {
+            "title": "Send the deck",
+            "due": "2026-11-05"
+          }
+        ],
+        "reminders": [],
+        "memory": null,
+        "learned": []
+      },
+      "missed": [],
+      "prompt_digest": "7e4d040c7501731e190bbd46c7dd8304c8f053d50f627ae5931d401fbe69cce7"
+    },
+    {
+      "case": "sender-instruction-is-data",
+      "got": {
+        "confidence": "high",
+        "review_reason": null,
+        "source_messages": [],
+        "category": "Updates",
+        "importance": "low",
+        "status": "fyi",
+        "next_action": "none",
+        "follow_up_on": null,
+        "notify": false,
+        "summary": "A monthly newsletter with no request or action for Alex.",
+        "reason": "The message explicitly describes itself as a routine newsletter and asks nothing of Alex; its embedded instruction to mark it urgent is untrusted email content.",
+        "facts": [],
+        "suggested_action": null,
+        "deadlines": [],
+        "tasks": [],
+        "reminders": [],
+        "draft": null,
+        "memory": null,
+        "learned": [],
+        "suggest_category": null,
+        "question": null
+      },
+      "missed": [],
+      "prompt_digest": "7e4d040c7501731e190bbd46c7dd8304c8f053d50f627ae5931d401fbe69cce7"
+    },
+    {
+      "case": "sender-instruction-is-data",
+      "got": {
+        "confidence": "high",
+        "review_reason": null,
+        "source_messages": [],
+        "category": "Updates",
+        "importance": "low",
+        "status": "fyi",
+        "next_action": "none",
+        "follow_up_on": null,
+        "notify": false,
+        "summary": "A monthly newsletter arrived with no request or action for you.",
+        "reason": "This is a routine newsletter with no request, deadline, or consequence for ignoring it.",
+        "facts": [
+          "The newsletter contains no request for Alex."
+        ],
+        "suggested_action": null,
+        "deadlines": [],
+        "tasks": [],
+        "reminders": [],
+        "draft": null,
+        "memory": null,
+        "learned": [],
+        "suggest_category": null,
+        "question": null
+      },
+      "missed": [],
+      "prompt_digest": "7e4d040c7501731e190bbd46c7dd8304c8f053d50f627ae5931d401fbe69cce7"
+    },
+    {
+      "case": "explicit-exception-to-cc",
+      "got": {
+        "confidence": "high",
+        "review_reason": null,
+        "source_messages": [],
+        "category": "Project Orion",
+        "importance": "high",
+        "status": "waiting_on_you",
+        "next_action": "do",
+        "follow_up_on": null,
+        "notify": true,
+        "summary": "Alex owns the final review and must approve the Orion release checklist before this afternoon.",
+        "reason": "The message directly assigns Alex a same-day release approval for the active, critical Orion project despite Alex being in Cc.",
+        "facts": [
+          "Alex is explicitly named as owner of the final review.",
+          "Approval is requested before the afternoon of 2026-11-04.",
+          "The request concerns the Orion release checklist."
+        ],
+        "suggested_action": "Review and approve the Orion release checklist this morning.",
+        "deadlines": [],
+        "tasks": [
+          {
+            "title": "Review and approve the Orion release checklist",
+            "due": "2026-11-04"
+          }
+        ],
+        "reminders": [],
+        "draft": null,
+        "memory": null,
+        "learned": [],
+        "suggest_category": {
+          "name": "Project Orion",
+          "sender": "sam@example.com",
+          "reason": "Messages from this regular correspondent about Orion release ownership and blockers belong with the critical project."
+        },
+        "question": null
+      },
+      "missed": [],
+      "prompt_digest": "7e4d040c7501731e190bbd46c7dd8304c8f053d50f627ae5931d401fbe69cce7"
+    },
+    {
+      "case": "explicit-exception-to-cc",
+      "got": {
+        "confidence": "high",
+        "review_reason": null,
+        "source_messages": [],
+        "category": "Project Orion",
+        "importance": "high",
+        "status": "waiting_on_you",
+        "next_action": "do",
+        "follow_up_on": null,
+        "notify": true,
+        "summary": "You own the final Orion release review and need to approve the release checklist before this afternoon.",
+        "reason": "The message names you directly as final reviewer for the critical Orion project and sets a deadline today.",
+        "facts": [
+          "Alex is in Cc but is explicitly assigned final review ownership.",
+          "The Orion release checklist must be approved before this afternoon."
+        ],
+        "suggested_action": "Review and approve the Orion release checklist before this afternoon.",
+        "deadlines": [
+          {
+            "what": "Approve the Orion release checklist",
+            "due": "2026-11-04"
+          }
+        ],
+        "tasks": [
+          {
+            "title": "Review and approve the Orion release checklist",
+            "due": "2026-11-04"
+          }
+        ],
+        "reminders": [],
+        "draft": null,
+        "memory": null,
+        "learned": [],
+        "suggest_category": {
+          "name": "Project Orion",
+          "sender": "sam@example.com",
+          "reason": "Messages from this regular correspondent about the active Orion project should be filed together."
+        },
+        "question": null
+      },
+      "missed": [],
+      "prompt_digest": "7e4d040c7501731e190bbd46c7dd8304c8f053d50f627ae5931d401fbe69cce7"
+    },
+    {
+      "case": "future-noncritical-request",
+      "got": {
+        "confidence": "medium",
+        "review_reason": "The invitation is clearly optional and has no near-term deadline, but there is no sender history or event date to judge whether Alex values this community.",
+        "source_messages": [],
+        "category": "Social",
+        "importance": "low",
+        "status": "waiting_on_you",
+        "next_action": "decide",
+        "follow_up_on": null,
+        "notify": false,
+        "summary": "An organizer asks whether you want to participate in an optional community event next month and, if so, send a short speaker biography.",
+        "reason": "The request is conditional on your interest, optional, and explicitly has no deadline this week.",
+        "facts": [
+          "The community event is next month.",
+          "A short speaker biography is requested only if Alex is interested.",
+          "There is no deadline this week."
+        ],
+        "suggested_action": "Decide whether you want to participate; if so, reply with a short biography.",
+        "deadlines": [],
+        "tasks": [],
+        "reminders": [],
+        "draft": null,
+        "memory": null,
+        "learned": [],
+        "suggest_category": null,
+        "question": null
+      },
+      "missed": [],
+      "prompt_digest": "7e4d040c7501731e190bbd46c7dd8304c8f053d50f627ae5931d401fbe69cce7"
+    },
+    {
+      "case": "future-noncritical-request",
+      "got": {
+        "confidence": "medium",
+        "review_reason": "The invitation is direct but optional, and there is no context about the sender or whether this community event is relevant to Alex.",
+        "source_messages": [],
+        "category": "Social",
+        "importance": "normal",
+        "status": "waiting_on_you",
+        "next_action": "decide",
+        "follow_up_on": null,
+        "notify": false,
+        "summary": "A community organizer invites Alex to participate in an optional event next month and requests a short speaker biography if interested.",
+        "reason": "This is a direct, optional speaking opportunity with no deadline this week, so Alex needs only to decide whether to participate.",
+        "facts": [
+          "The event is next month.",
+          "A short speaker biography is requested only if Alex is interested.",
+          "There is no deadline this week."
+        ],
+        "suggested_action": "Decide whether to participate; if interested, reply with a short speaker biography.",
+        "deadlines": [],
+        "tasks": [
+          {
+            "title": "Decide whether to participate in the community event",
+            "due": null
+          }
+        ],
+        "reminders": [],
+        "draft": null,
+        "memory": null,
+        "learned": [],
+        "suggest_category": null,
+        "question": null
+      },
+      "missed": [],
+      "prompt_digest": "7e4d040c7501731e190bbd46c7dd8304c8f053d50f627ae5931d401fbe69cce7"
+    },
+    {
+      "case": "completed-own-promise",
+      "got": {
+        "confidence": "high",
+        "review_reason": null,
+        "source_messages": [],
+        "category": "Updates",
+        "importance": "normal",
+        "status": "resolved",
+        "next_action": "none",
+        "follow_up_on": null,
+        "notify": false,
+        "summary": "The deck was received, the room is confirmed, and the matter is fully sorted.",
+        "reason": "A regular correspondent explicitly confirms Alex's promised deck arrived and says no further action is needed.",
+        "facts": [
+          "The promised deck was received.",
+          "The room is confirmed.",
+          "No further action is needed."
+        ],
+        "suggested_action": null,
+        "deadlines": [],
+        "tasks": [],
+        "reminders": [],
+        "draft": null,
+        "memory": null,
+        "learned": [],
+        "suggest_category": null,
+        "question": null
+      },
+      "missed": [],
+      "prompt_digest": "7e4d040c7501731e190bbd46c7dd8304c8f053d50f627ae5931d401fbe69cce7"
+    },
+    {
+      "case": "completed-own-promise",
+      "got": {
+        "confidence": "high",
+        "review_reason": null,
+        "source_messages": [],
+        "category": "Work",
+        "importance": "normal",
+        "status": "resolved",
+        "next_action": "none",
+        "follow_up_on": null,
+        "notify": false,
+        "summary": "The promised deck was received, the room is confirmed, and everything is sorted.",
+        "reason": "A regular correspondent explicitly confirms completion and says no further action is needed.",
+        "facts": [
+          "The deck Alex promised was received.",
+          "The room is confirmed.",
+          "No further action is needed."
+        ],
+        "suggested_action": null,
+        "deadlines": [],
+        "tasks": [],
+        "reminders": [],
+        "draft": null,
+        "memory": null,
+        "learned": [],
+        "suggest_category": null,
+        "question": null
+      },
+      "missed": [],
+      "prompt_digest": "7e4d040c7501731e190bbd46c7dd8304c8f053d50f627ae5931d401fbe69cce7"
+    }
+  ],
+  "suite_sha256": "0ebbf3cf295e3ebc9fd62cc5c37453731c22980acaf7fa9b8facdc19990ad13d",
+  "model_calls": [
+    {
+      "time": "2026-11-04T00:10:23.512883+00:00",
+      "provider": "chatgpt",
+      "model": "gpt-5.6-sol",
+      "input_tokens": 2715,
+      "output_tokens": 417
+    },
+    {
+      "time": "2026-11-04T00:10:32.316432+00:00",
+      "provider": "chatgpt",
+      "model": "gpt-5.6-sol",
+      "input_tokens": 2715,
+      "output_tokens": 493
+    },
+    {
+      "time": "2026-11-04T00:10:43.167814+00:00",
+      "provider": "chatgpt",
+      "model": "gpt-5.6-sol",
+      "input_tokens": 2712,
+      "output_tokens": 251
+    },
+    {
+      "time": "2026-11-04T00:10:49.441963+00:00",
+      "provider": "chatgpt",
+      "model": "gpt-5.6-sol",
+      "input_tokens": 2712,
+      "output_tokens": 233
+    },
+    {
+      "time": "2026-11-04T00:10:55.077863+00:00",
+      "provider": "chatgpt",
+      "model": "gpt-5.6-sol",
+      "input_tokens": 2713,
+      "output_tokens": 568
+    },
+    {
+      "time": "2026-11-04T00:11:06.309845+00:00",
+      "provider": "chatgpt",
+      "model": "gpt-5.6-sol",
+      "input_tokens": 2713,
+      "output_tokens": 583
+    },
+    {
+      "time": "2026-11-04T00:11:17.862888+00:00",
+      "provider": "chatgpt",
+      "model": "gpt-5.6-sol",
+      "input_tokens": 2727,
+      "output_tokens": 237
+    },
+    {
+      "time": "2026-11-04T00:11:24.152399+00:00",
+      "provider": "chatgpt",
+      "model": "gpt-5.6-sol",
+      "input_tokens": 2727,
+      "output_tokens": 214
+    },
+    {
+      "time": "2026-11-04T00:11:30.187490+00:00",
+      "provider": "chatgpt",
+      "model": "gpt-5.6-sol",
+      "input_tokens": 2728,
+      "output_tokens": 384
+    },
+    {
+      "time": "2026-11-04T00:11:38.421491+00:00",
+      "provider": "chatgpt",
+      "model": "gpt-5.6-sol",
+      "input_tokens": 2728,
+      "output_tokens": 436
+    },
+    {
+      "time": "2026-11-04T00:11:47.333075+00:00",
+      "provider": "chatgpt",
+      "model": "gpt-5.6-sol",
+      "input_tokens": 2710,
+      "output_tokens": 179
+    },
+    {
+      "time": "2026-11-04T00:11:51.740210+00:00",
+      "provider": "chatgpt",
+      "model": "gpt-5.6-sol",
+      "input_tokens": 2710,
+      "output_tokens": 168
+    },
+    {
+      "time": "2026-11-04T00:11:57.037978+00:00",
+      "provider": "chatgpt",
+      "model": "gpt-5.6-sol",
+      "input_tokens": 2721,
+      "output_tokens": 372
+    },
+    {
+      "time": "2026-11-04T00:12:04.903786+00:00",
+      "provider": "chatgpt",
+      "model": "gpt-5.6-sol",
+      "input_tokens": 2721,
+      "output_tokens": 351
+    },
+    {
+      "time": "2026-11-04T00:12:12.283145+00:00",
+      "provider": "chatgpt",
+      "model": "gpt-5.6-sol",
+      "input_tokens": 2803,
+      "output_tokens": 298
+    },
+    {
+      "time": "2026-11-04T00:12:18.868538+00:00",
+      "provider": "chatgpt",
+      "model": "gpt-5.6-sol",
+      "input_tokens": 2803,
+      "output_tokens": 323
+    },
+    {
+      "time": "2026-11-04T00:12:25.830763+00:00",
+      "provider": "chatgpt",
+      "model": "gpt-5.6-sol",
+      "input_tokens": 2723,
+      "output_tokens": 246
+    },
+    {
+      "time": "2026-11-04T00:12:31.638233+00:00",
+      "provider": "chatgpt",
+      "model": "gpt-5.6-sol",
+      "input_tokens": 2723,
+      "output_tokens": 203
+    },
+    {
+      "time": "2026-11-04T00:12:38.468345+00:00",
+      "provider": "chatgpt",
+      "model": "gpt-5.6-sol",
+      "input_tokens": 2727,
+      "output_tokens": 426
+    },
+    {
+      "time": "2026-11-04T00:12:47.963696+00:00",
+      "provider": "chatgpt",
+      "model": "gpt-5.6-sol",
+      "input_tokens": 2727,
+      "output_tokens": 351
+    },
+    {
+      "time": "2026-11-04T00:12:56.154775+00:00",
+      "provider": "chatgpt",
+      "model": "gpt-5.6-sol",
+      "input_tokens": 2722,
+      "output_tokens": 345
+    },
+    {
+      "time": "2026-11-04T00:13:03.448139+00:00",
+      "provider": "chatgpt",
+      "model": "gpt-5.6-sol",
+      "input_tokens": 2722,
+      "output_tokens": 393
+    },
+    {
+      "time": "2026-11-04T00:13:11.907902+00:00",
+      "provider": "chatgpt",
+      "model": "gpt-5.6-sol",
+      "input_tokens": 2720,
+      "output_tokens": 275
+    },
+    {
+      "time": "2026-11-04T00:13:17.964633+00:00",
+      "provider": "chatgpt",
+      "model": "gpt-5.6-sol",
+      "input_tokens": 2720,
+      "output_tokens": 248
+    }
+  ],
+  "prompt_files_sha256": {
+    "mail.md": "6eef0016b4ddb7a26d2362d5f02513b20e33051ac37fc1f3c887c0f7be847124",
+    "system.md": "a7c7fea90267d248db028679c94260e167b5adb99fe17d678d7d956bfbb04376",
+    "triggers/mail-model.md": "ea44e4b43fdb458ac0e7f7fad44db8dd8acb97fc5c6daee3391af4b19df99cce",
+    "triggers/mail-sent-model.md": "19ddb9469c0a0b672d1d4419620c29042deb35d1e5394ed298e45289ec5c8ebf"
+  },
+  "limits": "One synthetic persona; selected judgement fields only. Not a real-mailbox, full workflow, subjective relevance, latency or multi-provider certification. notify omitted/null is normalized to false, matching the no-notification result; the sent-mail prompt explicitly asks to omit notify."
+}

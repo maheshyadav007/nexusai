@@ -1,5 +1,9 @@
 "use client";
 
+import { useExpireNote, useRetryLearning } from "@/ui/client/work";
+import { Field } from "@/ui/primitives/Field";
+import { Input } from "@/ui/primitives/Input";
+
 import { useState } from "react";
 import type { KnowledgeLayer, LearnedNote } from "@/ui/client/contracts.generated";
 import { useShortDate } from "@/ui/client/format";
@@ -62,12 +66,18 @@ function Layers({ layers }: { layers: readonly KnowledgeLayer[] }) {
 function Note({ note }: { note: LearnedNote }) {
   const confirm = useConfirmNote();
   const remove = useRemoveNote();
+  const expire = useExpireNote();
+  const [expiry,setExpiry] = useState(note.expires_at?.slice(0,10) ?? "");
   return (
     <li data-testid="learned-note" className="group flex items-start justify-between gap-3 border-b border-line-subtle py-2">
-      <span className="min-w-0 break-words text-md text-ink-primary">{note.text}</span>
+      <div className="min-w-0 flex-1"><p className="break-words text-md text-ink-primary">{note.text}</p>
+        {note.account ? <p className="text-sm text-ink-muted">{note.account}</p> : null}
+        {note.seen_at ? <details className="mt-2 text-sm text-ink-secondary"><summary className="focus-ring cursor-pointer">{t("knows.note.expiry")}</summary><Field label={t("knows.note.expiry")}>{({invalid,...control}) => <Input {...control} invalid={invalid} type="date" value={expiry} onChange={event => setExpiry(event.target.value)} />}</Field><Button loading={expire.isPending} onClick={() => expire.mutate({line:note.line,revision:note.revision ?? 1,expires_at:expiry ? `${expiry}T23:59:59Z` : null})}>{t("knows.note.setExpiry")}</Button></details> : null}
+        {expire.isError || confirm.isError || remove.isError ? <ErrorState title={t("knows.error")} /> : null}
+      </div>
       <span className="flex shrink-0 items-center gap-1">
         {note.thread ? <TextLink className="text-sm" href={`/mail/all/${note.thread}`}>{t("knows.note.source")}</TextLink> : null}
-        {note.confirmed ? <Badge>{t("knows.note.confirmed")}</Badge> : <Button variant="quiet" loading={confirm.isPending} onClick={() => confirm.mutate(note.line)}>{t("knows.note.confirm")}</Button>}
+        {note.expires_at && new Date(note.expires_at).getTime() <= Date.now() ? <Badge>{t("knows.note.expired")}</Badge> : note.confirmed ? <Badge>{t("knows.note.confirmed")}</Badge> : <Button variant="quiet" loading={confirm.isPending} onClick={() => confirm.mutate(note.line)}>{t("knows.note.confirm")}</Button>}
         <Button variant="quiet" loading={remove.isPending} onClick={() => remove.mutate(note.line)}>{t("knows.note.remove")}</Button>
       </span>
     </li>
@@ -112,6 +122,7 @@ function OnItsOwn() {
 export function AgentKnows() {
   const knowledge = useKnowledge();
   const readMore = useReadMore();
+  const retryLearning = useRetryLearning();
   const format = useShortDate();
   if (knowledge.isPending) return <Skeleton className="h-6 w-full" />;
   if (knowledge.isError) return <ErrorState title={t("knows.error")} onRetry={() => void knowledge.refetch()} />;
@@ -125,6 +136,7 @@ export function AgentKnows() {
             {reading ? t("knows.reading", { done: data.learning_done, total: data.learning_total }) : t("knows.read", { judged: data.judged, left: data.conversations_unread })}
           </p>
           <SessionGeneration session="mail-agent" />
+          {data.learning_state === "failed" ? <ErrorState title={t("knows.learning.failed")} onRetry={() => retryLearning.mutate()} /> : null}
           <Notes notes={data.notes} />
           {data.conversations_unread && !reading ? (
             <div><Button loading={readMore.isPending} onClick={() => readMore.mutate(READ_MORE_BATCH)}>{t("knows.readMore", { count: READ_MORE_BATCH })}</Button></div>

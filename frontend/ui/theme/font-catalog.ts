@@ -3,8 +3,8 @@
  * in fonts.ts; the type check fails until both are done. Themes then name it by id.
  */
 export const FONT_CATALOG = {
-  sans: ["instrument-sans", "space-grotesk"],
-  serif: ["instrument-serif"],
+  sans: ["inter", "instrument-sans", "space-grotesk"],
+  serif: ["instrument-serif", "space-grotesk"],
   mono: ["jetbrains-mono"],
 } as const;
 

@@ -3,8 +3,11 @@
 The clock only says something came due. Starting the agent is the same as for any other event.
 """
 
+import os
 import threading
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import structlog
 
@@ -52,11 +55,61 @@ INSERT INTO schedules (title, prompt, kind, every, time, enabled) VALUES ('Morni
 INSERT INTO schedules (title, prompt, kind, every, weekday, time, enabled) VALUES ('Inbox review', '', 'mail-review', 'week', 0, '09:00', 1);
 """,
 )
+RELIABILITY_MIGRATION = Migration(
+    "agent_schedule_reliability_001",
+    "ALTER TABLE work_board ADD COLUMN overdue_notified_at TEXT;"
+    "ALTER TABLE trigger_runs ADD COLUMN manual INTEGER NOT NULL DEFAULT 0;"
+    "ALTER TABLE trigger_runs ADD COLUMN completed_through TEXT;"
+    "ALTER TABLE schedules ADD COLUMN timezone TEXT NOT NULL DEFAULT '';",
+)
 FOLLOW_UP_NOTICE_KIND = "follow-up"
 BRIEF_KIND = "mail-brief"
 REVIEW_KIND = "mail-review"
 # What the Mail agent runs for itself, which the person turns on and off through its settings.
 BUILT_IN_KINDS = ("mail-hourly", BRIEF_KIND, REVIEW_KIND)
+
+
+def system_timezone() -> str:
+    candidate = os.environ.get("TZ", "")
+    path = str(Path("/etc/localtime").resolve())
+    if not candidate and "zoneinfo/" in path:
+        candidate = path.split("zoneinfo/", 1)[1]
+    try:
+        ZoneInfo(candidate)
+        return candidate
+    except (ZoneInfoNotFoundError, ValueError):
+        return "UTC"
+
+
+def next_scheduled_run(schedule: Schedule, after: datetime) -> str | None:
+    zone = ZoneInfo(schedule.timezone or system_timezone())
+    instant = after if after.tzinfo else after.replace(tzinfo=ZoneInfo(system_timezone()))
+    local = instant.astimezone(zone).replace(tzinfo=None)
+    candidate = next_run_after(schedule, local)
+    if candidate is None:
+        return None
+    # Ambiguous times use the first occurrence. Nonexistent times advance by the DST gap.
+    result = datetime.fromisoformat(candidate).replace(tzinfo=zone, fold=0).astimezone(UTC)
+    while schedule.every != "once" and result <= instant.astimezone(UTC):
+        next_value = next_run_after(schedule, datetime.fromisoformat(candidate))
+        if next_value is None:
+            return None
+        candidate = next_value
+        result = datetime.fromisoformat(candidate).replace(tzinfo=zone, fold=0).astimezone(UTC)
+    return result.isoformat()
+
+
+def initialize_timezones(ctx: Context) -> None:
+    zone = system_timezone()
+    with ctx.bus.db.transaction() as tx:
+        for row in tx.execute("SELECT id,next_run FROM schedules WHERE timezone='' ").fetchall():
+            value = datetime.fromisoformat(row["next_run"]) if row["next_run"] else None
+            if value and value.tzinfo is None:
+                value = value.replace(tzinfo=ZoneInfo(zone))
+            tx.execute(
+                "UPDATE schedules SET timezone=?,next_run=? WHERE id=?",
+                (zone, value.astimezone(UTC).isoformat() if value else None, row["id"]),
+            )
 
 
 def _local_now() -> datetime:
@@ -86,6 +139,7 @@ def next_run_after(schedule: Schedule, after: datetime) -> str | None:
 
 def row_to_schedule(row: object) -> ScheduleRow:
     data = dict(row)  # type: ignore[call-overload]
+    data["timezone"] = data.get("timezone") or system_timezone()
     return ScheduleRow(**{**data, "enabled": bool(data["enabled"])})
 
 
@@ -105,12 +159,13 @@ def set_default(ctx: Context, key: str, value: bool | str) -> None:
 
 def start_built_ins(ctx: Context) -> None:
     """The ones that come with the app have no time set until they first run."""
+    initialize_timezones(ctx)
     rows = ctx.bus.db.fetch_all(
         "SELECT * FROM schedules WHERE enabled = 1 AND next_run IS NULL AND kind IN (?, ?)",
         (BRIEF_KIND, REVIEW_KIND),
     )
     for row in rows:
-        following = next_run_after(row_to_schedule(row), _local_now())
+        following = next_scheduled_run(row_to_schedule(row), datetime.now(UTC))
         with ctx.bus.db.transaction() as tx:
             tx.execute("UPDATE schedules SET next_run = ? WHERE id = ?", (following, row["id"]))
 
@@ -124,12 +179,17 @@ def set_built_in(ctx: Context, kind: str, enabled: bool) -> None:
     rows = ctx.bus.db.fetch_all("SELECT * FROM schedules WHERE kind = ?", (kind,))
     if not rows:
         return
-    following = next_run_after(row_to_schedule(rows[0]), _local_now()) if enabled else None
+    following = next_scheduled_run(row_to_schedule(rows[0]), datetime.now(UTC)) if enabled else None
     with ctx.bus.db.transaction() as tx:
         tx.execute(
             "UPDATE schedules SET enabled = ?, next_run = ? WHERE id = ?",
             (int(enabled), following, rows[0]["id"]),
         )
+        if not enabled:
+            tx.execute(
+                "UPDATE trigger_runs SET status='skipped',error='Schedule paused' WHERE schedule=? AND status='pending' AND manual=0",
+                (rows[0]["id"],),
+            )
 
 
 def set_hourly(ctx: Context, enabled: bool) -> None:
@@ -137,12 +197,17 @@ def set_hourly(ctx: Context, enabled: bool) -> None:
     rows = ctx.bus.db.fetch_all("SELECT * FROM schedules WHERE kind = 'mail-hourly'")
     if not rows:
         return
-    following = next_run_after(row_to_schedule(rows[0]), _local_now()) if enabled else None
+    following = next_scheduled_run(row_to_schedule(rows[0]), datetime.now(UTC)) if enabled else None
     with ctx.bus.db.transaction() as tx:
         tx.execute(
             "UPDATE schedules SET enabled = ?, next_run = ? WHERE id = ?",
             (int(enabled), following, rows[0]["id"]),
         )
+        if not enabled:
+            tx.execute(
+                "UPDATE trigger_runs SET status='skipped',error='Schedule paused' WHERE schedule=? AND status='pending' AND manual=0",
+                (rows[0]["id"],),
+            )
 
 
 class Scheduler:
@@ -170,7 +235,17 @@ class Scheduler:
             "SELECT MIN(next_run) AS due FROM schedules WHERE enabled = 1 AND next_run IS NOT NULL"
         )
         candidates = [rows[0]["due"], planner.next_reminder_due(self.ctx)]
-        moments = [datetime.fromisoformat(value[:16]) for value in candidates if value]
+        moments = []
+        for value in candidates:
+            if value:
+                parsed = datetime.fromisoformat(value)
+                moments.append(
+                    (
+                        parsed
+                        if parsed.tzinfo
+                        else parsed.replace(tzinfo=ZoneInfo(system_timezone()))
+                    ).astimezone(UTC)
+                )
         return min(moments) if moments else None
 
     def _loop(self) -> None:
@@ -183,7 +258,7 @@ class Scheduler:
             seconds = float(LONGEST_SLEEP_SECONDS)
             if due is not None:
                 seconds = max(
-                    1.0, min((due - datetime.now()).total_seconds(), LONGEST_SLEEP_SECONDS)
+                    1.0, min((due - datetime.now(UTC)).total_seconds(), LONGEST_SLEEP_SECONDS)
                 )
             self.wake.wait(seconds)
             self.wake.clear()
@@ -209,12 +284,14 @@ class Scheduler:
         """Work board deadlines that have passed. Uses no model, and tells the person once."""
         today = now.strftime("%Y-%m-%d")
         rows = self.ctx.bus.db.fetch_all(
-            "SELECT id, title, thread FROM work_board WHERE done = 0 AND due IS NOT NULL AND due < ? AND kind = 'deadline'",
+            "SELECT id, title, thread FROM work_board WHERE done = 0 AND due IS NOT NULL AND due < ? AND kind = 'deadline' AND overdue_notified_at IS NULL",
             (today,),
         )
         for row in rows:
             with self.ctx.bus.unit_of_work() as work:
-                work.tx.execute("UPDATE work_board SET done = 1 WHERE id = ?", (row["id"],))
+                work.tx.execute(
+                    "UPDATE work_board SET overdue_notified_at = ? WHERE id = ?", (today, row["id"])
+                )
                 channel.notify(
                     self.ctx,
                     work,
@@ -255,14 +332,15 @@ class Scheduler:
                 )
 
     def _run_due(self, now: datetime) -> None:
-        stamp = now.strftime("%Y-%m-%dT%H:%M")
+        instant = now if now.tzinfo else now.replace(tzinfo=ZoneInfo(system_timezone()))
+        stamp = instant.astimezone(UTC).isoformat()
         rows = self.ctx.bus.db.fetch_all(
             "SELECT * FROM schedules WHERE enabled = 1 AND next_run IS NOT NULL AND next_run <= ? ORDER BY next_run",
             (stamp,),
         )
         for row in rows:
             schedule = row_to_schedule(row)
-            following = None if schedule.every == "once" else next_run_after(schedule, now)
+            following = None if schedule.every == "once" else next_scheduled_run(schedule, instant)
             with self.ctx.bus.unit_of_work() as work:
                 work.tx.execute(
                     "UPDATE schedules SET next_run = ?, last_run = ?, enabled = ? WHERE id = ?",

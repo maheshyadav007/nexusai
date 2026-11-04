@@ -15,7 +15,7 @@ export function Tabs({ label, tabs, defaultValue }: { label: string; tabs: reado
   const group = useId();
   return (
     <RadixTabs.Root value={current} onValueChange={setCurrent}>
-      <RadixTabs.List aria-label={label} className="flex gap-1 border-b border-line-subtle">
+      <RadixTabs.List aria-label={label} className="flex flex-wrap gap-1 border-b border-line-subtle">
         {tabs.map((tab) => (
           <RadixTabs.Trigger key={tab.value} value={tab.value} className="focus-ring relative rounded-t-sm px-3 py-2 text-md text-ink-secondary transition-colors duration-fast hover:text-ink-primary data-[state=active]:text-ink-primary">
             {tab.label}

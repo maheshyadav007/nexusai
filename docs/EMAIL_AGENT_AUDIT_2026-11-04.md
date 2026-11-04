@@ -2,6 +2,10 @@
 
 Reviewed 4 November 2026 against `85b82f5` plus the composer/brief presentation changes in this working tree. This is a code and prompt audit, with isolated deterministic probes and primary-source research. It is not a claim that a live model was evaluated successfully on the user's mailbox. No real mail was reprocessed, sent, moved or used in research queries. Agent pipeline changes below are recommendations, not shipped fixes.
 
+## Implementation follow-up
+
+The findings below preserve the pre-implementation baseline. Reliability, shared context, scoped approved preferences, immutable brief artifacts, typed handoffs, timezone scheduling and queue controls have since been implemented. See [the implementation and verification record](EMAIL_AGENT_IMPLEMENTATION.md) for tests, model evaluation and remaining limitations. The historical probe scripts reproduce the earlier schema/behavior and are not current acceptance tests.
+
 ## Assessment
 
 The foundation is useful: durable trigger records, a shared runtime, structured triage, approval boundaries, source-marked/untrusted mail, editable personal prompts, corrections, mailbox-derived context and a view of what the agent knows. But I would not yet describe this as dependable end-to-end email management. Several scheduling/state paths can lose coverage or conceal unfinished work, and personalization varies by entry point. Fix these before expanding agent autonomy.

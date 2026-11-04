@@ -40,8 +40,8 @@ export function ActivityScreen() {
   );
 }
 
-const STATE_LABEL: Readonly<Record<string, StringKey>> = { running: "agents.state.running", active: "agents.state.active", finished: "agents.state.finished", off: "agents.state.off", past: "agents.state.past" };
-const STATE_TONE: Readonly<Record<string, "running" | "done" | "waiting" | "failed">> = { running: "running", active: "done" };
+const STATE_LABEL: Readonly<Record<string, StringKey>> = { failed: "agents.state.failed", running: "agents.state.running", active: "agents.state.active", finished: "agents.state.finished", off: "agents.state.off", past: "agents.state.past" };
+const STATE_TONE: Readonly<Record<string, "running" | "done" | "waiting" | "failed">> = { failed: "failed", running: "running", active: "done" };
 
 function AgentCard({ agent }: { agent: AgentEntry }) {
   const format = useDateTime();
@@ -118,6 +118,9 @@ function ChannelMessages() {
             <span className="flex flex-wrap items-center gap-2 text-sm text-ink-muted">
               <span className="tabular-nums">{format(message.time)}</span>
               {message.topic ? <Badge>{message.topic}</Badge> : null}
+              {message.purpose ? <p className="text-sm text-ink-secondary">{message.state} · {message.purpose}</p> : null}
+              {message.expected_output ? <p className="text-sm text-ink-secondary">{message.expected_output}</p> : null}
+              {message.outcome ? <p className="text-md text-ink-primary">{message.outcome}</p> : null}
               {message.untrusted ? <Badge tone="warning">{t("agentChannel.untrusted")}</Badge> : null}
             </span>
             <p className="break-words text-md text-ink-primary">{message.text}</p>

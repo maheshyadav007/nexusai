@@ -612,6 +612,7 @@ class MailReceived(BaseModel):
 
 
 class ThreadUpdated(BaseModel):
+    old_value: Any = None
     thread_id: int
     field: str
     value: Any = None

@@ -45,6 +45,20 @@ ALTER TABLE channel_messages ADD COLUMN tool_call TEXT;
 )
 
 
+HANDOFF_MIGRATION = Migration(
+    "agent_handoffs_001",
+    "ALTER TABLE agent_channel ADD COLUMN run INTEGER;"
+    "ALTER TABLE agent_channel ADD COLUMN tool_call TEXT;"
+    "ALTER TABLE agent_channel ADD COLUMN purpose TEXT;"
+    "ALTER TABLE agent_channel ADD COLUMN expected_output TEXT;"
+    "ALTER TABLE agent_channel ADD COLUMN evidence TEXT NOT NULL DEFAULT '[]';"
+    "ALTER TABLE agent_channel ADD COLUMN state TEXT NOT NULL DEFAULT 'note';"
+    "ALTER TABLE agent_channel ADD COLUMN outcome TEXT;"
+    "ALTER TABLE agent_channel ADD COLUMN owner_turn INTEGER;"
+    "CREATE UNIQUE INDEX agent_channel_call ON agent_channel(sender,run,tool_call);",
+)
+
+
 def _now() -> str:
     return datetime.now(UTC).isoformat()
 
@@ -281,6 +295,11 @@ def agent_messages(db: Database) -> AgentChannelList:
                 text=r["text"],
                 time=r["time"],
                 untrusted=bool(r["untrusted"]),
+                purpose=r["purpose"],
+                expected_output=r["expected_output"],
+                state=r["state"],
+                outcome=r["outcome"],
+                evidence=json.loads(r["evidence"]),
             )
             for r in shown
         ],

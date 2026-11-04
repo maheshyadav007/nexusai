@@ -267,3 +267,6 @@ svg.lucide {
 }
 
 .ai-brief-attention::before { opacity: 0.4; }
+
+/* Interface identity; reading surfaces retain the theme's Inter body face. */
+nav, button, [role="tab"], h1, h2, h3 { font-family: var(--font-space-grotesk), sans-serif; }

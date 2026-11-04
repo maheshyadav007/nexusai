@@ -4,7 +4,7 @@ import asyncio
 import json
 import threading
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -38,6 +38,7 @@ from nexusai.modules.agent import (
     gateway,
     guard,
     knowledge,
+    personalization,
     policy,
     prompts_builder,
     providers,
@@ -357,7 +358,12 @@ class SessionRuntime:
             self.require_personal(session)
         return self.dispatch(TurnRequest(session, text), retry)
 
-    def dispatch(self, request: TurnRequest, retry: bool = False) -> int:
+    def dispatch(
+        self,
+        request: TurnRequest,
+        retry: bool = False,
+        prepare: Callable[[Any, int], None] | None = None,
+    ) -> int:
         """The one way an agent starts, for a typed message, an event or the clock."""
         session = request.session
         row = self.row(session)
@@ -422,6 +428,8 @@ class SessionRuntime:
                     ),
                 )
                 turn = int(cursor.lastrowid or 0)
+                if prepare is not None:
+                    prepare(tx, turn)
         values: dict[str, Any] = {"status": "queued", "error": None}
         text = request.text
         if row.title == "New session":
@@ -528,7 +536,7 @@ class SessionRuntime:
                 )
 
     def rate(self, turn: int, value: str | None) -> None:
-        """Only recorded for now. Nothing changes how the agent behaves because of it."""
+        """Record artifact-specific satisfaction; it is evidence, not an automatic instruction."""
         if not self.db.fetch_all("SELECT 1 FROM agent_turns WHERE id = ?", (turn,)):
             raise CommandError("session.no_message", "That answer no longer exists.", 404)
         with self.ctx.bus.unit_of_work() as work:
@@ -546,6 +554,8 @@ class SessionRuntime:
                 source="agent",
                 trace_id=self.ctx.trace_id,
             )
+
+        personalization.observe(self.ctx, "answer_rated", "turn", str(turn), run=turn, new=value)
 
     def answer(self, session: str, answer: str) -> None:
         """From the question's card, or typed into the message box while it waits."""
@@ -582,11 +592,17 @@ class SessionRuntime:
         turn = latest[0] if latest else None
         origin = turn["origin"] if turn else PERSON
         task = turn["task"] if turn else ""
+        target = json.loads(turn["target"]) if turn and turn["target"] else {}
+        thread_account = self.db.fetch_all(
+            "SELECT account FROM threads WHERE id=?", (target.get("thread"),)
+        )
+        own_context = json.loads(turn["context"]) if turn and turn["context"] else {}
         layers = knowledge.layers_for(
             self.ctx,
             row.agent,
             f"{turn['text']}\n{task}" if turn else "",
             self._capabilities(),
+            account=thread_account[0]["account"] if thread_account else own_context.get("account"),
             scratch=str(config.home / "scratch" / session),
         )
         now = datetime.now().astimezone()

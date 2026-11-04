@@ -1,6 +1,6 @@
 # Agents and categories
 
-How many agents NexusAI has, what starts each one, and how mail gets its folder. Last reviewed: 2026-11-03.
+How many agents NexusAI has, what starts each one, and how mail gets its folder. Last reviewed: 2026-11-04.
 
 Settings named like `agent.learn_emails` are in `backend/src/nexusai/kernel/defaults.toml`.
 
@@ -12,8 +12,8 @@ There are **5 agents**, plus 3 helpers that make a single model call. All of the
 |---|---|---|---|
 | **Chat** | Talks to the person, and does what they ask | `session.md` | All, with risky ones asking first |
 | **Mail agent** | Judges mail, learns about the person, and suggests where mail should go | `mail.md` | A small set for mail (`MAIL_AGENT_TOOLS`) |
-| **Know you better** | Asks a few questions, so mail is judged the way the person would | `interview.md` | All. Changes ask first, because it read mail |
-| **Morning brief** | Writes the brief at the top of Today | `daily-prep.md` | All |
+| **First meeting** | Asks a few questions, so mail is judged the way the person would | `interview.md` | All. Changes ask first, because it read mail |
+| **Your brief** | Writes the brief at the top of Today | `daily-prep.md` | All |
 | **Scheduled** | Runs a prompt the person set up, on a schedule or an event | `scheduled.md` | All |
 
 | Helper | What it does | Started by |
@@ -38,12 +38,12 @@ A typed message, an event and the clock all start a run the same way. One thread
 | After a question is answered | Mail agent | The person's answer | Judges that conversation again with the answer |
 | Hourly check | Mail agent | The `mail-hourly` schedule | Each hour with mail handled since the last check, and no run if there's nothing new. Off until the Mail agent settings are saved with Hourly or Both |
 | Inbox review | Mail agent | The `mail-review` schedule | Mondays at 09:00, and after reading past mail |
-| Getting to know the person | Know you better | Reading past mail finishing | Once |
-| Morning brief | Morning brief | The `mail-brief` schedule | Every day at 08:30 |
+| Getting to know the person | First meeting | Reading past mail finishing | Once |
+| Your brief | Your brief | The `mail-brief` schedule | Every day at 08:30 |
 | Prompt schedule | Scheduled | A schedule the person made | When they set |
 | Event trigger | Scheduled | `mail.received` or `mail.urgent` | Each time, if the person set one up |
 
-Mail agent runs happen one at a time, because they share one chat. New mail goes ahead of past mail. `agent.max_running_sessions` (3) limits how many chats run at once.
+Mail agent runs happen one at a time, because they share one chat. New mail goes ahead of background work. Your brief is independent of optional past-mail reading; First meeting still starts automatically after that reading, or can be started manually. `agent.max_running_sessions` (3) limits how many chats run at once.
 
 ### Without a model
 
@@ -133,3 +133,12 @@ A category joins Priority in one of three ways:
 | Suggestion | The Inbox review sees how much of each category needed the person, and suggests up to three. A card on Today shows the app's own counts, and a no is remembered |
 
 Promotions, Updates, Forums and Social are never suggested. Server folders can't join Priority yet.
+
+
+## Coordination and feedback
+
+Assignments on Agent channel include an owner, purpose, expected output, evidence and reported state. Missing outcomes are blocked for review; a chat finishing does not mean the assignment succeeded. The message cap resets each run. Cockpit shows the durable work queue and failure controls.
+
+All writers use the shared profile/context service. Preferences are approved, scoped instructions with expiry and version restore under Prompts and memory. Mail-review runs can propose a higher-level instruction from real feedback observations, but cannot approve it. Chat ratings and opens are recorded as evidence, not automatic policy changes. Read flags describe mailbox state, and silence is not inferred disapproval.
+
+Schedules carry an explicit IANA timezone. Pausing prevents pending automatic runs; Run now is an explicit one-off request. Digest catch-up is bounded and advances its ID cursor only after success. Overdue notifications do not mark work complete. For detailed invariants and validation limits, see [implementation](EMAIL_AGENT_IMPLEMENTATION.md).

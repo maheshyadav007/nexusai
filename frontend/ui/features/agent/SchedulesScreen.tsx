@@ -46,6 +46,7 @@ function ScheduleForm({ initial, action, onSaved }: { initial?: ScheduleRow; act
   const [title, setTitle] = useState(initial?.title ?? "");
   const [prompt, setPrompt] = useState(initial?.prompt ?? "");
   const [every, setEvery] = useState<NonNullable<Schedule["every"]>>(initial?.every ?? "day");
+  const [timezone, setTimezone] = useState(initial?.timezone ?? "");
   const [time, setTime] = useState(initial?.time ?? HOURS_NOT_SET);
   const [weekday, setWeekday] = useState(String(initial?.weekday ?? 0));
   const [date, setDate] = useState(initial?.date ?? "");
@@ -59,6 +60,7 @@ function ScheduleForm({ initial, action, onSaved }: { initial?: ScheduleRow; act
     prompt,
     every,
     time,
+    timezone: timezone.trim() || null,
     weekday: Number(weekday),
     date: date || null,
     token_limit: Number(limit) || 0,
@@ -96,6 +98,7 @@ function ScheduleForm({ initial, action, onSaved }: { initial?: ScheduleRow; act
         {memory !== "auto_compact" ? <Field label={t("schedules.keep")} hint={t("context.keep.hint")}>{({ invalid, ...control }) => <Input type="number" min={0} invalid={invalid} value={keep} onChange={(event) => setKeep(event.target.value)} {...control} />}</Field> : null}
       </div>
       <Field label={t("schedules.limit")} hint={t("schedules.limit.hint")}>{({ invalid, ...control }) => <Input type="number" min={0} invalid={invalid} value={limit} onChange={(event) => setLimit(event.target.value)} {...control} />}</Field>
+      <Field label={t("schedules.timezone")} hint={t("schedules.timezone.hint")}>{({invalid,...control}) => <Input {...control} invalid={invalid} value={timezone} onChange={event => setTimezone(event.target.value)} />}</Field>
       <div><Button type="submit" variant="primary" loading={save.isPending} disabled={!title.trim() || (!isPrep && !prompt.trim()) || (every === "once" && !date)}>{action}</Button></div>
     </form>
   );
@@ -105,7 +108,7 @@ function ScheduleItem({ row }: { row: ScheduleRow }) {
   const save = useSaveSchedule();
   const remove = useRemoveSchedule();
   const run = useRunSchedule();
-  const format = useDateTime();
+  const format = useDateTime(row.timezone);
   const relative = useRelativeTime();
   return (
     <li>
@@ -118,6 +121,7 @@ function ScheduleItem({ row }: { row: ScheduleRow }) {
         meta={
           <>
             {row.next_run && row.enabled !== false ? t("schedules.next", { when: format(row.next_run) }) : t("schedules.noNext")}
+            {row.timezone ? ` · ${row.timezone}` : ""}
             {row.token_limit ? ` · ${t("schedules.limit.value", { limit: row.token_limit.toLocaleString() })}` : ""}
           </>
         }
@@ -125,7 +129,7 @@ function ScheduleItem({ row }: { row: ScheduleRow }) {
           <span className="flex shrink-0 items-center gap-2">
             {row.last_session ? <SessionLink className="text-sm" session={row.last_session}>{t("schedules.lastRun")}</SessionLink> : null}
             <Button variant="quiet" loading={run.isPending} onClick={() => row.id != null && run.mutate(row.id)}>{t("schedules.runNow")}</Button>
-            <Switch label={t("rules.enabled")} hideLabel checked={row.enabled ?? true} onChange={(enabled) => save.mutate({ id: row.id ?? null, title: row.title, prompt: row.prompt ?? "", kind: row.kind ?? "prompt", every: row.every ?? "day", time: row.time ?? HOURS_NOT_SET, weekday: row.weekday ?? 0, date: row.date ?? null, enabled, token_limit: row.token_limit ?? 0 })} />
+            <Switch label={t("rules.enabled")} hideLabel checked={row.enabled ?? true} onChange={(enabled) => save.mutate({ id: row.id ?? null, title: row.title, prompt: row.prompt ?? "", kind: row.kind ?? "prompt", every: row.every ?? "day", time: row.time ?? HOURS_NOT_SET, timezone:row.timezone ?? null, context_mode:row.context_mode ?? null, keep_messages:row.keep_messages ?? null, weekday: row.weekday ?? 0, date: row.date ?? null, enabled, token_limit: row.token_limit ?? 0 })} />
           </span>
         }
       >

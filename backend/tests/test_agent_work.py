@@ -484,12 +484,13 @@ def test_prompts_join_every_run_and_outside_edits_are_picked_up(
     assert names == [
         "System prompt",
         "Agent prompt",
+        "About the person",
         "Personalized prompts",
         "This run",
         "Task content",
     ]
     assert (
-        "I lead procurement." in call["layers"][2]["real"]
+        "I lead procurement." in call["layers"][3]["real"]
         and "Always answer in French." in call["layers"][1]["real"]
     )
 
@@ -677,14 +678,14 @@ def test_agent_messages_are_limited_and_topics_can_be_muted(
         session, first = run_tool(
             test, script, ToolCall("c1", "post_to_agents", {"text": "Hi", "topic": "budget"})
         )
-        assert first == "Posted."
+        assert first.startswith("Posted")
         _, second = run_tool(
             test,
             script,
             ToolCall("c2", "post_to_agents", {"text": "Again", "topic": "budget"}),
             session=session,
         )
-        assert "limit" in second
+        assert second.startswith("Posted")  # A new run has its own budget.
         test.post("/api/commands/agentChannel.setMuted", json={"topic": "budget", "muted": True})
         listed = test.post("/api/queries/agentChannel.list").json()
         assert listed["messages"] == [] and listed["muted"] == ["budget"]
@@ -982,7 +983,8 @@ def test_overdue_deadlines_notify_once_without_a_model(client: TestClient, scrip
     )
     assert notices[0]["title"] == "Overdue: Audit report"
     assert script.requests == []
-    assert client.post("/api/queries/board.list").json()["items"] == []
+    items = client.post("/api/queries/board.list").json()["items"]
+    assert len(items) == 1 and items[0]["title"] == "Audit report"
 
 
 def test_activity_records_commands_as_not_undoable(client: TestClient, script: Script) -> None:

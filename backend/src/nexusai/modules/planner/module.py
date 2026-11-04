@@ -100,6 +100,7 @@ def _change(ctx: Context, table: str, identifier: int, values: dict[str, Any], k
         named["completed"] = _now() if named["status"] == "done" else None
     columns = ", ".join(f"{name} = ?" for name in named)
     with ctx.bus.unit_of_work() as work:
+        before = work.tx.execute(f"SELECT * FROM {table} WHERE id=?", (identifier,)).fetchone()  # noqa: S608
         changed = work.tx.execute(
             f"UPDATE {table} SET {columns} WHERE id = ?",  # noqa: S608
             (*named.values(), identifier),
@@ -108,7 +109,18 @@ def _change(ctx: Context, table: str, identifier: int, values: dict[str, Any], k
             raise CommandError(
                 f"{kind}.not_found", f"{kind.capitalize()} {identifier} is gone.", 404
             )
-        work.emit(f"{table}.changed", {}, source="planner", trace_id=ctx.trace_id)
+        work.emit(
+            f"{table}.changed",
+            {
+                "id": identifier,
+                "by": ctx.actor,
+                "changes": values,
+                "old": {key: before[key] for key in values} if before else {},
+                "thread": before["thread"] if before else None,
+            },
+            source="planner",
+            trace_id=ctx.trace_id,
+        )
 
 
 def change_task(ctx: Context, identifier: int, values: dict[str, Any]) -> None:

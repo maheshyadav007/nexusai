@@ -120,7 +120,9 @@ def _written_in(ctx: Context, own: set[str]) -> set[int]:
     return {row["thread_id"] for row in rows}
 
 
-def contacts(ctx: Context, limit: int = MOST_CONTACTS) -> list[ContactRow]:
+def contacts(
+    ctx: Context, limit: int = MOST_CONTACTS, account: str | None = None
+) -> list[ContactRow]:
     """Who they actually write to. Anyone can email someone, so being written to says more."""
     own = own_addresses(ctx)
     if not own:
@@ -128,8 +130,8 @@ def contacts(ctx: Context, limit: int = MOST_CONTACTS) -> list[ContactRow]:
     since = (datetime.now(UTC) - timedelta(days=CONTACT_WINDOW_DAYS)).isoformat()
     rows = ctx.bus.db.fetch_all(
         "SELECT to_json, cc_json, date FROM messages WHERE LOWER(from_addr) IN"  # noqa: S608
-        f" ({_placeholders(own)}) AND date > ? GROUP BY message_id ORDER BY date DESC LIMIT ?",
-        (*own, since, MOST_SENT_READ),
+        f" ({_placeholders(own)}) AND date > ? AND account=? GROUP BY message_id ORDER BY date DESC LIMIT ?",
+        (*own, since, account or accounts.current_account(ctx.config), MOST_SENT_READ),
     )
     counted: dict[str, ContactRow] = {}
     for row in rows:
@@ -147,8 +149,8 @@ def contacts(ctx: Context, limit: int = MOST_CONTACTS) -> list[ContactRow]:
     return sorted(counted.values(), key=lambda item: (-item.written, item.address))[:limit]
 
 
-def mailbox_layer(ctx: Context) -> str:
-    people = contacts(ctx)
+def mailbox_layer(ctx: Context, account: str | None = None) -> str:
+    people = contacts(ctx, account=account)
     if not people:
         return ""
     lines = "\n".join(
@@ -189,8 +191,9 @@ def about_thread(ctx: Context, thread: int) -> str:
     if theirs:
         last_in = theirs[-1]
         lines.insert(0, f"- The person is {_position(last_in, own)} on the latest incoming message")
-        lines.append(_sender_line(ctx, last_in["from_addr"].lower(), own))
-        corrected = feedback.for_sender(db, last_in["from_addr"].lower())
+        account = db.fetch_all("SELECT account FROM threads WHERE id=?", (thread,))[0]["account"]
+        lines.append(_sender_line(ctx, last_in["from_addr"].lower(), own, account))
+        corrected = feedback.for_sender(db, last_in["from_addr"].lower(), account)
         if corrected:
             lines.append(f"- The person's corrections for this sender: {corrected}")
     flagged = db.fetch_all("SELECT flagged FROM threads WHERE id = ?", (thread,))
@@ -203,33 +206,35 @@ def about_thread(ctx: Context, thread: int) -> str:
     )
     if any("important" in str(row["folder"]).lower() for row in folders):
         lines.append("- Their mail service marks this as important")
-    return "Counted by the app from their mailbox, so this is reliable:\n" + "\n".join(lines)
-
-
-def _sender_line(ctx: Context, sender: str, own: set[str]) -> str:
-    db = ctx.bus.db
-    seen = db.fetch_all(
-        "SELECT COUNT(*) AS n, COALESCE(SUM(read), 0) AS opened FROM messages WHERE LOWER(from_addr) = ?",
-        (sender,),
-    )[0]
-    replied = db.fetch_all(
-        "SELECT COUNT(DISTINCT m.thread_id) AS n FROM messages m WHERE LOWER(m.from_addr) = ?"  # noqa: S608
-        " AND EXISTS (SELECT 1 FROM messages o WHERE o.thread_id = m.thread_id"
-        f" AND LOWER(o.from_addr) IN ({_placeholders(own)}))",
-        (sender, *own),
-    )[0]["n"]
-    conversations = db.fetch_all(
-        "SELECT COUNT(DISTINCT thread_id) AS n FROM messages WHERE LOWER(from_addr) = ?", (sender,)
-    )[0]["n"]
-    if seen["n"] <= 1:
-        return f"- {sender} is new: this is the first email from them"
     return (
-        f"- {sender}: {seen['n']} emails over time, the person opened {seen['opened']},"
-        f" and replied in {replied} of {conversations} conversations"
+        "Mailbox observations, scoped to this conversation. Read flags are not proof of attention:\n"
+        + "\n".join(lines)
     )
 
 
-def writing_samples(ctx: Context, sender: str) -> list[str]:
+def _sender_line(ctx: Context, sender: str, own: set[str], account: str | None = None) -> str:
+    db = ctx.bus.db
+    account = account or accounts.current_account(ctx.config)
+    seen = db.fetch_all(
+        "SELECT COUNT(*) n, COALESCE(SUM(read),0) marked_read FROM messages WHERE LOWER(from_addr)=? AND account=?",
+        (sender, account),
+    )[0]
+    replied = db.fetch_all(
+        "SELECT COUNT(DISTINCT m.thread_id) n FROM messages m WHERE LOWER(m.from_addr)=? AND m.account=?"
+        " AND EXISTS(SELECT 1 FROM messages o WHERE o.thread_id=m.thread_id AND o.account=m.account AND o.date>m.date"
+        f" AND LOWER(o.from_addr) IN ({_placeholders(own)}))",
+        (sender, account, *own),
+    )[0]["n"]
+    conversations = db.fetch_all(
+        "SELECT COUNT(DISTINCT thread_id) n FROM messages WHERE LOWER(from_addr)=? AND account=?",
+        (sender, account),
+    )[0]["n"]
+    if seen["n"] <= 1:
+        return f"- {sender} is new in this account: this is the first email from them"
+    return f"- {sender}: {seen['n']} emails in this account, {seen['marked_read']} marked read (read state is not evidence of attention), and replied after their mail in {replied} of {conversations} conversations"
+
+
+def writing_samples(ctx: Context, sender: str, account: str | None = None) -> list[str]:
     """How they write, to this person if they ever have, so a draft sounds like them."""
     own = own_addresses(ctx)
     if not own:
@@ -237,9 +242,9 @@ def writing_samples(ctx: Context, sender: str) -> list[str]:
     db = ctx.bus.db
     mine = (
         "SELECT own_text, to_json FROM messages WHERE encrypted = 0 AND LOWER(from_addr) IN"  # noqa: S608
-        f" ({_placeholders(own)}) AND LENGTH(own_text) > 20 GROUP BY message_id ORDER BY date DESC LIMIT 200"
+        f" ({_placeholders(own)}) AND account=? AND LENGTH(own_text) > 20 GROUP BY message_id ORDER BY date DESC LIMIT 200"
     )
-    rows = db.fetch_all(mine, tuple(own))
+    rows = db.fetch_all(mine, (*own, account or accounts.current_account(ctx.config)))
     to_them = [row for row in rows if sender.lower() in addresses(row["to_json"])]
     chosen = (to_them or rows)[:STYLE_SAMPLES]
     return [row["own_text"].strip()[:STYLE_SAMPLE_CHARS] for row in chosen]
@@ -276,7 +281,7 @@ def sender_table(ctx: Context) -> str:
         )
         shown = " | ".join(str(item["subject"])[:60] for item in subjects)
         lines.append(
-            f"- {row['name'] or 'Unnamed'} <{row['sender']}>: {row['n']} emails, opened {row['opened']},"
+            f"- {row['name'] or 'Unnamed'} <{row['sender']}>: {row['n']} emails, marked read {row['opened']},"
             f" replied in {len(threads & engaged)}, latest {_when(row['latest'])}. Subjects: {shown}"
         )
     return "\n".join(lines)
@@ -296,6 +301,6 @@ def category_table(ctx: Context) -> str:
     )
     return "\n".join(
         f"- {row['name']}: {row['n']} conversations, {row['needed']} needed them,"
-        f" {row['opened']} opened"
+        f" {row['opened']} marked read"
         for row in rows
     )

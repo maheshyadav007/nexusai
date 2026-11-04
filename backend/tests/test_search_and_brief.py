@@ -182,7 +182,7 @@ def test_a_brief_reaction_reaches_the_next_brief_and_the_person_can_see_it(
     config: Config,  # noqa: F811
 ) -> None:
     script.replies = [[TextChunk("Reply to Priya first.")]]
-    session_id = str(current().create("Morning brief", [], "daily-prep").id)
+    session_id = str(current().create("Your brief", [], "daily-prep").id)
     current().dispatch(TurnRequest(session_id, "Brief me", "schedule"))
     wait(lambda: post(client, "today.view").json()["prep_text"], "brief")
     wait(lambda: status(client, session_id) == "done", "brief finished")
@@ -221,10 +221,10 @@ def test_a_bad_session_cant_be_rated(client: TestClient) -> None:  # noqa: F811
 def test_the_registry_lists_what_runs_and_when(client: TestClient) -> None:  # noqa: F811
     agents = post(client, "agents.registry").json()["agents"]
     by_name = {agent["name"]: agent for agent in agents}
-    assert {"Mail agent", "Morning brief", "Inbox review", "Know you better"} <= set(by_name)
-    brief = by_name["Morning brief"]
+    assert {"Mail agent", "Your brief", "Inbox review", "First meeting"} <= set(by_name)
+    brief = by_name["Your brief"]
     assert brief["when"] == "Every day at 08:30" and brief["next_run"]
     assert by_name["Inbox review"]["when"].startswith("Mondays")
     post(client, "mailAgent.save", "commands", mode="both", morning_brief=False)
-    off = {a["name"]: a for a in post(client, "agents.registry").json()["agents"]}["Morning brief"]
+    off = {a["name"]: a for a in post(client, "agents.registry").json()["agents"]}["Your brief"]
     assert off["state"] == "off" and off["next_run"] is None

@@ -5,7 +5,15 @@ from typing import Any
 
 from nexusai.contracts.agent import AgentKnowledge, KnowledgeLayer, LearnedNote, MailPreview
 from nexusai.kernel.module import Context
-from nexusai.modules.agent import feedback, mail_agent, memory, prompts_builder, signals
+from nexusai.modules.agent import (
+    facts,
+    feedback,
+    mail_agent,
+    memory,
+    personalization,
+    prompts_builder,
+    signals,
+)
 from nexusai.modules.agent import guard as guards
 from nexusai.modules.agent.gateway import Layer
 from nexusai.modules.agent.guard import DataGuard
@@ -23,6 +31,8 @@ TRUST = {
     "How they want the brief": "yours",
     "What the mailbox shows": "counted",
     "Memory": "mixed",
+    "Approved preferences": "yours",
+    "Scoped facts": "mixed",
 }
 
 
@@ -41,25 +51,50 @@ def about_person(ctx: Context) -> str:
         f"Their signature:\n{profile.signature}" if profile.signature else "",
     ]
     said = "\n".join(line for line in lines if line)
-    return f"{said}\nTone for anything written as them: {profile.tone}" if said else ""
+    return (
+        f"{said}\nTone for anything written as them: {profile.tone}" if said or profile.tone else ""
+    )
 
 
 def layers_for(
-    ctx: Context, agent: str, task_text: str, capabilities: str = "", **values: str
+    ctx: Context,
+    agent: str,
+    task_text: str,
+    capabilities: str = "",
+    *,
+    account: str | None = None,
+    exclude_preference: int | None = None,
+    **values: str,
 ) -> list[Layer]:
+    from nexusai.modules.mail import accounts
+
     config = ctx.config
+    account = account or accounts.current_account(config)
     is_mail = agent == mail_agent.AGENT
-    return prompts_builder.build_layers(
+    selected_memory = memory.relevant(
+        config.home, agent, task_text, config.agent.memory_max_chars, include_learned=False
+    )
+    layers = prompts_builder.build_layers(
         config,
         agent,
-        memory=memory.relevant(config.home, agent, task_text, config.agent.memory_max_chars),
+        memory=selected_memory,
         capabilities=capabilities,
         about=about_person(ctx),
-        corrections=feedback.layer(ctx.bus.db) if is_mail else "",
+        corrections=feedback.layer(ctx.bus.db, account) if is_mail else "",
         brief_wishes=feedback.brief_layer(ctx.bus.db) if agent == "daily-prep" else "",
-        mailbox=signals.mailbox_layer(ctx) if is_mail else "",
+        mailbox=signals.mailbox_layer(ctx, account) if is_mail else "",
         **values,
     )
+
+    learned = facts.layer(
+        ctx, account, task_text, max(0, config.agent.memory_max_chars - len(selected_memory))
+    )
+    if learned:
+        layers.append(Layer("Scoped facts", learned))
+    instructions = personalization.layer(ctx, agent, task_text, account, exclude_preference)
+    if instructions:
+        layers.append(Layer("Approved preferences", instructions))
+    return layers
 
 
 def _notes(ctx: Context) -> list[LearnedNote]:
@@ -68,22 +103,23 @@ def _notes(ctx: Context) -> list[LearnedNote]:
         for line in memory.confirmed(ctx.config.home).splitlines()
         if line.strip()
     ]
-    section = ""
-    for line in memory.learned(ctx.config.home).splitlines():
-        if line.startswith("#"):
-            section = line.lstrip("# ").strip()
-            continue
-        found = NOTE.match(line.strip())
-        if found:
-            thread = found.group("thread")
-            notes.append(
-                LearnedNote(
-                    line=line,
-                    text=found.group("text"),
-                    section=section,
-                    thread=int(thread) if thread else None,
-                )
+    facts.sync(ctx)
+    for row in ctx.bus.db.fetch_all(
+        "SELECT * FROM learned_facts WHERE status IN ('inferred','confirmed') ORDER BY status='confirmed' DESC,seen_at DESC"
+    ):
+        notes.append(
+            LearnedNote(
+                line=row["line"],
+                text=row["text"],
+                section="",
+                thread=row["thread"],
+                confirmed=row["status"] == "confirmed",
+                account=row["account"],
+                seen_at=row["seen_at"],
+                expires_at=row["expires_at"],
+                revision=row["revision"],
             )
+        )
     return notes
 
 

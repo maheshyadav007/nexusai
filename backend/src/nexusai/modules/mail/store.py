@@ -204,6 +204,23 @@ DROP INDEX messages_from;
 CREATE INDEX messages_from_lower ON messages (LOWER(from_addr));
 """,
     ),
+    Migration(
+        "mail_decision_version_001",
+        """
+ALTER TABLE threads ADD COLUMN decision_version INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE threads ADD COLUMN importance_user_message INTEGER;
+ALTER TABLE threads ADD COLUMN status_user_message INTEGER;
+CREATE TRIGGER thread_decision_changed AFTER UPDATE OF status,importance,category,next_action,follow_up_on ON threads
+BEGIN UPDATE threads SET decision_version = decision_version + 1 WHERE id = NEW.id; END;
+CREATE TRIGGER thread_message_added AFTER INSERT ON messages
+BEGIN UPDATE threads SET decision_version = decision_version + 1 WHERE id = NEW.thread_id; END;
+CREATE TRIGGER thread_message_removed AFTER DELETE ON messages
+BEGIN UPDATE threads SET decision_version = decision_version + 1 WHERE id = OLD.thread_id; END;
+CREATE TRIGGER thread_message_edited AFTER UPDATE OF clean_text,subject,date,thread_id ON messages
+WHEN NEW.clean_text IS NOT OLD.clean_text OR NEW.subject IS NOT OLD.subject OR NEW.date IS NOT OLD.date OR NEW.thread_id IS NOT OLD.thread_id
+BEGIN UPDATE threads SET decision_version = decision_version + 1 WHERE id IN (OLD.thread_id, NEW.thread_id); END;
+""",
+    ),
 ]
 ATTACHMENTS_FROM_PARTS = (
     "UPDATE messages SET has_attachments = EXISTS (SELECT 1 FROM message_parts p WHERE p.message = ?"

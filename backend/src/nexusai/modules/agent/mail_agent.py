@@ -67,6 +67,13 @@ ALTER TABLE triage_runs ADD COLUMN turn INTEGER;
 """,
 )
 AGENT = "mail"
+EVIDENCE_MIGRATION = Migration(
+    "agent_triage_evidence_001",
+    "ALTER TABLE triage_runs ADD COLUMN confidence TEXT NOT NULL DEFAULT 'medium';"
+    "ALTER TABLE triage_runs ADD COLUMN review_reason TEXT;"
+    "ALTER TABLE triage_runs ADD COLUMN source_messages TEXT NOT NULL DEFAULT '[]';"
+    "ALTER TABLE triage_runs ADD COLUMN input_version INTEGER;",
+)
 SESSION_ID = "mail-agent"
 MAIL_TRIGGER = "mail-received"
 IMPORTANCE = {"low", "normal", "high"}
@@ -288,7 +295,9 @@ def ensure_session(ctx: Context) -> None:
 def _header(ctx: Context, row: Any, own: set[str]) -> str:
     """Who it's to, because being in To or only in Cc changes what's being asked of them."""
     me = " (the person)" if row["from_addr"].lower() in own else ""
-    lines = [f"From {row['from_name']} <{row['from_addr']}>{me} on {row['date']}"]
+    lines = [
+        f"[message {row['id']}] From {row['from_name']} <{row['from_addr']}>{me} on {row['date']}"
+    ]
     lines += signals.recipient_lines(row["to_json"], row["cc_json"], own)
     files = ctx.bus.db.fetch_all(
         "SELECT filename FROM message_parts WHERE message = ? AND kind = 'attachment' LIMIT 5",
@@ -390,7 +399,10 @@ def _style_samples(ctx: Context, thread: int) -> str:
     )
     if not rows or NO_REPLY.search(rows[0]["from_addr"]):
         return ""
-    samples = signals.writing_samples(ctx, rows[0]["from_addr"])
+    thread_account = ctx.bus.db.fetch_all("SELECT account FROM threads WHERE id=?", (thread,))
+    samples = signals.writing_samples(
+        ctx, rows[0]["from_addr"], thread_account[0]["account"] if thread_account else None
+    )
     if not samples:
         return ""
     joined = "\n---\n".join(samples)
@@ -420,6 +432,7 @@ def next_turn(
         )
         answers = [row["answer"] for row in rows if row["answer"]]
         learning = all(str(row["event"]).startswith(LEARN_PREFIX) for row in rows)
+        version = db.fetch_all("SELECT decision_version FROM threads WHERE id = ?", (thread,))
         subject, sender, task = task_for(ctx, thread, answers, live=not learning)
         if task:
             break
@@ -448,6 +461,7 @@ def next_turn(
         told = _template("mail-model")
     target = {
         "thread": thread,
+        "decision_version": version[0]["decision_version"] if version else None,
         "subject": subject,
         "messages": [{"message": r["message"], "answer": r["answer"]} for r in rows],
         "learning": learning,
@@ -468,7 +482,7 @@ def _plate_rows(ctx: Context, where: str, *params: Any) -> list[Any]:
 def needs_them(ctx: Context) -> list[Any]:
     return _plate_rows(
         ctx,
-        "account = ? AND in_inbox = 1 AND (status = 'waiting_on_you' OR (importance = 'high'"
+        "account = ? AND in_trash = 0 AND (status = 'waiting_on_you' OR (importance = 'high'"
         " AND status IN ('none', 'fyi')))",
         accounts.current_account(ctx.config),
     )
@@ -506,8 +520,13 @@ def on_the_plate(ctx: Context) -> str:
 
 
 def brief_task(ctx: Context) -> str:
+    from nexusai.modules.agent import briefs
+
     plate = on_the_plate(ctx)
-    task = f"On their plate today:\n<untrusted>\n{plate or 'Nothing open.'}\n</untrusted>"
+    task = (
+        briefs.snapshot(ctx)
+        + f"\n\nOn their plate today:\n<untrusted>\n{plate or 'Nothing open.'}\n</untrusted>"
+    )
     decisions: list[str] = []
     for label, query in (
         ("Approvals", "SELECT id, summary AS text FROM tool_approvals WHERE status = 'pending'"),
@@ -682,28 +701,34 @@ def look_for_open_loops(ctx: Context) -> int:
     return len(rows)
 
 
-def digest_turn(ctx: Context, since: str) -> TurnRequest | None:
-    """What came in over the last hour. Nothing new means no run, so no model call and no message."""
+def digest_turn(ctx: Context, after: int) -> tuple[TurnRequest, int] | None:
+    """Cover at most 100 durable judgements, with a lossless ID cursor across outages."""
+    account = accounts.current_account(ctx.config)
     rows = ctx.bus.db.fetch_all(
-        "SELECT r.thread, r.summary, t.subject, t.importance FROM triage_runs r"
-        " JOIN threads t ON t.id = r.thread WHERE r.status = 'done' AND r.time > ? ORDER BY r.id",
-        (since,),
+        "SELECT r.id,r.thread,r.summary,t.subject,t.importance FROM triage_runs r JOIN threads t ON t.id=r.thread"
+        " LEFT JOIN agent_turns a ON a.id=r.turn WHERE r.status='done' AND r.id>? AND t.account=? AND COALESCE(a.origin,'')!='mail-learn' ORDER BY r.id LIMIT 100",
+        (after, account),
     )
     if not rows:
         return None
+    latest = {r["thread"]: r for r in rows}
     lines = "\n".join(
-        f"- [thread {r['thread']}] {r['importance']}: {r['subject']}: {r['summary']}" for r in rows
+        f"- [thread {r['thread']}] {r['importance']}: {r['subject']}: {r['summary']}"
+        for r in latest.values()
     )
     plate = on_the_plate(ctx)
-    held = f"Handled this past hour:\n{lines}" + (f"\n\nStill open:\n{plate}" if plate else "")
+    held = f"Judgements {rows[0]['id']} through {rows[-1]['id']} (bounded catch-up):\n{lines}" + (
+        f"\n\nStill open:\n{plate}" if plate else ""
+    )
     task = f"{prompts_builder.packaged('mail-digest.md')}\n\n<untrusted>\n{held}\n</untrusted>"
     return TurnRequest(
         SESSION_ID,
-        _template("mail-digest", count=len(rows)),
+        _template("mail-digest", count=len(latest)),
         "mail-hourly",
         _template("mail-digest-model"),
         task,
-    )
+        context={"account": account},
+    ), int(rows[-1]["id"])
 
 
 def settle(ctx: Context, runs: list[int], status: str, error: str | None = None) -> None:
@@ -726,6 +751,11 @@ def after_turn(ctx: Context, turn: int, runs: list[Any], error: str | None) -> N
 
 
 def record(ctx: Context, session: str, fields: dict[str, Any]) -> str:
+    with ctx.bus.db.serialized():
+        return _record_current(ctx, session, fields)
+
+
+def _record_current(ctx: Context, session: str, fields: dict[str, Any]) -> str:
     """What the record_triage tool does. It only reaches the email this run was started for."""
     rows = ctx.bus.db.fetch_all(
         "SELECT id, target FROM agent_turns WHERE session = ? AND closed = 0 ORDER BY id DESC LIMIT 1",
@@ -737,6 +767,26 @@ def record(ctx: Context, session: str, fields: dict[str, Any]) -> str:
     turn = rows[0]["id"]
     if ctx.bus.db.fetch_all("SELECT 1 FROM triage_runs WHERE turn = ? LIMIT 1", (turn,)):
         return "This email is already judged."
+    version = ctx.bus.db.fetch_all(
+        "SELECT decision_version FROM threads WHERE id = ?", (target["thread"],)
+    )
+    if not version or version[0]["decision_version"] != target.get("decision_version"):
+        with ctx.bus.db.transaction() as tx:
+            tx.execute(
+                "UPDATE trigger_runs SET status = 'pending', turn = NULL, session = NULL WHERE turn = ? AND status = 'running'",
+                (turn,),
+            )
+        return "The conversation changed while I was reading. This judgement was discarded and queued again; no decision was overwritten."
+    supplied = fields.get("source_messages") or [row["message"] for row in target["messages"]]
+    valid = {
+        row["id"]
+        for row in ctx.bus.db.fetch_all(
+            "SELECT id FROM messages WHERE thread_id=?", (target["thread"],)
+        )
+    }
+    if not all(isinstance(identifier, int) and identifier in valid for identifier in supplied):
+        return "Judgement not recorded: the source messages must belong to this conversation."
+    fields = {**fields, "source_messages": supplied}
     Triage(ctx)._apply(
         target["thread"],
         target["messages"],
@@ -821,6 +871,8 @@ class Triage:
         category = self._settled_category(category, thread)
         next_action = parsed.get("next_action")
         next_action = next_action if next_action in NEXT_ACTIONS else None
+        if status not in {"waiting_on_you", "fyi"} or (status == "fyi" and next_action != "read"):
+            next_action = None
         follow_up = _valid_date(parsed.get("follow_up_on"))
         latest = max(row["message"] for row in rows)
         # A person can only take so many open questions. Past that it goes with its best guess.
@@ -869,6 +921,16 @@ class Triage:
                     ),
                 )
                 work.tx.execute("UPDATE messages SET why = ? WHERE id = ?", (why, row["message"]))
+            work.tx.execute(
+                "UPDATE triage_runs SET confidence=?,review_reason=?,source_messages=?,input_version=(SELECT decision_version FROM threads WHERE id=?) WHERE turn=?",
+                (
+                    parsed.get("confidence", "medium"),
+                    parsed.get("review_reason"),
+                    json.dumps(parsed.get("source_messages", [])),
+                    thread,
+                    turn,
+                ),
+            )
             # What the person chose stays, and so does what their rule filed.
             if not sent:
                 # A header rule only guessed. In a conversation they're part of, the agent knows better.
@@ -880,12 +942,19 @@ class Triage:
                     (category, why, thread, guessed),
                 )
                 work.tx.execute(
-                    "UPDATE threads SET importance = ? WHERE id = ?", (importance, thread)
+                    "UPDATE threads SET importance = ? WHERE id = ? AND (importance_user_message IS NULL OR importance_user_message < (SELECT MAX(id) FROM messages WHERE thread_id=?))",
+                    (importance, thread, thread),
                 )
             work.tx.execute(
                 "UPDATE threads SET status = ?, next_action = ?, follow_up_on = ?,"
-                " followup_notified = NULL WHERE id = ?",
-                (status, next_action, follow_up if status == "waiting_on_others" else None, thread),
+                " followup_notified = NULL WHERE id = ? AND (status_user_message IS NULL OR status_user_message < (SELECT MAX(id) FROM messages WHERE thread_id=?))",
+                (
+                    status,
+                    next_action,
+                    follow_up if status == "waiting_on_others" else None,
+                    thread,
+                    thread,
+                ),
             )
             if sent:
                 work.tx.execute("UPDATE threads SET why = ? WHERE id = ?", (why, thread))
@@ -1167,20 +1236,9 @@ def queue_existing(ctx: Context) -> None:
 
 
 def summary_view(ctx: Context, thread: int) -> ThreadSummary:
-    db = ctx.bus.db
-    count = db.fetch_all(
-        "SELECT COUNT(DISTINCT message_id) AS n FROM messages WHERE thread_id = ?", (thread,)
-    )[0]["n"]
-    rows = db.fetch_all("SELECT * FROM thread_summaries WHERE thread = ?", (thread,))
-    if not rows:
-        return ThreadSummary(thread=thread, text=None, covered=0, new_messages=count, updated=None)
-    return ThreadSummary(
-        thread=thread,
-        text=rows[0]["text"],
-        covered=rows[0]["covered"],
-        new_messages=max(count - rows[0]["covered"], 0),
-        updated=rows[0]["updated"],
-    )
+    from nexusai.modules.agent import summaries
+
+    return summaries.view(ctx, thread)
 
 
 def _ready_draft(ctx: Context, thread: int) -> DraftedReply | None:
@@ -1201,6 +1259,7 @@ def draft_reply(ctx: Context, thread: int) -> DraftedReply:
     """Only when asked, and only words for the person to check. Nothing is saved or sent."""
     if ready := _ready_draft(ctx, thread):
         return ready
+    version = ctx.bus.db.fetch_all("SELECT decision_version FROM threads WHERE id=?", (thread,))
     config = ctx.config.agent
     subject, _, text = _thread_text(
         ctx, thread, config.max_recent_thread_messages, config.max_thread_chars
@@ -1220,7 +1279,12 @@ def draft_reply(ctx: Context, thread: int) -> DraftedReply:
         f"<untrusted>\nSubject: {subject}\n\n{text}\n</untrusted>{_style_samples(ctx, thread)}"
         "\n\nWrite the reply now."
     )
-    layers: list[Layer] = prompts_builder.build_layers(ctx.config, "draft-reply")
+    from nexusai.modules.agent import knowledge
+
+    thread_account = ctx.bus.db.fetch_all("SELECT account FROM threads WHERE id=?", (thread,))
+    layers: list[Layer] = knowledge.layers_for(
+        ctx, "draft-reply", task, account=thread_account[0]["account"] if thread_account else None
+    )
     try:
         result = gateway.call_model(
             ctx, agent="draft-reply", session=None, layers=layers, messages=[Message("user", task)]
@@ -1236,48 +1300,21 @@ def draft_reply(ctx: Context, thread: int) -> DraftedReply:
     body = result.text.strip()
     if not body:
         raise CommandError("draft.failed", "The model didn't write anything. Try again.", 502)
+    current = ctx.bus.db.fetch_all("SELECT decision_version FROM threads WHERE id=?", (thread,))
+    if (
+        not version
+        or not current
+        or current[0]["decision_version"] != version[0]["decision_version"]
+    ):
+        raise CommandError(
+            "draft.changed",
+            "This conversation changed while the reply was being written. Generate it again.",
+            409,
+        )
     return DraftedReply(body=body)
 
 
 def summarize(ctx: Context, thread: int) -> ThreadSummary:
-    """Only when asked. An update reads just the messages since the last summary."""
-    db = ctx.bus.db
-    current = summary_view(ctx, thread)
-    messages = db.fetch_all(
-        "SELECT from_name, from_addr, date, clean_text, encrypted FROM messages WHERE thread_id = ? GROUP BY message_id ORDER BY date",
-        (thread,),
-    )
-    if not messages:
-        raise CommandError("thread.not_found", "That conversation no longer exists.", 404)
-    new = messages[current.covered :] if current.text else messages
-    limit = ctx.config.agent.max_thread_chars
-    blocks = [
-        f"From {m['from_name']} <{m['from_addr']}> on {m['date']}\n{'[Encrypted]' if m['encrypted'] else m['clean_text']}"
-        for m in new
-    ]
-    text = "\n\n".join(blocks)[-limit:]
-    task = f"<untrusted>\n{text}\n</untrusted>"
-    if current.text:
-        task = f"Earlier summary:\n{current.text}\n\nNew messages:\n{task}"
-    layers: list[Layer] = prompts_builder.build_layers(ctx.config, "summary")
-    try:
-        result = gateway.call_model(
-            ctx, agent="summary", session=None, layers=layers, messages=[Message("user", task)]
-        )
-    except (
-        providers.ModelUnavailable,
-        providers.ModelNotConfigured,
-        providers.ModelFlagged,
-        gateway.DailyCapReached,
-        guard.GuardBlocked,
-    ) as error:
-        raise CommandError("summary.failed", str(error), 502) from error
-    now = _now()
-    with ctx.bus.unit_of_work() as work:
-        work.tx.execute(
-            "INSERT INTO thread_summaries (thread, text, covered, updated) VALUES (?, ?, ?, ?)"
-            " ON CONFLICT (thread) DO UPDATE SET text = excluded.text, covered = excluded.covered, updated = excluded.updated",
-            (thread, result.text.strip(), len(messages), now),
-        )
-        work.emit("summary.ready", {"thread_id": thread}, source="agent", trace_id=ctx.trace_id)
-    return summary_view(ctx, thread)
+    from nexusai.modules.agent import summaries
+
+    return summaries.generate(ctx, thread)

@@ -667,3 +667,18 @@ Old IDs folded into another feature during consolidation.
 | WRK-12 | YC-7 |
 
 Rejected: YC-1 Injection shield, Back from leave. Not needed for now: YC-8 Voice.
+
+
+## Email reliability and personalization — 4 November 2026
+
+Implemented in the web app:
+
+- Purpose/account/address/topic-scoped preferences: proposed → explicit approval → active, with pause, expiry, revision conflict checks, version history, source evidence, deterministic scope check and read-only AI decision preview. Prompt edits also have save/restore history.
+- Source-scoped learned facts: inferred/confirmed/retired states, expiry and revisions. Shared profile/tone/signature context reaches manual draft generation. Feedback remains prompt/context adaptation, without model-weight training.
+- Atomic trigger reservation, bounded event coverage, fresh-input fences and human ownership, success-only digest/review cursors, retryable failed learning, and overdue notification separate from completion.
+- Immutable brief artifacts with exact-version reactions, obligation counts/source IDs, partial/stale/failed status, and readiness independent of history reading. Your brief retains its attention glow until interaction, then the stronger summary-style border/shadow.
+- Typed agent assignments with ownership/outcomes, per-run message caps, named schedule timezones and Cockpit queue age/failure/retry/cancel controls.
+- Message-identity/content-aware incremental summaries with honest partial coverage.
+- Agreed labels: Today stays; Your brief, For your decision, First meeting and Approve. Space Grotesk headings/navigation and Inter reading text. Existing composer-contained warning/override, right-docked chat entry points, connectors grouping, document layout and horizontal Settings dividers remain part of the UX refinement.
+
+Validation evidence and remaining real-account checks are recorded in [EMAIL_AGENT_IMPLEMENTATION.md](EMAIL_AGENT_IMPLEMENTATION.md). These additions do not certify end-to-end email quality or complete all future items in this roadmap.

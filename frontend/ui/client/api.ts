@@ -1,3 +1,7 @@
+import type {SimulatePreference, PreferenceSimulation} from "./contracts.generated";
+import type {ExpireLearnedNote} from "./contracts.generated";
+import type {GetAgentQueue, AgentQueue, QueueAction} from "./contracts.generated";
+import type { GetPreferences, PreferenceList, SavePreference, PreferenceHistory, PreferenceVersions, RestorePreference, RecordInteraction, PromptHistory, PromptVersions, RestorePrompt, PreviewPreference, PreferencePreview } from "./contracts.generated";
 import type {
   GetGeneration,
   GenerationState,
@@ -330,6 +334,15 @@ interface Commands {
   "schedules.setDefaults": [SetDefaults, ScheduleList];
   "activity.undo": [UndoActivity, AgentDone];
   "prompts.save": [SavePrompt, AgentDone];
+  "agentQueue.act": [QueueAction, AgentDone];
+  "memory.expireNote": [ExpireLearnedNote, AgentDone];
+  "mailAgent.retryLearning": [GetMailAgentSettings, AgentDone];
+  "preferences.simulate": [SimulatePreference, PreferenceSimulation];
+  "preferences.save": [SavePreference, PreferenceList];
+  "preferences.restore": [RestorePreference, PreferenceList];
+  "preferences.preview": [PreviewPreference, PreferencePreview];
+  "interactions.record": [RecordInteraction, AgentDone];
+  "prompts.restore": [RestorePrompt, AgentDone];
   "prompts.useStarters": [ListPrompts, AgentDone];
   "memory.save": [SaveMemory, AgentDone];
   "memory.remove": [RemoveMemory, AgentDone];
@@ -432,6 +445,10 @@ interface Queries {
   "jobs.list": [ListJobs, JobList];
   "activity.list": [ListActivity, ActivityList];
   "prompts.list": [ListPrompts, PromptList];
+  "agentQueue.get": [GetAgentQueue, AgentQueue];
+  "preferences.list": [GetPreferences, PreferenceList];
+  "preferences.history": [PreferenceHistory, PreferenceVersions];
+  "prompts.history": [PromptHistory, PromptVersions];
   "memory.list": [ListMemory, MemoryList];
   "thread.summary": [SummarizeThread, ThreadSummary];
   "triage.runs": [GetThreadRuns, ThreadRuns];

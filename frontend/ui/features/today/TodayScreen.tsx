@@ -407,9 +407,9 @@ function MorningBrief() {
   };
 
   useEffect(() => setComment(said), [said]);
-  if (!data?.prep_text || !session) return null;
+  if (!data?.prep_text || !session) return data?.prep_freshness === "failed" ? <section className="rounded-lg border border-line-subtle p-5" role="status"><h2 className="text-lg font-medium text-ink-primary">{t("today.prep")}</h2><p className="mt-2 text-sm text-ink-secondary">{t("today.brief.freshness.failed")}</p></section> : null;
   const send = (next: { rating: "up" | "down" | null; comment: string }, after?: () => void) =>
-    react.mutate({ session, ...next }, { onSuccess: () => { toast({ title: t("today.brief.saved") }); after?.(); }, onError: () => toast({ title: t("today.brief.failed"), tone: "danger" }) });
+    react.mutate({ session, artifact: data.prep_artifact ?? undefined, ...next }, { onSuccess: () => { toast({ title: t("today.brief.saved") }); after?.(); }, onError: () => toast({ title: t("today.brief.failed"), tone: "danger" }) });
   const rate = (value: "up" | "down") => {
     const next = rating === value ? null : value;
     send({ rating: next, comment: said });
@@ -423,6 +423,7 @@ function MorningBrief() {
         {!attended ? <h2 className="flex items-center gap-2 text-lg font-medium text-ink-primary"><Icon name="thinking" className="h-4 w-4 text-accent-default" />{t("today.prep")}</h2> : null}
         {data.prep_at ? <span className="text-sm tabular-nums text-ink-muted">{t("today.brief.when", { when: format(data.prep_at) })}</span> : null}
       </header>
+      {data.prep_freshness && data.prep_freshness !== "fresh" && data.prep_freshness !== "none" ? <p role="status" className="text-sm text-ink-secondary">{t(`today.brief.freshness.${data.prep_freshness}`)}</p> : null}
       <div data-testid="today-prep" className="text-md text-ink-primary"><Markdown text={data.prep_text} /></div>
       <div className="flex flex-wrap items-center gap-1">
         <IconButton icon="like" label={t("today.brief.like")} aria-pressed={rating === "up"} data-testid="brief-like" className={rating === "up" ? "text-accent-default" : ""} disabled={react.isPending} onClick={() => rate("up")} />

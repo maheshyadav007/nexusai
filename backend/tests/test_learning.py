@@ -121,7 +121,7 @@ def test_it_reads_the_newest_mail_rules_missed_oldest_first_then_starts_the_inte
 
     wait(interview, "the Interview to start")
     session = interview()[0]["id"]
-    wait(lambda: status(client, session) != "running", "its first answer")
+    wait(lambda: status(client, session) not in {"queued", "running"}, "its first answer")
     assert said(client, session) == ["Let's get set up. Ask me what you need to know."]
     # Found by what it says, because the inbox review can run alongside it.
     words = next(

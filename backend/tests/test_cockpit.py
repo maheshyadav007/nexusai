@@ -119,7 +119,7 @@ def test_upcoming_runs_are_listed_and_the_hour_timer_shows_when_on(
     assert {run["title"] for run in upcoming} == {
         "Weekly",
         "Mail agent, hourly",
-        "Morning brief",
+        "Your brief",
         "Inbox review",
     }
 

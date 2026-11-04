@@ -2,7 +2,7 @@
 
 Problems found while testing on the real mailbox and model, and how we plan to solve each one. Remove a row once it's fixed and proven on the real account.
 
-Last reviewed: 2026-11-03, at commit `9fa50d4`.
+Last reviewed: 2026-11-04. See [implementation evidence and limits](EMAIL_AGENT_IMPLEMENTATION.md). Rows requiring real-account proof stay open.
 
 ## Security
 
@@ -67,9 +67,9 @@ The app has connected to the real company servers, and the first feedback came f
 | Problem | What happens | How we'll solve it |
 |---|---|---|
 | It ignores pending decisions | It can say "your plate is quiet" while 8 decisions wait on Today | Implemented: the brief now receives pending approvals, questions, mail suggestions and category proposals. Regression tested; confirm on the next real brief. |
-| Learning only uses what's typed | It only learns from like, dislike and comments, and most days people give none | Add implicit signals: which items were opened, finished or ignored |
+| Learning only uses what's typed | It only learns from like, dislike and comments, and most days people give none | Implemented: actor/account/version-scoped opens, task outcomes, sends and explicit reactions are recorded. Read flags remain marked-read counts; ignored/inactive is not inferred dislike. Prompt preferences require approval. Validate usefulness with real user feedback. |
 | Reactions apply to the whole brief | One bad line counts against all of it | Add a like and dislike for each item |
-| Feedback isn't consolidated | It keeps only the last 10 reactions, so older requests drop off | Summarize feedback weekly into a short "how I like my brief" note the person can edit |
+| Feedback isn't consolidated | It keeps only the last 10 reactions, so older requests drop off | Mail review can propose evidence-backed scoped instructions for explicit approval; approved instructions persist with expiry/version/restore. Recent brief reactions remain bounded. Measure consolidation on real usage; no automatic permanent rule from one rating. |
 
 ## Needs you
 
@@ -122,3 +122,10 @@ These pass with fake mail or a fake model, but haven't run for real. Each is fin
 |---|---|---|
 | Reminder test doesn't fire in the browser tests | Reminders never fired in that environment, and we didn't find out why. Notice position is checked with a question from an agent, and was measured once with real reminders | Find out why, then add a real reminder test |
 | Mail eval is only a smoke test | The prompts were tuned on the same 27 emails, so 26 of 27 overstates quality | Add cases the prompts weren't tuned on, ideally reviewed real threads |
+
+
+## Email audit follow-up
+
+The 4 November reliability fixes and scoped prompt-feedback controls have deterministic regression coverage and synthetic browser verification; see [the implementation record](EMAIL_AGENT_IMPLEMENTATION.md). Real incoming/sent mail, company-provider tool parsing, real brief coverage and preference usefulness still need observation on the real account. No broad mailbox re-triage was used as a test.
+
+Remaining limits: item-level brief ratings, observed draft-edit style learning, retention/pruning controls for the interaction ledger, full conflict adjudication, provider-specific quality/latency budgets, multilingual mail evaluation, and a Home-specific remembered-chat reset are not completed here. Sender scope currently matches an address present in supplied conversation context; it is not an authenticated current-sender identity policy. Whole-brief ratings do not validate every sentence.

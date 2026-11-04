@@ -23,7 +23,6 @@ from test_agent_work import (  # noqa: F401
     triage_reply,
     wait,
 )
-from test_chat_engine import status
 
 
 def post(client: TestClient, name: str, kind: str = "queries", /, **body: Any) -> Any:
@@ -66,7 +65,7 @@ def test_it_sees_who_mail_is_to_and_how_the_person_behaves(
     judged(client, "Budget")
     sent = told(script.requests[-1])
     assert "only in Cc" in sent
-    assert "is new: this is the first email from them" in sent
+    assert "is new in this account: this is the first email from them" in sent
     assert "Cc: " in sent and "(the person)" in sent
 
 
@@ -110,7 +109,7 @@ def test_a_correction_is_used_from_then_on_but_an_agents_own_change_isnt(
     fake.state.deliver(make_mail(subject="Second one", message_id="<c2@x>"))
     judged(client, "Second one")
     sent = told(script.requests[-1])
-    assert "What the person changed after you judged" in sent
+    assert "Observed corrections to specific decisions" in sent
     assert "filed under Legal" in sent
     assert "corrections for this sender" in sent
 
@@ -323,8 +322,15 @@ def test_a_note_says_where_it_came_from_and_can_be_confirmed_or_removed(
     post(client, "memory.confirmNote", "commands", line=notes[0]["line"])
     post(client, "memory.removeNote", "commands", line=notes[1]["line"])
     assert memory.learned(home).strip() == ""
-    recalled = memory.relevant(home, "mail", "anything", 1000)
-    assert "- Works on Atlas" in recalled and "[mail:" not in recalled
+    from nexusai.modules.agent import knowledge
+    from nexusai.modules.agent.module import current
+
+    recalled = next(
+        layer.text
+        for layer in knowledge.layers_for(current().ctx, "mail", "anything")
+        if layer.name == "Scoped facts"
+    )
+    assert "- Works on Atlas" in recalled and "source mail:12" in recalled
     assert "<untrusted>" not in recalled.split("Works on Atlas")[0]
 
 
@@ -481,22 +487,23 @@ def _triggers() -> Any:
     return module._triggers
 
 
-def test_the_brief_waits_until_there_is_something_to_brief_on(
+def test_the_brief_can_explain_a_quiet_day_without_history_learning(
     client: TestClient, script: Script
 ) -> None:
     rows = client.app.state.bus.db.fetch_all(  # type: ignore[attr-defined]
         "SELECT id FROM schedules WHERE kind = 'mail-brief'"
     )
+    script.default = [TextChunk("There are no open obligations yet. Mail may still be syncing.")]
     triggers = _triggers()
     triggers.fire_schedule("brief-now", rows[0]["id"])
     wait(
-        lambda: client.app.state.bus.db.fetch_all(  # type: ignore[attr-defined]
-            "SELECT 1 FROM trigger_runs WHERE event = 'brief-now' AND status = 'skipped'"
+        lambda: client.app.state.bus.db.fetch_all(
+            "SELECT 1 FROM trigger_runs WHERE event='brief-now' AND status='done'"
         ),
-        "it to be skipped",
-    )
-    assert not script.requests
-    assert status is not None
+        "quiet-day brief",
+    )  # type: ignore[attr-defined]
+    assert len(script.requests) == 1
+    assert post(client, "today.view")["prep_text"].startswith("There are no open obligations")
 
 
 def test_the_built_ins_can_be_turned_off(client: TestClient) -> None:

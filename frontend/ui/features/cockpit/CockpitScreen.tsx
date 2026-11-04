@@ -9,7 +9,8 @@ import { useEvents } from "@/ui/client/events";
 import { useRelativeTime, useDateTime } from "@/ui/client/format";
 import { useCancelModel } from "@/ui/client/semantic";
 import { useStopSession } from "@/ui/client/sessions";
-import { useCockpit, useCockpitEvents, useStopPipeline, useTriageEstimate, useTriageExisting } from "@/ui/client/work";
+import { useAgentQueue, useCockpit, useCockpitEvents, useStopPipeline, useTriageEstimate, useTriageExisting } from "@/ui/client/work";
+import { AgentQueue } from "./AgentQueue";
 import { Pipelines } from "@/ui/features/cockpit/Pipelines";
 import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
@@ -190,6 +191,8 @@ export function CockpitScreen() {
   const cockpit = useCockpit();
   const health = cockpit.data?.health ?? [];
   const problems = health.filter((item) => item.state === "problem");
+  const queue = useAgentQueue();
+  const attention = problems.length + (queue.data?.failed ?? 0);
   const running = (cockpit.data?.jobs ?? []).filter((job) => job.kind !== "sync").length;
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -209,14 +212,14 @@ export function CockpitScreen() {
     <div className="cockpit-container mx-auto flex max-w-page flex-col gap-5 p-6">
       <PageHeader title={t("nav.cockpit")} summary={t("cockpit.overview")} />
       {cockpit.data ? <div data-testid="cockpit-overview" className="flex flex-wrap items-center gap-5 border-y border-line-subtle py-4">
-        <span className="flex items-center gap-2 text-md text-ink-primary"><StatusDot tone={problems.length ? "failed" : "done"} />{problems.length ? tn("cockpit.attentionCount", problems.length) : t("cockpit.healthy")}</span>
+        <span className="flex items-center gap-2 text-md text-ink-primary"><StatusDot tone={attention ? "failed" : "done"} />{attention ? tn("cockpit.attentionCount", attention) : t("cockpit.healthy")}</span>
         <span className="text-sm tabular-nums text-ink-muted">{t("cockpit.runningCount", { count: running })}</span>
         <span className="text-sm tabular-nums text-ink-muted">{t("cockpit.upcomingCount", { count: cockpit.data.upcoming.length })}</span>
       </div> : null}
       {problems.length ? <Rise className="flex flex-col gap-2 border-l border-status-warning pl-4"><h2 className="text-md font-medium text-ink-primary">{t("cockpit.attention")}</h2>{problems.map((item) => <TextLink key={item.id} href={item.link ?? "/logs"}>{item.label}: {item.detail}</TextLink>)}</Rise> : null}
       <div className="cockpit-columns grid items-start gap-6">
         <div className="flex min-w-0 flex-col gap-6">
-          <Rise className="flex flex-col gap-4"><RunningNow /><Maintenance /></Rise>
+          <Rise className="flex flex-col gap-4"><RunningNow /><AgentQueue /><Maintenance /></Rise>
           <Rise><Feed /></Rise>
         </div>
         <aside className="cockpit-aside flex min-w-0 flex-col gap-6 border-t border-line-subtle pt-4">

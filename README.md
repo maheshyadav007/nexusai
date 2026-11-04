@@ -12,6 +12,12 @@ Status: in development. The web app comes first, then an Electron desktop app.
 | `scripts/` | `dev.mjs`, for setup and running without `make` |
 | `archive/` | Old work, reference only |
 
+## Email agents
+
+Mail judgement, Your brief, scheduled work and chat share scoped prompt context. Feedback becomes reviewable instructions under **Prompts and memory → Preferences**, with scope checks, read-only AI previews, expiry and version restore. Today keeps its name. Headings and navigation use Space Grotesk; reading text uses Inter.
+
+See the [email-agent implementation and verification record](docs/EMAIL_AGENT_IMPLEMENTATION.md) and [audit baseline](docs/EMAIL_AGENT_AUDIT_2026-11-04.md). Model-weight training is outside this feedback loop.
+
 ## Run
 
 Needs [`uv`](https://docs.astral.sh/uv/) and Node 22.

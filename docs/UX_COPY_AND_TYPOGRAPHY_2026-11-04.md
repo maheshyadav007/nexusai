@@ -1,5 +1,7 @@
 # UI follow-up: copy, typography and AI-result presentation
 
+Update, 4 November: the user selected Space Grotesk headings/navigation plus Inter reading text, and the recorded replacements while keeping Today. These are now implemented. The recommendation/history below describes the earlier review; current verification is in [EMAIL_AGENT_IMPLEMENTATION.md](EMAIL_AGENT_IMPLEMENTATION.md).
+
 ## Recovered wording
 
 From the existing draft `docs/IDENTITY_PLAN.md` (left unchanged):
@@ -11,11 +13,11 @@ From the existing draft `docs/IDENTITY_PLAN.md` (left unchanged):
 | Morning brief | Your brief |
 | Know you better | First meeting |
 
-There is no recorded agreed replacement for Today. **Your day** is a new recommendation, not a recovered decision. Keep the navigation label stable until choosing the full copy set; applying only some labels can create inconsistencies between Today, Settings, Agents and schedule names. The app name and pet names remain separate identity decisions.
+The user approved the recorded replacements while explicitly keeping **Today**. **Your day** was a new recommendation and is not applied. App naming and pets are outside this implementation.
 
-## Font recommendation
+## Typography choice
 
-Current UI body: Instrument Sans. Instrument Serif, JetBrains Mono and Space Grotesk are already bundled through `frontend/ui/theme/fonts.ts`; Space Grotesk is available but not the current default. No font change was made in this patch: the request was to suggest alternatives.
+Implemented: Inter is the default reading family, and Space Grotesk is used for headings, navigation and short controls in both built-in themes. Both load through `frontend/ui/theme/fonts.ts`. Instrument families remain available as alternatives. The options below preserve the original design comparison.
 
 My preferred pairing: **Space Grotesk for headings, navigation and short controls; Inter for email bodies, briefs and long chat replies.** It keeps the character the user likes while giving long reading a quieter texture. This is a design judgement to compare in the actual app, not a claim that one typeface is universally more readable.
 
@@ -38,6 +40,6 @@ Trial settings: 400 weight for reading, 500 for controls, 600 sparingly; 16–17
 
 The earlier settings request means **horizontal dividers between sections**, not an added vertical divider. This patch does not change that interpretation.
 
-## Verification
+## Earlier presentation-patch verification
 
 Frontend typecheck, hardcoded-value check, import-boundary check and 19 tests passed; production build passed. Backend chat/trigger/history regression suite: 83 passed (two existing LangGraph experimental-stream warnings). Browser checks on a separate synthetic Home verified warning nesting, disabled → override → locked input, glow → border on interaction, persistence after refresh and a fresh glow for a regenerated brief. The production frontend was restarted and its API reported Home ready. No live-model email-quality evaluation was run.
