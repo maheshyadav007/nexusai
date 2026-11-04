@@ -63,6 +63,12 @@ def bytes_present(home: Path, model: CatalogModel) -> int:
 
 
 def _plain(error: Exception) -> str:
+    if isinstance(error, httpx.ConnectError) and "certificate" in str(error).lower():
+        return (
+            "The download server's certificate is not trusted by this operating system. "
+            "Check the device's trusted certificates, or use an approved mirror "
+            "or local model files."
+        )
     if isinstance(error, httpx.ConnectError | httpx.ConnectTimeout | httpx.ProxyError):
         return (
             "Couldn't reach the download server. If your network blocks it, use a mirror"

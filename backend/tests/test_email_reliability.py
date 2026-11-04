@@ -540,6 +540,9 @@ def test_empty_digest_does_not_advance_cursor_and_can_be_retried(
     fake.state.deliver(make_mail(subject="Outcome required"))
     triaged(client, "Outcome required")
     wait(lambda: agent.current().active_turn(mail_agent.SESSION_ID) is None)
+    # Turn completion precedes listener-driven queue settlement. A digest test must
+    # start after initial mail is fully settled, otherwise Run now legitimately handles mail.
+    wait(lambda: mail_agent.waiting_count(agent.current().ctx) == 0)
     script.default = []
     post(client, "mailAgent.runNow", {})
     db = agent.current().db

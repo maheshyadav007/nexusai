@@ -33,6 +33,7 @@ from nexusai.contracts.semantic import (
 )
 from nexusai.kernel.database import Migration
 from nexusai.kernel.module import CommandError, Context, Module
+from nexusai.kernel.network import system_ssl_context
 from nexusai.modules.mail.extract import EXTRACTOR_VERSION
 from nexusai.modules.semantic import catalog, downloader
 from nexusai.modules.semantic.catalog import BY_ID, MODELS, CatalogModel
@@ -757,6 +758,7 @@ def _hub_answers(source: str, model: CatalogModel) -> bool:
         response = httpx.head(
             catalog.url(model, model.files[1], source),
             timeout=HUB_CHECK_SECONDS,
+            verify=system_ssl_context(),
             follow_redirects=True,
         )
     except httpx.HTTPError:

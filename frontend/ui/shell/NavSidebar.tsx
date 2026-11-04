@@ -33,7 +33,7 @@ function NavRow({ item, active, collapsed, count, attention }: { item: NavItem; 
       href={item.href}
       aria-current={active ? "page" : undefined}
       {...(collapsed ? { "aria-label": label } : {})}
-      className={`focus-ring press relative flex items-center gap-2 rounded-md px-2 py-1 text-md transition-colors duration-fast ${collapsed ? "justify-center" : ""} ${active ? "text-ink-primary" : "text-ink-secondary hover:bg-surface-raised hover:text-ink-primary"}`}
+      className={`focus-ring press relative flex items-center gap-2 rounded-md px-2 py-px text-md transition-colors duration-fast ${collapsed ? "justify-center" : ""} ${active ? "text-ink-primary" : "text-ink-secondary hover:bg-surface-raised hover:text-ink-primary"}`}
     >
       {active ? <ActiveMark group={ACTIVE_ROW} /> : null}
       <span className="relative flex min-w-0 flex-1 items-center gap-2">
@@ -104,7 +104,7 @@ export function NavSidebar({ counts }: { counts?: Readonly<Record<string, number
 
   return (
     <nav aria-label={t("nav.label")} className={`flex h-full shrink-0 flex-col border-r border-line-subtle bg-surface-page ${collapsed ? "w-rail" : "w-sidebar"}`}>
-      <div className={`flex h-topbar shrink-0 items-center px-3 ${collapsed ? "justify-center" : "justify-between"}`}>
+      <div className={`flex h-7 shrink-0 items-center px-3 ${collapsed ? "justify-center" : "justify-between"}`}>
         {collapsed ? null : <span className="text-lg font-medium text-ink-primary">{t("app.name")}</span>}
         <div className="flex items-center">
           {collapsed ? null : <SidebarEditor />}
@@ -112,7 +112,7 @@ export function NavSidebar({ counts }: { counts?: Readonly<Record<string, number
         </div>
       </div>
       <div className="min-h-0 flex-1">
-        <div className="flex h-full min-h-0 flex-col gap-3 px-2 pb-3">
+        <div className="flex h-full min-h-0 flex-col gap-2 px-2 pb-2">
           <ul className="flex shrink-0 flex-col gap-px">{NAV_TOP.map(row)}</ul>
           {sections.map((section) => {
             const items = section.items.filter((item) => !item.hidden);
