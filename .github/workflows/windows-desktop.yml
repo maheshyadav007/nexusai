@@ -1,0 +1,46 @@
+name: Windows desktop validation
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'desktop-ci/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-desktop-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-install-update:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Build, install and update A to B
+        shell: powershell
+        run: .\desktop.cmd ci
+      - name: Upload test evidence and generic installer
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-desktop-validation
+          retention-days: 3
+          include-hidden-files: true
+          if-no-files-found: warn
+          path: |
+            .release/artifacts/ci/0.0.2/*.exe
+            .release/artifacts/ci/*/release.json
+            .release/artifacts/ci/*/smoke.json
+            .release/ci/probe/plan.json
+            .release/ci/probe/result.json
+            .release/ci/probe/before.png
+            .release/ci/probe/after.png
+            .release/ci/probe/app-data/desktop.log
+            .release/smoke/**/result.json
+            .release/smoke/**/window.png
+            .release/smoke/**/desktop.log

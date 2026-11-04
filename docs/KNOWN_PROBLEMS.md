@@ -14,11 +14,11 @@ Last reviewed: 2026-11-04. See [implementation evidence and limits](EMAIL_AGENT_
 
 ## Other machines
 
-The app has only ever been run for real on one Mac, so these come from reading the code and lockfiles. None were seen happening, except where noted.
+Real-account use has been on one Mac. Generic Windows installation and auto-update have also passed on a hosted runner. The remaining platform risks below need representative target-device checks.
 
 | Problem | What happens | How we'll solve it |
 |---|---|---|
-| Nothing tests Linux or Windows | Every check runs on a Mac only, which is how the keyring failure reached Linux | Run `make check` on Linux and Windows on each push |
+| Organization-device Windows acceptance is unverified | Generic hosted Windows CI passed installer build, installation and an A → B update with preserved test data; internal configuration and distribution are not yet proven | Follow the [Windows release guide](WINDOWS_RELEASE_GUIDE.md), then test the internal feed, A → B → C updates and real mail checks on a normal target laptop |
 | Older systems can't install | `onnxruntime` has no build for Intel Macs or macOS before 14. `onnxruntime` and `sqlcipher3` need glibc 2.28 or newer on Linux, so RHEL or CentOS 7 and Ubuntu 18.04 fail. `cryptography` has no Windows on ARM build | Make meaning search an optional install, and check the system before setup |
 | Company networks | Web requests trust a built-in certificate list, so a company that inspects traffic can break model sign-in and connectors. `next build` downloads fonts from Google, so a blocked network can fail the build | Use the system's certificates, and ship the fonts in the repo |
 | Commands use the wrong shell | The agent is told the shell is `$SHELL`, but commands run in `zsh`, or `/bin/sh` if that's missing. On Ubuntu that's `dash`, so bash commands can fail | Run commands in the shell the agent is told about |

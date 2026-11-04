@@ -43,6 +43,14 @@ export function proxy(request: NextRequest) {
   const headers = new Headers(request.headers);
   const value = installToken();
   if (value) headers.set(appConfig.installToken.header, value);
+  const desktopBackend = process.env.NEXUSAI_DESKTOP_BACKEND_URL;
+  if (desktopBackend) {
+    const target = new URL(request.nextUrl.pathname + request.nextUrl.search, desktopBackend);
+    if (target.hostname !== "127.0.0.1" || target.protocol !== "http:") {
+      return NextResponse.json({ message: "Invalid desktop backend address." }, { status: 503 });
+    }
+    return NextResponse.rewrite(target, { request: { headers } });
+  }
   return NextResponse.next({ request: { headers } });
 }
 

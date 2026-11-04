@@ -1,0 +1,21 @@
+{
+  "name": "nexusai-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NexusAI desktop shell and internal release tools",
+  "author": "NexusAI",
+  "main": "main.cjs",
+  "scripts": {
+    "test": "node --test tests/release.test.cjs tests/profiles.test.cjs"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.11"
+  },
+  "devDependencies": {
+    "adm-zip": "0.5.16",
+    "electron": "45.2.2",
+    "electron-builder": "26.18.0",
+    "js-yaml": "4.1.1",
+    "ssh2": "1.17.0"
+  }
+}

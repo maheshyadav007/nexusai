@@ -404,6 +404,33 @@ def test_a_damaged_token_in_tool_arguments_stops_the_tool(
     assert status(client, session) == "failed"
 
 
+def test_a_turn_is_not_closed_until_its_final_status_is_saved(
+    client: TestClient, script: Script, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from nexusai.modules.agent import module as agents
+
+    session = new_session(client)
+    runtime = agents._runtime
+    assert runtime is not None
+    observed: list[str] = []
+    original = runtime.notifier.wake
+
+    def waking(turn: int) -> None:
+        rows = runtime.db.fetch_all(
+            "SELECT s.status, t.closed FROM agent_sessions s JOIN agent_turns t ON t.session = s.id"
+            " WHERE t.id = ?",
+            (turn,),
+        )
+        if rows and rows[0]["closed"]:
+            observed.append(rows[0]["status"])
+        original(turn)
+
+    monkeypatch.setattr(runtime.notifier, "wake", waking)
+    script.replies = [[ToolCall("c1", "write_file", {"path": "x.txt", "content": "<EMAIL_999>"})]]
+    assert stream_parts(client, session, "Write it")[-1]["type"] == "error"
+    assert observed == ["failed"]
+
+
 def test_model_failure_is_shown_and_the_session_can_try_again(
     client: TestClient, script: Script
 ) -> None:

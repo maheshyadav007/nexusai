@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NexusAI</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: grid; place-content: center; text-align: center;
+    background: #f4efe6; color: #211e1a; font: 16px/1.5 "Segoe UI", system-ui, sans-serif; }
+  h1 { font-size: 26px; margin: 20px 0 4px; font-weight: 600; }
+  p { margin: 0; color: #6a6258; }
+  .progress { width: 32px; height: 32px; margin: auto; border: 3px solid #ddd4c6;
+    border-top-color: #a64321; border-radius: 50%; animation: turn 1s linear infinite; }
+  @keyframes turn { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .progress { animation: none; } }
+</style>
+<main role="status"><div class="progress" aria-hidden="true"></div><h1>Starting NexusAI</h1><p>Opening your workspace…</p></main>
+</html>

@@ -8,6 +8,7 @@ const extraHosts = (process.env.NEXUSAI_ALLOWED_ORIGINS ?? "").split(",").filter
 const ownAddresses = Object.values(networkInterfaces()).flat().filter((net) => net?.family === "IPv4").map((net) => net.address);
 
 export default {
+  ...(process.env.NEXUSAI_DESKTOP_BUILD === "1" ? { output: "standalone" } : {}),
   // Compression holds back streamed events until a buffer fills, and this server is local.
   compress: false,
   // Next trusts only localhost in development, and blocks its live connection elsewhere.
@@ -18,6 +19,8 @@ export default {
   // The backend's max_upload_bytes is the real limit.
   experimental: { proxyClientMaxBodySize: "210mb" },
   async rewrites() {
+    // The desktop proxy selects its backend port at launch, after this build is made.
+    if (process.env.NEXUSAI_DESKTOP_BUILD === "1") return [];
     return [{ source: "/api/:path*", destination: `${process.env.NEXUSAI_BACKEND_URL ?? appConfig.backendUrl}/api/:path*` }];
   },
 };
