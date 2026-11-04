@@ -1,5 +1,6 @@
 "use client";
 
+import { PostyGuide } from "@/ui/shell/PostyGuide";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, type ReactNode } from "react";
 import { useHomeStatus, useRecoveryKey } from "@/ui/client/home";
@@ -14,7 +15,6 @@ import { HomeChooser } from "@/ui/features/home/HomeChooser";
 import { EmailConnector } from "@/ui/features/connectors/ConnectorsScreen";
 import { AppearanceSettings } from "@/ui/features/settings/AppearanceSettings";
 import { LocalModelSettings, SearchModelChoice } from "@/ui/features/settings/LocalModelSettings";
-import { ModelSettings } from "@/ui/features/settings/ModelSettings";
 import { ProfileForm } from "@/ui/features/settings/ProfileForm";
 import { Button } from "@/ui/primitives/Button";
 import { ErrorState } from "@/ui/primitives/ErrorState";
@@ -36,7 +36,6 @@ const STEPS: readonly Step[] = [
   { id: "recovery", label: "setup.recovery.label", title: "setup.recovery.title", description: "setup.recovery.description" },
   { id: "profile", label: "setup.you.label", title: "setup.profile.title", description: "setup.profile.description" },
   { id: "mail", label: "setup.mail.label", title: "setup.mail.title", description: "setup.mail.description" },
-  { id: "model", label: "setup.model.label", title: "setup.model.title", description: "setup.model.description" },
   { id: "search", label: "setup.search.label", title: "setup.search.title", description: "setup.search.description" },
   { id: "permissions", label: "setup.agent.label", title: "setup.permissions.title", description: "setup.permissions.description" },
 ];
@@ -121,6 +120,7 @@ function Frame({ step, index, actions, children }: { step: Step; index: number; 
                 <h1 className="font-serif text-display">{t(step.title)}</h1>
                 <p className="mt-2 text-md text-ink-secondary">{t(step.description)}</p>
               </div>
+              <PostyGuide message={`posty.setup.${step.id}` as StringKey} />
               {children}
               {actions ? <footer className="flex items-center gap-3">{actions}</footer> : null}
             </section>
@@ -167,7 +167,7 @@ export function OnboardingFlow() {
   if (!onboarding.data || done) return <Skeleton className="h-6 w-full" />;
 
   // Home can't be revisited here, so a Home opened by an earlier run resumes at the next step.
-  const found = STEPS.findIndex((item) => item.id === onboarding.data.current_step);
+  const found = STEPS.findIndex((item) => item.id === (onboarding.data.current_step === "model" ? "search" : onboarding.data.current_step));
   const index = found > 0 ? found : 1;
   const step = STEPS[index] as Step;
   const isLast = index === STEPS.length - 1;
@@ -212,7 +212,6 @@ export function OnboardingFlow() {
       }
     >
       {step.id === "mail" ? <EmailConnector /> : null}
-      {step.id === "model" ? <ModelSettings /> : null}
       {step.id === "search" ? <SearchStep /> : null}
       {step.id === "permissions" ? <AgentPresets /> : null}
     </Frame>

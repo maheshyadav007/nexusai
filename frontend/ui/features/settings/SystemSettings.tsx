@@ -1,5 +1,6 @@
 "use client";
 
+import { DesktopUpdates } from "./DesktopUpdates";
 import { copyText } from "@/ui/client/browser";
 import { useState } from "react";
 import { RecoverySettings } from "@/ui/features/home/RecoveryKey";
@@ -160,6 +161,7 @@ export function AboutSettings() {
         <h3 className="text-md font-medium text-ink-primary">{t("settings.about.team")}</h3>
         <p data-testid="team-member" className="text-md text-ink-secondary">{t("settings.about.member")}</p>
       </section>
+    <DesktopUpdates />
     </Card>
   );
 }

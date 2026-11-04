@@ -270,3 +270,15 @@ svg.lucide {
 
 /* Interface identity; reading surfaces retain the theme's Inter body face. */
 nav, button, [role="tab"], h1, h2, h3 { font-family: var(--font-space-grotesk), sans-serif; }
+
+
+/* Native Windows caption buttons occupy the right side of this single app header. */
+.desktop-caption { @apply fixed inset-x-0 top-0 z-50 flex items-center gap-2 border-b border-line-subtle bg-surface-page text-sm text-ink-primary; height: 44px; padding: 0 150px 0 12px; app-region: drag; }
+html[data-desktop] body { padding-top: 44px; }
+html[data-desktop] .h-screen { height: calc(100dvh - 44px); }
+html[data-desktop] .min-h-screen { min-height: calc(100dvh - 44px); }
+.category-scroll { scrollbar-width: thin; }
+.category-scroll::-webkit-scrollbar { width: 3px; }
+.category-scroll::-webkit-scrollbar-thumb { @apply rounded-full bg-line-strong; }
+
+.desktop-tools { app-region: no-drag; }

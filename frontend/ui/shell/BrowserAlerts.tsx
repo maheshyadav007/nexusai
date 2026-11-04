@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useEvents } from "@/ui/client/events";
 import { useSettings } from "@/ui/client/settings";
+import { desktopApi } from "@/ui/client/desktop";
 import { playChime } from "@/ui/client/sound";
 import { useQuietHours } from "@/ui/client/work";
 import { t } from "@/ui/strings";
@@ -48,8 +49,14 @@ export function BrowserAlerts() {
         const kind = kindOf(event);
         const now = latest.current;
         const hushed = now.quiet?.enabled && isQuiet(now.quiet.start ?? "", now.quiet.end ?? "", new Date());
-        if (kind && !now.muted && !hushed && !now.off.includes(kind)) playChime();
-        if (event.type !== "notification.requested" || event.payload.kind !== "urgent-mail") return;
+        const sound = Boolean(kind && !now.muted && !hushed && !now.off.includes(kind));
+        const desktop = desktopApi();
+        if (desktop && event.type === "notification.requested") {
+          void desktop.notify({ title: String(event.payload.title ?? t("app.name")), body: String(event.payload.detail ?? ""), link: String(event.payload.link ?? "/today"), silent: !sound }).catch(() => { if (sound) playChime(); });
+          return;
+        }
+        if (sound) playChime();
+        if (event.type !== "notification.requested" || !["urgent-mail", "reminder"].includes(String(event.payload.kind))) return;
         if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
         const alert = new Notification(String(event.payload.title ?? t("app.name")), { body: String(event.payload.detail ?? "") });
         const link = event.payload.link;

@@ -10,6 +10,24 @@ Scheduling uses `tzlocal` to discover the OS IANA timezone, including Windows re
 
 Latest validation: the [expanded non-UTC Windows run](https://github.com/maheshyadav007/nexusai/actions/runs/41831647703) passed timezone detection and scheduler regressions, but stopped at backend tests with 117 passed and two email-reliability failures. It did not create an installer or exercise updates for the timezone-fixed source. Investigate stale-judgment counting and digest cursor/completion synchronization as recorded in [Known Problems](KNOWN_PROBLEMS.md#windows-email-reliability-validation). Source fixes may be merged while this investigation remains open; distribution acceptance still requires a green full run and target-device checks.
 
+## Beta acceptance builds
+
+The app remains **NexusAI**. Unsigned testers see **NexusAI Beta** in the installer/shortcuts; the prior unsigned app ID, data directory and updater-cache identity are retained to avoid abandoning existing pilot data. Technical feed/channel names remain `pilot`/`unsigned` for compatibility. Signed distribution stays separate.
+
+From a clean committed checkout, run:
+
+```sh
+./desktop.sh beta-trigger --version 0.1.0
+```
+
+This pushes a versioned `desktop-beta/<version>/<timestamp>` tag. Windows CI runs in India Standard Time, runs backend correctness/TLS checks, installs the separate CI app and tests its A-to-B update with preserved data, then builds and smoke-tests a separate generic Beta. Backend checks run once within that immutable-source build process. The publication job verifies the artifact manifest, smoke result and installer checksum, then publishes the `.exe` and checksum under GitHub **Releases → Assets** as a prerelease. A failed gate prevents publication. Use a new version for the next iteration.
+
+The generic Beta has **no update URL**, company profile or credentials. It deliberately does not inherit the CI app's temporary loopback feed. About & Updates states that newer Betas must be installed manually until a real internal feed is configured. For an internally customized Beta with automatic updates, follow the deployment-profile and hosting sections below. This separation makes the public tester installer usable after the runner has shut down.
+
+Beta UX includes launch-after-install, native Windows caption controls integrated into the app header, a Settings drop-up, About & Updates, graceful restart/quit, startup-stage timing in `desktop.log`, native reminder notifications and a notification test. Notification sound still depends on Windows Do Not Disturb/per-app settings. Posty setup guidance is deterministic; the temporary outline robot is replaced only after the main Beta work is accepted. Custom mascot artwork remains deferred.
+
+Local embedding/search downloads now use `truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)` to validate against native OS roots rather than only a certifi bundle. `SSL_CERT_FILE` can add roots; verification is never disabled. A corporate CA must actually be trusted by the device. Model-server listing uses the same context. Proxy routing, mirror availability and blocked download hosts still require testing on the intended network.
+
 ## 1. Validate the generic Windows app first
 
 Commit the source, desktop tools and workflow. From a development checkout on macOS or Linux:

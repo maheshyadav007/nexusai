@@ -47,6 +47,7 @@ function MailDownload() {
   const done = status.data?.done ?? 0;
   return (
     <div data-testid="mail-download" className="flex w-full flex-col gap-1">
+      <p className="text-sm text-ink-secondary">{t("accounts.download.continue")}</p>
       <Progress label={t("accounts.download")} value={done} max={total} />
       <p className="text-sm tabular-nums text-ink-muted">{t("accounts.download.count", { done, total })}</p>
     </div>

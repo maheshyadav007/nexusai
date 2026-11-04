@@ -54,9 +54,9 @@ class Script:
 
     def stream(self, request: ModelRequest) -> Iterator[Any]:
         self.requests.append(request)
-        if self.gate:
-            self.gate.wait(10)
-        reply = self.replies.pop(0) if self.replies else (self.default or triage_reply())
+        if self.gate and not self.gate.wait(60):
+            raise TimeoutError("The test did not release its model-response gate")
+        reply = self.replies.pop(0) if self.replies else (self.default if self.default is not None else triage_reply())
         for item in reply:
             if isinstance(item, Exception):
                 raise item
@@ -1049,3 +1049,17 @@ def test_no_model_call_for_a_draft_to_an_address_nobody_reads(
     answer = client.post("/api/commands/thread.draftReply", json={"id": thread["id"]})
     assert answer.status_code == 409 and answer.json()["code"] == "draft.no_reply"
     assert len(script.requests) == calls
+
+
+def test_agent_can_discover_and_read_an_email_attachment(client: TestClient, script: Script, fake: FakeMail) -> None:
+    client.post("/api/commands/schedules.setDefaults", json={"live_mail_enabled": False})
+    connect(client, fake)
+    fake.state.deliver(make_mail(subject="Attachment evidence", attachments=[("brief.txt", "text/plain", b"The launch date is Friday.")]))
+    thread = thread_named(client, "Attachment evidence")
+    session, output = run_tool(client, script, ToolCall("attachment-list", "read_thread", {"thread_id": thread["id"]}))
+    assert "brief.txt" in output and "read_document key m:" in output
+    import re
+    key = re.search(r"read_document key (m:\d+:\d+)", output)
+    assert key is not None
+    _, text = run_tool(client, script, ToolCall("attachment-read", "read_document", {"key": key.group(1)}), session=session)
+    assert "The launch date is Friday." in text

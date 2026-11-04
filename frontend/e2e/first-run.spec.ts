@@ -47,10 +47,10 @@ test("a new person goes from landing through setup into the app, and setup resum
   await page.getByRole("button", { name: "Skip for now" }).click();
 
   // Closing midway resumes at the same step.
-  await expect(page.getByRole("heading", { name: "Connect a model" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Find things by what they're about" })).toBeVisible();
   await page.goto("/");
   await expect(page).toHaveURL(/\/setup$/);
-  await expect(page.getByRole("heading", { name: "Connect a model" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Find things by what they're about" })).toBeVisible();
   await noViolations(page);
 
   await page.getByRole("button", { name: "Back" }).click();
@@ -61,7 +61,6 @@ test("a new person goes from landing through setup into the app, and setup resum
   await expect(page.getByRole("heading", { name: "Connect your mail" })).toBeVisible();
   await page.getByRole("button", { name: "Skip for now" }).click();
 
-  await page.getByRole("button", { name: "Continue" }).click();
   // Nothing downloads until asked. Downloads are blocked in this test environment, so this also
   // shows what a blocked corporate network sees, and skipping still moves on.
   await expect(page.getByRole("heading", { name: "Find things by what they're about" })).toBeVisible();

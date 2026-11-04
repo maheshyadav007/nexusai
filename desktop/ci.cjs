@@ -5,7 +5,7 @@ const { spawn } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const lib = require('./release-lib.cjs');
 
-module.exports = async function ci({ work, configFile, build, test, run }) {
+module.exports = async function ci({ work, configFile, build, test, run, betaVersion = null }) {
   const previous = fs.existsSync(configFile) ? fs.readFileSync(configFile) : null;
   const config = structuredClone(require('./release.example.json'));
   const ciRoot = path.join(work, 'ci');
@@ -57,6 +57,15 @@ module.exports = async function ci({ work, configFile, build, test, run }) {
     const result = JSON.parse(fs.readFileSync(resultFile, 'utf8'));
     if (!result.ok || result.to !== '0.0.2') throw new Error(`Installed update test failed: ${JSON.stringify(result)}`);
     console.log('Installed A → B update passed, including database settings, browser storage and app-data persistence.');
+    if (betaVersion) {
+      console.log('Building a separate NexusAI Beta installer with no ephemeral update feed.');
+      config.ciProbe = false;
+      config.updateBaseUrl = '';
+      config.version = betaVersion;
+      await build(config);
+      await test(config);
+      console.log('NexusAI Beta installer built and startup/shutdown smoke-tested.');
+    }
   } finally {
     fs.rmSync(flag, { force: true });
     if (previous) fs.writeFileSync(configFile, previous); else fs.rmSync(configFile, { force: true });

@@ -10,6 +10,7 @@ import httpx
 import structlog
 
 from nexusai.kernel.files import replace_file
+from nexusai.kernel.network import system_ssl_context
 from nexusai.modules.semantic.catalog import CatalogModel, ModelFile, folder, url
 
 log = structlog.get_logger()
@@ -118,7 +119,9 @@ def download(
         raise DownloadFailed("There isn't enough free space on this drive for the model.")
     timeout = httpx.Timeout(READ_SECONDS, connect=CONNECT_SECONDS)
     # Follows the system's proxy settings, which corporate networks rely on.
-    with httpx.Client(timeout=timeout, follow_redirects=True, trust_env=True) as client:
+    with httpx.Client(
+        timeout=timeout, follow_redirects=True, trust_env=True, verify=system_ssl_context()
+    ) as client:
         for item in model.files:
             target = base / item.name
             if target.is_file() and target.stat().st_size == item.size:
