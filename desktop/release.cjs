@@ -117,7 +117,7 @@ async function build(config) {
   const frontendRoot = path.join(buildRoot, 'frontend');
   await run(uv, ['python', 'install', pins.python, '--no-bin', '--no-registry']);
   const sourcePython = capture(uv, ['python', 'find', '--managed-python', pins.python]);
-  await run(uv, ['run', '--locked', '--python', sourcePython, 'pytest', '-q', 'tests/test_desktop.py', 'tests/test_api.py'], { cwd: backendRoot });
+  await run(uv, ['run', '--locked', '--python', sourcePython, 'pytest', '-q', 'tests/test_desktop.py', 'tests/test_api.py', 'tests/test_scheduler_timezone.py', 'tests/test_email_reliability.py', 'tests/test_agent_work.py', 'tests/test_cockpit.py'], { cwd: backendRoot });
   const pythonRoot = path.join(resources, 'python');
   await fsp.cp(path.dirname(sourcePython), pythonRoot, { recursive: true, dereference: true });
   const python = path.join(pythonRoot, 'python.exe');

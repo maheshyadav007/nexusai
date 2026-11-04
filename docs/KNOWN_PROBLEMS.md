@@ -18,6 +18,7 @@ Real-account use has been on one Mac. Generic Windows installation and auto-upda
 
 | Problem | What happens | How we'll solve it |
 |---|---|---|
+| Windows schedule timezone detection | Fixed in source: `tzlocal` detects Windows zones, the launcher supplies an IANA `TZ`, and scheduler ticks preserve their offset. Earlier UTC-only CI missed this path | Non-UTC Windows CI must pass; inspect previously saved UTC schedules and re-save any whose intended timezone is local |
 | Organization-device Windows acceptance is unverified | Generic hosted Windows CI passed installer build, installation and an A → B update with preserved test data; internal configuration and distribution are not yet proven | Follow the [Windows release guide](WINDOWS_RELEASE_GUIDE.md), then test the internal feed, A → B → C updates and real mail checks on a normal target laptop |
 | Older systems can't install | `onnxruntime` has no build for Intel Macs or macOS before 14. `onnxruntime` and `sqlcipher3` need glibc 2.28 or newer on Linux, so RHEL or CentOS 7 and Ubuntu 18.04 fail. `cryptography` has no Windows on ARM build | Make meaning search an optional install, and check the system before setup |
 | Company networks | Web requests trust a built-in certificate list, so a company that inspects traffic can break model sign-in and connectors. `next build` downloads fonts from Google, so a blocked network can fail the build | Use the system's certificates, and ship the fonts in the repo |

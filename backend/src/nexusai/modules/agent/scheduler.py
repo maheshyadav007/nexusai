@@ -6,10 +6,10 @@ The clock only says something came due. Starting the agent is the same as for an
 import os
 import threading
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import structlog
+from tzlocal import get_localzone_name
 
 from nexusai.contracts.agent import Schedule, ScheduleRow
 from nexusai.kernel.database import Migration
@@ -70,14 +70,11 @@ BUILT_IN_KINDS = ("mail-hourly", BRIEF_KIND, REVIEW_KIND)
 
 
 def system_timezone() -> str:
-    candidate = os.environ.get("TZ", "")
-    path = str(Path("/etc/localtime").resolve())
-    if not candidate and "zoneinfo/" in path:
-        candidate = path.split("zoneinfo/", 1)[1]
     try:
+        candidate = os.environ.get("TZ") or get_localzone_name()
         ZoneInfo(candidate)
         return candidate
-    except (ZoneInfoNotFoundError, ValueError):
+    except (ZoneInfoNotFoundError, ValueError, OSError, RuntimeError, LookupError):
         return "UTC"
 
 
@@ -113,7 +110,8 @@ def initialize_timezones(ctx: Context) -> None:
 
 
 def _local_now() -> datetime:
-    return datetime.now().astimezone().replace(tzinfo=None, second=0, microsecond=0)
+    # Preserve the OS offset: losing it can reinterpret local wall time as UTC.
+    return datetime.now().astimezone().replace(second=0, microsecond=0)
 
 
 def next_run_after(schedule: Schedule, after: datetime) -> str | None:
