@@ -18,7 +18,7 @@ The app has only ever been run for real on one Mac, so these come from reading t
 
 | Problem | What happens | How we'll solve it |
 |---|---|---|
-| Nothing tests Linux or Windows | Every check runs on a Mac only, which is how the keyring failure reached Linux | Run `make check` on Linux and Windows on each push |
+| Windows acceptance is unverified | Checks have run on a Mac; a packaged Windows installation and real update cycle are not yet proven | Run the [Windows build/test pipeline](WINDOWS_RELEASE_GUIDE.md), then A → B → C updates and real mail checks on a company laptop; automate the proven checks later |
 | Older systems can't install | `onnxruntime` has no build for Intel Macs or macOS before 14. `onnxruntime` and `sqlcipher3` need glibc 2.28 or newer on Linux, so RHEL or CentOS 7 and Ubuntu 18.04 fail. `cryptography` has no Windows on ARM build | Make meaning search an optional install, and check the system before setup |
 | Company networks | Web requests trust a built-in certificate list, so a company that inspects traffic can break model sign-in and connectors. `next build` downloads fonts from Google, so a blocked network can fail the build | Use the system's certificates, and ship the fonts in the repo |
 | Commands use the wrong shell | The agent is told the shell is `$SHELL`, but commands run in `zsh`, or `/bin/sh` if that's missing. On Ubuntu that's `dash`, so bash commands can fail | Run commands in the shell the agent is told about |

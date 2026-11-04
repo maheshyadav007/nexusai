@@ -373,6 +373,9 @@ Status: 4.1 to 4.3 built and tested. 4.4 is built, and its done-when, a full day
 | 5.2 | Bundled Python sidecar, supervised and restarted | Backend starts and recovers, with no Python installed on the machine |
 | 5.3 | Urgent mail pop-up window, native theme colors | Mica and vibrancy follow the theme |
 | 5.4 | Windows installer without admin rights; Windows CI and VM checks; test on a corporate laptop | Antivirus and AppLocker allow it |
+| 5.5 | Internal update feed and repeatable release scripts | Installed A updates to B and C on the company laptop with data preserved |
+
+Desktop shell, portable runtime packaging and internal publication scripts are implemented; Windows acceptance remains pending. Start with the [Windows release guide](WINDOWS_RELEASE_GUIDE.md). The company Windows test laptop can build releases manually after pulling the chosen source commit; a dedicated CI runner is optional later. Linux serves the files. Initial Windows packaging and update checks precede native visual effects and broader platform distribution.
 
 ## 8. Decisions needed
 

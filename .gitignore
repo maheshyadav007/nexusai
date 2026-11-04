@@ -31,3 +31,10 @@ test-results/
 
 # OS
 .DS_Store
+
+# Desktop build tools, artifacts and machine-specific release configuration
+.release/
+desktop/node_modules/
+desktop/release.local.json
+desktop/resources/
+desktop/dist/

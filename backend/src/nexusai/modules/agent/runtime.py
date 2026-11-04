@@ -209,11 +209,6 @@ class SessionRuntime:
                 )
         self.notifier.wake(turn)
 
-    def _close_turn(self, turn: int) -> None:
-        with self.db.transaction() as tx:
-            tx.execute("UPDATE agent_turns SET closed = 1 WHERE id = ?", (turn,))
-        self.notifier.wake(turn)
-
     def row(self, session: str) -> SessionRow:
         rows = self.db.fetch_all("SELECT * FROM agent_sessions WHERE id = ?", (session,))
         if not rows:
@@ -773,16 +768,34 @@ class SessionRuntime:
             parts.append({"type": "abort"})
         else:
             parts.append({"type": "finish"})
-        self._append(turn, parts)
-        with self.db.transaction() as tx:
-            tx.execute(
-                "UPDATE agent_turns SET end_checkpoint = ?,"
+        checkpoint = self._latest_checkpoint(session)
+        # The final stream parts, session state and turn closure become visible together.
+        # Otherwise [DONE] can race a still-running session, or a new request can see
+        # a completed session whose previous turn has not closed yet.
+        with self.ctx.bus.unit_of_work() as work:
+            totals = work.tx.execute(
+                "SELECT COALESCE(SUM(input_tokens), 0) AS i,"
+                " COALESCE(SUM(output_tokens), 0) AS o FROM model_calls WHERE session = ?",
+                (session,),
+            ).fetchone()
+            work.tx.execute(
+                "UPDATE agent_turns SET closed = 1, end_checkpoint = ?,"
                 " last_call = (SELECT MAX(id) FROM model_calls WHERE session = ?) WHERE id = ?",
-                (self._latest_checkpoint(session), session, turn),
+                (checkpoint, session, turn),
             )
-        self._close_turn(turn)
-        self._record_usage(session)
-        self._set(session, status=status, error=error, step=None)
+            work.tx.execute(
+                "UPDATE agent_sessions SET input_tokens = ?, output_tokens = ?,"
+                " status = ?, error = ?, step = NULL, updated = ? WHERE id = ?",
+                (totals["i"], totals["o"], status, error, _now(), session),
+            )
+            for part in parts:
+                work.tx.execute(
+                    "INSERT INTO agent_parts (turn, part) VALUES (?, ?)",
+                    (turn, json.dumps(part, default=str)),
+                )
+            for payload in ({"id": session}, {"id": session, "status": status}):
+                work.emit("session.changed", payload, source="agent", trace_id=self.ctx.trace_id)
+        self.notifier.wake(turn)
         if self.on_turn_end is not None:
             self.on_turn_end(turn, error)
 

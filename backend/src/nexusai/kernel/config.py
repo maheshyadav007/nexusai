@@ -146,13 +146,16 @@ def _env_file() -> dict[str, str]:
     the agent's commands inherit that and the API key would be one `env` away."""
     named = os.environ.get("NEXUSAI_ENV_FILE")
     path = Path(named) if named else Path(__file__).resolve().parents[4] / ".env"
-    if not path.is_file():
-        return {}
+    defaults = os.environ.get("NEXUSAI_ENV_DEFAULTS_FILE")
+    paths = ([Path(defaults)] if defaults else []) + [path]
     found: dict[str, str] = {}
-    for line in path.read_text(encoding="utf-8-sig").splitlines():
-        key, equals, value = line.strip().removeprefix("export ").partition("=")
-        if equals and not key.startswith("#"):
-            found[key.strip()] = value.strip().strip("\"'")
+    for candidate in paths:
+        if not candidate.is_file():
+            continue
+        for line in candidate.read_text(encoding="utf-8-sig").splitlines():
+            key, equals, value = line.strip().removeprefix("export ").partition("=")
+            if equals and not key.startswith("#"):
+                found[key.strip()] = value.strip().strip("\"'")
     return found
 
 

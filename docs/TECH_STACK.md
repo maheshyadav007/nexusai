@@ -18,7 +18,7 @@ Status legend: **In use** (in the repo today) · **Decided** (agreed, not built 
 
 | Choice | Status | Why |
 |---|---|---|
-| **Electron** | Decided, later | Added after the web app. Ships the same Chromium engine on macOS and Windows, so what we test on Mac matches what Windows users see. Trusted in enterprises (VS Code, Teams, Slack). |
+| **Electron** | Initial shell implemented; Windows acceptance pending | Bundles Chromium across platforms; packaging, native dependencies and lifecycle still require Windows testing. See [Windows release plan](WINDOWS_RELEASE_PLAN.md). |
 | Tauri | Considered | Smaller and lighter, but renders with WebKit on Mac and WebView2 on Windows, so Mac testing would not be representative. |
 | Native (WinUI / SwiftUI) | Considered | Two codebases, and the Windows one could not be tested locally. |
 | Python desktop UI (pywebview, Flet, PySide) | Considered | pywebview has the same engine split as Tauri; loses the web UI stack. Python is used for the backend only. |
@@ -27,7 +27,7 @@ Status legend: **In use** (in the repo today) · **Decided** (agreed, not built 
 
 | Choice | Status | Notes |
 |---|---|---|
-| Next.js (App Router) | In use | Local server for the web build. Electron later uses `output: 'export'` to load local files. |
+| Next.js (App Router) | In use | Local server for the web build. Desktop plan: package standalone server output to preserve dynamic routes, proxy behavior and streaming; verify packaged Node execution on Windows before standardizing it. |
 | React + TypeScript | In use | TypeScript across UI, preload and main process. |
 | Tailwind CSS | In use | Re-theme to the v9 palette. Colors as CSS variables so light, dark and accent themes switch instantly. v9 defines light only; dark must be designed. |
 | Zustand | In use | UI-only state. |
@@ -56,13 +56,13 @@ Status legend: **In use** (in the repo today) · **Decided** (agreed, not built 
 
 | Choice | Status | Notes |
 |---|---|---|
-| Main process in TypeScript | Decided, later | Kept thin: windows, tray, notifications, global shortcuts, launching the Python backend. |
-| Python backend as a sidecar | Decided, later | Uses a bundled standalone Python, not a frozen executable, to reduce antivirus flags. Test early on a corporate laptop. |
+| Main process in JavaScript (CommonJS) | Initial shell implemented | Window, native update menu, single instance, startup readiness and supervised Node/Python services. Tray, start-at-login and global shortcuts are deferred. |
+| Python backend as a sidecar | Decided, later | Bundle standalone Python and preinstalled dependencies. Verify native libraries and subprocess workers on Windows; packaging does not guarantee antivirus acceptance. |
 | Zod | Decided | Validates theme files and API responses in the UI. |
 | Preload + `contextBridge` typed IPC | Decided | `contextIsolation: true`, `nodeIntegration: false`; the UI only sees a small typed API. |
 | electron-builder | Decided | One config produces macOS `.dmg` and Windows installers. Windows: **per-user NSIS** installer (no admin needed). |
 | Credentials | Decided | Mail accounts: one encrypted file in Home (AES-GCM, key derived from the Home's key). Home's key and model and connector sign-ins: for now, a local file only this user can read, `secrets.json` in the app data folder, because a missing keyring blocked opening a Home. Secrets already in the OS credential store are still read. Planned once things are stable: OS credential store through Python `keyring`. |
-| Auto-update (`electron-updater`) | Decided | Details depend on where corporate builds are hosted. |
+| Auto-update (`electron-updater`) | Implemented, Windows verification pending | Generic internal feed, separate from private GitHub releases so employees need no GitHub account. Unsigned pilot is isolated from signed distribution; see [commands](WINDOWS_RELEASE_GUIDE.md) and [release gates](WINDOWS_RELEASE_PLAN.md). |
 
 ### Agent runtime
 

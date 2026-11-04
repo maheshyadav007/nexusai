@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "version": "0.1.0",
+  "companyEnvFile": "",
+  "embedCredentials": false,
+  "updateBaseUrl": "",
+  "signing": {
+    "enabled": false,
+    "publisherName": "",
+    "certificateFile": ""
+  },
+  "ssh": {
+    "host": "",
+    "port": 22,
+    "username": "",
+    "privateKeyFile": ""
+  },
+  "server": {
+    "root": "/srv/nexusai-updates",
+    "port": 8088,
+    "tlsCertificate": "",
+    "tlsKey": ""
+  }
+}
