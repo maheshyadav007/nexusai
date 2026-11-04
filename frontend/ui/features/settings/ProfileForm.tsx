@@ -17,7 +17,7 @@ const TONES = [
   { value: "brief", label: t("profile.tone.brief") },
 ];
 
-export function ProfileForm({ action, onSaved, compact = false, actions }: { action: string; onSaved?: () => void; compact?: boolean; actions?: ReactNode }) {
+export function ProfileForm({ action, onSaved, compact = false, onboarding = false, actions }: { action: string; onSaved?: () => void; compact?: boolean; onboarding?: boolean; actions?: ReactNode }) {
   const profile = useProfile();
   const save = useSaveProfile();
   const [draft, setDraft] = useState<Profile | null>(null);
@@ -42,9 +42,9 @@ export function ProfileForm({ action, onSaved, compact = false, actions }: { act
       <Field label={t("profile.tone")} hint={t("profile.tone.hint")}>
         {({ invalid, id, "aria-describedby": describedBy }) => <Select id={id} invalid={invalid} {...(describedBy ? { describedBy } : {})} value={draft.tone ?? "friendly"} options={TONES} onChange={(tone) => set({ tone: tone as Profile["tone"] })} />}
       </Field>
-      <Field label={t("profile.signature")}>{({ invalid, ...control }) => <Textarea invalid={invalid} rows={2} value={draft.signature ?? ""} onChange={(event) => set({ signature: event.target.value })} {...control} />}</Field>
-      <Field label={t("profile.vips")} hint={t("profile.vips.hint")}>{({ invalid, ...control }) => <Textarea invalid={invalid} rows={2} value={draft.vips ?? ""} onChange={(event) => set({ vips: event.target.value })} {...control} />}</Field>
-      <Field label={t("profile.about")} hint={t("profile.about.hint")}>{({ invalid, ...control }) => <Textarea invalid={invalid} rows={compact ? 2 : 3} value={draft.about ?? ""} onChange={(event) => set({ about: event.target.value })} {...control} />}</Field>
+      <Field label={t("profile.signature")}>{({ invalid, ...control }) => <Textarea invalid={invalid} rows={onboarding ? 1 : 2} value={draft.signature ?? ""} onChange={(event) => set({ signature: event.target.value })} {...control} />}</Field>
+      {onboarding ? null : <Field label={t("profile.vips")} hint={t("profile.vips.hint")}>{({ invalid, ...control }) => <Textarea invalid={invalid} rows={2} value={draft.vips ?? ""} onChange={(event) => set({ vips: event.target.value })} {...control} />}</Field>}
+      {onboarding ? null : <Field label={t("profile.about")} hint={t("profile.about.hint")}>{({ invalid, ...control }) => <Textarea invalid={invalid} rows={compact ? 2 : 3} value={draft.about ?? ""} onChange={(event) => set({ about: event.target.value })} {...control} />}</Field>}
       {save.isError ? <ErrorState title={t("profile.saveError")} /> : null}
       <div className={`flex items-center gap-3 ${compact ? "md:col-span-2" : ""}`}>
         {actions}

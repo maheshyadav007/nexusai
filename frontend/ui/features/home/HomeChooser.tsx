@@ -28,10 +28,12 @@ export function HomeChooser({ initialPath, mustExist = false, action, onChosen }
       <div className="w-full">
         <Field label={t("home.location")} {...(problem ? { error: problem } : {})}>
           {({ invalid, ...control }) => (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <Input invalid={invalid} spellCheck={false} value={path} onChange={(event) => setPath(event.target.value)} {...control} />
-              <FolderPicker start={path} onPick={setPath} trigger={<Button className="shrink-0">{t("home.browse")}</Button>} />
-              <Button className="shrink-0" data-testid="use-current-folder" loading={current.isPending} onClick={() => current.mutate(undefined, { onSuccess: (found) => setPath(found.path) })}>{t("home.useCurrent")}</Button>
+              <div className="flex gap-2">
+                <FolderPicker start={path} onPick={setPath} trigger={<Button className="shrink-0">{t("home.browse")}</Button>} />
+                <Button className="shrink-0" data-testid="use-current-folder" loading={current.isPending} onClick={() => current.mutate(undefined, { onSuccess: (found) => setPath(found.path) })}>{t("home.useCurrent")}</Button>
+              </div>
             </div>
           )}
         </Field>

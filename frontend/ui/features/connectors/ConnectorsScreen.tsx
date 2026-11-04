@@ -40,13 +40,13 @@ const STATE_LABEL: Readonly<Record<string, StringKey>> = {
 const INSECURE = "http://";
 
 /** The mail account and old mail together. Setup and the Connectors page both show this. */
-export function EmailConnector() {
+export function EmailConnector({ brief = false }: { brief?: boolean }) {
   return (
     <div className="flex flex-col gap-4">
-      <AccountSettings />
-      <ExpandRow variant="plain" label={t("connections.archives")} title={t("connections.archives")} meta={t("connections.archives.hint")}>
+      <AccountSettings brief={brief} />
+      {brief ? null : <ExpandRow variant="plain" label={t("connections.archives")} title={t("connections.archives")} meta={t("connections.archives.hint")}>
         <PstImportCard />
-      </ExpandRow>
+      </ExpandRow>}
     </div>
   );
 }

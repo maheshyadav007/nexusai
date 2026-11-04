@@ -15,6 +15,24 @@ body {
 }
 
 @layer components {
+  .onboarding-fields [data-field] > label {
+    @apply text-sm font-normal text-ink-muted;
+  }
+  .onboarding-fields [data-field] > input:not([type="checkbox"]):not([type="radio"]),
+  .onboarding-fields [data-field] > textarea,
+  .onboarding-fields [data-field] > span > input,
+  .onboarding-fields [data-field] > button[role="combobox"] {
+    @apply rounded-none border-x-0 border-t-0 border-b-line-subtle bg-transparent px-0 shadow-none;
+  }
+  .onboarding-fields [data-field] > input:focus,
+  .onboarding-fields [data-field] > textarea:focus,
+  .onboarding-fields [data-field] > span > input:focus,
+  .onboarding-fields [data-field] > button[role="combobox"]:focus {
+    @apply border-b-accent-default;
+  }
+  .onboarding-fields [data-field] > span > input[type="password"] {
+    @apply pr-7;
+  }
   .nx-progress {
     @apply block h-1 w-full appearance-none overflow-hidden rounded-full bg-surface-sunken;
   }

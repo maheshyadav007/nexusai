@@ -62,3 +62,5 @@ Implementation and validation results will be recorded here. A successful instal
 ## Follow-up UI review
 
 The isolated onboarding review found and corrected six reported UX gaps plus the related desktop chat/header overlap. See [Onboarding UI review](ONBOARDING_UI_REVIEW.md) for causes, scope and evidence. These corrections are on `codex/onboarding-sandbox` and are not part of the already-published Beta 0.1.0.
+
+The same sandbox now contains the Posty-led landing and five-step setup redesign. First run asks for only Home, a compact profile, deployment-managed mail credentials, optional local search and permissions. New Beta Homes use the default recovery key `admin`, so the recovery page is absent during setup; this is an explicit Beta security debt recorded in [Known problems](KNOWN_PROBLEMS.md), not part of the published Beta 0.1.0.

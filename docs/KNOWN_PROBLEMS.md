@@ -9,6 +9,7 @@ Last reviewed: 2026-11-04. See [implementation evidence and limits](EMAIL_AGENT_
 | Problem | What happens | How we'll solve it |
 |---|---|---|
 | No login, and open to the network | For testing, any machine on a private network can open the app by IP and use everything, including mail and agents. Must be fixed before real use | Add a login and HTTPS, and listen only on this computer by default |
+| New Beta Homes share the recovery key `admin` | First run no longer pauses to display a key. Anyone who copies a Beta Home can try the documented default and unlock its encrypted data | Before broader distribution, provision a unique key per Home or restore the setup key ceremony. Until then, replace the key in Settings before moving or sharing a Home |
 | Secrets are in a plain file | A missing keyring blocked opening a Home on Linux, so the Home's key and sign-ins now go in `secrets.json`, readable only by this user but not encrypted. Anything running as this user can read them, and the database is only as safe as this file | Once things are stable, go back to the OS credential store, with a clear fallback when none exists, and move these secrets across |
 | Folder-watch limit on Linux | If Linux runs out of file watches, opening a Home may fail with an error. Not reproduced | Catch it, and carry on without watching for file changes |
 
@@ -25,7 +26,7 @@ Real-account use has been on one Mac. Generic Windows installation and auto-upda
 | Commands use the wrong shell | The agent is told the shell is `$SHELL`, but commands run in `zsh`, or `/bin/sh` if that's missing. On Ubuntu that's `dash`, so bash commands can fail | Run commands in the shell the agent is told about |
 | Opening the app by IP address | Toasts and Copy now work over plain http. Browsers still don't grant notifications there | Add HTTPS |
 | Memory limit on attachments | The attachment reader is capped at 2 GB of address space. Linux enforces this, and a Mac ignores it, so large files may fail only on Linux | Test on Linux, then raise the limit or change how it's measured |
-| Moving a Home to another computer | The key stays behind in the app data folder or Keychain, so the Home asks for its recovery key, and model and connector sign-ins must be repeated | Explain this at setup, and make sure the recovery key was saved |
+| Moving a Home to another computer | The key stays behind in the app data folder or Keychain, so the Home asks for its recovery key, and model and connector sign-ins must be repeated. A new Beta Home opens with `admin` unless its key was replaced in Settings | Before moving it, replace or record the recovery key and expect to repeat model and connector sign-ins |
 | Network and virtual drives | The check misses some types, such as `virtiofs`, `vboxsf`, `ceph` and WSL's `/mnt/c`, where the database can be slow or unreliable | Add them to the list, and warn on WSL mounts |
 | Frontend and backend must share an account | The frontend reads the backend's token from the user's app data, and remembers it. A different user, or a reset, gives "Request refused" until it restarts | Read the token again after a refusal, and say what's wrong |
 | Ports already in use | Other programs often use 4000, such as NoMachine, and the frontend's port is fixed | Add one setting for both ports, and a clear message when one is taken |

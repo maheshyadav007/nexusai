@@ -97,6 +97,7 @@
     "content": "960px",
     "sidebar": "256px",
     "rail": "56px",
+    "posty": "72px",
     "topbar": "56px",
     "popover": "320px",
     "drawer": "420px",
