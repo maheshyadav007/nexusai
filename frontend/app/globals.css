@@ -281,4 +281,5 @@ html[data-desktop] .min-h-screen { min-height: calc(100dvh - 44px); }
 .category-scroll::-webkit-scrollbar { width: 3px; }
 .category-scroll::-webkit-scrollbar-thumb { @apply rounded-full bg-line-strong; }
 
-.desktop-tools { app-region: no-drag; }
+.desktop-tools { app-region: drag; }
+.desktop-tools button, .desktop-tools input, .desktop-tools a, .desktop-tools [role="button"] { app-region: no-drag; }

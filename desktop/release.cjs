@@ -19,6 +19,7 @@ const option = (name, fallback) => { const at = args.indexOf(`--${name}`); retur
 const channel = option('channel', 'pilot');
 const uv = process.env.NEXUSAI_UV || 'uv';
 let backendChecked = false;
+let managedVersions = false;
 
 function run(command, arguments_, options = {}) {
   console.log(`> ${path.basename(command)} ${arguments_.join(' ')}`);
@@ -97,7 +98,7 @@ async function build(config) {
   await run(process.execPath, ['--test', path.join(__dirname, 'tests/release.test.cjs'), path.join(__dirname, 'tests/profiles.test.cjs')]);
   const dirty = capture('git', ['status', '--porcelain', '--untracked-files=normal', '--', 'frontend', 'backend', 'desktop', 'scripts/desktop.ps1', 'desktop.cmd']);
   if (dirty) throw new Error('Commit the application and release tooling before building. Machine-local ignored configuration is allowed.');
-  const explicitVersion = option('version', null);
+  const explicitVersion = managedVersions ? config.version : option('version', null);
   let version = explicitVersion || config.version;
   if (!explicitVersion && fs.existsSync(path.join(artifactDirectory(config, version), 'release.json'))) {
     const parts = version.split('.').map(Number); parts[2] += 1; version = parts.join('.');
@@ -199,7 +200,7 @@ async function build(config) {
 
 async function test(config, install = false) {
   windows();
-  const version = option('version', config.version);
+  const version = managedVersions ? config.version : option('version', config.version);
   const directory = artifactDirectory(config, version);
   const manifest = JSON.parse(await fsp.readFile(path.join(directory, 'release.json'), 'utf8'));
   await lib.verifyArtifacts(directory, manifest);
@@ -231,11 +232,11 @@ async function test(config, install = false) {
 
 async function openApp(config) {
   windows();
-  const productName = config.signing.enabled ? 'NexusAI' : 'NexusAI Pilot';
+  const productName = config.signing.enabled ? 'NexusAI' : 'NexusAI Beta';
   const executable = path.join(process.env.LOCALAPPDATA || os.tmpdir(), `NexusAI-Pipeline-${config.signing.enabled ? 'Signed' : 'Pilot'}`, `${productName}.exe`);
   if (!fs.existsSync(executable)) throw new Error('Run desktop.cmd build-test first.');
   if (config.companyEnvFile) {
-    const data = path.join(process.env.APPDATA, productName);
+    const data = path.join(process.env.APPDATA, config.signing.enabled ? 'NexusAI' : 'NexusAI Pilot');
     await fsp.mkdir(data, { recursive: true });
     await fsp.copyFile(config.companyEnvFile, path.join(data, 'company.env'));
   }
@@ -333,7 +334,7 @@ async function main() {
     return profiles.applyProfile(archive, path.join(work, 'deployment'), configFile);
   }
   if (action === 'apply-profile') return profiles.applyProfile(path.resolve(root, option('profile', path.join(work, 'deployment.zip'))), path.join(work, 'deployment'), configFile);
-  if (action === 'ci' || action === 'beta') { windows(); return require('./ci.cjs')({ root, work, configFile, build, test, run, betaVersion: action === 'beta' ? option('version', '0.1.0') : null }); }
+  if (action === 'ci' || action === 'beta') { windows(); managedVersions = true; return require('./ci.cjs')({ root, work, configFile, build, test, run, betaVersion: action === 'beta' ? option('version', '0.1.0') : null }); }
   if (action === 'menu') {
     console.log('NexusAI desktop\n1. Local configuration\n2. Build + install/smoke test + open app\n3. Set up Linux host\n4. Build + test + publish to pilot\n5. Publish existing tested build\n6. Diagnose setup\n7. Open installed test app');
     action = ({ 1: 'init', 2: 'build-test', 3: 'server-setup', 4: 'release', 5: 'publish', 6: 'doctor', 7: 'open' })[await ssh.ask('Choose', '2')];
