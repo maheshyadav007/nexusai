@@ -28,7 +28,7 @@ Real-account use has been on one Mac. Generic Windows installation and auto-upda
 | Network and virtual drives | The check misses some types, such as `virtiofs`, `vboxsf`, `ceph` and WSL's `/mnt/c`, where the database can be slow or unreliable | Add them to the list, and warn on WSL mounts |
 | Frontend and backend must share an account | The frontend reads the backend's token from the user's app data, and remembers it. A different user, or a reset, gives "Request refused" until it restarts | Read the token again after a refusal, and say what's wrong |
 | Ports already in use | Other programs often use 4000, such as NoMachine, and the frontend's port is fixed | Add one setting for both ports, and a clear message when one is taken |
-| No fixed Node version | Node 22 is only mentioned in the README | Add `engines` and `.nvmrc` |
+| Node runtime security updates | Development uses `.nvmrc` and package `engines`; desktop builds pin Node 22.23.4 in `desktop/toolchain.json` | Keep these aligned with Node security releases, then rerun frontend/build checks and Windows installer/update CI. Electron embeds a separate Node runtime and must be maintained through Electron updates. |
 
 ## POP3 and company servers
 
