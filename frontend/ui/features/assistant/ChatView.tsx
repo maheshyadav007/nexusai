@@ -9,8 +9,6 @@ import { useEvents } from "@/ui/client/events";
 import { useTimeOnly } from "@/ui/client/format";
 import { isManagedSession, useChatDraft, groupApprovals, takeFirstMessage, useAnswerSession, useApprovals, useChooseVersion, useModelCall, useRateMessage, useSession, useSetSessionModel, useStopSession } from "@/ui/client/sessions";
 import { useChannel, useCompactSession, useDismissChannel, useSessionContext, useSetContext } from "@/ui/client/work";
-import { useGeneration } from "@/ui/client/generation";
-import { GenerationSurface } from "@/ui/primitives/GenerationSurface";
 import { Icon } from "@/ui/icons";
 import { useDateTime } from "@/ui/client/format";
 import { MessageSources, useOpenSource } from "./MessageSources";
@@ -250,7 +248,7 @@ export function CompactAction({ session, wide = false }: { session: string; wide
     });
   return <div className="flex flex-col gap-2">
     {wide ? <Button variant="quiet" loading={compact.isPending} onClick={run}>{t("chat.compact")}</Button> : <IconButton icon="compact" label={t("chat.compact")} disabled={compact.isPending} onClick={run} />}
-    {compact.isPending ? <GenerationSurface phase={compact.phase} label={t("generation.compact")} compact /> : null}
+    {compact.isPending ? <p role="status" className="flex items-center gap-2 text-sm text-ink-muted"><Icon name="loading" className="h-3 w-3 animate-spin motion-reduce:animate-none" />{t("generation.preparing")}</p> : null}
   </div>;
 }
 
@@ -324,8 +322,6 @@ export function ChatView({ id, initial, active, footer }: { id: string; initial:
   }, [id, sendMessage]);
 
   const working = status === "submitted" || status === "streaming";
-  const generation = useGeneration("session", id);
-  const modelPhase = generation.data?.phase;
 
   // An event or the clock can start a run while this is open. It appears here as it happens.
   const { subscribe } = useEvents();
@@ -414,9 +410,7 @@ export function ChatView({ id, initial, active, footer }: { id: string; initial:
               </Fragment>
             ),
           )}
-          {working && !waiting && (modelPhase === "generating" || modelPhase === "queued") ? (
-            <GenerationSurface phase={modelPhase} label={t("generation.answer")} compact />
-          ) : working && !waiting && !showsItsWork(messages[messages.length - 1]) ? (
+          {working && !waiting && !showsItsWork(messages[messages.length - 1]) ? (
             <p data-testid="thinking-start" className="flex items-center gap-2 py-1 text-md text-ink-muted">
               <Icon name="loading" className="h-4 w-4 animate-spin motion-reduce:animate-none" />
               {t("generation.preparing")}

@@ -5,6 +5,7 @@ on:
   push:
     tags:
       - 'desktop-ci/**'
+      - 'desktop-beta/**'
 
 permissions:
   contents: read
@@ -16,7 +17,7 @@ concurrency:
 jobs:
   build-install-update:
     runs-on: windows-2022
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
         with:
@@ -29,7 +30,9 @@ jobs:
           'NEXUSAI_TEST_WINDOWS_ZONE=Asia/Kolkata' >> $env:GITHUB_ENV
       - name: Build, install and update A to B
         shell: powershell
-        run: .\desktop.cmd ci
+        run: |
+          if ($env:GITHUB_REF -like 'refs/tags/desktop-beta/*') { $betaVersion = ($env:GITHUB_REF_NAME -split '/')[1]; .\desktop.cmd beta -Version $betaVersion } else { .\desktop.cmd ci }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload test evidence and generic installer
         if: always()
         uses: actions/upload-artifact@v7
@@ -39,6 +42,9 @@ jobs:
           include-hidden-files: true
           if-no-files-found: warn
           path: |
+            .release/artifacts/unsigned/*/*.exe
+            .release/artifacts/unsigned/*/release.json
+            .release/artifacts/unsigned/*/smoke.json
             .release/artifacts/ci/0.0.2/*.exe
             .release/artifacts/ci/*/release.json
             .release/artifacts/ci/*/smoke.json
@@ -50,3 +56,53 @@ jobs:
             .release/smoke/**/result.json
             .release/smoke/**/window.png
             .release/smoke/**/desktop.log
+
+  publish-beta:
+    if: startsWith(github.ref, 'refs/tags/desktop-beta/')
+    needs: build-install-update
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-desktop-validation
+          path: evidence
+      - name: Publish tested Beta installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, re
+          from pathlib import Path
+          version = os.environ['GITHUB_REF_NAME'].split('/')[1]
+          assert re.fullmatch(r'\d+\.\d+\.\d+', version)
+          root = Path('evidence/artifacts/unsigned') / version
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              env.write('BETA_VERSION=' + version + '\n')
+          manifest = json.loads((root / 'release.json').read_text())
+          assert not manifest.get('ciProbe')
+          assert manifest['version'] == version
+          smoke = json.loads((root / 'smoke.json').read_text())
+          assert smoke['ok'] and smoke['version'] == manifest['version']
+          assert smoke['releaseSha256'] == hashlib.sha256((root / 'release.json').read_bytes()).hexdigest()
+          for item in manifest['files']:
+              if item['name'].endswith('.exe'):
+                  file = root / item['name']
+                  digest = hashlib.sha256(file.read_bytes()).hexdigest()
+                  assert digest == item['sha256']
+                  (root / 'SHA256SUMS.txt').write_text(digest + '  ' + file.name + '\n')
+          PY
+          cat > notes.md <<'EOF'
+          NexusAI Beta for Windows x64. This unsigned test release is intended for operator acceptance testing before a small-group rollout.
+
+          Includes guided deterministic Posty onboarding (outline robot placeholder), password visibility, clearer mail-download guidance, simplified chat waiting states, attachment discovery for agents, OS certificate trust for search-model downloads, desktop app/update controls and a single Windows header with native window buttons.
+
+          Automated gates: non-UTC Windows backend checks, A-to-B installed update with preserved test data, and a separate Beta startup/shutdown smoke test.
+
+          This generic Beta installer contains no internal credentials and no configured update server. About & Updates explains that updates are manual until an internal feed is configured. The auto-update gate uses a separate CI-only app and local feed. Windows notification policies, internal model/download access and real-mail behavior still need testing on the target device. Custom Posty artwork is deferred.
+          EOF
+          beta_version="${GITHUB_REF_NAME#desktop-beta/}"
+          beta_version="${beta_version%%/*}"
+          gh release create "$GITHUB_REF_NAME" evidence/artifacts/unsigned/*/*.exe evidence/artifacts/unsigned/*/SHA256SUMS.txt --title "NexusAI Beta $beta_version" --prerelease --notes-file notes.md

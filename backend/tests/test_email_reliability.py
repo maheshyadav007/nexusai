@@ -157,6 +157,11 @@ def test_same_thread_new_message_discards_the_old_judgement(
         )
     )
     wait(lambda: thread_named(client, "Changed request")["message_count"] == 2)
+    # Persistence and listener delivery are separate. Hold the response until both inputs
+    # are queued, so this specifically tests one stale run followed by one combined retry.
+    wait(lambda: agent.current().db.fetch_all(
+        "SELECT COUNT(*) n FROM trigger_runs WHERE thread=?", (thread["id"],)
+    )[0]["n"] == 2)
     script.gate.set()
     triaged(client, "Changed request")
     wait(
@@ -535,6 +540,9 @@ def test_empty_digest_does_not_advance_cursor_and_can_be_retried(
     fake.state.deliver(make_mail(subject="Outcome required"))
     triaged(client, "Outcome required")
     wait(lambda: agent.current().active_turn(mail_agent.SESSION_ID) is None)
+    # Turn completion precedes listener-driven queue settlement. A digest test must
+    # start after initial mail is fully settled, otherwise Run now legitimately handles mail.
+    wait(lambda: mail_agent.waiting_count(agent.current().ctx) == 0)
     script.default = []
     post(client, "mailAgent.runNow", {})
     db = agent.current().db
@@ -547,6 +555,8 @@ def test_empty_digest_does_not_advance_cursor_and_can_be_retried(
     script.default = [TextChunk("Reviewed the supplied results.")]
     post(client, "agentQueue.act", {"id": failed[0]["id"], "action": "retry"})
     wait(lambda: db.fetch_all("SELECT value FROM agent_defaults WHERE key LIKE 'last_digest_id:%'"))
+    # The cursor is recorded before queue completion; wait for the actual terminal state.
+    wait(lambda: db.fetch_all("SELECT status FROM trigger_runs WHERE id=?", (failed[0]["id"],))[0]["status"] == "done")
     assert (
         db.fetch_all("SELECT status FROM trigger_runs WHERE id=?", (failed[0]["id"],))[0]["status"]
         == "done"

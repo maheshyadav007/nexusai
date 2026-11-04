@@ -133,22 +133,25 @@ def test_old_events_are_removed_but_never_unhandled_ones(
     wait(
         lambda: bus.db.fetch_all("SELECT 1 FROM event_cursors WHERE seq >= ?", (kept.seq,)), "seen"
     )
-    with bus.db.transaction() as tx:
-        tx.execute(
-            "INSERT INTO events (id, type, version, time, source, trace_id, depth, payload)"
-            " VALUES ('old', 'mail.sent', 1, '2001-01-01T00:00:00+00:00', 'test', 't', 0, '{}')"
-        )
-        # A listener that's still behind holds everything after its place.
-        tx.execute(
-            "UPDATE event_cursors SET seq = 0 WHERE listener = (SELECT MIN(listener) FROM event_cursors)"
-        )
-    future = (datetime.now(UTC) + timedelta(days=1)).isoformat()
-    assert bus.prune(future) == 0
-    with bus.db.transaction() as tx:
-        tx.execute("UPDATE event_cursors SET seq = (SELECT MAX(seq) FROM events)")
-    assert bus.prune("2002-01-01T00:00:00+00:00") == 1
-    assert not bus.db.fetch_all("SELECT 1 FROM events WHERE id = 'old'")
-    assert bus.db.fetch_all("SELECT 1 FROM events WHERE id = ?", (kept.id,))
+    # Cursor edits and deletion assertions belong to one controlled snapshot. The live
+    # scheduler may prune old events, and listeners advance their cursors concurrently.
+    with bus.db.serialized():
+        with bus.db.transaction() as tx:
+            tx.execute(
+                "INSERT INTO events (id, type, version, time, source, trace_id, depth, payload)"
+                " VALUES ('old', 'mail.sent', 1, '2001-01-01T00:00:00+00:00', 'test', 't', 0, '{}')"
+            )
+            # A listener that's still behind holds everything after its place.
+            tx.execute(
+                "UPDATE event_cursors SET seq = 0 WHERE listener = (SELECT MIN(listener) FROM event_cursors)"
+            )
+        future = (datetime.now(UTC) + timedelta(days=1)).isoformat()
+        assert bus.prune(future) == 0
+        with bus.db.transaction() as tx:
+            tx.execute("UPDATE event_cursors SET seq = (SELECT MAX(seq) FROM events)")
+        assert bus.prune("2002-01-01T00:00:00+00:00") == 1
+        assert not bus.db.fetch_all("SELECT 1 FROM events WHERE id = 'old'")
+        assert bus.db.fetch_all("SELECT 1 FROM events WHERE id = ?", (kept.id,))
 
 
 # Home

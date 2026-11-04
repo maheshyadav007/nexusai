@@ -32,6 +32,7 @@ from nexusai.contracts.notifications import NotificationRequested
 from nexusai.kernel.config import SystemModel
 from nexusai.kernel.database import Migration
 from nexusai.kernel.module import CommandError, Context, Module
+from nexusai.kernel.network import system_ssl_context
 from nexusai.kernel.secrets import secret_store
 from nexusai.modules.models.chatgpt import (
     ChatGptClient,
@@ -183,6 +184,7 @@ def _names_from_server(base_url: str, key: str, timeout: float) -> list[str]:
         response = httpx.get(
             f"{base_url.rstrip('/')}/models",
             headers={"Authorization": f"Bearer {key}"},
+            verify=system_ssl_context(),
             timeout=timeout,
         )
         response.raise_for_status()

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, dialog, shell } = require('electron');
+const { app, BrowserWindow, Menu, dialog, shell, ipcMain, Notification } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { spawn } = require('node:child_process');
 const { randomBytes } = require('node:crypto');
@@ -24,7 +24,45 @@ app.setAppUserModelId(config.appId);
 const logPath = path.join(dataDir, 'desktop.log');
 const log = (message) => fs.appendFileSync(logPath, `${new Date().toISOString()} ${message}\n`);
 let window, backend, frontend, backendUrl, origin, shuttingDown = false, canQuit = false;
-let updateReady = false, installing = false, menu;
+let updateReady = false, installing = false, menu, restartRequested = false;
+let updateState = { state: 'idle', version: app.getVersion(), availableVersion: null, percent: 0, error: null, configured: Boolean(config.updateBaseUrl) };
+const startedAt = Date.now();
+async function startupStage(detail) {
+  log(`Startup +${Date.now() - startedAt}ms: ${detail}`);
+  if (window && !window.isDestroyed()) await window.webContents.executeJavaScript(`document.getElementById('startup-detail')?.replaceChildren(${JSON.stringify(detail)})`).catch(() => {});
+}
+function trustedSender(event) {
+  return window && event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame && event.senderFrame.url.startsWith(`${origin}/`);
+}
+ipcMain.handle('nexus:caption', (event, colors) => {
+  if (!trustedSender(event) || process.platform !== 'win32') return;
+  const valid = value => typeof value === 'string' && value.length < 64 && /^(rgba?\([\d.,\s%]+\)|#[a-fA-F\d]{6,8})$/.test(value);
+  if (!valid(colors?.color) || !valid(colors?.symbolColor)) throw new Error('Invalid caption colors');
+  window.setTitleBarOverlay({ color: colors.color, symbolColor: colors.symbolColor, height: 44 });
+});
+ipcMain.handle('nexus:status' , (event) => { if (!trustedSender(event)) throw new Error('Untrusted window'); return updateState; });
+ipcMain.handle('nexus:action', async (event, action) => {
+  if (!trustedSender(event)) throw new Error('Untrusted window');
+  if (action === 'check') {
+    if (!config.updateBaseUrl) return updateState;
+    updateState = { ...updateState, state: 'checking', error: null };
+    try { await autoUpdater.checkForUpdates(); } catch (error) { updateState = { ...updateState, state: 'error', error: error.message }; }
+  } else if (action === 'download') {
+    if (updateState.state === 'available') { updateState = { ...updateState, state: 'downloading' }; await autoUpdater.downloadUpdate(); }
+  } else if (action === 'install') { if (updateReady) void shutdown(true); }
+  else if (action === 'restart') { restartRequested = true; void shutdown(); }
+  else if (action === 'quit') void shutdown();
+  else if (action === 'logs') void shell.openPath(dataDir);
+  else throw new Error('Unknown app action');
+  return updateState;
+});
+ipcMain.handle('nexus:notify', (event, notice) => {
+  if (!trustedSender(event) || !notice || typeof notice.title !== 'string') throw new Error('Invalid notice');
+  if (!Notification.isSupported()) return false;
+  const alert = new Notification({ title: notice.title.slice(0, 200), body: String(notice.body || '').slice(0, 1000), silent: notice.silent !== false });
+  alert.on('click', () => { window?.show(); window?.focus(); if (typeof notice.link === 'string' && /^\/(?!\/)/.test(notice.link)) void window.loadURL(origin + notice.link); });
+  alert.show(); return true;
+});
 let startupComplete = false;
 let probeReport = null, probeExitAttempts = 0;
 const controlToken = randomBytes(32).toString('hex');
@@ -59,6 +97,7 @@ async function shutdown(update = false, failedStartup = false) {
       });
       if (response.status === 409) {
         shuttingDown = false;
+        restartRequested = false;
         if (probeDir) {
           if (++probeExitAttempts > 60) throw new Error('CI app did not become idle for its update.');
           setTimeout(() => void shutdown(update), 1000);
@@ -84,7 +123,7 @@ async function shutdown(update = false, failedStartup = false) {
     if (probeDir && probeReport) fs.writeFileSync(path.join(probeDir, 'result.json'), JSON.stringify(probeReport, null, 2));
     canQuit = true;
     if (update) { installing = true; autoUpdater.quitAndInstall(true, true); }
-    else app.exit(failedStartup || errors.length ? 1 : 0);
+    else { if (restartRequested && !failedStartup) app.relaunch(); app.exit(failedStartup || errors.length ? 1 : 0); }
   } catch (error) {
     log(error.stack);
     shuttingDown = false;
@@ -104,7 +143,7 @@ function updateItem(label) {
 }
 
 function setupUpdates() {
-  autoUpdater.autoDownload = true;
+  autoUpdater.autoDownload = Boolean(probeDir);
   autoUpdater.autoInstallOnAppQuit = false;
   autoUpdater.allowDowngrade = false;
   const channelFile = path.join(dataDir, 'update-channel');
@@ -122,11 +161,11 @@ function setupUpdates() {
       { label: `Version ${app.getVersion()}`, enabled: false },
       { id: 'update-status', label: 'Check for updates', click: async () => {
         if (!config.updateBaseUrl) return showMessage('Updates are not configured in this local test build.');
-        try { await autoUpdater.checkForUpdates(); if (!updateReady) await showMessage('Update check completed. Any available update downloads in the background.'); }
+        try { await autoUpdater.checkForUpdates(); if (!updateReady) await showMessage('Update check completed. Open Settings → About & Updates to download an available update.'); }
         catch (error) { await showMessage(`Could not check for updates: ${error.message}`); }
       } },
       { label: 'Restart to update', click: () => updateReady ? void shutdown(true) : void showMessage('No downloaded update is ready.') },
-      { label: 'Receive pilot updates', type: 'checkbox', checked: channel === 'pilot', enabled: config.signed,
+      { label: 'Receive beta updates', type: 'checkbox', checked: channel === 'pilot', enabled: config.signed,
         click: (item) => { useChannel(item.checked ? 'pilot' : 'stable'); void showMessage('Update channel saved. Check for updates to use it.'); } },
       { label: 'Open logs folder', click: () => void shell.openPath(dataDir) },
       { type: 'separator' }, { label: 'Quit', click: () => void shutdown() },
@@ -134,15 +173,22 @@ function setupUpdates() {
     { role: 'editMenu' }, { role: 'viewMenu' },
   ]);
   Menu.setApplicationMenu(menu);
+  if (process.platform !== 'darwin') window.removeMenu();
+  autoUpdater.on('checking-for-update', () => { updateState = { ...updateState, state: 'checking', error: null }; });
+  autoUpdater.on('update-available', (info) => { updateState = { ...updateState, state: 'available', availableVersion: info.version }; });
+  autoUpdater.on('update-not-available', () => { updateState = { ...updateState, state: 'current' }; });
   autoUpdater.on('error', (error) => {
+    updateState = { ...updateState, state: 'error', error: error.message };
     log(`Update error: ${error.message}`); window?.setProgressBar(-1); updateItem('Update failed — click to retry');
     if (probeDir) { probeReport = { ok: false, error: error.message }; void shutdown(false, true); }
   });
   autoUpdater.on('download-progress', ({ percent }) => {
+    updateState = { ...updateState, state: 'downloading', percent };
     updateItem(`Downloading update: ${Math.round(percent)}%`);
     window?.setProgressBar(percent / 100);
   });
   autoUpdater.on('update-downloaded', () => {
+    updateState = { ...updateState, state: 'ready', percent: 100 };
     updateReady = true; updateItem('Update ready'); window?.setProgressBar(-1);
     if (probeDir) { void shutdown(true); return; }
     void dialog.showMessageBox(window, { message: 'A NexusAI update is ready.', detail: 'Restart when your current work is finished.',
@@ -186,9 +232,12 @@ async function runUpdateProbe() {
 
 async function start() {
   window = new BrowserWindow({ width: 1440, height: 940, minWidth: 1000, minHeight: 700, show: true,
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
+    ...(process.platform === 'win32' ? { titleBarStyle: 'hidden', titleBarOverlay: { color: '#f4efe6', symbolColor: '#211e1a', height: 44 } } : {}),
+    icon: path.join(__dirname, 'build-resources', 'icon.png'),
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(__dirname, 'preload.cjs'), autoplayPolicy: 'no-user-gesture-required' } });
   window.on('close', (event) => { if (!canQuit) { event.preventDefault(); void shutdown(); } });
   await window.loadFile(path.join(__dirname, 'loading.html'));
+  await startupStage('Preparing your local services…');
   const frontendPort = await persistentFrontendPort(dataDir);
   let backendPort = await freePort();
   while (frontendPort === backendPort) backendPort = await freePort();
@@ -208,11 +257,13 @@ async function start() {
   log(`Starting NexusAI ${app.getVersion()} (${config.signed ? 'signed' : 'unsigned pilot'})`);
   backend = child(path.join(resources, 'python', process.platform === 'win32' ? 'python.exe' : 'bin/python3'),
     ['-m', 'nexusai.api.desktop'], { env: { ...env, NEXUSAI_DESKTOP_CONTROL_TOKEN: controlToken }, cwd: dataDir });
-  await waitReady(`${backendUrl}/api/health`, backend);
   const site = path.join(resources, 'frontend');
   frontend = child(path.join(resources, 'node', process.platform === 'win32' ? 'node.exe' : 'node'),
     [path.join(resources, 'frontend-server.cjs'), path.join(site, 'server.js')], { cwd: site, env: { ...env, PORT: String(frontendPort), HOSTNAME: '127.0.0.1',
       NEXUSAI_DESKTOP_BACKEND_URL: backendUrl } });
+  await startupStage('Opening your encrypted workspace and starting the interface…');
+  await Promise.all([waitReady(`${backendUrl}/api/health`, backend), waitReady(`http://127.0.0.1:${frontendPort}`, frontend)]);
+  await startupStage('Connecting your workspace…');
   await waitReady(`${origin}/api/health`, frontend);
   const proxyStatus = await fetch(`${origin}/api/home/status`, { method: 'POST', signal: AbortSignal.timeout(10000) });
   if (!proxyStatus.ok) throw new Error(`Frontend authentication/proxy check failed (${proxyStatus.status}).`);
@@ -230,7 +281,9 @@ async function start() {
   window.webContents.session.webRequest.onCompleted((details) => {
     if (smokeDir && details.url.startsWith(origin) && details.statusCode >= 400) errors.push(`HTTP ${details.statusCode}: ${details.url}`);
   });
+  await startupStage('Workspace ready. Opening NexusAI…');
   await window.loadURL(origin);
+  log(`Startup complete: ${Date.now() - startedAt}ms`);
   startupComplete = true;
   window.show();
   setupUpdates();

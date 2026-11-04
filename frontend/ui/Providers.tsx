@@ -4,6 +4,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { EventsProvider } from "./client/events";
 import { ToastProvider } from "./primitives/Toast";
+import { DesktopFrame } from "./shell/DesktopFrame";
+import { DefaultModel } from "./features/onboarding/DefaultModel";
 import { ConnectionBanner } from "./shell/ConnectionBanner";
 import { ThemeProvider } from "./theme/ThemeProvider";
 
@@ -20,6 +22,8 @@ export function Providers({ children }: { children: ReactNode }) {
       <EventsProvider>
         <ThemeProvider>
           <ToastProvider>
+            <DesktopFrame />
+            <DefaultModel />
             <ConnectionBanner />
             {children}
           </ToastProvider>

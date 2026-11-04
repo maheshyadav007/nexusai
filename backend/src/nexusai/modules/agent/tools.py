@@ -1092,13 +1092,22 @@ def build_tools(
                 return "That conversation no longer exists."
             citations.note(ctx.bus.db, session, citations.MAIL, str(thread_id), opened=True)
             recent = view.messages[-ctx.config.agent.max_recent_thread_messages :]
+            attachments = [
+                f"- {a.filename}: read_document key m:{m.id}:{a.index}"
+                for m in recent for a in m.attachments if a.kind in {"attachment", "calendar"}
+            ]
+            manifest = (
+                "Attachments (use read_document to read their extracted contents):\n"
+                + "\n".join(attachments) + "\n\n"
+                if attachments else ""
+            )
             body = "\n\n".join(
                 f"From {m.from_name} <{m.from_addr}> on {m.date}\n{m.own_text}" for m in recent
             )
             skipped = len(view.messages) - len(recent)
             note = f"[{skipped} older messages not shown]\n\n" if skipped else ""
             limit = ctx.config.agent.max_thread_chars
-            return _untrusted(f"Subject: {view.thread.subject}\n{note}{body}"[:limit])
+            return _untrusted(f"Subject: {view.thread.subject}\n{manifest}{note}{body}"[:limit])
 
         return _guarded(
             ctx,
@@ -1420,7 +1429,12 @@ def build_tools(
     def read_document(key: str, tool_call_id: str) -> str:
         def work() -> str:
             try:
-                text = get_document(GetDocument(key=key), ctx).text
+                preview = get_document(GetDocument(key=key), ctx)
+                text = preview.text or (
+                    f"No extracted text is available for {preview.document.name}. "
+                    f"Status: {preview.document.status}. "
+                    f"{preview.document.status_reason or 'Image-only documents may need OCR; encrypted files need an unlocked copy.'}"
+                )
             except CommandError as error:
                 return error.message
             citations.note(ctx.bus.db, session, citations.DOCUMENT, key, opened=True)

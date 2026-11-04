@@ -8,7 +8,37 @@ Node is pinned to **22.23.4** in `desktop/toolchain.json` and `.nvmrc`. Frontend
 
 Scheduling uses `tzlocal` to discover the OS IANA timezone, including Windows registry mappings, while `tzdata` supplies the named-zone database. An explicit `TZ` takes precedence. The Electron launcher also passes its detected IANA zone to child services when `TZ` is unset, and the scheduler preserves the OS clock offset. Hosted CI now sets the disposable runner to India Standard Time, tests backend detection without `TZ`, and runs scheduler/mail reliability checks before packaging. Previously saved schedules may already contain an incorrect explicit `UTC` zone; inspect and re-save those schedules with the intended timezone. The app does not silently rewrite saved UTC schedules, since UTC may have been chosen intentionally.
 
-Latest validation: the [expanded non-UTC Windows run](https://github.com/maheshyadav007/nexusai/actions/runs/41831647703) passed timezone detection and scheduler regressions, but stopped at backend tests with 117 passed and two email-reliability failures. It did not create an installer or exercise updates for the timezone-fixed source. Investigate stale-judgment counting and digest cursor/completion synchronization as recorded in [Known Problems](KNOWN_PROBLEMS.md#windows-email-reliability-validation). Source fixes may be merged while this investigation remains open; distribution acceptance still requires a green full run and target-device checks.
+Latest validation: [Beta Windows run 41853092074](https://github.com/maheshyadav007/nexusai/actions/runs/41853092074) passed at source commit `129833b` in India Standard Time: **121 backend checks**, frontend checks/builds, installed A-to-B update with preserved database/browser/app data, and separate Beta 0.1.0 startup/shutdown smoke. This includes the corrected timezone and mail-reliability checks. Earlier failed runs and test synchronization corrections are recorded in [Known Problems](KNOWN_PROBLEMS.md#windows-email-reliability-validation). Organization-device and internal-feed acceptance remain separate.
+
+## Beta acceptance builds
+
+The app remains **NexusAI**. Unsigned testers see **NexusAI Beta** in the installer/shortcuts; the prior unsigned app ID, data directory and updater-cache identity are retained to avoid abandoning existing pilot data. Technical feed/channel names remain `pilot`/`unsigned` for compatibility. Signed distribution stays separate.
+
+From a clean committed checkout, run:
+
+```sh
+./desktop.sh beta-trigger --version 0.1.0
+```
+
+This pushes a versioned `desktop-beta/<version>/<timestamp>` tag. Windows CI runs in India Standard Time, runs backend correctness/TLS checks, installs the separate CI app and tests its A-to-B update with preserved data, then builds and smoke-tests a separate generic Beta. Backend checks run once within that immutable-source build process. The publication job verifies the artifact manifest, smoke result and installer checksum, then publishes the `.exe` and checksum under GitHub **Releases → Assets** as a prerelease. A failed gate prevents publication. Use a new version for the next iteration.
+
+The generic Beta has **no update URL**, company profile or credentials. It deliberately does not inherit the CI app's temporary loopback feed. About & Updates states that newer Betas must be installed manually until a real internal feed is configured. For an internally customized Beta with automatic updates, follow the deployment-profile and hosting sections below. This separation makes the public tester installer usable after the runner has shut down.
+
+Beta UX includes launch-after-install, native Windows caption controls integrated into the app header, a Settings drop-up, About & Updates, graceful restart/quit, startup-stage timing in `desktop.log`, native reminder notifications and a notification test. Notification sound still depends on Windows Do Not Disturb/per-app settings. Posty setup guidance is deterministic; the temporary outline robot is replaced only after the main Beta work is accepted. Custom mascot artwork remains deferred.
+
+Local embedding/search downloads now use `truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)` to validate against native OS roots rather than only a certifi bundle. `SSL_CERT_FILE` can add roots; verification is never disabled. A corporate CA must actually be trusted by the device. Model-server listing uses the same context. Proxy routing, mirror availability and blocked download hosts still require testing on the intended network.
+
+### Target-device Beta acceptance
+
+Before expanding beyond the operator test:
+
+1. Install the Beta, use the Finish-page launch option, then confirm Start-menu search and native minimize/maximize/close controls. Check that an existing unsigned Home still opens.
+2. Complete setup with Posty. Test password visibility, background mail download and first-model selection. The guide is deterministic and should work before a chat model is connected.
+3. On the intended network, download the local search model with the corporate CA installed in the OS store. Confirm useful certificate/host errors if that trust is missing; do not bypass verification.
+4. Open a thread with a supported text attachment and ask the agent to read it. Verify the attachment content, then check Preparing and the existing Thinking presentation in chat.
+5. Populate categories, confirm Agent/Planner stay reachable, trigger a reminder and use the notification test. Check Windows sound/Do Not Disturb settings if silent.
+6. Open About & Updates. The public generic Beta must explain manual updates. Test check/download/install separately with a privately configured persistent feed before promising automatic updates to users.
+7. Inspect `desktop.log` startup-stage timing and test graceful Restart/Quit. Record device-specific failures before a small-group rollout.
 
 ## 1. Validate the generic Windows app first
 
@@ -33,7 +63,7 @@ The job is designed to:
 
 The CI app is named **NexusAI CI** with a distinct application ID and test data. Its installer embeds an ephemeral loopback update URL and is a validation artifact, not a distribution release. It never uses a deployment profile or contacts an internal mail/model server. This update probe exercises a full installer download; it does not certify differential downloads, code signing, real-mail behavior or an internal HTTPS feed. Hosted Windows images already contain development tools and system libraries, so this is not a substitute for a normal target-device test.
 
-Standard GitHub-hosted runners are free for public repositories. Private repositories consume the account's included Actions usage and may incur charges after it is exhausted; artifact storage has its own limits. The workflow has a 60-minute timeout and retains artifacts for three days. Check the repository's Actions/billing settings before repeated runs. GitHub Enterprise Server requires self-hosted runners rather than GitHub-hosted Windows VMs. See [GitHub's runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+Standard GitHub-hosted runners are free for public repositories. Private repositories consume the account's included Actions usage and may incur charges after it is exhausted; artifact storage has its own limits. The build job has a 90-minute timeout and retains artifacts for three days. Check the repository's Actions/billing settings before repeated runs. GitHub Enterprise Server requires self-hosted runners rather than GitHub-hosted Windows VMs. See [GitHub's runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
 
 Iterate on the generic build until this job is green. Do not add internal credentials to the workflow to make it pass. Local Windows execution of the same generic check is `desktop.cmd ci`, intended for a fresh disposable runner/VM.
 

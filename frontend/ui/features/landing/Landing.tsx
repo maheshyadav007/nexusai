@@ -1,5 +1,6 @@
 "use client";
 
+import { PostyGuide } from "@/ui/shell/PostyGuide";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useHomeStatus } from "@/ui/client/home";
@@ -51,8 +52,9 @@ export function Landing() {
       </header>
       <main className="mx-auto grid max-w-page items-center gap-7 px-6 py-7 lg:grid-cols-2">
         <div className="flex flex-col items-start gap-5">
-          <h1 className="text-balance font-serif text-hero leading-tight">{t("landing.headline")}</h1>
+          <h1 className="text-balance font-serif text-display leading-tight">{t("landing.headline")}</h1>
           <p className="max-w-popover text-lg text-ink-secondary">{t("landing.subhead")}</p>
+          <PostyGuide message="posty.welcome" />
           <div className="flex flex-col items-start gap-2">
             <Button variant="primary" onClick={() => router.push("/setup")}>
               {t("landing.start")}

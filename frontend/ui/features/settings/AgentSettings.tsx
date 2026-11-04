@@ -6,6 +6,7 @@ import type { GuardRule, Permissions, QuietHours, SendCheckSettings } from "@/ui
 import { usePermissions, useSavePermissions } from "@/ui/client/sessions";
 import { useGuardRules, useQuietHours, useSaveGuardRules, useSaveQuietHours, useSaveSendChecks, useSendChecks, useSetCap, useTestGuard, useToolCatalog, useUsage } from "@/ui/client/work";
 import { useSettings, useUpdateSettings } from "@/ui/client/settings";
+import { desktopApi } from "@/ui/client/desktop";
 import { playChime } from "@/ui/client/sound";
 import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
@@ -285,7 +286,12 @@ export function NotificationSettings() {
   if (!quiet.data) return <Card title={t("notifications.title")}><Skeleton className="h-6 w-full" /></Card>;
   const value = quiet.data;
   const update = (changes: Partial<QuietHours>) => save.mutate({ ...value, ...changes });
-  const allow = () => void Notification.requestPermission().then((result) => toast({ title: t(result === "granted" ? "notifications.allowed" : "notifications.blocked") }));
+  const allow = () => {
+    const desktop = desktopApi();
+    if (desktop) { void desktop.notify({ title: t("app.name"), body: t("notifications.test.body"), silent: false }).then(() => toast({ title: t("notifications.test.sent") })).catch(() => toast({ title: t("notifications.blocked") })); return; }
+    if (typeof Notification === "undefined") { toast({ title: t("notifications.blocked") }); return; }
+    void Notification.requestPermission().then((result) => toast({ title: t(result === "granted" ? "notifications.allowed" : "notifications.blocked") }));
+  };
   return (
     <Card title={t("notifications.title")} description={t("quiet.description")}>
       <SettingRow label={t("quiet.enabled")}>
@@ -302,7 +308,7 @@ export function NotificationSettings() {
       </SettingRow>
       <SoundSettings />
       <SettingRow label={t("notifications.browser")} description={t("notifications.browser.description")}>
-        <div className="flex justify-end"><Button onClick={allow}>{t("notifications.allow")}</Button></div>
+        <div className="flex justify-end"><Button onClick={allow}>{t("notifications.test")}</Button></div>
       </SettingRow>
     </Card>
   );

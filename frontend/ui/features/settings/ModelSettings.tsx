@@ -125,7 +125,7 @@ function InternalServer() {
       <Switch label={t("settings.models.internal.tools")} checked={supports} onChange={setTools} />
       {list.isError ? <ErrorState title={t("settings.models.list.error")} description={messageOf(list.error)} /> : null}
       {save.isError ? <ErrorState title={t("settings.models.error")} description={messageOf(save.error)} /> : null}
-      <div><Button loading={list.isPending} disabled={!url} onClick={() => list.mutate({ base_url: url, ...(apiKey ? { api_key: apiKey } : {}) })}>{t("settings.models.internal.load")}</Button></div>
+      <div><Button loading={list.isPending} disabled={!url} onClick={() => list.mutate({ base_url: url, ...(apiKey ? { api_key: apiKey } : {}) }, { onSuccess: result => { const first = result.models[0]; if (first && !result.models.some(item => item.id === data.model)) store(first.id); } })}>{t("settings.models.internal.load")}</Button></div>
       {options.length ? <Field label={t("settings.models.choose")}>{({ invalid, id }) => <Select id={id} invalid={invalid} {...(data.model ? { value: data.model } : {})} placeholder={t("settings.models.choose.placeholder")} options={options} onChange={(model) => store(model)} />}</Field> : null}
       {data.provider === "litellm" && data.model ? <p className="text-md text-ink-secondary">{t("settings.models.internal.using", { model: data.model })}</p> : null}
     </div>

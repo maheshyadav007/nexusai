@@ -14,10 +14,10 @@ import { useSidebar } from "@/ui/client/settings";
 import { AttentionCount } from "@/ui/primitives/AttentionCount";
 import { IconButton } from "@/ui/primitives/IconButton";
 import { ActiveMark, CountPop } from "@/ui/primitives/Motion";
-import { ScrollArea } from "@/ui/primitives/ScrollArea";
 import { Tooltip } from "@/ui/primitives/Tooltip";
 import { t } from "@/ui/strings";
 import { NAV_BOTTOM, NAV_SECTIONS, NAV_TOP, type NavItem } from "./nav";
+import { AppMenu } from "./AppMenu";
 import { SidebarEditor } from "./SidebarEditor";
 import { arrange } from "./sidebarLayout";
 
@@ -33,7 +33,7 @@ function NavRow({ item, active, collapsed, count, attention }: { item: NavItem; 
       href={item.href}
       aria-current={active ? "page" : undefined}
       {...(collapsed ? { "aria-label": label } : {})}
-      className={`focus-ring press relative flex items-center gap-2 rounded-md px-2 py-1 text-md transition-colors duration-fast ${collapsed ? "justify-center" : ""} ${active ? "text-ink-primary" : "text-ink-secondary hover:bg-surface-raised hover:text-ink-primary"}`}
+      className={`focus-ring press relative flex items-center gap-2 rounded-md px-2 py-px text-md transition-colors duration-fast ${collapsed ? "justify-center" : ""} ${active ? "text-ink-primary" : "text-ink-secondary hover:bg-surface-raised hover:text-ink-primary"}`}
     >
       {active ? <ActiveMark group={ACTIVE_ROW} /> : null}
       <span className="relative flex min-w-0 flex-1 items-center gap-2">
@@ -104,34 +104,33 @@ export function NavSidebar({ counts }: { counts?: Readonly<Record<string, number
 
   return (
     <nav aria-label={t("nav.label")} className={`flex h-full shrink-0 flex-col border-r border-line-subtle bg-surface-page ${collapsed ? "w-rail" : "w-sidebar"}`}>
-      <div className={`flex h-topbar shrink-0 items-center px-3 ${collapsed ? "justify-center" : "justify-between"}`}>
+      <div className={`flex h-7 shrink-0 items-center px-3 ${collapsed ? "justify-center" : "justify-between"}`}>
         {collapsed ? null : <span className="text-lg font-medium text-ink-primary">{t("app.name")}</span>}
         <div className="flex items-center">
           {collapsed ? null : <SidebarEditor />}
           <IconButton icon={collapsed ? "expand" : "collapse"} label={t(collapsed ? "nav.expand" : "nav.collapse")} aria-expanded={!collapsed} onClick={toggle} />
         </div>
       </div>
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="flex flex-col gap-5 px-2 pb-4">
-          <ul className="flex flex-col gap-px">{NAV_TOP.map(row)}</ul>
+      <div className="min-h-0 flex-1">
+        <div className="flex h-full min-h-0 flex-col gap-2 px-2 pb-2">
+          <ul className="flex shrink-0 flex-col gap-px">{NAV_TOP.map(row)}</ul>
           {sections.map((section) => {
             const items = section.items.filter((item) => !item.hidden);
             // Every folder and category sits together, before the two that end the list.
             const closing = items.findIndex((item) => FOLDERS_COME_BEFORE.has(item.id));
             const split = section.id === MAIL_SECTION ? (closing < 0 ? items.length : closing) : items.length;
             return (
-              <section key={section.id} aria-label={t(section.label)}>
+              <section key={section.id} aria-label={t(section.label)} className={section.id === MAIL_SECTION ? "flex min-h-0 flex-1 flex-col" : "shrink-0"}>
                 {collapsed || !section.heading ? null : <h2 className="mb-1 px-2 text-sm text-ink-muted">{t(section.label)}</h2>}
                 <ul className="flex flex-col gap-px">{items.slice(0, split).map(row)}</ul>
-                {section.id === MAIL_SECTION ? <CategoryNav collapsed={collapsed} /> : null}
-                {section.id === MAIL_SECTION ? <FolderNav collapsed={collapsed} /> : null}
+                {section.id === MAIL_SECTION ? <div className="category-scroll my-1 min-h-0 flex-1 overflow-y-auto overscroll-contain" tabIndex={0} role="region" aria-label={t("nav.customMail")}><CategoryNav collapsed={collapsed} /><FolderNav collapsed={collapsed} /></div> : null}
                 <ul className="flex flex-col gap-px">{items.slice(split).map(row)}</ul>
               </section>
             );
           })}
         </div>
-      </ScrollArea>
-      <ul className="flex shrink-0 flex-col gap-px border-t border-line-subtle p-2">{NAV_BOTTOM.map(row)}</ul>
+      </div>
+      <ul className="flex shrink-0 flex-col gap-px border-t border-line-subtle p-2">{NAV_BOTTOM.filter(item => item.id !== "settings").map(row)}<li><AppMenu collapsed={collapsed} /></li></ul>
     </nav>
   );
 }
