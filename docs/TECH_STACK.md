@@ -18,7 +18,7 @@ Status legend: **In use** (in the repo today) · **Decided** (agreed, not built 
 
 | Choice | Status | Why |
 |---|---|---|
-| **Electron** | Initial shell implemented; Windows acceptance pending | Bundles Chromium across platforms; packaging, native dependencies and lifecycle still require Windows testing. See [Windows release plan](WINDOWS_RELEASE_PLAN.md). |
+| **Electron** | Generic Windows CI passed; target-device acceptance pending | Bundles Chromium across platforms; installer and A-to-B update passed on a hosted Windows runner. Internal configuration and a normal target device still require testing. See [Windows release plan](WINDOWS_RELEASE_PLAN.md). |
 | Tauri | Considered | Smaller and lighter, but renders with WebKit on Mac and WebView2 on Windows, so Mac testing would not be representative. |
 | Native (WinUI / SwiftUI) | Considered | Two codebases, and the Windows one could not be tested locally. |
 | Python desktop UI (pywebview, Flet, PySide) | Considered | pywebview has the same engine split as Tauri; loses the web UI stack. Python is used for the backend only. |
@@ -62,7 +62,7 @@ Status legend: **In use** (in the repo today) · **Decided** (agreed, not built 
 | Preload + `contextBridge` typed IPC | Decided | `contextIsolation: true`, `nodeIntegration: false`; the UI only sees a small typed API. |
 | electron-builder | Decided | One config produces macOS `.dmg` and Windows installers. Windows: **per-user NSIS** installer (no admin needed). |
 | Credentials | Decided | Mail accounts: one encrypted file in Home (AES-GCM, key derived from the Home's key). Home's key and model and connector sign-ins: for now, a local file only this user can read, `secrets.json` in the app data folder, because a missing keyring blocked opening a Home. Secrets already in the OS credential store are still read. Planned once things are stable: OS credential store through Python `keyring`. |
-| Auto-update (`electron-updater`) | Implemented, Windows verification pending | Generic internal feed, separate from private GitHub releases so employees need no GitHub account. Unsigned pilot is isolated from signed distribution; see [commands](WINDOWS_RELEASE_GUIDE.md) and [release gates](WINDOWS_RELEASE_PLAN.md). |
+| Auto-update (`electron-updater`) | Generic Windows A-to-B CI passed; internal feed pending | Generic internal feed, separate from private GitHub releases so employees need no GitHub account. Unsigned pilot is isolated from signed distribution; see [commands](WINDOWS_RELEASE_GUIDE.md) and [release gates](WINDOWS_RELEASE_PLAN.md). |
 
 ### Agent runtime
 

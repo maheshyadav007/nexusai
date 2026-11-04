@@ -2,7 +2,7 @@
 
 NexusAI separates generic source development, deployment customization, and distribution. This manual describes the checked-in automation and its acceptance gates. It contains no deployment-specific hostnames, accounts or credentials.
 
-Status: the scripts and GitHub workflow are implemented. The first hosted Windows run found missing IANA timezone data during backend startup. The backend now declares `tzdata` as a runtime dependency; a regression test disables system timezone lookup, and the bundled-Python check verifies named zones before packaging. A successful Windows job and a real organization-device update are still required before distribution is considered verified.
+Status: generic Windows CI passed on 4 November 2026 at commit `3e459f3`: installer build, installation, A-to-B auto-update and data-preservation checks. See the [Windows validation run](https://github.com/maheshyadav007/nexusai/actions/runs/41814312165). The backend bundles `tzdata` and tests named zones without system timezone data. A normal organization-device test, private configuration, internal feed and signed distribution remain unverified; the CI installer uses a temporary loopback feed and must not be distributed.
 
 ## 1. Validate the generic Windows app first
 

@@ -375,7 +375,7 @@ Status: 4.1 to 4.3 built and tested. 4.4 is built, and its done-when, a full day
 | 5.4 | Windows installer without admin rights; Windows CI and VM checks; test on a corporate laptop | Antivirus and AppLocker allow it |
 | 5.5 | Internal update feed and repeatable release scripts | Installed A updates to B and C on the company laptop with data preserved |
 
-Desktop shell, portable runtime packaging and internal publication scripts are implemented; Windows acceptance remains pending. Start with the [Windows release guide](WINDOWS_RELEASE_GUIDE.md). The company Windows test laptop can build releases manually after pulling the chosen source commit; a dedicated CI runner is optional later. Linux serves the files. Initial Windows packaging and update checks precede native visual effects and broader platform distribution.
+Desktop shell, portable runtime packaging and internal publication scripts are implemented. Generic hosted Windows CI passed installer build, installation and an A-to-B update with data preservation on 4 November 2026; normal target-device and internal distribution acceptance remain pending. Start with the [Windows release guide](WINDOWS_RELEASE_GUIDE.md). The company Windows test laptop can build releases manually after pulling the chosen source commit; a dedicated CI runner is optional later. Linux serves the files. Initial Windows packaging and update checks precede native visual effects and broader platform distribution.
 
 ## 8. Decisions needed
 
