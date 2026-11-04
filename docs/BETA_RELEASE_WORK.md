@@ -33,3 +33,12 @@ Implementation and validation results will be recorded here. A successful instal
 
 - Additional UI acceptance checks now cover password visibility, a populated/scrolling category list with Agent and Planner remaining visible, integrated desktop-header actions, Settings drop-up and staged update controls. Screenshots are retained in the isolated QA output. Native Windows buttons are verified separately by packaged Windows evidence.
 - The full local backend run exposed an additional setup race in the digest test: initial mail queue settlement must precede asking Run now for a digest. The superseded Beta run was cancelled before publication; the setup wait was corrected without changing product behavior.
+
+
+## Final local acceptance
+
+- Full backend: **816 passed, 1 skipped, 12 speed checks deselected**. Two existing LangGraph beta-protocol warnings; no test failures.
+- Frontend: **19 tests**, type checks, hardcoded-value checks and layer boundaries passed. Standalone production build passed.
+- Browser: **8 checks passed**, including six first-run/recovery/accessibility checks and two Beta desktop-control/password checks. A 25-category fixture verifies that Agent and Planner remain in the viewport. The Windows bridge is mocked only for these browser layout/control tests.
+- Actual Electron 45.2.2 with Node 22.23.4 server: startup/render/shutdown smoke passed with no renderer errors; a separate real sandboxed preload/IPC status request passed. The local Mac startup log measured 1.739 seconds to page load; this is not a Windows performance claim.
+- The superseded release run was cancelled before publication. The replacement [Windows Beta validation](https://github.com/maheshyadav007/nexusai/actions/runs/41850625879) uses source commit `c762d16`; publication remains gated on its result.
