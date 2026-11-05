@@ -96,6 +96,18 @@ module.exports = async function ci({ work, configFile, build, test, run, betaVer
       if (mode === 'automatic') {
         if (await exitCode(installerOf(a), ['/S', `/D=${installed}`]) === 0) throw new Error('The installer allowed a manual downgrade.');
         await run(path.join(installed, `Uninstall ${product}.exe`), ['/S', '/KEEP_APP_DATA'], { timeout: 180000 });
+        // NSIS's launcher can exit before its temporary uninstaller finishes.
+        // Wait for removal, rather than racing the downgrade guard on B's registration.
+        await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `
+          $deadline = (Get-Date).AddSeconds(120)
+          while ((Test-Path -LiteralPath 'HKCU:\\Software\\${guid}') -or
+                 (Test-Path -LiteralPath 'HKLM:\\Software\\${guid}') -or
+                 (Test-Path -LiteralPath '${executable.replaceAll("'", "''")}')) {
+            if ((Get-Date) -ge $deadline) { throw 'Uninstall did not finish removing the Beta registration and executable. Inspect installer diagnostics.' }
+            Start-Sleep -Milliseconds 250
+          }
+          Write-Output 'Uninstall completed; safe to reset the upgrade fixture.'
+        `], { timeout: 135000 });
         await run(installerOf(a), ['/S', `/D=${installed}`], { timeout: 180000 });
       }
     }
