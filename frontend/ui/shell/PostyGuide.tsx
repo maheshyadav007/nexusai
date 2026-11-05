@@ -1,13 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { Icon } from "@/ui/icons";
 import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
-import { useDismissChecklist, useOnboarding } from "@/ui/client/onboarding";
-import { useMailStatus } from "@/ui/client/mail";
-import { useModelStatus } from "@/ui/client/models";
-import { Button } from "@/ui/primitives/Button";
 import { t, type StringKey } from "@/ui/strings";
 
 export function PostyGuide({ message, title, prominent = false, children }: { message: StringKey; title?: string; prominent?: boolean; children?: React.ReactNode }) {
@@ -29,18 +23,4 @@ export function PostyGuide({ message, title, prominent = false, children }: { me
       {children ? <div className="mt-4 flex flex-wrap items-center gap-3">{children}</div> : null}
     </div>
   </aside>;
-}
-
-const ROUTES: readonly [string, StringKey][] = [
-  ["/mail", "posty.page.mail"], ["/connectors", "posty.page.connectors"], ["/settings", "posty.page.settings"],
-  ["/documents", "posty.page.documents"], ["/planner", "posty.page.planner"], ["/agent", "posty.page.agents"],
-  ["/search", "posty.page.search"], ["/cockpit", "posty.page.cockpit"],
-];
-export function WorkspaceGuide() {
-  const onboarding = useOnboarding(); const dismiss = useDismissChecklist();
-  const mail = useMailStatus(); const model = useModelStatus(); const path = usePathname();
-  if (!onboarding.data || onboarding.data.checklist_dismissed) return null;
-  const message = ROUTES.find(([prefix]) => path.startsWith(prefix))?.[1] ?? "posty.page.today";
-  const destination = !mail.data?.account ? "/connectors" : !model.data?.connected ? "/settings?section=models" : "/mail/inbox";
-  return <div className="mx-auto w-full max-w-content px-5 pt-4"><PostyGuide message={message}><Link href={destination} className="focus-ring text-sm text-accent-default underline">{t("posty.next")}</Link><Button variant="quiet" onClick={() => dismiss.mutate(undefined)}>{t("posty.dismiss")}</Button></PostyGuide></div>;
 }

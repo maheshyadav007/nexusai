@@ -70,6 +70,7 @@ test("a new person goes from landing through setup into the app, and setup resum
   await noViolations(page);
   await page.getByRole("button", { name: "Enter NexusAI" }).click();
   await expect(page).toHaveURL(/\/today$/);
+  await expect(page.getByTestId("posty-guide")).toHaveCount(0);
 
   // What setup skipped waits here, and goes away when asked.
   const checklist = page.getByTestId("finish-setup");

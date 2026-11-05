@@ -29,7 +29,7 @@ export function ProfileForm({ action, onSaved, compact = false, onboarding = fal
   const set = (changes: Partial<Profile>) => setDraft({ ...draft, ...changes });
   return (
     <form
-      className={compact ? "grid gap-3 md:grid-cols-2" : "flex flex-col gap-4"}
+      className={compact ? `grid gap-3 md:grid-cols-2 ${onboarding ? "h-full" : ""}` : "flex flex-col gap-4"}
       onSubmit={(event) => {
         event.preventDefault();
         save.mutate(draft, onSaved ? { onSuccess: onSaved } : {});
@@ -46,9 +46,9 @@ export function ProfileForm({ action, onSaved, compact = false, onboarding = fal
       {onboarding ? null : <Field label={t("profile.vips")} hint={t("profile.vips.hint")}>{({ invalid, ...control }) => <Textarea invalid={invalid} rows={2} value={draft.vips ?? ""} onChange={(event) => set({ vips: event.target.value })} {...control} />}</Field>}
       {onboarding ? null : <Field label={t("profile.about")} hint={t("profile.about.hint")}>{({ invalid, ...control }) => <Textarea invalid={invalid} rows={compact ? 2 : 3} value={draft.about ?? ""} onChange={(event) => set({ about: event.target.value })} {...control} />}</Field>}
       {save.isError ? <ErrorState title={t("profile.saveError")} /> : null}
-      <div className={`flex items-center gap-3 ${compact ? "md:col-span-2" : ""}`}>
+      <div className={`flex items-center gap-3 ${compact ? "md:col-span-2" : ""} ${onboarding ? "mt-auto justify-between pt-6" : ""}`}>
         {actions}
-        <Button type="submit" variant="primary" loading={save.isPending}>
+        <Button className={onboarding ? "ml-auto" : ""} type="submit" variant="primary" loading={save.isPending}>
           {action}
         </Button>
       </div>

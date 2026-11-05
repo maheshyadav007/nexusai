@@ -23,15 +23,17 @@ interface Step {
   id: string;
   label: StringKey;
   title: StringKey;
+  formTitle: StringKey;
+  formNote: StringKey;
 }
 
 // Only what the app can't work without, or that's far easier now. The rest waits on Today.
 const STEPS: readonly Step[] = [
-  { id: "home", label: "setup.home.label", title: "setup.home.title" },
-  { id: "profile", label: "setup.you.label", title: "setup.profile.title" },
-  { id: "mail", label: "setup.mail.label", title: "setup.mail.title" },
-  { id: "search", label: "setup.search.label", title: "setup.search.title" },
-  { id: "permissions", label: "setup.agent.label", title: "setup.permissions.title" },
+  { id: "home", label: "setup.home.label", title: "setup.home.title", formTitle: "setup.home.formTitle", formNote: "setup.home.formNote" },
+  { id: "profile", label: "setup.you.label", title: "setup.profile.title", formTitle: "setup.profile.formTitle", formNote: "setup.profile.formNote" },
+  { id: "mail", label: "setup.mail.label", title: "setup.mail.title", formTitle: "setup.mail.formTitle", formNote: "setup.mail.formNote" },
+  { id: "search", label: "setup.search.label", title: "setup.search.title", formTitle: "setup.search.formTitle", formNote: "setup.search.formNote" },
+  { id: "permissions", label: "setup.agent.label", title: "setup.permissions.title", formTitle: "setup.permissions.formTitle", formNote: "setup.permissions.formNote" },
 ];
 
 const NEEDS_RECOVERY = new Set(["missing", "locked", "damaged"]);
@@ -43,13 +45,15 @@ function SearchStep() {
 
 function Frame({ step, index, actions, children }: { step: Step; index: number; actions?: ReactNode; children: ReactNode }) {
   const seen = useRef(index);
+  const main = useRef<HTMLElement>(null);
   const forward = index >= seen.current;
   useEffect(() => {
     seen.current = index;
+    main.current?.scrollTo({ top: 0 });
   }, [index]);
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-surface-page text-ink-primary">
-      <header className="flex h-topbar shrink-0 items-center justify-between gap-5 px-5 md:px-6">
+      <header className="flex h-topbar shrink-0 items-center justify-between gap-5 px-6 lg:px-7">
         <span className="text-lg font-medium">{t("app.name")}</span>
         <div className="flex items-center gap-3 text-sm text-ink-muted">
           <span className="hidden sm:inline">{t("setup.quick")}</span>
@@ -57,19 +61,21 @@ function Frame({ step, index, actions, children }: { step: Step; index: number; 
           <span className="tabular-nums">{t("setup.stepCount", { current: index + 1, total: STEPS.length })}</span>
         </div>
       </header>
-      <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain lg:grid lg:grid-cols-5 lg:overflow-hidden">
-        <aside className="relative flex min-h-drawer flex-col justify-between px-6 py-7 lg:col-span-2 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:px-7 lg:py-7">
+      <main ref={main} className="min-h-0 flex-1 overflow-y-auto overscroll-contain lg:grid lg:grid-cols-5 lg:overflow-hidden">
+        <aside className="relative flex min-h-drawer flex-col justify-between px-6 py-6 lg:col-span-2 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:px-7 lg:py-7">
           <PostyGuide prominent title={t(step.title)} message={`posty.setup.${step.id}` as StringKey} />
           <p className="mt-6 text-sm text-ink-muted">{t(index === STEPS.length - 1 ? "setup.lastStep" : "setup.time")}</p>
           <span aria-hidden className="absolute right-0 top-1/2 hidden h-popover w-px -translate-y-1/2 bg-line-subtle lg:block" />
         </aside>
-        <section className="min-w-0 px-6 pb-7 pt-6 lg:col-span-3 lg:h-full lg:overflow-y-auto lg:px-7 lg:py-7">
-          <div className="mx-auto w-full max-w-reading">
-            <p className="mb-5 text-sm font-medium tracking-wide text-ink-muted">{t(step.label)}</p>
+        <section className="flex min-w-0 items-start px-6 py-6 lg:col-span-3 lg:h-full lg:items-center lg:overflow-y-auto lg:px-7 lg:py-7">
+          <div className="mx-auto flex h-onboarding w-full max-w-onboarding flex-col">
+            <p className="mb-2 text-sm font-medium tracking-wide text-ink-muted">{t(step.label)}</p>
+            <h2 className="font-serif text-title text-ink-primary">{t(step.formTitle)}</h2>
+            <p className="mb-8 mt-2 text-md leading-relaxed text-ink-muted">{t(step.formNote)}</p>
             <Steps step={step.id} forward={forward}>
-              <section className="onboarding-fields flex flex-col gap-5">
+              <section className="onboarding-fields flex h-full flex-col gap-5">
                 {children}
-                {actions ? <footer className="flex items-center gap-3">{actions}</footer> : null}
+                {actions ? <footer className="mt-auto flex w-full items-center justify-between gap-3 pt-6">{actions}</footer> : null}
               </section>
             </Steps>
           </div>
@@ -108,7 +114,7 @@ export function OnboardingFlow() {
   if (home.data.state === "unset") {
     return (
       <Frame step={first} index={0}>
-        <HomeChooser initialPath={home.data.default_path} action={t("setup.home.action")} onChosen={() => setStep.mutate((STEPS[1] as Step).id)} />
+        <HomeChooser onboarding initialPath={home.data.default_path} action={t("setup.home.action")} onChosen={() => setStep.mutate((STEPS[1] as Step).id)} />
       </Frame>
     );
   }
@@ -148,7 +154,7 @@ export function OnboardingFlow() {
       index={index}
       actions={
         <>
-          {back}
+          {back ?? <span aria-hidden />}
           <Button variant="primary" loading={setStep.isPending || finish.isPending} onClick={goNext}>
             {t(isLast ? "setup.enter" : (step.id === "mail" && !mail.data?.account) || (step.id === "search" && !semantic.data?.ready && !semantic.data?.models.some((row) => row.state === "downloading")) ? "setup.skip" : "setup.next")}
           </Button>

@@ -24,14 +24,14 @@ export const themeSchema = z
     accents: z.strictObject({ terracotta: accent, cobalt: accent, moss: accent, plum: accent }),
     type: z.strictObject({
       minSize: size,
-      size: z.strictObject({ xs: size, sm: size, md: size, lg: size, xl: size, display: size, hero: size }),
+      size: z.strictObject({ xs: size, sm: size, md: size, lg: size, xl: size, title: size, display: size, hero: size }),
       family: z.strictObject({ sans: z.enum(FONT_CATALOG.sans), serif: z.enum(FONT_CATALOG.serif), mono: z.enum(FONT_CATALOG.mono) }),
     }),
     space: z.record(z.string(), size),
     radius: z.strictObject({ sm: size, md: size, lg: size, full: size }),
     shadow: z.strictObject({ raised: z.string(), overlay: z.string() }),
     motion: z.strictObject({ fast: z.string(), normal: z.string(), slow: z.string(), generation: z.string(), press: z.string(), easing: z.string() }),
-    layout: z.strictObject({ content: size, page: size, sidebar: size, rail: size, posty: size, railWide: size, dock: size, dockHeight: size, reading: size, mailList: size, topbar: size, popover: size, drawer: size, dialog: size, modal: size, modalHeight: size, aura: size }),
+    layout: z.strictObject({ content: size, page: size, sidebar: size, rail: size, posty: size, onboarding: size, railWide: size, dock: size, dockHeight: size, reading: size, mailList: size, topbar: size, popover: size, drawer: size, dialog: size, modal: size, modalHeight: size, aura: size }),
     glass: z.strictObject({ opacity: z.string(), blur: size }),
     icon: z.strictObject({ stroke: z.string() }),
     scale: z.strictObject({

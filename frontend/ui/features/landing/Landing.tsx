@@ -39,11 +39,11 @@ export function Landing() {
     if (home.data && home.data.state !== "unset") router.replace("/");
   }, [home.data, router]);
   return (
-    <div className="min-h-screen bg-surface-page text-ink-primary">
+    <div className="min-h-screen bg-surface-page text-ink-primary lg:flex lg:h-screen lg:flex-col lg:overflow-hidden">
       <header className="mx-auto flex h-topbar max-w-page items-center px-6">
         <span className="text-lg font-medium">{t("app.name")}</span>
       </header>
-      <main className="mx-auto grid max-w-page items-stretch px-6 py-7 lg:grid-cols-5">
+      <main className="mx-auto grid w-full max-w-page flex-1 items-stretch px-6 py-7 lg:min-h-0 lg:grid-cols-5">
         <div className="relative flex min-h-drawer flex-col items-start justify-center py-5 lg:col-span-2 lg:pr-7">
           <PostyGuide prominent title={t("landing.headline")} message="posty.welcome" />
           <div className="flex flex-col items-start gap-2">
