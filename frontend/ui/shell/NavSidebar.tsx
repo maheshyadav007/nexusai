@@ -2,8 +2,8 @@
 
 import { useSessions } from "@/ui/client/sessions";
 import { usePlannerCounts, useWaitingCount } from "@/ui/client/work";
-import { CategoryNav, CategoryNavActions } from "./CategoryNav";
-import { FolderNav } from "./FolderNav";
+import { CategoryNavActions } from "./CategoryNav";
+import { CustomMailNav } from "./CustomMailNav";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -28,16 +28,17 @@ const FOLDERS_COME_BEFORE = new Set(["archive", "trash"]);
 
 function NavRow({ item, active, collapsed, count, attention }: { item: NavItem; active: boolean; collapsed: boolean; count: number | undefined; attention: boolean }) {
   const label = t(item.label);
+  const home = item.id === "today";
   const row = (
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
       {...(collapsed ? { "aria-label": label } : {})}
-      className={`focus-ring press relative flex items-center gap-2 rounded-md px-2 py-px text-md transition-colors duration-fast ${collapsed ? "justify-center" : ""} ${active ? "text-ink-primary" : "text-ink-secondary hover:bg-surface-raised hover:text-ink-primary"}`}
+      className={`focus-ring press relative flex items-center gap-2 rounded-md px-2 transition-colors duration-fast ${home ? "border border-accent-default/20 bg-accent-default/5 py-2 text-lg font-medium text-ink-primary hover:bg-accent-default/10" : "py-px text-md"} ${collapsed ? "justify-center" : ""} ${active ? "text-ink-primary" : home ? "" : "text-ink-secondary hover:bg-surface-raised hover:text-ink-primary"}`}
     >
-      {active ? <ActiveMark group={ACTIVE_ROW} /> : null}
+      {active ? <ActiveMark group={ACTIVE_ROW} {...(home ? { className: "absolute inset-0 rounded-md bg-accent-default/10" } : {})} /> : null}
       <span className="relative flex min-w-0 flex-1 items-center gap-2">
-        <Icon name={item.icon} />
+        <Icon name={item.icon} {...(home ? { className: "text-accent-default" } : {})} />
         {collapsed ? null : <span className="min-w-0 flex-1 truncate">{label}</span>}
         {collapsed || !count ? null : attention ? <AttentionCount value={count} /> : <CountPop value={count} className="text-sm text-ink-muted" />}
       </span>
@@ -111,20 +112,20 @@ export function NavSidebar({ counts }: { counts?: Readonly<Record<string, number
           <IconButton icon={collapsed ? "expand" : "collapse"} label={t(collapsed ? "nav.expand" : "nav.collapse")} aria-expanded={!collapsed} onClick={toggle} />
         </div>
       </div>
+      <ul className="flex shrink-0 flex-col gap-px px-2 pb-4 pt-2">{NAV_TOP.map(row)}</ul>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain category-scroll">
-        <div className="flex h-full min-h-0 flex-col gap-2 px-2 pb-2">
-          <ul className="flex shrink-0 flex-col gap-px">{NAV_TOP.map(row)}</ul>
+        <div className="flex min-h-full flex-col gap-2 px-2 pb-2">
           {sections.map((section) => {
             const items = section.items.filter((item) => !item.hidden);
             // Every folder and category sits together, before the two that end the list.
             const closing = items.findIndex((item) => FOLDERS_COME_BEFORE.has(item.id));
             const split = section.id === MAIL_SECTION ? (closing < 0 ? items.length : closing) : items.length;
             return (
-              <section key={section.id} aria-label={t(section.label)} className={section.id === MAIL_SECTION ? "flex min-h-0 shrink flex-col" : "shrink-0 border-t border-line-subtle pt-2"}>
+              <section key={section.id} aria-label={t(section.label)} className={section.id === MAIL_SECTION ? "flex shrink-0 flex-col" : "shrink-0 border-t border-line-subtle pt-2"}>
                 {collapsed || !section.heading ? null : <h2 className="mb-1 px-2 text-sm text-ink-muted">{t(section.label)}</h2>}
                 <ul className="flex flex-col gap-px">{items.slice(0, split).map(row)}</ul>
                 {section.id === MAIL_SECTION ? <CategoryNavActions collapsed={collapsed} /> : null}
-                {section.id === MAIL_SECTION ? <div className="category-scroll my-1 min-h-0 shrink overflow-y-auto overscroll-contain" tabIndex={0} role="region" aria-label={t("nav.customMail")}><CategoryNav collapsed={collapsed} /><FolderNav collapsed={collapsed} /></div> : null}
+                {section.id === MAIL_SECTION ? <CustomMailNav collapsed={collapsed} /> : null}
                 <ul className="flex flex-col gap-px">{items.slice(split).map(row)}</ul>
               </section>
             );

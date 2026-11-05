@@ -15,6 +15,7 @@ import { IconButton } from "@/ui/primitives/IconButton";
 import { Input } from "@/ui/primitives/Input";
 import { ActiveMark } from "@/ui/primitives/Motion";
 import { t } from "@/ui/strings";
+import { categoryHref, customCategories } from "./customMail";
 
 const EDIT_CATEGORIES = "/settings?section=categories";
 
@@ -65,15 +66,15 @@ export function CategoryNavActions({ collapsed }: { collapsed: boolean }) {
 }
 
 /** Folders the person or an agent made. They live in the sidebar beside the fixed ones. */
-export function CategoryNav({ collapsed }: { collapsed: boolean }) {
+export function CategoryNav({ collapsed, visibleHrefs }: { collapsed: boolean; visibleHrefs?: ReadonlySet<string> }) {
   const categories = useCategories();
   const pathname = usePathname();
   const router = useRouter();
   const update = useUpdateCategory();
   if (collapsed) return null;
-  const hrefOf = (name: string) => `/mail/category/${encodeURIComponent(name)}`;
+  const hrefOf = categoryHref;
   // A created folder must remain reachable even before any mail is assigned to it.
-  const rows = (categories.data?.categories ?? []).filter((item) => !item.proposed);
+  const rows = customCategories(categories.data?.categories ?? []).filter((item) => !visibleHrefs || visibleHrefs.has(hrefOf(item.name)));
   return (
     <section aria-label={t("nav.categories")}>
       <ul className="flex flex-col gap-px">

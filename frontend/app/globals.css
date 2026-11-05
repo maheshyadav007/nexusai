@@ -298,6 +298,26 @@ html[data-desktop] .min-h-screen { min-height: calc(100dvh - 44px); }
 .category-scroll::-webkit-scrollbar { width: 3px; }
 .category-scroll::-webkit-scrollbar-thumb { @apply rounded-full bg-line-strong; }
 
+/* The account menu shares its button's edges, including when the sidebar is a rail. */
+.account-menu {
+  width: var(--radix-dropdown-menu-trigger-width);
+  min-width: calc(var(--layout-sidebar) - 2 * var(--space-2));
+  max-width: calc(100vw - 2 * var(--space-2));
+  max-height: var(--radix-dropdown-menu-content-available-height);
+  overflow-y: auto;
+}
+.account-menu[data-state="open"] { animation: account-menu-in var(--motion-normal) var(--motion-easing); }
+.account-menu[data-state="closed"] { animation: account-menu-out var(--motion-fast) var(--motion-easing) forwards; }
+.account-trigger[data-state="open"] { @apply bg-surface-sunken text-ink-primary; }
+.account-trigger[data-state="open"] .account-chevron { transform: rotate(0deg); }
+@keyframes account-menu-in {
+  from { opacity: 0; transform: translateY(var(--space-1)) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes account-menu-out {
+  to { opacity: 0; transform: translateY(var(--space-1)) scale(0.98); }
+}
+
 .desktop-tools { app-region: drag; }
 .desktop-tools button, .desktop-tools input, .desktop-tools a, .desktop-tools [role="button"] { app-region: no-drag; }
 

@@ -35,14 +35,17 @@ test("desktop header integrates actions and exposes staged update controls", asy
   await expect(page.locator("header.h-topbar")).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Categories and custom folders" })).toBeVisible();
   const nav = page.getByRole("navigation", { name: "Main navigation" });
+  await nav.getByRole("link", { name: "Tasks", exact: true }).scrollIntoViewIfNeeded();
   await expect(nav.getByRole("link", { name: "Tasks", exact: true })).toBeInViewport();
+  await nav.getByRole("link", { name: "Sessions", exact: true }).scrollIntoViewIfNeeded();
   await expect(nav.getByRole("link", { name: "Sessions", exact: true })).toBeInViewport();
+  await expect(nav.getByRole("link", { name: "Today", exact: true })).toBeInViewport();
   await page.screenshot({ path: "test-results/beta-today-desktop.png", fullPage: true });
   await page.getByTestId("assistant-pill").click();
   const caption = await page.locator(".desktop-caption").boundingBox();
   await expect(page.getByTestId("assistant-dock")).toHaveCSS("top", `${caption!.y + caption!.height}px`);
   await page.getByRole("button", { name: "Minimize", exact: true }).click();
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByTestId("account-menu-trigger").click();
   await expect(page.getByRole("menuitem", { name: "Restart NexusAI" })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Quit NexusAI" })).toBeVisible();
   await page.getByRole("menuitem", { name: "About & Updates" }).click();
@@ -90,7 +93,7 @@ test("empty categories remain in the sidebar after creating another and navigati
 
 test("web settings offer browser actions instead of desktop process controls", async ({ page }) => {
   await page.goto("/today");
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByTestId("account-menu-trigger").click();
   await expect(page.getByRole("menuitem", { name: "Close tab", exact: true })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Quit NexusAI" })).toHaveCount(0);
   await page.getByRole("menuitem", { name: "Reload tab", exact: true }).click();

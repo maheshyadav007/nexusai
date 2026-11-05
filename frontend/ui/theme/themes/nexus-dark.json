@@ -97,6 +97,7 @@
   "layout": {
     "content": "960px",
     "sidebar": "256px",
+    "folderList": "160px",
     "rail": "56px",
     "posty": "72px",
     "onboarding": "520px",

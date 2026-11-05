@@ -7,20 +7,18 @@ import { ContextMenu } from "@/ui/primitives/ContextMenu";
 import { Icon } from "@/ui/icons";
 import { ActiveMark } from "@/ui/primitives/Motion";
 import { t } from "@/ui/strings";
-
-// These have their own rows in the sidebar already, or are only how a server stores things.
-const LISTED_ELSEWHERE = new Set(["inbox", "sent", "drafts", "archive", "trash", "all"]);
+import { customFolders, folderHref } from "./customMail";
 
 /** The folders on the server, including Gmail's labels. An email can be in several of them. */
-export function FolderNav({ collapsed }: { collapsed: boolean }) {
+export function FolderNav({ collapsed, visibleHrefs }: { collapsed: boolean; visibleHrefs?: ReadonlySet<string> }) {
   const folders = useMailFolders();
   const pathname = usePathname();
   const router = useRouter();
   const more = useGetMoreFromFolder();
   if (collapsed) return null;
-  const hrefOf = (name: string) => `/mail/folder/${encodeURIComponent(name)}`;
+  const hrefOf = folderHref;
   // Nothing here and nothing on the server is only clutter, unless it's the one open.
-  const rows = (folders.data?.folders ?? []).filter((row) => !LISTED_ELSEWHERE.has(row.role) && ((row.here ?? 0) > 0 || (row.on_server ?? 0) > 0 || pathname.startsWith(hrefOf(row.name))));
+  const rows = customFolders(folders.data?.folders ?? [], pathname);
   if (!rows.length) return null;
   const depthOf = (name: string, parent?: string | null): number => {
     const above = rows.find((row) => row.name === parent);
@@ -29,7 +27,7 @@ export function FolderNav({ collapsed }: { collapsed: boolean }) {
   return (
     <section aria-label={t("nav.folders")}>
       <ul className="flex flex-col gap-px">
-        {rows.map((row) => {
+        {rows.filter((row) => !visibleHrefs || visibleHrefs.has(hrefOf(row.name))).map((row) => {
           const href = hrefOf(row.name);
           const active = pathname === href || pathname.startsWith(`${href}/`);
           const depth = depthOf(row.name, row.parent);
