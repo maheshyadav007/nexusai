@@ -10,6 +10,12 @@ Scheduling uses `tzlocal` to discover the OS IANA timezone, including Windows re
 
 Latest validation: [Beta Windows run 41853092074](https://github.com/maheshyadav007/nexusai/actions/runs/41853092074) passed at source commit `129833b` in India Standard Time: **121 backend checks**, frontend checks/builds, installed A-to-B update with preserved database/browser/app data, and separate Beta 0.1.0 startup/shutdown smoke. This includes the corrected timezone and mail-reliability checks. Earlier failed runs and test synchronization corrections are recorded in [Known Problems](KNOWN_PROBLEMS.md#windows-email-reliability-validation). Organization-device and internal-feed acceptance remain separate.
 
+The installer/update reliability changes require a fresh Windows validation run. Hosted acceptance now exercises both an automatic downloaded update and a manually launched installer while the previous Beta is running, checking database, browser storage and app-data preservation. It also tests downgrade rejection and a leftover bundled Python process without terminating unrelated processes. A-to-B acceptance changes the version on the same source; it does not establish compatibility with every historical release or schema.
+
+Manual installers request the app’s normal shutdown and wait up to 120 seconds for processes under the installation directory. Busy work, lingering services or a failed safety check stop replacement. Interactive installs offer Retry/Cancel; silent installs fail instead of forcing closure. Diagnostics are in `%TEMP%\nexusai-installer-<pid>.log` and the app-data `desktop.log`. Older apps may require normal manual closure because they lack the new shutdown request. The legacy uninstaller can still fail on file locks or permissions; its actual exit code is now shown.
+
+Automatic shutdown failures keep a visible recovery window with retry, reopen and logs controls. An installer is handed off only after clean service exits, a leftover-service check and a fresh checksum check. Installer cancellation or failure after handoff still requires reviewing installer logs; a successful process launch alone does not certify installation. Newer database migration IDs are rejected by this version to protect a newer workspace from an older executable.
+
 ## Beta acceptance builds
 
 The app remains **NexusAI**. Unsigned testers see **NexusAI Beta** in the installer/shortcuts; the prior unsigned app ID, data directory and updater-cache identity are retained to avoid abandoning existing pilot data. Technical feed/channel names remain `pilot`/`unsigned` for compatibility. Signed distribution stays separate.
@@ -20,7 +26,7 @@ From a clean committed checkout, run:
 ./desktop.sh beta-trigger --version 0.1.0
 ```
 
-This pushes a versioned `desktop-beta/<version>/<timestamp>` tag. Windows CI runs in India Standard Time, runs backend correctness/TLS checks, installs the separate CI app and tests its A-to-B update with preserved data, then builds and smoke-tests a separate generic Beta. Backend checks run once within that immutable-source build process. The publication job verifies the artifact manifest, smoke result and installer checksum, then publishes the `.exe` and checksum under GitHub **Releases → Assets** as a prerelease. A failed gate prevents publication. Use a new version for the next iteration.
+This pushes a versioned `desktop-beta/<version>/<timestamp>` tag. Windows CI runs in India Standard Time, runs backend correctness/TLS checks, installs the real Beta identity in a guarded disposable account and tests automatic and manual A-to-B upgrades with preserved data, then builds and smoke-tests a separate generic Beta. Backend checks run once within that immutable-source build process. The publication job verifies the artifact manifest, smoke result and installer checksum, then publishes the `.exe` and checksum under GitHub **Releases → Assets** as a prerelease. A failed gate prevents publication. Use a new version for the next iteration.
 
 The generic Beta has **no update URL**, company profile or credentials. It deliberately does not inherit the CI app's temporary loopback feed. About & Updates states that newer Betas must be installed manually until a real internal feed is configured. For an internally customized Beta with automatic updates, follow the deployment-profile and hosting sections below. This separation makes the public tester installer usable after the runner has shut down.
 
@@ -61,7 +67,7 @@ The job is designed to:
 5. Confirm B's version and preserved database settings, browser storage, app-data marker and open Home, then exit cleanly.
 6. Upload the generic B installer, screenshots, logs and JSON results as short-lived Actions artifacts.
 
-The CI app is named **NexusAI CI** with a distinct application ID and test data. Its installer embeds an ephemeral loopback update URL and is a validation artifact, not a distribution release. It never uses a deployment profile or contacts an internal mail/model server. This update probe exercises a full installer download; it does not certify differential downloads, code signing, real-mail behavior or an internal HTTPS feed. Hosted Windows images already contain development tools and system libraries, so this is not a substitute for a normal target-device test.
+Hosted CI tests **NexusAI Beta** with the existing `com.nexusai.pilot` application ID and `NexusAI Pilot` data directory. It refuses accounts containing an existing Beta installation or data. Local `desktop.cmd ci` uses the separate **NexusAI CI** identity. Its installer embeds an ephemeral loopback update URL and is a validation artifact, not a distribution release. It never uses a deployment profile or contacts an internal mail/model server. This update probe exercises a full installer download; it does not certify differential downloads, code signing, real-mail behavior or an internal HTTPS feed. Hosted Windows images already contain development tools and system libraries, so this is not a substitute for a normal target-device test.
 
 Standard GitHub-hosted runners are free for public repositories. Private repositories consume the account's included Actions usage and may incur charges after it is exhausted; artifact storage has its own limits. The build job has a 90-minute timeout and retains artifacts for three days. Check the repository's Actions/billing settings before repeated runs. GitHub Enterprise Server requires self-hosted runners rather than GitHub-hosted Windows VMs. See [GitHub's runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
 
@@ -135,7 +141,7 @@ The first build downloads tools and dependencies and may take several minutes. L
 .\desktop.cmd build-test -Version 0.1.1
 ```
 
-Unsigned customized builds use **NexusAI Pilot**, a separate app ID/data directory and an `unsigned/` feed. Signed builds use **NexusAI**. CI uses a third identity. Do not simultaneously open the same Home from different installations.
+Unsigned customized builds use **NexusAI Pilot**, a separate app ID/data directory and an `unsigned/` feed. Signed builds use **NexusAI**. Local CI uses a third identity; hosted acceptance deliberately exercises the unsigned Beta identity. Do not simultaneously open the same Home from different installations.
 
 A customization has this precedence: bundled deployment defaults, then the user's app-data `company.env`, then explicit process environment. `open` and `build-test` copy the profile's complete company.env to the build operator's app-data directory for testing; it is not automatically copied to every employee unless embedding was enabled. Other users can configure sign-ins through the app or receive a local company.env through the deployment's chosen onboarding process.
 
@@ -170,6 +176,8 @@ HTTP is supported for the unsigned internal pilot. HTTPS requires a certificate 
 ## 6. Release with one command
 
 On the Windows build machine/VM, after the profile is applied:
+
+`release` and `publish` require `.release/acceptance.json` from installed automatic/manual upgrade validation for the exact source commit and application identity. Download it from the successful hosted run for unsigned Beta/Pilot. Signed distribution requires equivalent evidence for the signed identity on a disposable signing test device; the unsigned hosted receipt does not certify signed updates.
 
 ```powershell
 .\desktop.cmd release

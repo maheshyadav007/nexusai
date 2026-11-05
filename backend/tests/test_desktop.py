@@ -13,6 +13,7 @@ from fastapi import FastAPI
 
 from nexusai.api.desktop import DesktopControl
 from nexusai.kernel.config import load_config
+from nexusai.kernel.database import Database, DatabaseTooNew, Migration
 
 
 def test_scheduling_without_system_timezone_database() -> None:
@@ -125,6 +126,69 @@ async def test_idle_exit_drains_and_refuses_new_api_work() -> None:
         assert response.status_code == 200
         assert (await client.post("/api/mail/send")).status_code == 503
     assert controlled.server is not None and controlled.server.should_exit
+
+
+@pytest.mark.asyncio
+async def test_failed_exit_check_reopens_requests_and_can_be_retried() -> None:
+    controlled = controller()
+
+    def broken(_: str) -> list[Any]:
+        raise RuntimeError("database unavailable")
+
+    controlled.app.state.bus = SimpleNamespace(db=SimpleNamespace(fetch_all=broken))
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=controlled, raise_app_exceptions=False),
+        base_url="http://test",
+    ) as client:
+        failed = await client.post(
+            "/__desktop__/prepare-exit", headers={"x-nexusai-desktop": "test-desktop-token"}
+        )
+        assert failed.status_code == 500
+        assert not controlled.draining
+        assert (await client.post("/ordinary-request")).status_code == 404
+        controlled.app.state.bus.db.fetch_all = lambda _: []
+        assert (
+            await client.post(
+                "/__desktop__/prepare-exit", headers={"x-nexusai-desktop": "test-desktop-token"}
+            )
+        ).status_code == 200
+    assert controlled.server is not None and controlled.server.should_exit
+
+
+@pytest.mark.asyncio
+async def test_disconnected_exit_response_does_not_leave_admission_closed() -> None:
+    controlled = controller([])
+
+    async def disconnected(_: Any) -> None:
+        raise ConnectionError("control client disconnected")
+
+    scope = {
+        "type": "http",
+        "path": "/__desktop__/prepare-exit",
+        "method": "POST",
+        "headers": [(b"x-nexusai-desktop", b"test-desktop-token")],
+    }
+    with pytest.raises(ConnectionError):
+        await controlled(scope, None, disconnected)
+    assert not controlled.draining
+    assert controlled.server is not None and not controlled.server.should_exit
+
+
+def test_newer_database_is_rejected_without_modifying_its_migrations(tmp_path: Any) -> None:
+    db = Database(tmp_path / "newer.db")
+    try:
+        old = Migration("known", "CREATE TABLE preserved (value TEXT)")
+        future = Migration("future", "ALTER TABLE preserved ADD COLUMN extra TEXT")
+        db.migrate([old, future])
+        with pytest.raises(DatabaseTooNew, match="newer NexusAI"):
+            db.require_compatible([old])
+        assert {row["id"] for row in db.fetch_all("SELECT id FROM migrations")} == {
+            "known",
+            "future",
+        }
+        db.require_compatible([old, future])
+    finally:
+        db.close()
 
 
 @pytest.mark.asyncio

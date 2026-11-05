@@ -28,11 +28,17 @@ jobs:
           Set-TimeZone -Id 'India Standard Time'
           Remove-Item Env:TZ -ErrorAction SilentlyContinue
           'NEXUSAI_TEST_WINDOWS_ZONE=Asia/Kolkata' >> $env:GITHUB_ENV
-      - name: Build, install and update A to B
+      - name: Build and verify automatic and manual Beta upgrades
         shell: powershell
         run: |
           if ($env:GITHUB_REF -like 'refs/tags/desktop-beta/*') { $betaVersion = ($env:GITHUB_REF_NAME -split '/')[1]; .\desktop.cmd beta -Version $betaVersion } else { .\desktop.cmd ci }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Collect installer diagnostics
+        if: always()
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force .release/installer-logs | Out-Null
+          Get-ChildItem "$env:TEMP/nexusai-installer-*.log" -ErrorAction SilentlyContinue | Copy-Item -Destination .release/installer-logs
       - name: Upload test evidence and generic installer
         if: always()
         uses: actions/upload-artifact@v7
@@ -48,11 +54,15 @@ jobs:
             .release/artifacts/ci/0.0.2/*.exe
             .release/artifacts/ci/*/release.json
             .release/artifacts/ci/*/smoke.json
-            .release/ci/probe/plan.json
-            .release/ci/probe/result.json
-            .release/ci/probe/before.png
-            .release/ci/probe/after.png
-            .release/ci/probe/app-data/desktop.log
+            .release/artifacts/acceptance/*/release.json
+            .release/artifacts/acceptance/*/smoke.json
+            .release/acceptance.json
+            .release/installer-logs/*.log
+            .release/ci/**/plan.json
+            .release/ci/**/result.json
+            .release/ci/**/before.png
+            .release/ci/**/after.png
+            .release/ci/**/app-data/desktop.log
             .release/smoke/**/result.json
             .release/smoke/**/window.png
             .release/smoke/**/desktop.log
@@ -83,7 +93,14 @@ jobs:
               env.write('BETA_VERSION=' + version + '\n')
           manifest = json.loads((root / 'release.json').read_text())
           assert not manifest.get('ciProbe')
+          assert not manifest.get('acceptanceProbe')
           assert manifest['version'] == version
+          acceptance = json.loads(Path('evidence/acceptance.json').read_text())
+          assert acceptance['sourceCommit'] == manifest['sourceCommit'] == os.environ['GITHUB_SHA']
+          assert acceptance['appId'] == manifest['appId'] == 'com.nexusai.pilot'
+          assert acceptance['downgradeBlocked'] and acceptance['orphanServiceBlocked']
+          for mode in ('automatic', 'manual'):
+              assert all(acceptance[mode][key] for key in ('ok', 'settingsPreserved', 'browserStoragePreserved', 'appDataPreserved', 'homeReady'))
           smoke = json.loads((root / 'smoke.json').read_text())
           assert smoke['ok'] and smoke['version'] == manifest['version']
           assert smoke['releaseSha256'] == hashlib.sha256((root / 'release.json').read_bytes()).hexdigest()
@@ -99,10 +116,10 @@ jobs:
 
           Includes guided deterministic Posty onboarding (outline robot placeholder), password visibility, clearer mail-download guidance, simplified chat waiting states, attachment discovery for agents, OS certificate trust for search-model downloads, desktop app/update controls and a single Windows header with native window buttons.
 
-          Automated gates: non-UTC Windows backend checks, A-to-B installed update with preserved test data, and a separate Beta startup/shutdown smoke test.
+          Automated gates: non-UTC backend checks, installed automatic and manual Beta upgrades preserving test data, manual-downgrade rejection, orphan-service blocking, and a separate distributable Beta startup/shutdown smoke test.
 
-          This generic Beta installer contains no internal credentials and no configured update server. About & Updates explains that updates are manual until an internal feed is configured. The auto-update gate uses a separate CI-only app and local feed. Windows notification policies, internal model/download access and real-mail behavior still need testing on the target device. Custom Posty artwork is deferred.
+          This generic Beta installer contains no internal credentials and no configured update server. About & Updates explains that updates are manual until an internal feed is configured. Acceptance uses the real Beta identity in a guarded disposable runner, synthetic data and a temporary local feed; acceptance installers are not distributed. Windows notification policies, internal model/download access and real-mail behavior still need target-device testing.
           EOF
           beta_version="${GITHUB_REF_NAME#desktop-beta/}"
           beta_version="${beta_version%%/*}"
-          gh release create "$GITHUB_REF_NAME" evidence/artifacts/unsigned/*/*.exe evidence/artifacts/unsigned/*/SHA256SUMS.txt --title "NexusAI Beta $beta_version" --prerelease --notes-file notes.md
+          gh release create "$GITHUB_REF_NAME" evidence/artifacts/unsigned/"$beta_version"/*.exe evidence/artifacts/unsigned/"$beta_version"/SHA256SUMS.txt --title "NexusAI Beta $beta_version" --prerelease --notes-file notes.md

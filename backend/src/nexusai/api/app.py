@@ -42,6 +42,7 @@ from nexusai.kernel import backups, vault
 from nexusai.kernel import home as homes
 from nexusai.kernel.config import Config, load_config
 from nexusai.kernel.database import Database, DatabaseDamaged
+from nexusai.kernel.event_bus import MIGRATIONS as BUS_MIGRATIONS
 from nexusai.kernel.event_bus import EventBus
 from nexusai.kernel.logging import configure_logging, sink
 from nexusai.kernel.module import CommandError, Context, Endpoint, Listener, Module
@@ -53,7 +54,7 @@ from nexusai.modules.documents import module as documents
 from nexusai.modules.documents.module import documents_module
 from nexusai.modules.mail import pst_upload
 from nexusai.modules.mail import store as mail_store
-from nexusai.modules.mail.module import mail_module
+from nexusai.modules.mail.module import KINDS_SORTED, mail_module
 from nexusai.modules.models.module import models_module, reset_login
 from nexusai.modules.notifications.module import notifications_module
 from nexusai.modules.onboarding.module import onboarding_module
@@ -113,9 +114,13 @@ def _open_database(config: Config, home: Path, key: str) -> tuple[Database, bool
         if sentinel.exists():
             log.warning("unclean_exit_found")
             db.check()
-        migrations = [migration for module in MODULES for migration in module.migrations]
+        migrations = list(BUS_MIGRATIONS) + [
+            migration for module in MODULES for migration in module.migrations
+        ]
+        # Mail's background data conversion also records a completion marker here.
+        db.require_compatible(migrations, [KINDS_SORTED])
         upgrading = db.pending(migrations)
-    except DatabaseDamaged:
+    except Exception:
         db.close()
         raise
     if upgrading:

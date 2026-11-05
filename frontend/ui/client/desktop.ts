@@ -12,7 +12,7 @@ export interface DesktopApi {
   platform: string;
   caption: (colors: { color: string; symbolColor: string }) => Promise<void>;
   status: () => Promise<DesktopStatus>;
-  action: (action: "check" | "download" | "install" | "restart" | "quit" | "logs") => Promise<DesktopStatus>;
+  action: (action: "check" | "download" | "install" | "restart" | "quit" | "logs" | "retry-shutdown") => Promise<DesktopStatus>;
   notify: (notice: { title: string; body?: string; link?: string; silent?: boolean }) => Promise<boolean>;
 }
 declare global { interface Window { nexusDesktop?: DesktopApi } }

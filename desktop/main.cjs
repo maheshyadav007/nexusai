@@ -4,7 +4,8 @@ const { spawn } = require('node:child_process');
 const { randomBytes } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { freePort, persistentFrontendPort, waitReady, waitExit } = require('./runtime.cjs');
+const { pathToFileURL } = require('node:url');
+const { freePort, persistentFrontendPort, waitReady, waitExit, isAlive, launchInstaller, waitInstalledServices } = require('./runtime.cjs');
 
 const resources = app.isPackaged ? process.resourcesPath : path.join(__dirname, 'resources');
 const config = require(path.join(resources, 'runtime.json'));
@@ -13,7 +14,7 @@ const smokeDir = smokeAt >= 0 ? process.argv[smokeAt + 1] : null;
 if (smokeAt >= 0 && !smokeDir) throw new Error('--smoke-dir needs a directory');
 const normalDataDir = path.join(app.getPath('appData'), config.dataDirectory);
 let probeDir = null;
-if (config.ciProbe && !smokeDir) {
+if ((config.ciProbe || config.acceptanceProbe) && !smokeDir) {
   const probeFile = path.join(normalDataDir, 'update-probe.json');
   if (fs.existsSync(probeFile)) probeDir = JSON.parse(fs.readFileSync(probeFile, 'utf8')).directory;
 }
@@ -25,6 +26,8 @@ const logPath = path.join(dataDir, 'desktop.log');
 const log = (message) => fs.appendFileSync(logPath, `${new Date().toISOString()} ${message}\n`);
 let window, backend, frontend, backendUrl, origin, shuttingDown = false, canQuit = false;
 let updateReady = false, installing = false, menu, restartRequested = false;
+let exitPrepared = false, lifecycleMode = false, shutdownRequest = false, downloadedUpdate = null;
+const shutdownPage = path.join(__dirname, 'shutdown.html');
 let updateState = { state: 'idle', version: app.getVersion(), availableVersion: null, percent: 0, error: null, configured: Boolean(config.updateBaseUrl) };
 const startedAt = Date.now();
 async function startupStage(detail) {
@@ -32,7 +35,8 @@ async function startupStage(detail) {
   if (window && !window.isDestroyed()) await window.webContents.executeJavaScript(`document.getElementById('startup-detail')?.replaceChildren(${JSON.stringify(detail)})`).catch(() => {});
 }
 function trustedSender(event) {
-  return window && event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame && event.senderFrame.url.startsWith(`${origin}/`);
+  return window && event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame &&
+    (event.senderFrame.url.startsWith(`${origin}/`) || (lifecycleMode && event.senderFrame.url === pathToFileURL(shutdownPage).href));
 }
 ipcMain.handle('nexus:caption', (event, colors) => {
   if (!trustedSender(event) || process.platform !== 'win32') return;
@@ -43,6 +47,14 @@ ipcMain.handle('nexus:caption', (event, colors) => {
 ipcMain.handle('nexus:status' , (event) => { if (!trustedSender(event)) throw new Error('Untrusted window'); return updateState; });
 ipcMain.handle('nexus:action', async (event, action) => {
   if (!trustedSender(event)) throw new Error('Untrusted window');
+  if (lifecycleMode && !['retry-shutdown', 'restart', 'quit', 'logs'].includes(action)) throw new Error('Finish shutdown before continuing.');
+  if (lifecycleMode && shuttingDown && action !== 'logs') throw new Error('Shutdown is still in progress.');
+  if (action === 'retry-shutdown') { void shutdown(shutdownRequest); return updateState; }
+  if (action === 'restart' && lifecycleMode) {
+    if (isAlive(backend) || isAlive(frontend)) throw new Error('Local services are still stopping. Retry shutdown first.');
+    if (process.platform === 'win32' && app.isPackaged) await waitInstalledServices(resources, app.getPath('exe'));
+    app.relaunch(); canQuit = true; app.exit(0); return updateState;
+  }
   if (action === 'check') {
     if (!config.updateBaseUrl) return updateState;
     updateState = { ...updateState, state: 'checking', error: null };
@@ -75,6 +87,10 @@ function child(command, args, options) {
   service.on('error', (error) => { service.spawnError = error; log(`Service error: ${error.message}`); });
   service.on('exit', (code, signal) => {
     log(`Service exited: ${path.basename(command)} code=${code} signal=${signal}`);
+    if (lifecycleMode && !shuttingDown) {
+      void lifecycleScreen('Local services have stopped. Retry shutdown to continue, or reopen NexusAI.', true);
+      return;
+    }
     if (!shuttingDown && window && startupComplete) {
       window.hide();
       if (!probeDir) dialog.showErrorBox('NexusAI service stopped', `A local service stopped. Restart NexusAI.\n\nLogs: ${logPath}`);
@@ -87,11 +103,20 @@ function child(command, args, options) {
 
 function showMessage(message) { return dialog.showMessageBox(window, { message, type: 'info' }); }
 
+async function lifecycleScreen(detail, retry = false) {
+  lifecycleMode = true;
+  if (!window || window.isDestroyed()) return;
+  if (window.webContents.getURL() !== pathToFileURL(shutdownPage).href) await window.loadFile(shutdownPage);
+  window.show();
+  await window.webContents.executeJavaScript(`document.getElementById('detail').textContent=${JSON.stringify(detail)};document.getElementById('retry').disabled=${!retry};document.getElementById('restart').disabled=${!retry || isAlive(backend) || isAlive(frontend)};`).catch(() => {});
+}
+
 async function shutdown(update = false, failedStartup = false) {
   if (shuttingDown) return;
   shuttingDown = true;
+  shutdownRequest = update;
   try {
-    if (backend && backend.exitCode === null && backendUrl && startupComplete && !failedStartup) {
+    if (!exitPrepared && isAlive(backend) && backendUrl && startupComplete && !failedStartup) {
       const response = await fetch(`${backendUrl}/__desktop__/prepare-exit`, {
         method: 'POST', headers: { 'x-nexusai-desktop': controlToken }, signal: AbortSignal.timeout(10000),
       });
@@ -107,33 +132,48 @@ async function shutdown(update = false, failedStartup = false) {
         return;
       }
       if (!response.ok) throw new Error(`Could not prepare a safe exit (${response.status}).`);
+      exitPrepared = true;
     }
-    window?.hide();
+    await lifecycleScreen('Waiting for local services to finish. No update has been installed.');
     // Closing browser/SSE connections allows Uvicorn to drain. Never terminate Python forcibly.
-    if (frontend?.exitCode === null) frontend.stdin.end();
-    backend?.stdin.end();
-    await waitExit(frontend);
-    const code = await waitExit(backend);
-    if (!failedStartup && code !== null && code !== undefined && code !== 0) throw new Error(`Backend did not exit cleanly (${code}); update postponed.`);
+    if (isAlive(frontend) && !frontend.stdin.writableEnded) frontend.stdin.end();
+    if (isAlive(backend) && !backend.stdin.writableEnded) backend.stdin.end();
+    const stopped = await Promise.allSettled([waitExit(frontend, 120000, 'Interface'), waitExit(backend, 120000, 'Python backend')]);
+    if (!failedStartup) {
+      for (let i = 0; i < stopped.length; i++) {
+        const result = stopped[i];
+        if (result.status === 'rejected') throw result.reason;
+        if ([frontend, backend][i] && result.value !== 0) throw new Error(`${i ? 'Python backend' : 'Interface'} did not exit cleanly (${result.value}). No update was installed.`);
+      }
+    } else if (isAlive(backend) || isAlive(frontend)) throw new Error('A local service is still stopping. Retry shutdown.');
     if (smokeDir) {
       fs.writeFileSync(path.join(smokeDir, 'result.json'), JSON.stringify({
         ok: !failedStartup && errors.length === 0, version: app.getVersion(), errors,
       }, null, 2));
     }
     if (probeDir && probeReport) fs.writeFileSync(path.join(probeDir, 'result.json'), JSON.stringify(probeReport, null, 2));
-    canQuit = true;
-    if (update) { installing = true; autoUpdater.quitAndInstall(true, true); }
-    else { if (restartRequested && !failedStartup) app.relaunch(); app.exit(failedStartup || errors.length ? 1 : 0); }
+    if (update) {
+      installing = true;
+      await lifecycleScreen('Checking that all bundled local services have stopped…');
+      if (process.platform === 'win32' && app.isPackaged) await waitInstalledServices(resources, app.getPath('exe'));
+      await lifecycleScreen('Starting the verified update installer…');
+      await launchInstaller(downloadedUpdate);
+      canQuit = true; app.exit(0);
+    } else { canQuit = true; if (restartRequested && !failedStartup) app.relaunch(); app.exit(failedStartup || errors.length ? 1 : 0); }
   } catch (error) {
     log(error.stack);
     shuttingDown = false;
+    installing = false;
+    restartRequested = false;
+    updateState = { ...updateState, state: updateReady ? 'ready' : 'error', error: error.message };
     if (probeDir) {
       fs.writeFileSync(path.join(probeDir, 'result.json'), JSON.stringify({ ok: false, error: error.message }));
       canQuit = true; app.exit(1); return;
     }
     // A partly stopped app must be relaunched before further work; no binary replacement occurs.
-    dialog.showErrorBox('NexusAI could not close safely', `${error.message}\n\nNo update was installed. Logs: ${logPath}`);
-    if (smokeDir || (backend && backend.exitCode !== null)) { canQuit = true; app.exit(1); }
+    if (lifecycleMode) await lifecycleScreen(`${error.message}\n\nNo update was installed. Logs: ${logPath}`, true);
+    else dialog.showErrorBox('NexusAI could not close safely', `${error.message}\n\nNo update was installed. Logs: ${logPath}`);
+    if (smokeDir && !isAlive(backend) && !isAlive(frontend)) { canQuit = true; app.exit(1); }
   }
 }
 
@@ -187,7 +227,8 @@ function setupUpdates() {
     updateItem(`Downloading update: ${Math.round(percent)}%`);
     window?.setProgressBar(percent / 100);
   });
-  autoUpdater.on('update-downloaded', () => {
+  autoUpdater.on('update-downloaded', (info) => {
+    downloadedUpdate = { file: info.downloadedFile, sha512: info.files?.find(file => /\.exe(?:$|\?)/i.test(file.url))?.sha512 };
     updateState = { ...updateState, state: 'ready', percent: 100 };
     updateReady = true; updateItem('Update ready'); window?.setProgressBar(-1);
     if (probeDir) { void shutdown(true); return; }
@@ -216,7 +257,8 @@ async function runUpdateProbe() {
     window.webContents.session.flushStorageData();
     fs.writeFileSync(path.join(probeDir, 'before.png'), (await window.capturePage()).toPNG());
     autoUpdater.disableDifferentialDownload = true;
-    await autoUpdater.checkForUpdates();
+    if (plan.mode === 'manual') fs.writeFileSync(path.join(probeDir, 'manual-ready.json'), JSON.stringify({ version: app.getVersion(), nonce: plan.nonce }));
+    else await autoUpdater.checkForUpdates();
   } else if (app.getVersion() === plan.to) {
     const settings = await api('/api/queries/settings.get');
     const browserMarker = await window.webContents.executeJavaScript("localStorage.getItem('nexusai.updateProbe')");
@@ -225,7 +267,7 @@ async function runUpdateProbe() {
       throw new Error('The installed update did not preserve its database/browser/app-data fixtures.');
     }
     fs.writeFileSync(path.join(probeDir, 'after.png'), (await window.capturePage()).toPNG());
-    probeReport = { ok: true, from: plan.from, to: app.getVersion(), settingsPreserved: true, browserStoragePreserved: true, appDataPreserved: true, homeReady: true };
+    probeReport = { ok: true, mode: plan.mode || 'automatic', from: plan.from, to: app.getVersion(), settingsPreserved: true, browserStoragePreserved: true, appDataPreserved: true, homeReady: true };
     await shutdown();
   } else throw new Error(`Unexpected installed version in CI: ${app.getVersion()}`);
 }
@@ -235,7 +277,14 @@ async function start() {
     ...(process.platform === 'win32' ? { titleBarStyle: 'hidden', titleBarOverlay: { color: '#f4efe6', symbolColor: '#211e1a', height: 44 } } : {}),
     icon: path.join(__dirname, 'build-resources', 'icon.png'),
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(__dirname, 'preload.cjs'), autoplayPolicy: 'no-user-gesture-required' } });
-  window.on('close', (event) => { if (!canQuit) { event.preventDefault(); void shutdown(); } });
+  window.on('close', (event) => {
+    if (!canQuit) {
+      event.preventDefault();
+      if (shuttingDown) return;
+      if (lifecycleMode && !isAlive(backend) && !isAlive(frontend)) { canQuit = true; app.exit(0); }
+      else void shutdown();
+    }
+  });
   await window.loadFile(path.join(__dirname, 'loading.html'));
   await startupStage('Preparing your local services…');
   const frontendPort = await persistentFrontendPort(dataDir);
@@ -298,11 +347,19 @@ async function start() {
 }
 
 app.on('before-quit', (event) => {
-  if (!canQuit && !installing) { event.preventDefault(); void shutdown(); }
+  if (!canQuit) {
+    if (shuttingDown) { event.preventDefault(); return; }
+    if (lifecycleMode && !isAlive(backend) && !isAlive(frontend)) { canQuit = true; return; }
+    event.preventDefault(); void shutdown();
+  }
 });
 if (!app.requestSingleInstanceLock()) app.exit(0);
+else if (process.argv.includes('--prepare-install')) app.exit(0);
 else {
-  app.on('second-instance', () => { if (window) { window.show(); window.focus(); } });
+  app.on('second-instance', (_, argv) => {
+    if (argv.includes('--prepare-install')) { restartRequested = false; void shutdown(); }
+    else if (window) { window.show(); window.focus(); }
+  });
   app.whenReady().then(start).catch(async (error) => {
     errors.push(error.message); log(error.stack);
     if (probeDir) probeReport = { ok: false, error: error.message, version: app.getVersion() };

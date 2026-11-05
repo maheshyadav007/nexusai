@@ -6,7 +6,7 @@
   "author": "NexusAI",
   "main": "main.cjs",
   "scripts": {
-    "test": "node --test tests/release.test.cjs tests/profiles.test.cjs"
+    "test": "node --test tests/release.test.cjs tests/profiles.test.cjs tests/shutdown.test.cjs"
   },
   "dependencies": {
     "electron-updater": "6.8.11"

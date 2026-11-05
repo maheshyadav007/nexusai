@@ -8,6 +8,7 @@ const lib = require('../release-lib.cjs');
 const example = require('../release.example.json');
 const { freePort, persistentFrontendPort, waitReady } = require('../runtime.cjs');
 const http = require('node:http');
+const { patchUninstallMessage, withInstallerTemplates } = require('../installer-templates.cjs');
 
 test('configuration rejects stored passwords, unsafe URLs and invalid server paths', () => {
   assert.equal(lib.validateConfig(structuredClone(example)).version, '0.1.0');
@@ -76,4 +77,30 @@ test('the frontend origin remains stable across launches and a collision is acti
     if (server) await new Promise((resolve) => server.close(resolve));
     await fs.rm(directory, { recursive: true, force: true });
   }
+});
+
+test('publication requires complete installed-upgrade evidence for this source and identity', () => {
+  const passed = { ok: true, settingsPreserved: true, browserStoragePreserved: true, appDataPreserved: true, homeReady: true };
+  const report = { schemaVersion: 1, sourceCommit: 'current', appId: 'com.nexusai.pilot', automatic: passed, manual: passed, downgradeBlocked: true, orphanServiceBlocked: true };
+  lib.verifyAcceptance(report, 'current', 'com.nexusai.pilot');
+  for (const patch of [{ sourceCommit: 'old' }, { appId: 'com.nexusai.ci' }, { manual: { ...passed, appDataPreserved: false } }, { downgradeBlocked: false }]) {
+    assert.throws(() => lib.verifyAcceptance({ ...report, ...patch }, 'current', 'com.nexusai.pilot'), /acceptance/);
+  }
+});
+
+test('installer error-message patch is scoped and restored even if compilation fails', async () => {
+  const template = require('node:fs').readFileSync(path.join(__dirname, '../node_modules/app-builder-lib/templates/nsis/include/installUtil.nsh'), 'utf8');
+  const patched = patchUninstallMessage(template);
+  assert.match(patched, /uninstaller exit code \$R0/);
+  assert.throws(() => patchUninstallMessage('unknown template'), /template changed/);
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'nexusai-nsis-'));
+  const file = path.join(directory, 'template.nsh');
+  try {
+    await fs.writeFile(file, template);
+    await assert.rejects(withInstallerTemplates(file, async () => {
+      assert.equal(await fs.readFile(file, 'utf8'), patched);
+      throw new Error('compiler failed');
+    }), /compiler failed/);
+    assert.equal(await fs.readFile(file, 'utf8'), template);
+  } finally { await fs.rm(directory, { recursive: true, force: true }); }
 });

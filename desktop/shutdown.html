@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>NexusAI — closing safely</title>
+<style>
+body{margin:0;min-height:100vh;display:grid;place-content:center;background:#f4efe6;color:#211e1a;font:16px/1.6 "Segoe UI",system-ui,sans-serif}
+main{max-width:620px;padding:32px}h1{font-size:26px;font-weight:600}p{overflow-wrap:anywhere}button{font:inherit;padding:8px 16px;margin:8px 8px 0 0;border:1px solid #b9aa98;border-radius:8px;background:#fffdf9;color:inherit;cursor:pointer}button:disabled{opacity:.5;cursor:default}button:focus-visible{outline:2px solid #a64321;outline-offset:3px}
+</style>
+<main><h1>Closing NexusAI safely</h1><p id="detail" role="status">Waiting for local services to finish. Your update has not been installed yet.</p>
+<p>Your workspace stays on this computer. This window remains available if shutdown needs attention.</p>
+<button id="retry" disabled>Retry shutdown</button><button id="restart" disabled>Reopen NexusAI</button><button id="logs">Open logs folder</button>
+</main><script>
+for(const [id,action] of [['retry','retry-shutdown'],['restart','restart'],['logs','logs']]) document.getElementById(id).onclick=()=>window.nexusDesktop.action(action).catch(error=>document.getElementById('detail').textContent=error.message);
+</script></html>

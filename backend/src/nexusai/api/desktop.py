@@ -28,6 +28,7 @@ class DesktopControl:
         self.active = 0
         self.draining = False
         self.server: uvicorn.Server | None = None
+        self._prepare_lock = asyncio.Lock()
 
     def busy(self) -> bool:
         if self.active:
@@ -52,15 +53,25 @@ class DesktopControl:
             if scope["method"] != "POST" or not secrets.compare_digest(supplied, self.token):
                 await JSONResponse({"error": "Not found"}, status_code=404)(scope, receive, send)
                 return
-            # Close the admission gate before yielding to the database check.
-            self.draining = True
-            if await asyncio.to_thread(self.busy):
-                self.draining = False
-                await JSONResponse({"busy": True}, status_code=409)(scope, receive, send)
-                return
-            await JSONResponse({"stopping": True})(scope, receive, send)
-            assert self.server is not None
-            self.server.should_exit = True
+            async with self._prepare_lock:
+                committed = False
+                self.draining = True
+                try:
+                    if self.server is None:
+                        await JSONResponse({"error": "Exit control is not ready"}, status_code=503)(
+                            scope, receive, send
+                        )
+                        return
+                    if not self.server.should_exit and await asyncio.to_thread(self.busy):
+                        await JSONResponse({"busy": True}, status_code=409)(scope, receive, send)
+                        return
+                    await JSONResponse({"stopping": True})(scope, receive, send)
+                    self.server.should_exit = True
+                    committed = True
+                finally:
+                    # A failed check or disconnected control request must not lock out the UI.
+                    if not committed and not (self.server and self.server.should_exit):
+                        self.draining = False
             return
         if self.draining:
             await JSONResponse({"error": "App is closing"}, status_code=503)(scope, receive, send)

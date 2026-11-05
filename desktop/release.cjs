@@ -9,6 +9,7 @@ const yaml = require('js-yaml');
 const lib = require('./release-lib.cjs');
 const ssh = require('./ssh.cjs');
 const profiles = require('./profiles.cjs');
+const { withInstallerTemplates } = require('./installer-templates.cjs');
 
 const root = path.resolve(__dirname, '..');
 const work = path.join(root, '.release');
@@ -90,12 +91,12 @@ async function snapshot(destination) {
 }
 
 function artifactDirectory(config, version = config.version) {
-  return path.join(work, 'artifacts', config.ciProbe ? 'ci' : config.signing.enabled ? 'signed' : 'unsigned', version);
+  return path.join(work, 'artifacts', config.acceptanceProbe ? 'acceptance' : config.ciProbe ? 'ci' : config.signing.enabled ? 'signed' : 'unsigned', version);
 }
 
 async function build(config) {
   windows(); doctor(config);
-  await run(process.execPath, ['--test', path.join(__dirname, 'tests/release.test.cjs'), path.join(__dirname, 'tests/profiles.test.cjs')]);
+  await run(process.execPath, ['--test', ...fs.readdirSync(path.join(__dirname, 'tests')).filter(name => name.endsWith('.test.cjs')).map(name => path.join(__dirname, 'tests', name))]);
   const dirty = capture('git', ['status', '--porcelain', '--untracked-files=normal', '--', 'frontend', 'backend', 'desktop', 'scripts/desktop.ps1', 'desktop.cmd']);
   if (dirty) throw new Error('Commit the application and release tooling before building. Machine-local ignored configuration is allowed.');
   const explicitVersion = managedVersions ? config.version : option('version', null);
@@ -120,7 +121,7 @@ async function build(config) {
   await run(uv, ['python', 'install', pins.python, '--no-bin', '--no-registry']);
   const sourcePython = capture(uv, ['python', 'find', '--managed-python', pins.python]);
   if (!backendChecked) {
-  await run(uv, ['run', '--locked', '--python', sourcePython, 'pytest', '-q', 'tests/test_desktop.py', 'tests/test_api.py', 'tests/test_scheduler_timezone.py', 'tests/test_email_reliability.py', 'tests/test_agent_work.py', 'tests/test_cockpit.py', 'tests/test_network_trust.py'], { cwd: backendRoot });
+  await run(uv, ['run', '--locked', '--python', sourcePython, 'pytest', '-q', 'tests/test_desktop.py', 'tests/test_home.py', 'tests/test_agent_sessions.py', 'tests/test_api.py', 'tests/test_scheduler_timezone.py', 'tests/test_email_reliability.py', 'tests/test_agent_work.py', 'tests/test_cockpit.py', 'tests/test_network_trust.py'], { cwd: backendRoot });
     backendChecked = true;
   } else console.log('Backend checks already passed for this source in this build process.');
   const pythonRoot = path.join(resources, 'python');
@@ -151,20 +152,23 @@ async function build(config) {
   const signed = config.signing.enabled;
   const productName = config.ciProbe ? 'NexusAI CI' : signed ? 'NexusAI' : 'NexusAI Beta';
   const runtime = { appId: config.ciProbe ? 'com.nexusai.ci' : signed ? 'com.nexusai.desktop' : 'com.nexusai.pilot',
-    ciProbe: config.ciProbe === true, dataDirectory: config.ciProbe ? productName : signed ? 'NexusAI' : 'NexusAI Pilot', signed,
+    ciProbe: config.ciProbe === true, acceptanceProbe: config.acceptanceProbe === true, dataDirectory: config.ciProbe ? productName : signed ? 'NexusAI' : 'NexusAI Pilot', signed,
     updateBaseUrl: config.updateBaseUrl ? lib.feedUrl(config, signed) : '' };
   await fsp.writeFile(path.join(resources, 'runtime.json'), JSON.stringify(runtime, null, 2));
   const builder = {
     appId: runtime.appId, productName, asar: true,
     directories: { output, buildResources: 'build-resources' },
-    files: ['main.cjs', 'runtime.cjs', 'loading.html', 'preload.cjs', 'build-resources/icon.png', 'build-resources/LICENSE.lucide', 'package.json'],
+    files: ['main.cjs', 'runtime.cjs', 'loading.html', 'shutdown.html', 'preload.cjs', 'build-resources/icon.png', 'build-resources/LICENSE.lucide', 'package.json'],
     extraResources: [{ from: 'resources', to: '.', filter: ['**/*'] },
-      { from: 'frontend-server.cjs', to: 'frontend-server.cjs' }],
+      { from: 'frontend-server.cjs', to: 'frontend-server.cjs' },
+      { from: 'installer/check-install.ps1', to: 'check-install.ps1' }],
     extraMetadata: { name: config.ciProbe ? 'nexusai-ci' : signed ? 'nexusai' : 'nexusai-pilot', version },
     artifactName: `NexusAI${config.ciProbe ? '-CI' : signed ? '' : '-Beta'}-Setup-${version}.exe`,
     win: { icon: path.join(__dirname, 'build-resources', 'icon.ico'), target: [{ target: 'nsis', arch: ['x64'] }], verifyUpdateCodeSignature: signed,
       ...(signed ? { certificateFile: config.signing.certificateFile, publisherName: config.signing.publisherName } : {}) },
     nsis: { oneClick: false, perMachine: false, allowElevation: false, allowToChangeInstallationDirectory: true,
+      guid: lib.installationGuid(runtime.appId),
+      include: path.join(__dirname, 'installer', 'installer.nsh'),
       deleteAppDataOnUninstall: false, createDesktopShortcut: true, runAfterFinish: true },
     forceCodeSigning: signed,
     ...(runtime.updateBaseUrl ? { publish: [{ provider: 'generic', url: runtime.updateBaseUrl }] } : {}),
@@ -173,8 +177,9 @@ async function build(config) {
   await fsp.writeFile(builderConfig, JSON.stringify(builder, null, 2));
   const signingEnv = { ...process.env, CSC_IDENTITY_AUTO_DISCOVERY: signed ? 'true' : 'false' };
   if (signed && !signingEnv.CSC_KEY_PASSWORD) signingEnv.CSC_KEY_PASSWORD = await ssh.secret('Code-signing certificate password');
-  await run(process.execPath, [path.join(__dirname, 'node_modules/electron-builder/out/cli/cli.js'),
-    '--win', 'nsis', '--x64', '--config', builderConfig, '--publish', 'never'], { cwd: __dirname, env: signingEnv });
+  await withInstallerTemplates(path.join(__dirname, 'node_modules/app-builder-lib/templates/nsis/include/installUtil.nsh'), () =>
+    run(process.execPath, [path.join(__dirname, 'node_modules/electron-builder/out/cli/cli.js'),
+      '--win', 'nsis', '--x64', '--config', builderConfig, '--publish', 'never'], { cwd: __dirname, env: signingEnv }));
   if (!runtime.updateBaseUrl) {
     // Local-only builds still get a manifest for install/smoke testing; they cannot be published.
     await fsp.writeFile(path.join(output, 'latest.yml'), yaml.dump({ version, files: [] }));
@@ -184,7 +189,7 @@ async function build(config) {
     lib.safeName(name); const file = path.join(output, name);
     files.push({ name, size: (await fsp.stat(file)).size, sha256: await lib.sha256(file) });
   }
-  const manifest = { schemaVersion: 1, version, signed, ciProbe: runtime.ciProbe, appId: runtime.appId, productName,
+  const manifest = { schemaVersion: 1, version, signed, ciProbe: runtime.ciProbe, acceptanceProbe: runtime.acceptanceProbe, appId: runtime.appId, productName,
     sourceCommit: capture('git', ['rev-parse', 'HEAD']), updateBaseUrl: runtime.updateBaseUrl,
     toolchain: { ...pins, electron: require('./package.json').devDependencies.electron }, files };
   if (runtime.updateBaseUrl) {
@@ -205,7 +210,7 @@ async function test(config, install = false) {
   const manifest = JSON.parse(await fsp.readFile(path.join(directory, 'release.json'), 'utf8'));
   await lib.verifyArtifacts(directory, manifest);
   const installer = manifest.files.find((file) => file.name.endsWith('.exe'));
-  const testInstall = path.join(process.env.LOCALAPPDATA || os.tmpdir(), `NexusAI-Pipeline-${manifest.ciProbe ? 'CI' : manifest.signed ? 'Signed' : 'Pilot'}`);
+  const testInstall = path.join(process.env.LOCALAPPDATA || os.tmpdir(), `NexusAI-Pipeline-${manifest.acceptanceProbe ? 'Beta-Acceptance' : manifest.ciProbe ? 'CI' : manifest.signed ? 'Signed' : 'Pilot'}`);
   if (install && manifest.signed && fs.existsSync(path.join(process.env.APPDATA || os.homedir(), 'NexusAI', 'home-pointer.json'))) {
     throw new Error('Run signed installer tests in a disposable Windows account/VM. This account already has a NexusAI Home.');
   }
@@ -270,12 +275,24 @@ async function serverSetup(config) {
   }
 }
 
+async function requireAcceptance(sourceCommit, appId) {
+  let report;
+  try { report = JSON.parse(await fsp.readFile(path.join(work, 'acceptance.json'), 'utf8')); }
+  catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    throw new Error('Installed automatic/manual upgrade evidence is required. Download acceptance.json from the Windows validation run for this commit into .release/ before publishing.');
+  }
+  lib.verifyAcceptance(report, sourceCommit, appId);
+}
+
 async function publish(config) {
   lib.validateConfig(config, true);
   if (!['pilot', 'stable'].includes(channel)) throw new Error('Channel must be pilot or stable.');
   const directory = artifactDirectory(config, option('version', config.version));
   const manifest = JSON.parse(await fsp.readFile(path.join(directory, 'release.json'), 'utf8'));
   await lib.verifyArtifacts(directory, manifest);
+  if (manifest.ciProbe || manifest.acceptanceProbe) throw new Error('Acceptance installers contain a temporary test feed and cannot be published.');
+  await requireAcceptance(manifest.sourceCommit, manifest.appId);
   if (manifest.updateBaseUrl !== lib.feedUrl(config, manifest.signed)) throw new Error('The update URL changed since this installer was built. Rebuild with a new version.');
   if (channel === 'stable' && (!manifest.signed || !manifest.updateBaseUrl.startsWith('https://'))) throw new Error('Stable publication requires a signed installer and HTTPS. Unsigned internal testing uses pilot.');
   const report = JSON.parse(await fsp.readFile(path.join(directory, 'smoke.json'), 'utf8'));
@@ -351,7 +368,9 @@ async function main() {
     case 'server-setup': return serverSetup(config);
     case 'publish': return publish(config);
     case 'release':
-      lib.validateConfig(config, true); await build(config); await test(config); return publish(config);
+      lib.validateConfig(config, true);
+      await requireAcceptance(capture('git', ['rev-parse', 'HEAD']), config.signing.enabled ? 'com.nexusai.desktop' : 'com.nexusai.pilot');
+      await build(config); await test(config); return publish(config);
     default: throw new Error('Commands: init, doctor, build, test, install-test, build-test, open, server-setup, publish, release.');
   }
 }

@@ -17,6 +17,10 @@ class DatabaseDamaged(Exception):
     """The file isn't a readable database, so it needs restoring from a backup."""
 
 
+class DatabaseTooNew(Exception):
+    """An older application must not open a database migrated by a newer one."""
+
+
 def key_pragma(key: str) -> str:
     """SQL can't take a pragma's value as a parameter, so only an exact key shape gets through."""
     if not RAW_KEY.match(key):
@@ -85,6 +89,17 @@ class Database:
         """Whether this database has data that an upgrade is about to change."""
         applied = {row["id"] for row in self.fetch_all("SELECT id FROM migrations")}
         return bool(applied) and any(migration.id not in applied for migration in migrations)
+
+    def require_compatible(
+        self, migrations: Sequence[Migration], markers: Sequence[str] = ()
+    ) -> None:
+        known = {migration.id for migration in migrations} | set(markers)
+        applied = {row["id"] for row in self.fetch_all("SELECT id FROM migrations")}
+        if applied - known:
+            raise DatabaseTooNew(
+                "This workspace was updated by a newer NexusAI. Install that version or newer "
+                "to open it. Your data has not been migrated or reset."
+            )
 
     def migrate(self, migrations: Sequence[Migration]) -> None:
         with self._lock:

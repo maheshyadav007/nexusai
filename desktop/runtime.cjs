@@ -1,6 +1,9 @@
 const net = require('node:net');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { spawn } = require('node:child_process');
+const { createHash } = require('node:crypto');
+const { createReadStream } = require('node:fs');
 
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -45,16 +48,55 @@ async function waitReady(url, child, timeout = 120000) {
   throw new Error(`Timed out waiting for ${url}. Open desktop.log for details.`);
 }
 
-function waitExit(child, timeout = 120000) {
-  if (!child || child.exitCode !== null || child.signalCode !== null) return Promise.resolve(child?.exitCode);
+function isAlive(child) { return Boolean(child && child.exitCode === null && child.signalCode === null && !child.spawnError); }
+
+function waitExit(child, timeout = 120000, name = 'Service') {
+  const result = () => {
+    if (child?.spawnError) throw child.spawnError;
+    if (child?.signalCode) throw new Error(`${name} stopped unexpectedly (${child.signalCode}). No update was installed.`);
+    return child?.exitCode;
+  };
+  if (!isAlive(child)) return Promise.resolve().then(result);
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       child.removeListener('exit', done);
-      reject(new Error('Backend is still stopping. No update was installed. Wait and try again.'));
+      reject(new Error(`${name} is still stopping. No update was installed. Wait and retry the shutdown.`));
     }, timeout);
-    function done(code) { clearTimeout(timer); resolve(code); }
+    function done(code, signal) {
+      clearTimeout(timer);
+      if (signal) reject(new Error(`${name} stopped unexpectedly (${signal}). No update was installed.`));
+      else resolve(code);
+    }
     child.once('exit', done);
   });
 }
 
-module.exports = { freePort, persistentFrontendPort, waitReady, waitExit };
+async function launchInstaller(update, spawnProcess = spawn) {
+  if (!update || !path.isAbsolute(update.file) || !update.file.toLowerCase().endsWith('.exe') || typeof update.sha512 !== 'string') {
+    throw new Error('No verified update installer is ready. Download the update again.');
+  }
+  const hash = createHash('sha512');
+  for await (const chunk of createReadStream(update.file)) hash.update(chunk);
+  if (hash.digest('base64') !== update.sha512) throw new Error('The downloaded installer changed. Download the update again.');
+  await new Promise((resolve, reject) => {
+    const installer = spawnProcess(update.file, ['--updated', '/S', '--force-run'], { detached: true, stdio: 'ignore', windowsHide: true });
+    installer.once('error', reject);
+    installer.once('spawn', () => { installer.unref(); resolve(); });
+  });
+}
+
+function waitInstalledServices(resources, executable, spawnProcess = spawn) {
+  return new Promise((resolve, reject) => {
+    const powershell = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32/WindowsPowerShell/v1.0/powershell.exe');
+    const child = spawnProcess(powershell, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(resources, 'check-install.ps1'),
+      '-InstallDirectory', path.dirname(executable), '-AppGuid', '00000000-0000-0000-0000-000000000000', '-Version', '0.0.0', '-Mode', 'services'], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    let output = '';
+    const collect = chunk => { output = (output + String(chunk)).slice(-8000); };
+    child.stdout.on('data', collect); child.stderr.on('data', collect);
+    const timer = setTimeout(() => { child.kill(); reject(new Error('The local-service check timed out. No update was installed.')); }, 135000);
+    child.once('error', error => { clearTimeout(timer); reject(error); });
+    child.once('exit', code => { clearTimeout(timer); code === 0 ? resolve() : reject(new Error(output.trim() || 'Local services have not stopped. No update was installed.')); });
+  });
+}
+
+module.exports = { freePort, persistentFrontendPort, waitReady, waitExit, isAlive, launchInstaller, waitInstalledServices };
