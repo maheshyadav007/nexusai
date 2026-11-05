@@ -7,8 +7,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+import structlog
 from imapclient import IMAPClient
-from imapclient.exceptions import IMAPClientError, LoginError
+from imapclient.exceptions import IMAPClientAbortError, IMAPClientError, LoginError
 
 from nexusai.contracts.mail import MailProfile
 
@@ -37,6 +38,7 @@ DELETING_ROLES = {"trash", "junk"}
 READ, FLAGGED = b"\\Seen", b"\\Flagged"
 ConnectionFailed = (OSError, IMAPClientError, ssl.SSLError, EOFError, TimeoutError)
 MESSAGE_ID = re.compile(rb"message-id:\s*(<[^>]+>)", re.I)
+log = structlog.get_logger()
 
 
 class SignInFailed(Exception):
@@ -77,6 +79,12 @@ class ImapSession:
     ) -> None:
         self.never_delete = never_delete
         self.deleting_folders: set[str] = set()
+        self.profile, self.password, self.timeout = profile, password, timeout
+        self.selected: tuple[str, int] | None = None
+        self._connect()
+
+    def _connect(self) -> None:
+        profile, password, timeout = self.profile, self.password, self.timeout
         self.client = IMAPClient(
             profile.imap.host,
             port=profile.imap.port,
@@ -122,7 +130,7 @@ class ImapSession:
         """Each mail's Message-ID, so one already held in another folder needn't come down again."""
         if not uids:
             return {}
-        rows = self.client.fetch(uids, ["BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)]"])
+        rows = self._fetch_isolated(uids, ["BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)]"])
         found: dict[int, str] = {}
         for uid, row in rows.items():
             header = next(
@@ -136,7 +144,36 @@ class ImapSession:
     def select(self, name: str) -> tuple[int, int]:
         """The folder's UIDVALIDITY and message count."""
         info: dict[bytes, Any] = self.client.select_folder(name)
+        self.selected = (name, int(info[b"UIDVALIDITY"]))
         return int(info[b"UIDVALIDITY"]), int(info.get(b"EXISTS", 0))
+
+    def _recover_fetch(self) -> None:
+        # A parser error can leave unread response bytes. Start with a clean connection.
+        selected = self.selected
+        self.client.shutdown()
+        self._connect()
+        if selected and self.select(selected[0])[0] != selected[1]:
+            raise IMAPClientAbortError("Folder identity changed during fetch recovery")
+
+    def _fetch_isolated(self, uids: list[int], fields: list[str]) -> dict[int, Any]:
+        try:
+            return dict(self.client.fetch(uids, fields))
+        except IMAPClientAbortError:
+            # An outage is not evidence that any particular message is bad.
+            raise
+        except (IMAPClientError, ValueError):
+            self._recover_fetch()
+        rows: dict[int, Any] = {}
+        for uid in uids:
+            try:
+                rows.update(self.client.fetch([uid], fields))
+            except IMAPClientAbortError:
+                raise
+            except (IMAPClientError, ValueError) as error:
+                # Recovery must succeed before treating this as a message-specific failure.
+                self._recover_fetch()
+                log.warning("imap_mail_skipped", uid=uid, error=type(error).__name__)
+        return rows
 
     def all_uids(self) -> list[int]:
         return sorted(int(uid) for uid in self.client.search(["ALL"]))
@@ -148,7 +185,7 @@ class ImapSession:
     def fetch(self, uids: list[int]) -> list[Fetched]:
         if not uids:
             return []
-        rows = self.client.fetch(uids, ["BODY.PEEK[]", "FLAGS"])
+        rows = self._fetch_isolated(uids, ["BODY.PEEK[]", "FLAGS"])
         result = []
         for uid, row in rows.items():
             flags = row.get(b"FLAGS", ())

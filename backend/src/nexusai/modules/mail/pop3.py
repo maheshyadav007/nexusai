@@ -136,15 +136,21 @@ class Pop3Session:
         return [found for found in self.all_uids() if found > uid]
 
     def fetch(self, uids: list[int]) -> list[Fetched]:
-        client, numbers = self._listing()
         result = []
         for uid in sorted(uids):
+            client, numbers = self._listing()
             number = numbers.get(uid)
             if number is None:
                 continue
             try:
                 lines = client.retr(number)[1]
             except poplib.error_proto as error:
+                if b"line too long" in _reply(error):
+                    # The rest of this response is unread. Drop it before fetching the next mail.
+                    client.close()
+                    self.client, self.numbers = None, None
+                    log.warning("pop3_mail_skipped", uid=uid, error="line_too_long")
+                    continue
                 if any(word in _reply(error) for word in LOST_REPLIES):
                     raise Pop3Failed(_reply(error).decode(errors="replace")) from error
                 # One mail the server won't give shouldn't stop all the others.

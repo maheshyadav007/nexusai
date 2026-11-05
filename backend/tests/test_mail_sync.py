@@ -7,10 +7,13 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from imapclient import IMAPClient
+from imapclient.exceptions import IMAPClientAbortError
 
 from fake_mail import PASSWORD, USER, Box, FakeMail, make_mail, start_fake_mail
 from nexusai.api.app import create_app
 from nexusai.kernel.config import Config
+from nexusai.modules.mail import sync
 from nexusai.modules.mail.imap import DeleteRefused, ImapSession
 
 SECONDS = 8
@@ -83,6 +86,104 @@ def test_account_test_reports_each_service(client: TestClient, fake: FakeMail) -
     ).json()
     assert bad["ok"] is False
     assert all("refused" in result["message"] for result in bad["results"])
+
+
+@pytest.mark.parametrize("initial", [True, False])
+def test_bad_message_does_not_discard_healthy_batch(
+    client: TestClient, fake: FakeMail, monkeypatch: pytest.MonkeyPatch, initial: bool
+) -> None:
+    original = sync.parse_message
+
+    def parse(raw: bytes) -> Any:
+        if b"Subject: Broken" in raw:
+            raise ValueError("malformed message")
+        return original(raw)
+
+    monkeypatch.setattr(sync, "parse_message", parse)
+    if not initial:
+        connect(client, fake)
+    for subject in ("Before", "Broken", "After"):
+        fake.state.deliver(make_mail(subject))
+    if initial:
+        connect(client, fake)
+    thread_with(client, "Before")
+    thread_with(client, "After")
+    assert "Broken" not in {row["subject"] for row in threads(client)}
+    fake.state.deliver(make_mail("Next batch"))
+    thread_with(client, "Next batch")
+
+
+@pytest.mark.parametrize("headers", [True, False])
+def test_failed_imap_batch_is_fetched_individually(
+    client: TestClient, fake: FakeMail, monkeypatch: pytest.MonkeyPatch, headers: bool
+) -> None:
+    original = IMAPClient.fetch
+    attempts: list[list[int]] = []
+    for subject in ("Before", "Broken", "After"):
+        fake.state.deliver(make_mail(subject))
+
+    def fetch(self: IMAPClient, messages: Any, data: Any, *args: Any, **kwargs: Any) -> Any:
+        body = "BODY.PEEK[]" in data
+        header = "BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)]" in data
+        if header if headers else body:
+            attempts.append(list(messages))
+            if 2 in messages:
+                raise ValueError("invalid response for this message")
+        return original(self, messages, data, *args, **kwargs)
+
+    monkeypatch.setattr(IMAPClient, "fetch", fetch)
+    connect(client, fake)
+    thread_with(client, "Before")
+    thread_with(client, "After")
+    assert [1, 2, 3] in attempts and [2] in attempts and [3] in attempts
+    # A failed optional header lookup must not prevent a successful body fetch.
+    assert ("Broken" in {row["subject"] for row in threads(client)}) is headers
+    fake.state.deliver(make_mail("Next batch"))
+    thread_with(client, "Next batch")
+
+
+@pytest.mark.parametrize("error_type", [OSError, IMAPClientAbortError])
+def test_initial_download_outage_does_not_advance_past_unstored_mail(
+    client: TestClient,
+    fake: FakeMail,
+    monkeypatch: pytest.MonkeyPatch,
+    error_type: type[Exception],
+) -> None:
+    original = IMAPClient.fetch
+    failed = False
+
+    def fetch(self: IMAPClient, messages: Any, data: Any, *args: Any, **kwargs: Any) -> Any:
+        nonlocal failed
+        if "BODY.PEEK[]" in data and not failed:
+            failed = True
+            raise error_type("connection lost")
+        return original(self, messages, data, *args, **kwargs)
+
+    monkeypatch.setattr(IMAPClient, "fetch", fetch)
+    fake.state.deliver(make_mail("Survives outage"))
+    connect(client, fake)
+    thread_with(client, "Survives outage")
+    assert failed
+
+
+def test_imap_fetch_recovery_refuses_changed_folder_identity(
+    fake: FakeMail, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from nexusai.contracts.mail import MailProfile
+
+    session = ImapSession(MailProfile.model_validate(fake.profile()), PASSWORD, 3)
+    session.select("INBOX")
+
+    def fetch(*_: Any, **__: Any) -> Any:
+        fake.state.boxes["INBOX"].validity += 1
+        raise ValueError("invalid response")
+
+    monkeypatch.setattr(IMAPClient, "fetch", fetch)
+    try:
+        with pytest.raises(IMAPClientAbortError, match="Folder identity changed"):
+            session.fetch([1, 2])
+    finally:
+        session.close()
 
 
 def test_smtp_never_looks_up_this_computers_name(

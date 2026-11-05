@@ -53,6 +53,19 @@ Live-model quality is measured separately from deterministic correctness. Do not
 - Forced empty-result schedule surfaced in Cockpit with an attention count and Retry. A subsequent successful retry cleared the failed queue. A backend outage/restart verified event-stream recovery without reloading the browser; a closed proxy response now gets a bounded reconnect attempt.
 - Running app restarted on frontend **4000** / backend **4100**. Startup recorded an **upgrade backup before migrations** and completed successfully; Home readiness and the new Preferences tab/font pairing were verified against the running build. No broad live-mail re-triage, test send or destructive mail action was used.
 
+## Mail sync failure isolation — 5 November 2026
+
+Mail sync keeps its existing input limits and reconnect timers. A failed IMAP header/body batch
+falls back to individual fetches on a clean connection; only messages that still fail are skipped
+and logged by UID and error class. Connection aborts/outages retain the normal reconnect path,
+and recovery rejects changed folder UIDVALIDITY. POP3 skips an individual overlong response line
+and opens a clean connection before fetching subsequent mail. MIME parsing failures are isolated
+per message, so healthy messages in the batch still reach storage and normal downstream events.
+Initial-sync cursors advance after ingestion rather than before downloading succeeds.
+
+Skipped mail stays on the server; this change adds no automatic per-message retry queue or manual
+retry UI. Skips appear in backend logs. Image display sizing and input limits are unchanged.
+
 ## Boundaries and remaining work
 
 This implements the agreed reliability/context/prompt-feedback tranche. It does not promise perfect email management. Live company-provider parsing, real incoming/sent workflows, brief coverage, multilingual and multi-person quality, provider latency/cost targets, and long-term preference usefulness remain release checks in [KNOWN_PROBLEMS.md](KNOWN_PROBLEMS.md).

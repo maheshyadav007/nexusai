@@ -2,6 +2,7 @@
 
 import json
 import os
+import poplib
 import threading
 from collections.abc import Callable, Iterator
 from dataclasses import replace
@@ -167,6 +168,22 @@ def test_mail_arrives_and_new_mail_needs_a_new_connection(
     wait(lambda: "Fresh news" in subjects(client), "new mail")
     assert pop3.state.connections > seen
     assert pop3.state.retrieved.count("id-0001") == 1
+
+
+def test_pop3_long_line_skips_only_that_mail(
+    client: TestClient, pop3: FakePop3, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(poplib, "_MAXLINE", 4096)
+    pop3.state.deliver(make_mail("Before"))
+    bad = pop3.state.deliver(b"Subject: Broken\r\n\r\n" + b"x" * 8192 + b"\r\n")
+    pop3.state.deliver(make_mail("After"))
+    connect(client)
+    wait(lambda: {"Before", "After"} <= subjects(client), "healthy messages around long line")
+    assert "Broken" not in subjects(client)
+    pop3.state.deliver(make_mail("Next batch"))
+    wait(lambda: "Next batch" in subjects(client), "sync continues after skipped message")
+    assert pop3.state.retrieved.count(bad) == 1
+    assert not pop3.state.deleted
 
 
 def test_read_marks_stay_here_and_mail_the_server_dropped_stays_too(

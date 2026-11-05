@@ -470,6 +470,7 @@ class MailSync:
         newest = uids[-allowance:]
         below = newest[0] if len(uids) > len(newest) else None
         self._set_state("syncing")
+        stored = self._ingest(session, folder, newest, live=False, advance=False)
         with self.ctx.bus.db.transaction() as tx:
             tx.execute(
                 "UPDATE mail_folders SET uidvalidity = ?, backfill_below = ?, last_uid = ?,"
@@ -483,8 +484,6 @@ class MailSync:
                     folder.name,
                 ),
             )
-        stored = self._ingest(session, folder, newest, live=False, advance=True)
-        with self.ctx.bus.db.transaction() as tx:
             self._spend(tx, stored)
         self._note_progress()
 
@@ -638,7 +637,17 @@ class MailSync:
         rules = load_rules(self.ctx.config.home)
         prepared = []
         for item in fetched:
-            parsed = parse_message(item.raw)
+            try:
+                parsed = parse_message(item.raw)
+            except Exception as error:
+                log.warning(
+                    "mail_parse_skipped",
+                    account=self.account,
+                    folder=folder.name,
+                    uid=item.uid,
+                    error=type(error).__name__,
+                )
+                continue
             # NexusAI's own saved drafts are shown from the drafts list, not as mail.
             if DRAFT_HEADER in parsed.headers:
                 continue
