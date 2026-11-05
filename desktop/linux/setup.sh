@@ -57,6 +57,13 @@ server {
         default_type application/yaml;
         try_files \$uri =404;
     }
+    # The landing page, when website/deploy.py has put one here. Its name never changes, so it can't be cached for long.
+    location ~ ^/(index\.html|release\.js)?\$ {
+        add_header Cache-Control "no-cache" always;
+        gzip on;
+        gzip_types application/javascript text/javascript;
+        try_files \$uri /index.html =404;
+    }
     location / {
         add_header Cache-Control "public, max-age=31536000, immutable";
         try_files \$uri =404;

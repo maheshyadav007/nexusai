@@ -22,6 +22,9 @@ __pycache__/
 *.db-shm
 *.pst
 
+# Internal server addresses for the landing page
+website/deploy.json
+
 # Generated theme output
 frontend/ui/theme/generated/
 

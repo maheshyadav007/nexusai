@@ -1,0 +1,10 @@
+{
+  "version": "latest",
+  "channel": "pilot",
+  "releaseRoot": "/srv/nexusai-updates",
+  "installerFolder": "windows/x64/unsigned",
+  "port": 8088,
+  "publicUrl": "http://UPDATE-HOST:8088",
+  "tlsCertificate": "",
+  "tlsKey": ""
+}
