@@ -74,9 +74,9 @@ const FLOATING_HEIGHT = readSpace(light.layout.dockHeight);
 const SMALL_SCREEN = readSpace(light.layout.page);
 
 function useWindowSize() {
-  const [size, setSize] = useState({ width: 0, height: 0 });
+  const [size, setSize] = useState({ width: 0, height: 0, caption: 0 });
   useEffect(() => {
-    const measure = () => setSize({ width: window.innerWidth, height: window.innerHeight });
+    const measure = () => setSize({ width: window.innerWidth, height: window.innerHeight, caption: document.querySelector(".desktop-caption")?.getBoundingClientRect().bottom ?? 0 });
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
@@ -87,14 +87,14 @@ function useWindowSize() {
 function Panel() {
   const assistant = useAssistant();
   const sessions = useSessions("");
-  const { width, height } = useWindowSize();
+  const { width, height, caption } = useWindowSize();
   // The Mail agent's chat is always first, so its triggered runs are easy to get to.
   const chats = [...(sessions.data?.sessions ?? [])].sort((a, b) => Number(b.id === MAIL_AGENT) - Number(a.id === MAIL_AGENT));
   const options = chats.map((row) => ({ value: row.id, label: row.status === "waiting" ? t("chat.waitingLabel", { title: row.title }) : row.title }));
   // Only one panel ever exists, so pinning moves it instead of restarting the conversation.
   // Out from the edge it sits against that edge, so the pointer that called it is already on it.
   const attached = !FLOATING_VIEW_ENABLED || (assistant.pinned && width >= SMALL_SCREEN);
-  const place = attached ? { top: 0, right: 0, bottom: 0, borderRadius: 0 } : { top: Math.max(GAP, height - GAP - FLOATING_HEIGHT), right: GAP, bottom: GAP, borderRadius: GAP - 2 };
+  const place = attached ? { top: caption, right: 0, bottom: 0, borderRadius: 0 } : { top: Math.max(GAP, height - GAP - FLOATING_HEIGHT), right: GAP, bottom: GAP, borderRadius: GAP - 2 };
   return (
     <SlidePanel
       attached={attached}

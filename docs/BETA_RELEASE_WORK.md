@@ -7,7 +7,7 @@ App name: **NexusAI**. **Posty** is a deterministic setup guide, not a model-dri
 - Offer launch after installation; provide app/shortcut icons and a searchable NexusAI Beta name.
 - One integrated Windows header with native window controls. Move app actions into the sidebar Settings drop-up: Settings, About & Updates, Restart and Quit. Graceful shutdown remains mandatory.
 - Instrument startup stages, start local services concurrently, and explain progress rather than showing an indefinite spinner.
-- Posty provides deterministic, progressively revealed, reduced-motion-aware guidance on landing/setup and unfinished setup across app pages. Explain email download and safe background continuation. Improve the first Today experience.
+- Posty provides deterministic, progressively revealed, reduced-motion-aware guidance on landing and setup only. It disappears after the person enters NexusAI. Explain email download and safe background continuation within setup, and improve the first Today experience without another mascot guide.
 - Remove the separate chat-model onboarding page; use the first available model by default while retaining model settings. Investigate discovery/download paths without embedding internal credentials.
 - Password visibility controls; bounded category/folder navigation with a subtle scrollbar; Windows reminder notifications/sound and a test action.
 - Chat only: Preparing with spinner until actual content; then retain the existing Thinking/tool presentation. Remove chat response generation glow. Preserve AI glow in other features.
@@ -57,3 +57,10 @@ Implementation and validation results will be recorded here. A successful instal
 - Publication passed: [NexusAI Beta 0.1.0](https://github.com/maheshyadav007/nexusai/releases/tag/desktop-beta/0.1.0/2026-11-04T14-59-26-117Z). Installer SHA-256: `0978de11f265b97782beda979341c99ec3acfbfe78990bfc1a4456fa9c89db7a`. The release contains the `.exe` and checksum file.
 
 - Downloaded Windows evidence was reviewed: the Beta landing page renders correctly; all three packaged/installed smoke results have no renderer errors. The update probe screenshot captured a workspace loading state, so it does not establish the final workspace layout; browser acceptance checks cover that layout and the target-device review remains required. Installer SHA-256 independently matched the manifest and GitHub asset digest. Hosted Beta startup measured **3.457 seconds**; target-device performance can differ. Native Windows caption buttons are outside Electron page captures and still require visual/interaction acceptance on the laptop.
+
+
+## Follow-up UI review
+
+The isolated onboarding review found and corrected six reported UX gaps plus the related desktop chat/header overlap. See [Onboarding UI review](ONBOARDING_UI_REVIEW.md) for causes, scope and evidence. These corrections are on `codex/onboarding-sandbox` and are not part of the already-published Beta 0.1.0.
+
+The same sandbox now contains the Posty-led landing and five-step setup redesign. First run asks for only Home, a compact profile, deployment-managed mail credentials, optional local search and permissions. Every setup page uses the same 520px content frame and fixed action anchors; the narrow layout resets to the top on each step. Posty is removed from the application shell after setup. New Beta Homes use the default recovery key `admin`, so the recovery page is absent during setup; this is an explicit Beta security debt recorded in [Known problems](KNOWN_PROBLEMS.md), not part of the published Beta 0.1.0.

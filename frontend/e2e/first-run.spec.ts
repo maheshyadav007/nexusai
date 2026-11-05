@@ -8,6 +8,7 @@ const noViolations = async (page: Page) => {
 
 // Runs before the other files: the backend starts with no Home, as on a new computer.
 test("a new person goes from landing through setup into the app, and setup resumes", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/");
   await expect(page).toHaveURL(/\/welcome$/);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
@@ -27,17 +28,11 @@ test("a new person goes from landing through setup into the app, and setup resum
   await expect(page.getByText(/free on this drive/)).toBeVisible();
   await page.getByRole("button", { name: "Use this folder" }).click();
 
-  await expect(page.getByRole("heading", { name: "Save your recovery key" })).toBeVisible();
-  await expect(page.getByTestId("recovery-key")).toHaveText(/^([0-9A-Z]{4}-){7}[0-9A-Z]{4}$/);
-  await noViolations(page);
-  // There's no way past it without saying it's saved, and then it can't be shown again.
-  await expect(page.getByRole("button", { name: "Continue" })).toBeDisabled();
-  await page.getByRole("checkbox", { name: "I've saved my recovery key somewhere safe" }).click();
-  await page.getByRole("button", { name: "Continue" }).click();
-
   await expect(page.getByRole("heading", { name: "Tell NexusAI about you" })).toBeVisible();
-  // How it looks is chosen here too, and takes effect right away.
-  await expect(page.getByRole("radiogroup", { name: "Theme" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Important people" })).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "About me" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Continue", exact: true })).toBeInViewport({ ratio: 1 });
+  await page.screenshot({ path: "test-results/review-profile.png" });
   await page.getByRole("textbox", { name: "Name", exact: true }).fill("Asha Rao");
   await noViolations(page);
   await page.getByRole("button", { name: "Continue" }).click();
@@ -64,8 +59,6 @@ test("a new person goes from landing through setup into the app, and setup resum
   // Nothing downloads until asked. Downloads are blocked in this test environment, so this also
   // shows what a blocked corporate network sees, and skipping still moves on.
   await expect(page.getByRole("heading", { name: "Find things by what they're about" })).toBeVisible();
-  await expect(page.getByTestId("search-recommendation")).toContainText("recommended");
-  await expect(page.getByTestId("search-choice")).toContainText("Can't be reached");
   await expect(page.getByTestId("local-model").getByRole("alert")).toHaveCount(0);
   await page.getByTestId("local-model").getByRole("button", { name: /Download/ }).click();
   await expect(page.getByTestId("local-model").getByRole("alert")).toContainText(/mirror/);
@@ -73,14 +66,11 @@ test("a new person goes from landing through setup into the app, and setup resum
   await noViolations(page);
   await page.getByRole("button", { name: "Skip for now" }).click();
   await expect(page.getByRole("heading", { name: "What may the agent do?" })).toBeVisible();
-  // Passing a step without doing it doesn't count as finishing it.
-  await expect(page.getByTestId("step-skipped").filter({ hasText: "Mail" })).toContainText("Skipped");
-  await expect(page.getByTestId("step-skipped").filter({ hasText: "Search" })).toBeVisible();
-  await expect(page.getByTestId("step-done").filter({ hasText: "Recovery key" })).toBeVisible();
   await expect(page.getByRole("radio", { name: /Balanced/ })).toBeChecked();
   await noViolations(page);
   await page.getByRole("button", { name: "Enter NexusAI" }).click();
   await expect(page).toHaveURL(/\/today$/);
+  await expect(page.getByTestId("posty-guide")).toHaveCount(0);
 
   // What setup skipped waits here, and goes away when asked.
   const checklist = page.getByTestId("finish-setup");

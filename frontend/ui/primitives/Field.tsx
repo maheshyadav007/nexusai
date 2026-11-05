@@ -11,7 +11,7 @@ export function Field({ label, hint, error, children }: { label: string; hint?: 
   const noteId = `${id}-note`;
   const note = error ?? hint;
   return (
-    <div className="flex flex-col gap-1">
+    <div data-field className="flex flex-col gap-1">
       <label htmlFor={id} className="text-md font-medium text-ink-primary">
         {label}
       </label>

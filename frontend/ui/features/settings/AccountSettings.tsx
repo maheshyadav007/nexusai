@@ -77,7 +77,7 @@ function addressFor(login: string, server: string): string {
   return parts.length > 2 && !/^[0-9.]+$/.test(server) ? `${clean}@${parts.slice(1).join(".")}` : "";
 }
 
-export function AccountSettings() {
+export function AccountSettings({ brief = false }: { brief?: boolean }) {
   const accounts = useMailAccounts();
   const status = useMailStatus();
   const presets = useMailPresets();
@@ -142,11 +142,11 @@ export function AccountSettings() {
   }, [suggested]);
   const state = STATES[status.data?.state ?? "off"] ?? STATES.off;
 
-  if (accounts.isPending) return <Card title={t("accounts.title")}><Skeleton className="h-6 w-full" /></Card>;
-  if (accounts.isError) return <Card title={t("accounts.title")}><ErrorState title={t("accounts.error")} onRetry={() => void accounts.refetch()} /></Card>;
+  if (accounts.isPending) return <Card bare={brief} title={t("accounts.title")}><Skeleton className="h-6 w-full" /></Card>;
+  if (accounts.isError) return <Card bare={brief} title={t("accounts.title")}><ErrorState title={t("accounts.error")} onRetry={() => void accounts.refetch()} /></Card>;
 
   return (
-    <Card title={t("accounts.title")} description={t(managed ? "accounts.description.system" : "accounts.description")}>
+    <Card bare={brief} title={t("accounts.title")} description={brief ? undefined : t(managed ? "accounts.description.system" : "accounts.description")}>
       <div className="flex flex-col gap-4">
         {active && !editing ? (
           <div className="flex flex-col items-start gap-3">
@@ -176,12 +176,12 @@ export function AccountSettings() {
               void settled().then((found) => save.mutate({ name: nameFor(login), profile: profileWith(found), password, pull_limit: onServer && wanted < onServer ? wanted : null }, { onSuccess: () => setEditing(false) }));
             }}
           >
-            {managed ? null : <Field label={t("accounts.server")} hint={t("accounts.server.hint")}>{({ invalid, ...control }) => <Input autoComplete="off" spellCheck={false} placeholder={t("accounts.server.placeholder")} invalid={invalid} value={servers.imapHost} onChange={(event) => setServers({ ...servers, imapHost: event.target.value })} {...control} />}</Field>}
+            {managed || brief ? null : <Field label={t("accounts.server")} hint={t("accounts.server.hint")}>{({ invalid, ...control }) => <Input autoComplete="off" spellCheck={false} placeholder={t("accounts.server.placeholder")} invalid={invalid} value={servers.imapHost} onChange={(event) => setServers({ ...servers, imapHost: event.target.value })} {...control} />}</Field>}
             <div className="grid gap-3 md:grid-cols-2">
               <Field label={t("accounts.username")} hint={t("accounts.username.hint")}>{({ invalid, ...control }) => <Input autoComplete="off" spellCheck={false} invalid={invalid} value={login} onChange={(event) => setLogin(event.target.value)} {...control} />}</Field>
               <Field label={t("accounts.password")} hint={preset?.password_hint ?? t("accounts.password.hint")}>{({ invalid, ...control }) => <Input type="password" autoComplete="off" invalid={invalid} value={password} onChange={(event) => setPassword(event.target.value)} {...control} />}</Field>
             </div>
-            {managed ? null : (
+            {managed || brief ? null : (
               <div>
                 <Button variant="quiet" aria-expanded={details} onClick={() => setDetails(!details)}>{t(details ? "accounts.servers.hide" : "accounts.servers.show")}</Button>
               </div>
@@ -195,6 +195,7 @@ export function AccountSettings() {
                 <Switch label={t("accounts.secure")} checked={servers.secure} onChange={(secure) => setServers({ ...servers, secure })} />
               </div>
             ) : null}
+            {brief && login.trim() && !preset ? <p role="alert" className="text-sm text-status-warning">{t("accounts.server.unconfigured")}</p> : null}
             {test.data ? (
               <ul data-testid="connection-results" className="flex flex-col gap-1">
                 {test.data.results.map((result) => (

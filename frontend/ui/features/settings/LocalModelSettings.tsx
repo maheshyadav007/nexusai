@@ -90,7 +90,7 @@ export function SearchModelChoice() {
 }
 
 /** Used in setup and in Settings, so the two can't drift apart. */
-export function LocalModelSettings({ brief = false }: { brief?: boolean }) {
+export function LocalModelSettings({ brief = false, bare = false }: { brief?: boolean; bare?: boolean }) {
   const semantic = useSemantic();
   const download = useDownloadModel();
   const cancel = useCancelModel();
@@ -100,14 +100,14 @@ export function LocalModelSettings({ brief = false }: { brief?: boolean }) {
   const importFiles = useImportModel();
   const [mirror, setMirror] = useState<string | null>(null);
   const [folder, setFolder] = useState("");
-  if (semantic.isPending) return <Card title={t("semantic.title")}><Skeleton className="h-6 w-full" /></Card>;
-  if (semantic.isError) return <Card title={t("semantic.title")}><ErrorState title={t("semantic.error")} onRetry={() => void semantic.refetch()} /></Card>;
+  if (semantic.isPending) return <Card bare={bare} title={t("semantic.title")}><Skeleton className="h-6 w-full" /></Card>;
+  if (semantic.isError) return <Card bare={bare} title={t("semantic.title")}><ErrorState title={t("semantic.error")} onRetry={() => void semantic.refetch()} /></Card>;
   const status = semantic.data;
   const model = status.models.find((row) => row.active) ?? status.models[0];
   if (!model) return null;
   const importFailed = importFiles.error instanceof ApiRequestError ? importFiles.error.detail.message : importFiles.isError ? t("semantic.import.failed") : null;
   return (
-    <Card title={t("semantic.title")} description={t("semantic.description")}>
+    <Card bare={bare} title={t("semantic.title")} description={bare ? undefined : t("semantic.description")}>
       <div className="flex flex-col gap-4" data-testid="local-model">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">

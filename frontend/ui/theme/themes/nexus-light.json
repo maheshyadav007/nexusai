@@ -53,6 +53,7 @@
       "md": "13px",
       "lg": "15px",
       "xl": "19px",
+      "title": "26px",
       "display": "32px",
       "hero": "60px"
     },
@@ -97,6 +98,8 @@
     "content": "960px",
     "sidebar": "256px",
     "rail": "56px",
+    "posty": "72px",
+    "onboarding": "520px",
     "topbar": "56px",
     "popover": "320px",
     "drawer": "420px",

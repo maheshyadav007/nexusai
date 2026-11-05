@@ -66,7 +66,7 @@ def test_data_on_disk_is_encrypted_and_opens_again(config: Config) -> None:
 def test_a_new_computer_needs_the_recovery_key(config: Config) -> None:
     with running(config) as client:
         save_theme(client)
-        key = recovery_key(client)
+        key = vault.INITIAL_RECOVERY_KEY
     # The Home folder alone gives no way in: nothing in it holds the key in the clear.
     data_key = json.loads(Path(str(config.secrets_test_file)).read_text())
     forget_key(config)
@@ -90,20 +90,20 @@ def test_a_new_computer_needs_the_recovery_key(config: Config) -> None:
         assert status(client)["state"] == "ready"
 
 
-def test_the_recovery_key_shows_until_saved_and_a_new_one_replaces_it(config: Config) -> None:
+def test_the_default_key_is_hidden_and_a_new_one_replaces_it(config: Config) -> None:
     with running(config) as client:
-        first = recovery_key(client)
+        assert client.post("/api/home/recovery-key").json()["pending"] is None
+        first = client.post("/api/home/recovery-key/new").json()["pending"]
         assert len(first.replace("-", "")) == vault.RECOVERY_CHARS
-        assert recovery_key(client) == first
         client.post("/api/home/recovery-key/confirm")
         assert client.post("/api/home/recovery-key").json()["pending"] is None
-
         second = client.post("/api/home/recovery-key/new").json()["pending"]
         assert second != first
     forget_key(config)
     with running(config) as client:
+        default = client.post("/api/home/unlock", json={"recovery_key": vault.INITIAL_RECOVERY_KEY})
         old = client.post("/api/home/unlock", json={"recovery_key": first})
-        assert old.status_code == 422
+        assert default.status_code == 422 and old.status_code == 422
         new = client.post("/api/home/unlock", json={"recovery_key": second})
         assert new.json()["state"] == "ready"
 

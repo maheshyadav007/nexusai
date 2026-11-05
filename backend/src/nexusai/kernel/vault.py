@@ -29,6 +29,9 @@ SALT_BYTES = 16
 ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 MISREAD = str.maketrans({"O": "0", "I": "1", "L": "1"})
 WRAP_INFO = b"nexusai-recovery-v1"
+# Internal Beta onboarding uses one known initial key and does not stop setup to display it.
+# Replacing it from Settings still creates a unique, high-entropy recovery key.
+INITIAL_RECOVERY_KEY = "admin"
 
 
 class VaultLocked(Exception):
@@ -62,7 +65,8 @@ def _normalize(text: str) -> str:
 
 
 def _wrapping_key(recovery: str, salt: bytes) -> bytes:
-    # High-entropy input, so HKDF is the right tool and a slow password hash adds nothing.
+    # Treat this as key material. The beta's initial `admin` key is a deliberate
+    # convenience tradeoff; replacement and legacy recovery keys are random.
     derive = HKDF(algorithm=hashes.SHA256(), length=KEY_BYTES, salt=salt, info=WRAP_INFO)
     return derive.derive(_normalize(recovery).encode("ascii"))
 
@@ -98,10 +102,12 @@ def open_key(home: Path, store: SecretStore) -> str:
     if vault is None:
         vault_id = uuid.uuid4().hex
         key = secrets.token_hex(KEY_BYTES)
-        recovery = _new_recovery_key()
+        legacy = (home / "system" / "nexusai.db").exists()
+        recovery = _new_recovery_key() if legacy else INITIAL_RECOVERY_KEY
         # The key is saved first: a Home sealed with a key nobody kept could never open.
         store.set(_key_name(vault_id), key)
-        store.set(_pending_name(vault_id), recovery)
+        if legacy:
+            store.set(_pending_name(vault_id), recovery)
         _seal(home, vault_id, key, recovery)
         return key
     saved = store.get(_key_name(vault["id"]))

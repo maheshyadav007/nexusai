@@ -3,129 +3,83 @@
 import { PostyGuide } from "@/ui/shell/PostyGuide";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, type ReactNode } from "react";
-import { useHomeStatus, useRecoveryKey } from "@/ui/client/home";
-import { PendingRecoveryKey } from "@/ui/features/home/RecoveryKey";
+import { useHomeStatus } from "@/ui/client/home";
 import { useFinishOnboarding, useOnboarding, useSetStep } from "@/ui/client/onboarding";
 import { useMailStatus } from "@/ui/client/mail";
-import { useModelStatus } from "@/ui/client/models";
 import { useSemantic } from "@/ui/client/semantic";
 import { useStarterPrompts } from "@/ui/client/work";
 import { AgentPresets } from "@/ui/features/settings/AgentSettings";
 import { HomeChooser } from "@/ui/features/home/HomeChooser";
 import { EmailConnector } from "@/ui/features/connectors/ConnectorsScreen";
-import { AppearanceSettings } from "@/ui/features/settings/AppearanceSettings";
-import { LocalModelSettings, SearchModelChoice } from "@/ui/features/settings/LocalModelSettings";
+import { LocalModelSettings } from "@/ui/features/settings/LocalModelSettings";
 import { ProfileForm } from "@/ui/features/settings/ProfileForm";
 import { Button } from "@/ui/primitives/Button";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { Steps } from "@/ui/primitives/Motion";
-import { Stepper, StepRail } from "@/ui/primitives/Stepper";
 import { t, type StringKey } from "@/ui/strings";
 
 interface Step {
   id: string;
   label: StringKey;
   title: StringKey;
-  description: StringKey;
+  formTitle: StringKey;
+  formNote: StringKey;
 }
 
 // Only what the app can't work without, or that's far easier now. The rest waits on Today.
 const STEPS: readonly Step[] = [
-  { id: "home", label: "setup.home.label", title: "setup.home.title", description: "setup.home.description" },
-  { id: "recovery", label: "setup.recovery.label", title: "setup.recovery.title", description: "setup.recovery.description" },
-  { id: "profile", label: "setup.you.label", title: "setup.profile.title", description: "setup.profile.description" },
-  { id: "mail", label: "setup.mail.label", title: "setup.mail.title", description: "setup.mail.description" },
-  { id: "search", label: "setup.search.label", title: "setup.search.title", description: "setup.search.description" },
-  { id: "permissions", label: "setup.agent.label", title: "setup.permissions.title", description: "setup.permissions.description" },
+  { id: "home", label: "setup.home.label", title: "setup.home.title", formTitle: "setup.home.formTitle", formNote: "setup.home.formNote" },
+  { id: "profile", label: "setup.you.label", title: "setup.profile.title", formTitle: "setup.profile.formTitle", formNote: "setup.profile.formNote" },
+  { id: "mail", label: "setup.mail.label", title: "setup.mail.title", formTitle: "setup.mail.formTitle", formNote: "setup.mail.formNote" },
+  { id: "search", label: "setup.search.label", title: "setup.search.title", formTitle: "setup.search.formTitle", formNote: "setup.search.formNote" },
+  { id: "permissions", label: "setup.agent.label", title: "setup.permissions.title", formTitle: "setup.permissions.formTitle", formNote: "setup.permissions.formNote" },
 ];
 
 const NEEDS_RECOVERY = new Set(["missing", "locked", "damaged"]);
 
-/** Comes right after Home, so nobody's mail is stored before they hold the way back to it. */
-function RecoveryStep({ step, index, back, onDone }: { step: Step; index: number; back: ReactNode; onDone: () => void }) {
-  const key = useRecoveryKey();
-  const pending = key.data?.pending;
-  return (
-    <Frame
-      step={step}
-      index={index}
-      actions={
-        pending ? (
-          back
-        ) : (
-          <>
-            {back}
-            <Button variant="primary" disabled={!key.isSuccess} onClick={onDone}>
-              {t("setup.next")}
-            </Button>
-          </>
-        )
-      }
-    >
-      {key.isPending ? <Skeleton className="h-6 w-full" /> : null}
-      {key.isError ? <ErrorState title={t("recovery.error")} onRetry={() => void key.refetch()} /> : null}
-      {pending ? <PendingRecoveryKey value={pending} action={t("setup.next")} onSaved={onDone} /> : null}
-      {key.isSuccess && !pending ? <p className="text-md text-ink-secondary">{t("recovery.alreadySaved")}</p> : null}
-    </Frame>
-  );
-}
-
 /** Nothing downloads until the person says so. Skipping just means search goes by keyword. */
 function SearchStep() {
-  return (
-    <div className="flex flex-col gap-4">
-      <SearchModelChoice />
-      <LocalModelSettings brief />
-    </div>
-  );
-}
-
-/** Which earlier steps were passed without being done, so they aren't shown as finished. */
-function useSkippedSteps(): ReadonlySet<number> {
-  const mail = useMailStatus();
-  const model = useModelStatus();
-  const semantic = useSemantic();
-  const skipped: Record<string, boolean> = {
-    mail: Boolean(mail.data) && !mail.data?.account,
-    model: Boolean(model.data) && !model.data?.connected,
-    search: Boolean(semantic.data) && !semantic.data?.ready && !semantic.data?.models.some((row) => row.state === "downloading"),
-  };
-  return new Set(STEPS.flatMap((item, index) => (skipped[item.id] ? [index] : [])));
+  return <LocalModelSettings brief bare />;
 }
 
 function Frame({ step, index, actions, children }: { step: Step; index: number; actions?: ReactNode; children: ReactNode }) {
-  const skipped = useSkippedSteps();
   const seen = useRef(index);
+  const main = useRef<HTMLElement>(null);
   const forward = index >= seen.current;
   useEffect(() => {
     seen.current = index;
+    main.current?.scrollTo({ top: 0 });
   }, [index]);
   return (
-    <div className="flex min-h-screen bg-surface-page text-ink-primary">
-      <aside className="sticky top-0 hidden h-screen w-sidebar shrink-0 flex-col gap-6 border-r border-line-subtle p-5 lg:flex">
+    <div className="flex h-screen flex-col overflow-hidden bg-surface-page text-ink-primary">
+      <header className="flex h-topbar shrink-0 items-center justify-between gap-5 px-6 lg:px-7">
         <span className="text-lg font-medium">{t("app.name")}</span>
-        <StepRail label={t("setup.progress")} steps={STEPS.map((item) => t(item.label))} current={index} skipped={skipped} skippedLabel={t("setup.skipped")} />
-        <p className="mt-auto text-sm text-ink-muted">{t("setup.time")}</p>
-      </aside>
-      <main className="flex min-w-0 flex-1 flex-col gap-6 p-6">
-        <header className="flex flex-col gap-4 lg:hidden">
-          <span className="text-lg font-medium">{t("app.name")}</span>
-          <Stepper label={t("setup.progress")} steps={STEPS.map((item) => t(item.label))} current={index} skipped={skipped} />
-        </header>
-        <div className="mx-auto w-full max-w-reading py-5">
-          <Steps step={step.id} forward={forward}>
-            <section className="flex flex-col gap-5">
-              <div>
-                <h1 className="font-serif text-display">{t(step.title)}</h1>
-                <p className="mt-2 text-md text-ink-secondary">{t(step.description)}</p>
-              </div>
-              <PostyGuide message={`posty.setup.${step.id}` as StringKey} />
-              {children}
-              {actions ? <footer className="flex items-center gap-3">{actions}</footer> : null}
-            </section>
-          </Steps>
+        <div className="flex items-center gap-3 text-sm text-ink-muted">
+          <span className="hidden sm:inline">{t("setup.quick")}</span>
+          <progress className="nx-progress w-rail-wide" aria-label={t("setup.progress")} max={STEPS.length} value={index + 1} />
+          <span className="tabular-nums">{t("setup.stepCount", { current: index + 1, total: STEPS.length })}</span>
         </div>
+      </header>
+      <main ref={main} className="min-h-0 flex-1 overflow-y-auto overscroll-contain lg:grid lg:grid-cols-5 lg:overflow-hidden">
+        <aside className="relative flex min-h-drawer flex-col justify-between px-6 py-6 lg:col-span-2 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:px-7 lg:py-7">
+          <PostyGuide prominent title={t(step.title)} message={`posty.setup.${step.id}` as StringKey} />
+          <p className="mt-6 text-sm text-ink-muted">{t(index === STEPS.length - 1 ? "setup.lastStep" : "setup.time")}</p>
+          <span aria-hidden className="absolute right-0 top-1/2 hidden h-popover w-px -translate-y-1/2 bg-line-subtle lg:block" />
+        </aside>
+        <section className="flex min-w-0 items-start px-6 py-6 lg:col-span-3 lg:h-full lg:items-center lg:overflow-y-auto lg:px-7 lg:py-7">
+          <div className="mx-auto flex h-onboarding w-full max-w-onboarding flex-col">
+            <p className="mb-2 text-sm font-medium tracking-wide text-ink-muted">{t(step.label)}</p>
+            <h2 className="font-serif text-title text-ink-primary">{t(step.formTitle)}</h2>
+            <p className="mb-8 mt-2 text-md leading-relaxed text-ink-muted">{t(step.formNote)}</p>
+            <Steps step={step.id} forward={forward}>
+              <section className="onboarding-fields flex h-full flex-col gap-5">
+                {children}
+                {actions ? <footer className="mt-auto flex w-full items-center justify-between gap-3 pt-6">{actions}</footer> : null}
+              </section>
+            </Steps>
+          </div>
+        </section>
       </main>
     </div>
   );
@@ -160,7 +114,7 @@ export function OnboardingFlow() {
   if (home.data.state === "unset") {
     return (
       <Frame step={first} index={0}>
-        <HomeChooser initialPath={home.data.default_path} action={t("setup.home.action")} onChosen={() => setStep.mutate((STEPS[1] as Step).id)} />
+        <HomeChooser onboarding initialPath={home.data.default_path} action={t("setup.home.action")} onChosen={() => setStep.mutate((STEPS[1] as Step).id)} />
       </Frame>
     );
   }
@@ -187,14 +141,10 @@ export function OnboardingFlow() {
       </Button>
     ) : null;
 
-  if (step.id === "recovery") {
-    return <RecoveryStep step={step} index={index} back={back} onDone={goNext} />;
-  }
   if (step.id === "profile") {
     return (
-      <Frame step={step} index={index} actions={back}>
-        <AppearanceSettings brief />
-        <ProfileForm action={t("setup.next")} onSaved={goNext} />
+      <Frame step={step} index={index}>
+        <ProfileForm compact onboarding actions={back} action={t("setup.next")} onSaved={goNext} />
       </Frame>
     );
   }
@@ -204,14 +154,14 @@ export function OnboardingFlow() {
       index={index}
       actions={
         <>
-          {back}
+          {back ?? <span aria-hidden />}
           <Button variant="primary" loading={setStep.isPending || finish.isPending} onClick={goNext}>
             {t(isLast ? "setup.enter" : (step.id === "mail" && !mail.data?.account) || (step.id === "search" && !semantic.data?.ready && !semantic.data?.models.some((row) => row.state === "downloading")) ? "setup.skip" : "setup.next")}
           </Button>
         </>
       }
     >
-      {step.id === "mail" ? <EmailConnector /> : null}
+      {step.id === "mail" ? <EmailConnector brief /> : null}
       {step.id === "search" ? <SearchStep /> : null}
       {step.id === "permissions" ? <AgentPresets /> : null}
     </Frame>

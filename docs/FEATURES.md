@@ -79,12 +79,12 @@ Default location is `~/NexusAI` on macOS and `%USERPROFILE%\NexusAI` on Windows,
 
 ## A3. Landing & onboarding
 
-A screen inside the app, following the v9 look and the chosen theme. The flow: **Landing → Home folder → Theme → Profile → Mail → Model → Setup interview (can skip) → Email priorities → PST import (can skip) → Tool permissions → App.** The result is a guided path into the app, ending on Today.
+A Posty-led screen inside the app, following the v9 look and the current theme. The short first-run flow is **Landing → Home folder → Profile → Mail login → Local search → Tool permissions → Today.** A two-column layout pairs concise guidance with the current controls and stacks on narrow windows. Appearance, the setup interview, email priorities and PST import remain available from Settings or the unfinished-setup checklist on Today.
 
 | ID | Feature | Pri |
 |---|---|---|
-| ONB-1 | Landing screen on first launch: what NexusAI does, data stays on this device, "Get started"; returning users go straight to Today | MVP |
-| ONB-2 | Short guided setup with progress, back and resume if closed midway: data, you, mail, model, search model, how much the agent may do. Live checks of mail login, model and folder, with errors in plain language. The interview, priorities and old mail wait in a dismissible checklist on Today | MVP |
+| ONB-1 | Concise Posty-led landing on first launch: the product promise, one realistic decision preview and "Get started"; returning users go straight to Today | MVP |
+| ONB-2 | Short guided setup with progress, back and resume if closed midway: Home, profile, deployment-managed mail login, optional local search and how much the agent may do. Folder and login checks report errors in plain language. The interview, priorities and old mail wait in a dismissible checklist on Today | MVP |
 | ONB-4 | Sync and PST import continue in the background so the user enters the app right away | MVP |
 | ONB-6 | Short dismissible tour of the app on first entry | Next |
 

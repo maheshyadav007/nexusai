@@ -16,5 +16,5 @@ test("reset removes everything from the browser, and setup starts again", async 
   await page.getByRole("textbox", { name: "Folder" }).fill(`${process.env.E2E_HOME}/AfterReset`);
   await expect(page.getByText(/free on this drive/)).toBeVisible();
   await page.getByRole("button", { name: "Use this folder" }).click();
-  await expect(page.getByRole("heading", { name: "Save your recovery key" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tell NexusAI about you" })).toBeVisible();
 });

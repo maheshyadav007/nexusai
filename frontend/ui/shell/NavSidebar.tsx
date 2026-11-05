@@ -2,7 +2,7 @@
 
 import { useSessions } from "@/ui/client/sessions";
 import { usePlannerCounts, useWaitingCount } from "@/ui/client/work";
-import { CategoryNav } from "./CategoryNav";
+import { CategoryNav, CategoryNavActions } from "./CategoryNav";
 import { FolderNav } from "./FolderNav";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -111,7 +111,7 @@ export function NavSidebar({ counts }: { counts?: Readonly<Record<string, number
           <IconButton icon={collapsed ? "expand" : "collapse"} label={t(collapsed ? "nav.expand" : "nav.collapse")} aria-expanded={!collapsed} onClick={toggle} />
         </div>
       </div>
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain category-scroll">
         <div className="flex h-full min-h-0 flex-col gap-2 px-2 pb-2">
           <ul className="flex shrink-0 flex-col gap-px">{NAV_TOP.map(row)}</ul>
           {sections.map((section) => {
@@ -120,10 +120,11 @@ export function NavSidebar({ counts }: { counts?: Readonly<Record<string, number
             const closing = items.findIndex((item) => FOLDERS_COME_BEFORE.has(item.id));
             const split = section.id === MAIL_SECTION ? (closing < 0 ? items.length : closing) : items.length;
             return (
-              <section key={section.id} aria-label={t(section.label)} className={section.id === MAIL_SECTION ? "flex min-h-0 flex-1 flex-col" : "shrink-0"}>
+              <section key={section.id} aria-label={t(section.label)} className={section.id === MAIL_SECTION ? "flex min-h-0 shrink flex-col" : "shrink-0 border-t border-line-subtle pt-2"}>
                 {collapsed || !section.heading ? null : <h2 className="mb-1 px-2 text-sm text-ink-muted">{t(section.label)}</h2>}
                 <ul className="flex flex-col gap-px">{items.slice(0, split).map(row)}</ul>
-                {section.id === MAIL_SECTION ? <div className="category-scroll my-1 min-h-0 flex-1 overflow-y-auto overscroll-contain" tabIndex={0} role="region" aria-label={t("nav.customMail")}><CategoryNav collapsed={collapsed} /><FolderNav collapsed={collapsed} /></div> : null}
+                {section.id === MAIL_SECTION ? <CategoryNavActions collapsed={collapsed} /> : null}
+                {section.id === MAIL_SECTION ? <div className="category-scroll my-1 min-h-0 shrink overflow-y-auto overscroll-contain" tabIndex={0} role="region" aria-label={t("nav.customMail")}><CategoryNav collapsed={collapsed} /><FolderNav collapsed={collapsed} /></div> : null}
                 <ul className="flex flex-col gap-px">{items.slice(split).map(row)}</ul>
               </section>
             );

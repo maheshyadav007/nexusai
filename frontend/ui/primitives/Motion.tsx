@@ -129,13 +129,13 @@ export function Grow({ children }: { children: ReactNode }) {
   );
 }
 
-/** Pages side by side. Moving forward slides left, and going back slides right. */
+/** Guided steps rise into place. Going back reverses the vertical direction. */
 export function Steps({ step, forward, children }: { step: string; forward: boolean; children: ReactNode }) {
   const feel = useFeel();
-  const offset = forward ? 24 : -24;
+  const offset = forward ? 16 : -16;
   return (
     <AnimatePresence initial={false} mode="wait">
-      <motion.div key={step} initial={{ opacity: 0, x: offset }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -offset }} transition={feel.smooth}>
+      <motion.div key={step} className="min-h-0 flex-1" initial={{ opacity: 0, y: offset }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -offset }} transition={feel.smooth}>
         {children}
       </motion.div>
     </AnimatePresence>
