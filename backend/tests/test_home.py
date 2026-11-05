@@ -310,6 +310,12 @@ def test_secrets_kept_in_the_keyring_before_are_still_found(
 def test_commands_run_in_the_shell_the_model_is_told_about(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Exercise POSIX selection independently of the host (Windows may return bash.EXE).
+    monkeypatch.setattr(
+        prompts_builder.shutil,
+        "which",
+        lambda shell: shell if shell in {"/bin/sh", "bash"} else None,
+    )
     monkeypatch.setenv("SHELL", "/bin/sh")
     assert tools.shell_command("ls", windows=False)[0][0] == prompts_builder.posix_shell()
     assert prompts_builder.posix_shell().endswith("sh")
