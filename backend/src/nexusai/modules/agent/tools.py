@@ -399,6 +399,9 @@ def run_shell(command: str, cwd: Path, timeout: float, control: RunControl) -> s
     )
     control.attach(process)
     try:
+        # Stop may arrive while Popen is still creating the process, before attachment.
+        if control.stopped.is_set():
+            _kill_tree(process)
         output, _ = process.communicate(input=script, timeout=timeout)
     except subprocess.TimeoutExpired as expired:
         _kill_tree(process)

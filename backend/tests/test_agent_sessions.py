@@ -1,8 +1,10 @@
 import json
+import subprocess
 import sys
 import threading
 import time
 from collections.abc import Callable, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -13,7 +15,7 @@ from fastapi.testclient import TestClient
 from nexusai.api.app import create_app
 from nexusai.contracts.agent import Permissions
 from nexusai.kernel.config import Config
-from nexusai.modules.agent import gateway, policy
+from nexusai.modules.agent import gateway, policy, tools
 from nexusai.modules.agent.providers import (
     ModelRequest,
     ModelUnavailable,
@@ -494,6 +496,41 @@ def test_three_sessions_run_together_and_the_fourth_waits(
     assert script.gate
     script.gate.set()
     wait(lambda: all(status(client, s) == "done" for s in sessions), "all done")
+
+
+def test_stop_during_process_creation_is_applied_when_spawn_returns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spawning, release = threading.Event(), threading.Event()
+    real_popen = subprocess.Popen
+    spawned: list[subprocess.Popen[str]] = []
+    control = tools.RunControl()
+
+    def slow_popen(*args: Any, **kwargs: Any) -> subprocess.Popen[str]:
+        process = real_popen(*args, **kwargs)
+        spawned.append(process)
+        spawning.set()
+        if not release.wait(10):
+            tools._kill_tree(process)
+            raise TimeoutError("Test did not release process creation")
+        return process
+
+    monkeypatch.setattr(tools.subprocess, "Popen", slow_popen)
+    command = "Start-Sleep -Seconds 30" if sys.platform == "win32" else "sleep 30"
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        result = executor.submit(tools.run_shell, command, tmp_path, 60, control)
+        try:
+            assert spawning.wait(10)
+            # Stop sees no attached process yet, as with a slow Windows Popen.
+            control.stop()
+            release.set()
+            assert "[Stopped by the person.]" in result.result(timeout=10)
+            assert spawned[0].poll() is not None
+        finally:
+            release.set()
+            for process in spawned:
+                if process.poll() is None:
+                    tools._kill_tree(process)
 
 
 def test_stop_ends_a_running_command(client: TestClient, script: Script) -> None:
