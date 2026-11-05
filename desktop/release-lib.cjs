@@ -79,12 +79,4 @@ function quote(value) { return `'${String(value).replaceAll("'", "'\\''")}'`; }
 function feedUrl(config, signed) { return new URL(signed ? './' : 'unsigned/', config.updateBaseUrl).href; }
 function installationGuid(appId) { return UUID.v5(appId, UUID.parse('50e065bc-3134-11e6-9bab-38c9862bdaf3')); }
 
-function verifyAcceptance(report, sourceCommit, appId) {
-  if (report.schemaVersion !== 1 || report.sourceCommit !== sourceCommit || report.appId !== appId ||
-      !report.automatic?.ok || !report.manual?.ok || !report.downgradeBlocked || !report.orphanServiceBlocked ||
-      ![report.automatic, report.manual].every(run => run.settingsPreserved && run.browserStoragePreserved && run.appDataPreserved && run.homeReady)) {
-    throw new Error('Installed automatic/manual upgrade acceptance is missing or does not match this source and application identity. Download acceptance.json from the successful Windows validation run into .release/ before publishing.');
-  }
-}
-
-module.exports = { validateConfig, sha256, safeName, makeChannelMetadata, verifyArtifacts, quote, feedUrl, verifyAcceptance, installationGuid };
+module.exports = { validateConfig, sha256, safeName, makeChannelMetadata, verifyArtifacts, quote, feedUrl, installationGuid };

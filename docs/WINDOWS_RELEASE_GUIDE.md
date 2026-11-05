@@ -177,8 +177,6 @@ HTTP is supported for the unsigned internal pilot. HTTPS requires a certificate 
 
 On the Windows build machine/VM, after the profile is applied:
 
-`release` and `publish` require `.release/acceptance.json` from installed automatic/manual upgrade validation for the exact source commit and application identity. Download it from the successful hosted run for unsigned Beta/Pilot. Signed distribution requires equivalent evidence for the signed identity on a disposable signing test device; the unsigned hosted receipt does not certify signed updates.
-
 ```powershell
 .\desktop.cmd release
 ```

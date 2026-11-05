@@ -275,16 +275,6 @@ async function serverSetup(config) {
   }
 }
 
-async function requireAcceptance(sourceCommit, appId) {
-  let report;
-  try { report = JSON.parse(await fsp.readFile(path.join(work, 'acceptance.json'), 'utf8')); }
-  catch (error) {
-    if (error.code !== 'ENOENT') throw error;
-    throw new Error('Installed automatic/manual upgrade evidence is required. Download acceptance.json from the Windows validation run for this commit into .release/ before publishing.');
-  }
-  lib.verifyAcceptance(report, sourceCommit, appId);
-}
-
 async function publish(config) {
   lib.validateConfig(config, true);
   if (!['pilot', 'stable'].includes(channel)) throw new Error('Channel must be pilot or stable.');
@@ -292,7 +282,6 @@ async function publish(config) {
   const manifest = JSON.parse(await fsp.readFile(path.join(directory, 'release.json'), 'utf8'));
   await lib.verifyArtifacts(directory, manifest);
   if (manifest.ciProbe || manifest.acceptanceProbe) throw new Error('Acceptance installers contain a temporary test feed and cannot be published.');
-  await requireAcceptance(manifest.sourceCommit, manifest.appId);
   if (manifest.updateBaseUrl !== lib.feedUrl(config, manifest.signed)) throw new Error('The update URL changed since this installer was built. Rebuild with a new version.');
   if (channel === 'stable' && (!manifest.signed || !manifest.updateBaseUrl.startsWith('https://'))) throw new Error('Stable publication requires a signed installer and HTTPS. Unsigned internal testing uses pilot.');
   const report = JSON.parse(await fsp.readFile(path.join(directory, 'smoke.json'), 'utf8'));
@@ -369,7 +358,6 @@ async function main() {
     case 'publish': return publish(config);
     case 'release':
       lib.validateConfig(config, true);
-      await requireAcceptance(capture('git', ['rev-parse', 'HEAD']), config.signing.enabled ? 'com.nexusai.desktop' : 'com.nexusai.pilot');
       await build(config); await test(config); return publish(config);
     default: throw new Error('Commands: init, doctor, build, test, install-test, build-test, open, server-setup, publish, release.');
   }

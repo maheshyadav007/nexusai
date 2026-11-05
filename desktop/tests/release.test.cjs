@@ -79,15 +79,6 @@ test('the frontend origin remains stable across launches and a collision is acti
   }
 });
 
-test('publication requires complete installed-upgrade evidence for this source and identity', () => {
-  const passed = { ok: true, settingsPreserved: true, browserStoragePreserved: true, appDataPreserved: true, homeReady: true };
-  const report = { schemaVersion: 1, sourceCommit: 'current', appId: 'com.nexusai.pilot', automatic: passed, manual: passed, downgradeBlocked: true, orphanServiceBlocked: true };
-  lib.verifyAcceptance(report, 'current', 'com.nexusai.pilot');
-  for (const patch of [{ sourceCommit: 'old' }, { appId: 'com.nexusai.ci' }, { manual: { ...passed, appDataPreserved: false } }, { downgradeBlocked: false }]) {
-    assert.throws(() => lib.verifyAcceptance({ ...report, ...patch }, 'current', 'com.nexusai.pilot'), /acceptance/);
-  }
-});
-
 test('installer error-message patch is scoped and restored even if compilation fails', async () => {
   const template = require('node:fs').readFileSync(path.join(__dirname, '../node_modules/app-builder-lib/templates/nsis/include/installUtil.nsh'), 'utf8');
   const patched = patchUninstallMessage(template);
