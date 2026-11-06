@@ -10,7 +10,7 @@ import time
 from collections.abc import Callable, Iterable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any, cast
+from typing import Annotated, Any, Literal, cast
 
 from langchain_core.tools import InjectedToolCallId
 from pydantic import BaseModel, Field
@@ -158,7 +158,9 @@ class _Nothing(_Call):
 
 
 class _ListMail(_Call):
-    folder: str = Field(default="priority", description="priority, all, sent, archive or trash.")
+    folder: str = Field(
+        default="priority", description="priority, important, starred, all, sent, archive or trash."
+    )
     category: str | None = Field(default=None, description="Only this category.")
     limit: int = Field(default=30, description="How many conversations, up to 100.")
 
@@ -181,12 +183,15 @@ class _ThreadIds(_Call):
 
 class _CategoryItem(BaseModel):
     name: str = Field(description="A short name, like Invoices.")
-    in_priority: bool = Field(default=False, description="Show this in the Priority inbox.")
+    in_priority: bool = Field(default=True, description="Show this in the Priority inbox.")
+    mode: Literal["exact", "smart"] | None = None
+    description: str = Field(default="", max_length=500)
     sender: str | None = Field(
-        default=None, description="File mail from this sender or domain here automatically."
+        default=None, description="File mail from this exact email address here automatically."
     )
     subject: str | None = Field(
-        default=None, description="File mail whose subject contains this here automatically."
+        default=None,
+        description="File mail whose subject starts with this literal prefix here automatically.",
     )
 
 
@@ -201,6 +206,8 @@ class _ChangeCategory(_Call):
     sender: str | None = Field(default=None, description="File mail from this sender here.")
     subject: str | None = Field(default=None, description="File mail with this subject here.")
     clear_rule: bool = Field(default=False, description="Stop filing mail here automatically.")
+    mode: Literal["exact", "smart"] | None = None
+    description: str | None = Field(default=None, max_length=500)
 
 
 class _CategoryNames(_Call):
@@ -632,11 +639,18 @@ def specs(
             found = mail.category_rows(ctx)
             described = []
             for c in found:
-                notes = [f"{c.count} conversations", f"made by {c.source}"]
+                notes = [
+                    f"{c.count} conversations",
+                    f"made by {c.source}",
+                    f"mode: {c.mode}",
+                    f"description: {c.description}",
+                ]
                 if c.in_priority:
                     notes.append("in Priority inbox")
                 if c.sender or c.subject:
-                    notes.append(f"files mail matching {c.sender or c.subject}")
+                    notes.append(
+                        f"exact sender: {c.sender or 'any'}; literal subject prefix: {c.subject or 'any'}"
+                    )
                 if c.proposed:
                     notes.append("only suggested so far")
                 described.append(f"{c.name}: {', '.join(notes)}")
@@ -656,6 +670,8 @@ def specs(
                     sender=item.sender,
                     subject=item.subject,
                     source="agent",
+                    mode=item.mode,
+                    description=item.description,
                 )
                 filed += cast(CategorySaved, mail.save_category(command, ctx)).filed
             return f"Created {len(categories)} categories. Filed {filed} existing conversations."
@@ -678,15 +694,19 @@ def specs(
         sender: str | None = None,
         subject: str | None = None,
         clear_rule: bool = False,
+        mode: Literal["exact", "smart"] | None = None,
+        description: str | None = None,
     ) -> str:
         def work() -> str:
             command = UpdateCategory(
                 name=name,
                 new_name=new_name,
                 in_priority=in_priority,
-                sender=sender,
-                subject=subject,
+                **({"sender": sender} if sender is not None else {}),
+                **({"subject": subject} if subject is not None else {}),
                 clear_rule=clear_rule,
+                mode=mode,
+                description=description,
             )
             try:
                 mail.update_category(command, ctx)
@@ -1275,8 +1295,8 @@ def specs(
         (
             update_category,
             _ChangeCategory,
-            "Change one category in place: rename it, change its Priority inbox setting, or set "
-            "or clear its rule. Prefer this to creating a new one and moving mail across.",
+            "Change one category in place: rename it, change its Priority setting, mode or personalized description, or set "
+            "or clear its exact sender / literal subject-prefix rule. Prefer this to creating a new one and moving mail across.",
         ),
         (
             delete_categories,

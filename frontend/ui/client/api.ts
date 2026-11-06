@@ -1,3 +1,5 @@
+import type { MarkFolderRead } from "./contracts.generated";
+import type { MailOrganization, FinishMailLearning, MergeCategories, SortCategory, CategorySortEstimate } from "./contracts.generated";
 import type {SimulatePreference, PreferenceSimulation} from "./contracts.generated";
 import type {ExpireLearnedNote} from "./contracts.generated";
 import type {GetAgentQueue, AgentQueue, QueueAction} from "./contracts.generated";
@@ -280,6 +282,7 @@ interface Commands {
   "mail.accounts.save": [SaveMailAccount, MailAccounts];
   "mail.accounts.remove": [RemoveMailAccount, MailAccounts];
   "thread.setRead": [SetThreadRead, MailDone];
+  "mail.markFolderRead": [MarkFolderRead, MailDone];
   "thread.setFlag": [SetThreadFlag, MailDone];
   "thread.move": [MoveThread, MailDone];
   "thread.setStatus": [SetThreadStatus, MailDone];
@@ -316,6 +319,9 @@ interface Commands {
   "categories.save": [SaveCategory, CategorySaved];
   "categories.remove": [CategoryName, CategoryList];
   "categories.update": [UpdateCategory, CategoryList];
+  "categories.merge": [MergeCategories, CategoryList];
+  "categories.sort": [SortCategory, CategorySortEstimate];
+  "mail.learning.finish": [FinishMailLearning, MailOrganization];
   "categories.reorder": [ReorderCategories, CategoryList];
   "categories.decide": [DecideCategory, CategoryList];
   "categories.decidePriority": [DecidePriority, CategoryList];
@@ -399,6 +405,7 @@ interface Queries {
   "diagnostics.get": [GetDiagnostics, Diagnostics];
   "mail.accounts": [GetMailAccounts, MailAccounts];
   "mail.status": [GetMailStatus, MailStatus];
+  "mail.organization": [GetMailStatus, MailOrganization];
   "threads.list": [ListThreads, ThreadList];
   "thread.get": [GetThread, ThreadView];
   "rules.get": [GetRules, RuleSet];

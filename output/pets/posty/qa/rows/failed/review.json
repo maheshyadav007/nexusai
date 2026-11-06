@@ -1,0 +1,142 @@
+{
+  "ok": true,
+  "frames_root": "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/rows/failed/frames",
+  "states": [
+    "failed"
+  ],
+  "errors": [],
+  "warnings": [],
+  "rows": [
+    {
+      "state": "failed",
+      "expected_frames": 8,
+      "actual_frames": 8,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/rows/failed/frames/failed/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 18747,
+          "bbox": [
+            5,
+            29,
+            187,
+            178
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 327
+        },
+        {
+          "index": 1,
+          "file": "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/rows/failed/frames/failed/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 18283,
+          "bbox": [
+            7,
+            33,
+            185,
+            178
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 205
+        },
+        {
+          "index": 2,
+          "file": "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/rows/failed/frames/failed/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 17954,
+          "bbox": [
+            7,
+            37,
+            184,
+            178
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 293
+        },
+        {
+          "index": 3,
+          "file": "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/rows/failed/frames/failed/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 17596,
+          "bbox": [
+            8,
+            45,
+            184,
+            178
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 304
+        },
+        {
+          "index": 4,
+          "file": "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/rows/failed/frames/failed/04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 17359,
+          "bbox": [
+            8,
+            44,
+            184,
+            179
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 240
+        },
+        {
+          "index": 5,
+          "file": "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/rows/failed/frames/failed/05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 17734,
+          "bbox": [
+            7,
+            38,
+            184,
+            179
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 256
+        },
+        {
+          "index": 6,
+          "file": "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/rows/failed/frames/failed/06.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 18270,
+          "bbox": [
+            7,
+            33,
+            185,
+            178
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 248
+        },
+        {
+          "index": 7,
+          "file": "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/rows/failed/frames/failed/07.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 18768,
+          "bbox": [
+            6,
+            29,
+            185,
+            178
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 398
+        }
+      ]
+    }
+  ]
+}

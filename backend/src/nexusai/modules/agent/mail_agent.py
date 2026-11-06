@@ -16,11 +16,11 @@ from nexusai.contracts.agent import (
     TriageEstimate,
     TriageRun,
 )
-from nexusai.contracts.mail import MergeCategories
 from nexusai.kernel.database import Migration
 from nexusai.kernel.home import scratch_folder
 from nexusai.kernel.module import CommandError, Context
 from nexusai.modules.agent import (
+    bulk_learning,
     category_names,
     channel,
     feedback,
@@ -33,10 +33,11 @@ from nexusai.modules.agent import (
 )
 from nexusai.modules.agent.context import TurnRequest
 from nexusai.modules.agent.gateway import Layer
+from nexusai.modules.agent.prompt_data import untrusted
 from nexusai.modules.agent.providers import Message
 from nexusai.modules.mail import accounts
 from nexusai.modules.mail import module as mail
-from nexusai.modules.mail.rules import BUILT_IN_RULES, NO_REPLY
+from nexusai.modules.mail.rules import NO_REPLY
 from nexusai.modules.planner import module as planner
 
 log = structlog.get_logger()
@@ -88,8 +89,6 @@ MOST_OPEN_ASKS = 3
 # When a follow-up comes up if the agent can't say, and how far back one gets looked for.
 LOOK_BACK_DAYS = 30
 MOST_ON_THE_PLATE = 15
-# Names it makes up appear in the sidebar. Past this it has to use the ones that are there.
-MOST_AGENT_CATEGORIES = 12
 # Measured on a real mailbox: instructions, what's known about the person, and the mail itself.
 APPROX_TOKENS_PER_MESSAGE = 7000
 MailMode = Literal["each", "hourly", "both"]
@@ -201,37 +200,24 @@ def _conversations(ctx: Context, limit: int) -> list[Any]:
 
 
 def conversations_not_read(ctx: Context) -> int:
-    return len(_conversations(ctx, 1 << 20))
+    return bulk_learning.unseen_count(ctx)
 
 
 def queue_learning(ctx: Context, count: int | None = None) -> int:
-    """What says the most about someone is what they wrote, so up to half is their own
-    conversations and the rest is the newest mail rules didn't catch. Handed over oldest first,
-    so what's learned builds up towards today."""
-    account = accounts.current_account(ctx.config)
-    wanted = count or learn_count(ctx)
-    # Asking for more means their own conversations, which is what the button says.
-    theirs = _conversations(ctx, wanted if count else wanted // 2 or wanted)
-    newest = ctx.bus.db.fetch_all(
-        f"SELECT m.id, m.thread_id, m.date FROM messages m WHERE {NOT_FROM_RULES}"  # noqa: S608
-        " ORDER BY m.date DESC, m.id DESC LIMIT ?",
-        (account, wanted),
-    )
-    chosen = {row["id"]: row for row in theirs}
-    for row in newest:
-        if count or len(chosen) >= wanted:
-            break
-        chosen.setdefault(row["id"], row)
-    rows = sorted(chosen.values(), key=lambda row: (row["date"], row["id"]))
-    for row in rows:
-        enqueue(ctx, row["id"], row["thread_id"], event=f"{LEARN_PREFIX}{row['id']}")
-    _set(ctx, LEARNING_TOTAL, str(len(rows)))
-    set_learning_state(ctx, "reading")
-    return len(rows)
+    """Imports learn all new groups; an explicit manual request can bound new groups per click."""
+    return bulk_learning.queue(ctx, retry_failed=count is not None, limit_groups=count)
 
 
 def learning_progress(ctx: Context) -> tuple[int, int]:
     """How many of the past emails it's been through, and how many it set out to read."""
+    if _setting(ctx, "mail_group_learning") or ctx.bus.db.fetch_all(
+        "SELECT 1 FROM mail_learning_batches LIMIT 1"
+    ):
+        rows = ctx.bus.db.fetch_all(
+            "SELECT COUNT(*) AS total, SUM(learned) AS done FROM mail_learning_groups WHERE account=?",
+            (accounts.current_account(ctx.config),),
+        )[0]
+        return int(rows["done"] or 0), int(rows["total"])
     total = int(_setting(ctx, LEARNING_TOTAL) or 0)
     left = ctx.bus.db.fetch_all(
         "SELECT COUNT(*) AS n FROM trigger_runs WHERE trigger = ? AND event LIKE ?"
@@ -254,11 +240,11 @@ def has_learning_waiting(ctx: Context) -> bool:
 def wrap_up_turn(ctx: Context) -> TurnRequest:
     """Turns the running notes into something the person, and the Interview, can read."""
     notes = memory.learned(ctx.config.home)
-    task = f"<untrusted>\n{notes or 'No notes.'}\n</untrusted>"
+    task = untrusted(notes or "No notes.")
     samples = signals.writing_samples(ctx, "")
     if samples:
         joined = "\n---\n".join(samples)
-        task += f"\n\nHow they write, from their sent mail:\n<untrusted>\n{joined}\n</untrusted>"
+        task += "\n\nHow they write, from their sent mail:\n" + untrusted(joined)
     return TurnRequest(
         SESSION_ID,
         _template("mail-learned"),
@@ -269,14 +255,24 @@ def wrap_up_turn(ctx: Context) -> TurnRequest:
 
 
 def interview_turn(ctx: Context, session: str) -> TurnRequest:
-    notes = memory.learned(ctx.config.home)
-    task = f"<untrusted>\n{notes}\n</untrusted>" if notes else ""
+    from nexusai.modules.agent import facts
+
+    account = accounts.current_account(ctx.config)
+    notes = facts.layer(
+        ctx, account, "mail priorities and uncertainties", ctx.config.agent.memory_max_chars
+    )
+    task = (
+        "Learned context for this account (hypotheses remain unconfirmed):\n" + notes
+        if notes
+        else ""
+    )
     return TurnRequest(
         session,
         _template("interview-start"),
         "setup",
         _template("interview-start-model"),
         task,
+        context={"account": account},
     )
 
 
@@ -364,7 +360,30 @@ def task_for(
     )
     if not text:
         return subject, sender, ""
-    task = f"<untrusted>\nSubject: {subject}\n\n{text}\n</untrusted>"
+    task = untrusted(f"Subject: {subject}\n\n{text}")
+    latest = db.fetch_all(
+        "SELECT account,from_addr,subject FROM messages WHERE thread_id=? ORDER BY date DESC,id DESC LIMIT 1",
+        (thread,),
+    )
+    if latest:
+        identifier = bulk_learning.group_id(
+            latest[0]["account"], latest[0]["from_addr"], latest[0]["subject"]
+        )
+        groups = db.fetch_all(
+            "SELECT note,importance,importance_confirmed FROM mail_learning_groups WHERE id=? AND learned=1",
+            (identifier,),
+        )
+        if groups:
+            group = groups[0]
+            source = (
+                "confirmed by the person"
+                if group["importance_confirmed"]
+                else "a guess from past mail"
+            )
+            task += (
+                f"\n\nThis sender/subject group's usual importance is {group['importance']} ({source}). Use this context when judging the current message. Notes from this group remain guesses:\n"
+                + untrusted(group["note"])
+            )
     facts = signals.about_thread(ctx, thread)
     if facts:
         task += f"\n\n{facts}"
@@ -374,17 +393,29 @@ def task_for(
     )
     if board:
         lines = "\n".join(f"- {r['kind']}: {r['title']} (due {r['due']})" for r in board)
-        task += f"\n\nAlready on the work board for this conversation:\n<untrusted>\n{lines}\n</untrusted>"
-    # Including what rules file into, which has no entry of its own until someone edits it.
+        task += "\n\nAlready on the work board for this conversation:\n" + untrusted(lines)
     known = db.fetch_all(
-        "SELECT name FROM mail_categories WHERE proposed = 0 UNION"
-        " SELECT DISTINCT category FROM threads WHERE category IS NOT NULL ORDER BY 1"
+        "SELECT name, description, in_priority FROM mail_categories WHERE proposed = 0 AND mode = 'smart' ORDER BY position, name"
     )
     if known:
-        task += "\n\nCategories that exist: " + ", ".join(row[0] for row in known)
+        descriptions = json.dumps([dict(row) for row in known], ensure_ascii=False)
+        task += "\n\nSmart folders (use only these names, zero or more):\n" + untrusted(
+            descriptions
+        )
+    exact = db.fetch_all(
+        "SELECT name, description, sender, subject, in_priority FROM mail_categories WHERE proposed = 0 AND mode = 'exact' ORDER BY position, name"
+    )
+    if exact:
+        task += (
+            "\n\nExact folders and personalized settings (rules are applied deterministically; "
+            "do not assign these as Smart folders or override their matches):\n"
+            + untrusted(json.dumps([dict(row) for row in exact], ensure_ascii=False))
+        )
     waiting = db.fetch_all("SELECT name FROM mail_categories WHERE proposed = 1 ORDER BY 1")
     if waiting:
-        task += "\n\nCategories already suggested: " + ", ".join(row[0] for row in waiting)
+        task += "\n\nCategories already suggested:\n" + untrusted(
+            ", ".join(row[0] for row in waiting)
+        )
     if live:
         task += _style_samples(ctx, thread)
     if answers:
@@ -406,7 +437,7 @@ def _style_samples(ctx: Context, thread: int) -> str:
     if not samples:
         return ""
     joined = "\n---\n".join(samples)
-    return f"\n\nHow the person writes, from their sent mail:\n<untrusted>\n{joined}\n</untrusted>"
+    return "\n\nHow the person writes, from their sent mail:\n" + untrusted(joined)
 
 
 def next_turn(
@@ -418,12 +449,14 @@ def next_turn(
     while True:
         # New mail goes ahead of past mail, so catching up never holds it back.
         first = db.fetch_all(
-            "SELECT thread FROM trigger_runs WHERE trigger = ? AND status = 'pending'"
+            "SELECT id, thread, event FROM trigger_runs WHERE trigger = ? AND status = 'pending'"
             " ORDER BY event LIKE ?, id LIMIT 1",
             (MAIL_TRIGGER, f"{LEARN_PREFIX}%"),
         )
         if not first:
             return None
+        if str(first[0]["event"]).startswith(bulk_learning.PREFIX):
+            return bulk_learning.batch_request(ctx, first[0], own)
         thread = first[0]["thread"]
         rows = db.fetch_all(
             "SELECT id, message, answer, event FROM trigger_runs WHERE trigger = ? AND status = 'pending' AND thread = ?"
@@ -431,8 +464,18 @@ def next_turn(
             (MAIL_TRIGGER, thread, config.triage_batch),
         )
         answers = [row["answer"] for row in rows if row["answer"]]
-        learning = all(str(row["event"]).startswith(LEARN_PREFIX) for row in rows)
-        version = db.fetch_all("SELECT decision_version FROM threads WHERE id = ?", (thread,))
+        filing_only = all(str(row["event"]).startswith("refile-") for row in rows)
+        learning = filing_only or all(str(row["event"]).startswith(LEARN_PREFIX) for row in rows)
+        version = db.fetch_all(
+            "SELECT decision_version,account FROM threads WHERE id = ?", (thread,)
+        )
+        from nexusai.modules.agent import knowledge
+
+        context_version = (
+            knowledge.decision_context_version(ctx, AGENT, version[0]["account"])
+            if version
+            else None
+        )
         subject, sender, task = task_for(ctx, thread, answers, live=not learning)
         if task:
             break
@@ -448,7 +491,7 @@ def next_turn(
         shown = _template(
             "mail-learn", done=done + 1, total=total, sender=sender, subject=shown_subject
         )
-        told = _template("mail-learn-model")
+        told = _template("mail-refile-model") if filing_only else _template("mail-learn-model")
         origin = LEARNING_ORIGIN
     elif answers:
         shown = _template("mail-answer", subject=shown_subject, answer=" ".join(answers))
@@ -462,9 +505,12 @@ def next_turn(
     target = {
         "thread": thread,
         "decision_version": version[0]["decision_version"] if version else None,
+        "context_version": context_version,
+        "account": version[0]["account"] if version else None,
         "subject": subject,
         "messages": [{"message": r["message"], "answer": r["answer"]} for r in rows],
         "learning": learning,
+        "filing_only": filing_only,
         "sent": sent,
     }
     request = TurnRequest(SESSION_ID, shown, origin, told, task, target, own)
@@ -524,8 +570,7 @@ def brief_task(ctx: Context) -> str:
 
     plate = on_the_plate(ctx)
     task = (
-        briefs.snapshot(ctx)
-        + f"\n\nOn their plate today:\n<untrusted>\n{plate or 'Nothing open.'}\n</untrusted>"
+        briefs.snapshot(ctx) + "\n\nOn their plate today:\n" + untrusted(plate or "Nothing open.")
     )
     decisions: list[str] = []
     for label, query in (
@@ -548,14 +593,10 @@ def brief_task(ctx: Context) -> str:
             lines = "\n".join(f"- [{label} {row['id']}] {row['text']}" for row in rows[:20])
             decisions.append(f"{label}: {len(rows)} pending\n{lines}")
     if decisions:
-        task += (
-            "\n\nDecisions waiting for them:\n<untrusted>\n"
-            + "\n\n".join(decisions)
-            + "\n</untrusted>"
-        )
+        task += "\n\nDecisions waiting for them:\n" + untrusted("\n\n".join(decisions))
     past = feedback.briefs_with_reactions(ctx.bus.db)
     if past:
-        task += f"\n\nEarlier briefs and how they took them:\n<untrusted>\n{past}\n</untrusted>"
+        task += "\n\nEarlier briefs and how they took them:\n" + untrusted(past)
     return task
 
 
@@ -580,7 +621,7 @@ def review_turn(ctx: Context) -> TurnRequest | None:
         _template("mail-review"),
         "mail-review",
         _template("mail-review-model"),
-        f"<untrusted>\n{table}{named}\n</untrusted>",
+        untrusted(f"{table}{named}"),
     )
 
 
@@ -627,20 +668,15 @@ def they_answered(ctx: Context, message: int, thread: int) -> None:
 def tidy_categories(ctx: Context) -> int:
     """Once, for what was named before overlaps were caught. Needs no model, and reads no mail.
 
-    The agent's own folders in one area become one, and overlapping suggestions become one.
-    Returns how many suggestions are left, since only a model can tell HR from People team.
+    Only overlapping unaccepted suggestions can be combined here. Accepted folders stay for
+    the person to merge from Today. Returns how many suggestions are left.
     """
     db = ctx.bus.db
     rows = db.fetch_all("SELECT name, source, proposed FROM mail_categories")
     accepted = [row for row in rows if row["proposed"] == 0]
-    for row in sorted(accepted, key=lambda item: len(item["name"]), reverse=True):
-        others = [other["name"] for other in accepted if other["name"] != row["name"]]
-        area = category_names.area_of(row["name"], others)
-        if row["source"] == "agent" and area and len(area) < len(row["name"]):
-            mail.merge_categories(MergeCategories(names=[row["name"]], into=area), ctx)
-            accepted = [other for other in accepted if other["name"] != row["name"]]
     settled = [str(row["name"]) for row in accepted]
     left: list[str] = []
+    changed = False
     with db.transaction() as tx:
         for row in sorted((r for r in rows if r["proposed"] == 1), key=lambda r: len(r["name"])):
             name = str(row["name"])
@@ -652,7 +688,8 @@ def tidy_categories(ctx: Context) -> int:
                 "UPDATE OR IGNORE mail_category_votes SET name = ? WHERE name = ?", (area, name)
             )
             tx.execute("UPDATE mail_categories SET proposed = 2 WHERE name = ?", (name,))
-    if rows:
+            changed = True
+    if changed:
         with ctx.bus.unit_of_work() as work:
             work.emit("categories.changed", {}, source="agent", trace_id=ctx.trace_id)
     return len(left)
@@ -720,14 +757,14 @@ def digest_turn(ctx: Context, after: int) -> tuple[TurnRequest, int] | None:
     held = f"Judgements {rows[0]['id']} through {rows[-1]['id']} (bounded catch-up):\n{lines}" + (
         f"\n\nStill open:\n{plate}" if plate else ""
     )
-    task = f"{prompts_builder.packaged('mail-digest.md')}\n\n<untrusted>\n{held}\n</untrusted>"
+    task = f"{prompts_builder.packaged('mail-digest.md')}\n\n" + untrusted(held)
     return TurnRequest(
         SESSION_ID,
         _template("mail-digest", count=len(latest)),
         "mail-hourly",
         _template("mail-digest-model"),
         task,
-        context={"account": account},
+        context={"account": account, "threads": list(latest)},
     ), int(rows[-1]["id"])
 
 
@@ -741,6 +778,9 @@ def settle(ctx: Context, runs: list[int], status: str, error: str | None = None)
 
 def after_turn(ctx: Context, turn: int, runs: list[Any], error: str | None) -> None:
     """A run that ended without a judgement leaves that mail uncategorized, and says why."""
+    if runs and str(runs[0]["event"]).startswith(bulk_learning.PREFIX):
+        bulk_learning.after_turn(ctx, runs[0], turn, error)
+        return
     judged = ctx.bus.db.fetch_all("SELECT 1 FROM triage_runs WHERE turn = ? LIMIT 1", (turn,))
     if judged or not runs:
         settle(ctx, [run["id"] for run in runs], "done")
@@ -762,6 +802,21 @@ def _record_current(ctx: Context, session: str, fields: dict[str, Any]) -> str:
         (session,),
     )
     target = json.loads(rows[0]["target"]) if rows and rows[0]["target"] else None
+    if target and target.get("context_version"):
+        from nexusai.modules.agent import knowledge
+
+        if (
+            knowledge.decision_context_version(ctx, AGENT, target["account"])
+            != target["context_version"]
+        ):
+            with ctx.bus.db.transaction() as tx:
+                tx.execute(
+                    "UPDATE trigger_runs SET status='pending',turn=NULL,session=NULL WHERE turn=? AND status='running'",
+                    (rows[0]["id"],),
+                )
+            return "Category settings or personalized instructions changed. This result was discarded and queued with fresh context."
+    if target and "bulk_batch" in target:
+        return bulk_learning.record(ctx, target["bulk_batch"], fields, rows[0]["id"])
     if not target or "thread" not in target:
         return "There's no new email in hand to judge in this run."
     turn = rows[0]["id"]
@@ -794,9 +849,17 @@ def _record_current(ctx: Context, session: str, fields: dict[str, Any]) -> str:
         fields,
         turn,
         learning=bool(target.get("learning")),
+        filing_only=bool(target.get("filing_only")),
         sent=bool(target.get("sent")),
     )
-    return f"Filed as {fields.get('category') or 'uncategorized'}, {fields.get('importance', 'normal')} importance."
+    saved = ctx.bus.db.fetch_all(
+        "SELECT category,importance,extra_categories FROM threads WHERE id=?", (target["thread"],)
+    )[0]
+    folders = [
+        *([saved["category"]] if saved["category"] else []),
+        *json.loads(saved["extra_categories"]),
+    ]
+    return f"Filed as {', '.join(folders) or 'uncategorized'}, {saved['importance']} importance."
 
 
 class Triage:
@@ -846,6 +909,7 @@ class Triage:
         turn: int,
         *,
         learning: bool = False,
+        filing_only: bool = False,
         sent: bool = False,
     ) -> None:
         ctx = self.ctx
@@ -868,7 +932,39 @@ class Triage:
         )
         provisional = bool(question)
         why = f"{reason} (a best guess until you answer)" if provisional else reason
-        category = self._settled_category(category, thread)
+        allowed = {
+            row["name"].casefold(): row["name"]
+            for row in ctx.bus.db.fetch_all(
+                "SELECT name FROM mail_categories WHERE mode = 'smart' AND proposed = 0"
+            )
+        }
+        requested = parsed.get("smart_folders")
+        if not isinstance(requested, list) or (not requested and category):
+            requested = [category] if category else []
+        smart = list(
+            dict.fromkeys(
+                allowed[name.casefold()]
+                for name in requested
+                if isinstance(name, str) and name.casefold() in allowed
+            )
+        )
+        recipients = ctx.bus.db.fetch_all(
+            "SELECT to_json, cc_json FROM messages WHERE thread_id = ? ORDER BY date DESC, id DESC LIMIT 1",
+            (thread,),
+        )
+        if (
+            recipients
+            and "broadcast" in allowed
+            and len(
+                set(
+                    signals.addresses(recipients[0]["to_json"])
+                    + signals.addresses(recipients[0]["cc_json"])
+                )
+            )
+            > signals.MOST_NAMED_RECIPIENTS
+        ):
+            smart = list(dict.fromkeys([allowed["broadcast"], *smart]))
+        category = smart[0] if smart else None
         next_action = parsed.get("next_action")
         next_action = next_action if next_action in NEXT_ACTIONS else None
         if status not in {"waiting_on_you", "fyi"} or (status == "fyi" and next_action != "read"):
@@ -933,29 +1029,52 @@ class Triage:
             )
             # What the person chose stays, and so does what their rule filed.
             if not sent:
-                # A header rule only guessed. In a conversation they're part of, the agent knows better.
-                guessed = int(self._rule_only_guessed(thread))
+                current = work.tx.execute(
+                    "SELECT category, category_source, extra_categories FROM threads WHERE id = ?",
+                    (thread,),
+                ).fetchone()
+                if current and current["category_source"] != "user":
+                    primary = (
+                        current["category"] if current["category_source"] == "rule" else category
+                    )
+                    exact_names = {
+                        row["name"]
+                        for row in work.tx.execute(
+                            "SELECT name FROM mail_categories WHERE mode='exact' AND proposed=0"
+                        )
+                    }
+                    kept_extras = [
+                        name
+                        for name in json.loads(current["extra_categories"])
+                        if name in exact_names
+                    ]
+                    extras = list(dict.fromkeys([*kept_extras, *smart]))
+                    work.tx.execute(
+                        "UPDATE threads SET category = ?, category_source = ?, extra_categories = ?, why = ? WHERE id = ?",
+                        (
+                            primary,
+                            "rule" if current["category_source"] == "rule" else "agent",
+                            json.dumps([name for name in extras if name != primary]),
+                            why,
+                            thread,
+                        ),
+                    )
+                if not filing_only:
+                    work.tx.execute(
+                        "UPDATE threads SET importance = ? WHERE id = ? AND importance_user_message IS NULL",
+                        (importance, thread),
+                    )
+            if not filing_only:
                 work.tx.execute(
-                    "UPDATE threads SET category = ?, category_source = 'agent', why = ? WHERE id = ?"
-                    " AND (COALESCE(category_source, '') NOT IN ('user', 'rule')"
-                    " OR (category_source = 'rule' AND ? = 1))",
-                    (category, why, thread, guessed),
+                    "UPDATE threads SET status = ?, next_action = ?, follow_up_on = ?,"
+                    " followup_notified = NULL WHERE id = ? AND status_user_message IS NULL",
+                    (
+                        status,
+                        next_action,
+                        follow_up if status == "waiting_on_others" else None,
+                        thread,
+                    ),
                 )
-                work.tx.execute(
-                    "UPDATE threads SET importance = ? WHERE id = ? AND (importance_user_message IS NULL OR importance_user_message < (SELECT MAX(id) FROM messages WHERE thread_id=?))",
-                    (importance, thread, thread),
-                )
-            work.tx.execute(
-                "UPDATE threads SET status = ?, next_action = ?, follow_up_on = ?,"
-                " followup_notified = NULL WHERE id = ? AND (status_user_message IS NULL OR status_user_message < (SELECT MAX(id) FROM messages WHERE thread_id=?))",
-                (
-                    status,
-                    next_action,
-                    follow_up if status == "waiting_on_others" else None,
-                    thread,
-                    thread,
-                ),
-            )
             if sent:
                 work.tx.execute("UPDATE threads SET why = ? WHERE id = ?", (why, thread))
             work.emit(
@@ -984,8 +1103,8 @@ class Triage:
                 work.emit(
                     "mail.urgent", {"thread_id": thread}, source="agent", trace_id=ctx.trace_id
                 )
-        if not sent:
-            self._note_category(category)
+        if filing_only:
+            parsed = {**parsed, "suggest_category": None, "learned": []}
         self._suggest_category(parsed.get("suggest_category"), thread)
         memory.add_learned(ctx.config.home, _strings(parsed.get("learned")), thread)
         if learning:
@@ -1003,36 +1122,6 @@ class Triage:
                 triage_message=latest,
             )
 
-    def _rule_only_guessed(self, thread: int) -> bool:
-        db = self.ctx.bus.db
-        own = signals.own_addresses(self.ctx)
-        rows = db.fetch_all("SELECT from_addr, rule FROM messages WHERE thread_id = ?", (thread,))
-        wrote = any(row["from_addr"].lower() in own for row in rows)
-        applied = {row["rule"] for row in rows if row["rule"]}
-        return wrote and applied <= BUILT_IN_RULES
-
-    def _settled_category(self, category: str | None, thread: int) -> str | None:
-        """So "Job Search" and "Job search" or "HR" and "HR feedback" don't become two folders."""
-        if not category:
-            return None
-        db = self.ctx.bus.db
-        waiting = [
-            str(row["name"])
-            for row in db.fetch_all("SELECT name FROM mail_categories WHERE proposed = 1")
-        ]
-        # Waiting on the person: filed under it already, and it appears if they say yes.
-        if name := category_names.area_of(category, waiting):
-            self._vote(name, thread)
-            return name
-        known = db.fetch_all(
-            "SELECT name, source FROM mail_categories WHERE proposed = 0 UNION"
-            " SELECT DISTINCT category, 'rule' FROM threads WHERE category IS NOT NULL"
-        )
-        if settled := category_names.area_of(category, [str(row["name"]) for row in known]):
-            return settled
-        made = sum(1 for row in known if row["source"] == "agent")
-        return None if made >= MOST_AGENT_CATEGORIES else category.strip()
-
     def _vote(self, name: str, thread: int) -> None:
         with self.ctx.bus.unit_of_work() as work:
             work.tx.execute(
@@ -1049,16 +1138,6 @@ class Triage:
                 (SESSION_ID,),
             )[0]["n"]
         )
-
-    def _note_category(self, category: str | None) -> None:
-        """A name the agent came up with appears in the sidebar, marked as the agent's."""
-        if not category:
-            return
-        with self.ctx.bus.db.transaction() as tx:
-            tx.execute(
-                "INSERT OR IGNORE INTO mail_categories (name, source, created) VALUES (?, 'agent', ?)",
-                (category, _now()),
-            )
 
     def _suggest_category(self, suggestion: Any, thread: int) -> None:
         """Mail that keeps coming from one place. Once enough does, the person decides, on Today."""
@@ -1110,6 +1189,7 @@ class Triage:
                 isinstance(item, dict)
                 and item.get("title")
                 and not planner.has_task(ctx.bus.db, str(item["title"])[:500], thread)
+                and not planner.has_reminder(ctx.bus.db, str(item["title"])[:500], thread)
             ):
                 planner.add_task(
                     ctx,
@@ -1125,6 +1205,7 @@ class Triage:
                 and item.get("title")
                 and _valid_moment(item.get("when"))
                 and not planner.has_reminder(ctx.bus.db, str(item["title"])[:500], thread)
+                and not planner.has_task(ctx.bus.db, str(item["title"])[:500], thread)
             ):
                 planner.add_reminder(
                     ctx,
@@ -1276,14 +1357,25 @@ def draft_reply(ctx: Context, thread: int) -> DraftedReply:
             409,
         )
     task = (
-        f"<untrusted>\nSubject: {subject}\n\n{text}\n</untrusted>{_style_samples(ctx, thread)}"
-        "\n\nWrite the reply now."
+        untrusted(f"Subject: {subject}\n\n{text}")
+        + _style_samples(ctx, thread)
+        + "\n\nWrite the reply now."
     )
     from nexusai.modules.agent import knowledge
 
     thread_account = ctx.bus.db.fetch_all("SELECT account FROM threads WHERE id=?", (thread,))
     layers: list[Layer] = knowledge.layers_for(
-        ctx, "draft-reply", task, account=thread_account[0]["account"] if thread_account else None
+        ctx,
+        "draft-reply",
+        task,
+        account=thread_account[0]["account"] if thread_account else None,
+        senders=knowledge.sender_scope(ctx, [thread]),
+    )
+    layers.append(
+        Layer(
+            "This run",
+            f"The person requested a draft to review. Now: {datetime.now().astimezone().isoformat(timespec='minutes')}. Do not invent dates or commitments.",
+        )
     )
     try:
         result = gateway.call_model(
@@ -1293,6 +1385,8 @@ def draft_reply(ctx: Context, thread: int) -> DraftedReply:
         providers.ModelUnavailable,
         providers.ModelNotConfigured,
         providers.ModelFlagged,
+        providers.ModelContextExceeded,
+        providers.ModelResponseInvalid,
         gateway.DailyCapReached,
         guard.GuardBlocked,
     ) as error:

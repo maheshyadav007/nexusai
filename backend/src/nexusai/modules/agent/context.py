@@ -71,7 +71,10 @@ def profile_for(
     settings: ContextSettings, origin: str, own: dict[str, Any] | None
 ) -> ContextProfile:
     base = settings.chat if origin == PERSON else settings.triggered
-    return base.model_copy(update={k: v for k, v in (own or {}).items() if v is not None})
+    overrides = {
+        k: v for k, v in (own or {}).items() if k in ContextProfile.model_fields and v is not None
+    }
+    return ContextProfile.model_validate({**base.model_dump(), **overrides})
 
 
 def recent(messages: list[Any], keep: int) -> list[Any]:
@@ -140,6 +143,19 @@ class AutoCompact(SummarizationMiddleware):
         self.keep_messages = keep_messages
         self.on_compacted = on_compacted
 
+    def _determine_cutoff_index(self, messages: list[Any]) -> int:
+        cutoff = super()._determine_cutoff_index(messages)
+        current = max(
+            (
+                i
+                for i, message in enumerate(messages)
+                if isinstance(message, HumanMessage) and not is_summary(message)
+            ),
+            default=0,
+        )
+        # The task and its tool results are one unit; compact only earlier turns.
+        return min(cutoff, current)
+
     def before_model(self, state: Any, runtime: Any) -> dict[str, Any] | None:
         try:
             update = super().before_model(state, runtime)
@@ -174,10 +190,13 @@ class TaskContent(AgentMiddleware):
         for index in range(len(messages) - 1, -1, -1):
             message = messages[index]
             if isinstance(message, HumanMessage) and not is_summary(message):
-                messages[index] = HumanMessage(
-                    content=f"{self.task}\n\n{message.text}", id=message.id
+                messages[index] = message.model_copy(
+                    update={"content": f"{self.task}\n\n{message.text}"}
                 )
                 break
+        else:
+            # A recovered checkpoint may contain only a summary; never omit run data.
+            messages.append(HumanMessage(content=self.task))
         return handler(request.override(messages=messages))
 
 

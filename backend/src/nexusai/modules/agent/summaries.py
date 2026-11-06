@@ -9,6 +9,7 @@ from nexusai.contracts.agent import ThreadSummary
 from nexusai.kernel.database import Migration
 from nexusai.kernel.module import CommandError, Context
 from nexusai.modules.agent import gateway, guard, prompts_builder, providers
+from nexusai.modules.agent.prompt_data import untrusted
 
 MIGRATION = Migration(
     "agent_summary_sources_001",
@@ -99,10 +100,16 @@ def generate(ctx: Context, thread: int) -> ThreadSummary:
         if remaining <= 0:
             break
     earlier = row["text"] if row and not changed else ""
-    task = "Reconcile dates, negations, unresolved asks and commitments. Additional messages may be older than the earlier summary. Do not claim to have read omitted or encrypted content.\n<untrusted>\n"
+    evidence = ""
     if earlier:
-        task += f"Earlier summary (source-derived data):\n{earlier}\n\nAdditional source chunks:\n"
-    task += "\n\n".join(blocks) + "\n</untrusted>"
+        evidence += (
+            f"Earlier summary (source-derived data):\n{earlier}\n\nAdditional source chunks:\n"
+        )
+    evidence += "\n\n".join(blocks)
+    task = (
+        "Reconcile dates, negations, unresolved asks and commitments. Additional messages may be older than the earlier summary. Do not claim to have read omitted or encrypted content.\n"
+        + untrusted(evidence)
+    )
     layers = prompts_builder.build_layers(ctx.config, "summary")
     try:
         result = gateway.call_model(
@@ -114,6 +121,8 @@ def generate(ctx: Context, thread: int) -> ThreadSummary:
         )
     except (
         providers.ModelUnavailable,
+        providers.ModelContextExceeded,
+        providers.ModelResponseInvalid,
         providers.ModelNotConfigured,
         providers.ModelFlagged,
         gateway.DailyCapReached,

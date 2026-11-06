@@ -12,7 +12,7 @@ from nexusai.kernel.database import Migration
 from nexusai.kernel.module import Context
 from nexusai.modules.mail import accounts, store
 from nexusai.modules.mail.parse import Part, parse_message
-from nexusai.modules.mail.rules import evaluate, load_rules
+from nexusai.modules.mail.rules import evaluate, own_domain_of
 
 log = structlog.get_logger()
 MIGRATION = Migration(
@@ -106,6 +106,27 @@ class PstRunner:
                 self._run_one(ctx, dict(rows[0]))
             except Exception:
                 log.exception("pst_import_failed", import_id=rows[0]["id"])
+                # Parsing a worker record can fail before the normal process cleanup.
+                # Reap it before starting another job, retaining the committed checkpoint.
+                with self._lock:
+                    current = self._current
+                    self._current = None
+                if current:
+                    try:
+                        if current.process.poll() is None:
+                            current.process.terminate()
+                            try:
+                                current.process.wait(timeout=5)
+                            except subprocess.TimeoutExpired:
+                                current.process.kill()
+                                current.process.wait(timeout=5)
+                    except Exception:
+                        log.exception("pst_worker_cleanup_failed")
+                    finally:
+                        if current.process.stdout:
+                            current.process.stdout.close()
+                        if current.process.stderr:
+                            current.process.stderr.close()
                 _set_status(
                     ctx, rows[0]["id"], "failed", "The import hit a problem. You can try again."
                 )
@@ -152,7 +173,7 @@ class PstRunner:
             return
         if pausing:
             _set_status(ctx, import_id, "paused", None)
-        elif finished:
+        elif finished and process.returncode == 0:
             _set_status(ctx, import_id, "done", None)
         else:
             detail = process.stderr.read()[-_stderr_limit:] if process.stderr else ""
@@ -175,15 +196,21 @@ def _set_status(ctx: Context, import_id: int, status: str, error: str | None) ->
 
 def _store_batch(ctx: Context, import_id: int, batch: list[dict[str, object]]) -> None:
     account = accounts.current_account(ctx.config)
-    rules = load_rules(ctx.config.home)
+    _, profiles = accounts.read_accounts(ctx.config)
+    profile = profiles.get(account)
+    domain = own_domain_of(profile.address or profile.auth.user) if profile else None
+    from nexusai.modules.mail.module import folder_modes, ordered_rules
+
+    rules = ordered_rules(ctx)
+    modes = folder_modes(ctx)
     prepared = []
     failed = 0
     for record in batch:
         if "raw" not in record:
             failed += 1
             continue
-        raw = bytes.fromhex(str(record["raw"]))
         try:
+            raw = bytes.fromhex(str(record["raw"]))
             parsed = parse_message(raw)
         except Exception:
             failed += 1
@@ -200,7 +227,7 @@ def _store_batch(ctx: Context, import_id: int, batch: list[dict[str, object]]) -
                     sha256="",
                 )
             )
-        prepared.append((record, raw, parsed, evaluate(parsed, rules)))
+        prepared.append((record, raw, parsed, evaluate(parsed, rules, domain, folder_modes=modes)))
     imported = duplicates = 0
     with ctx.bus.unit_of_work() as work:
         for record, raw, parsed, match in prepared:

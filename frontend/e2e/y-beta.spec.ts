@@ -74,7 +74,7 @@ test("chat launcher stays fixed at the right and the document does not scroll", 
   await page.screenshot({ path: "test-results/review-today.png" });
 });
 
-test("empty categories remain in the sidebar after creating another and navigating away", async ({ page }) => {
+test("empty categories stay hidden from the sidebar after navigation", async ({ page }) => {
   await page.goto("/today");
   const names = [`Review empty A ${Date.now()}`, `Review empty B ${Date.now()}`];
   for (const name of names) {
@@ -86,9 +86,9 @@ test("empty categories remain in the sidebar after creating another and navigati
   }
   await page.getByRole("link", { name: "Today", exact: true }).click();
   const nav = page.getByRole("navigation", { name: "Main navigation" });
-  for (const name of names) await expect(nav.getByRole("link", { name, exact: true })).toBeVisible();
+  for (const name of names) await expect(nav.getByRole("link", { name, exact: true })).toHaveCount(0);
   await page.reload();
-  for (const name of names) await expect(nav.getByRole("link", { name, exact: true })).toBeVisible();
+  for (const name of names) await expect(nav.getByRole("link", { name, exact: true })).toHaveCount(0);
 });
 
 test("web settings offer browser actions instead of desktop process controls", async ({ page }) => {

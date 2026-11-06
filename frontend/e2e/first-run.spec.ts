@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 const noViolations = async (page: Page) => {
   const { violations } = await new AxeBuilder({ page }).analyze();
-  expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
+  expect(violations.map((v) => ({ rule: v.id, nodes: v.nodes.map((n) => ({ target: n.target, html: n.html, reason: n.failureSummary })) }))).toEqual([]);
 };
 
 // Runs before the other files: the backend starts with no Home, as on a new computer.

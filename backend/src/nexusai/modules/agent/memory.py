@@ -7,6 +7,7 @@ from pathlib import Path
 from nexusai.contracts.agent import MemoryFile, MemoryProposal
 from nexusai.kernel.database import Database, Migration
 from nexusai.kernel.module import CommandError
+from nexusai.modules.agent.prompt_data import untrusted
 
 MIGRATION = Migration(
     "agent_memory_001",
@@ -83,16 +84,28 @@ def learned(home: Path) -> str:
 
 
 def add_learned(home: Path, notes: list[str], source: int | None = None) -> None:
-    """One line each, saying where it came from, with no repeats. The oldest go first if it ever
-    grows too long."""
+    add_learned_sources(home, [(note, source) for note in notes])
+
+
+def add_learned_sources(home: Path, notes: list[tuple[str, int | None]]) -> None:
+    """Keep provenance when identical observations came from different conversations."""
     current = learned(home)
     lines = current.splitlines()
-    known = {SOURCE.sub("", line) for line in lines}
-    for note in notes:
+    for note, source in notes:
         line = f"- {' '.join(note.split())[:LEARNED_NOTE_CHARS]}"
-        if len(line) > len("- ") and line not in known:
-            known.add(line)
-            lines.append(f"{line} [mail:{source}]" if source else line)
+        if len(line) <= len("- "):
+            continue
+        sourced = f"{line} [mail:{source}]" if source else line
+        matching = [
+            index for index, existing in enumerate(lines) if SOURCE.sub("", existing) == line
+        ]
+        if sourced in lines or (source is None and matching):
+            continue
+        unscoped = next((index for index in matching if not SOURCE.search(lines[index])), None)
+        if source and unscoped is not None:
+            lines[unscoped] = sourced
+        else:
+            lines.append(sourced)
     while len("\n".join(lines)) > LEARNED_MAX_CHARS:
         lines.pop(0)
     if lines != current.splitlines():
@@ -174,7 +187,7 @@ def relevant(
                 continue
             # It's about the person, so it's always relevant, and it's only ever data.
             kept = _fit_learned(file.content.strip(), words, int(limit * LEARNED_SHARE))
-            scored.append((1 << 30, file.name, f"<untrusted>\n{kept}\n</untrusted>"))
+            scored.append((1 << 30, file.name, untrusted(kept)))
         elif overlap or not words:
             scored.append((overlap, file.name, file.content.strip()))
     scored.sort(key=lambda item: (-item[0], item[1]))

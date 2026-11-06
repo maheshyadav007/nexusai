@@ -7,7 +7,7 @@ export const categoryHref = (name: string) => `/mail/category/${encodeURICompone
 export const folderHref = (name: string) => `/mail/folder/${encodeURIComponent(name)}`;
 export const isCurrentMail = (pathname: string, href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
-export const customCategories = (categories: readonly MailCategory[]) => categories.filter((item) => !item.proposed);
+export const customCategories = (categories: readonly MailCategory[]) => categories.filter((item) => !item.proposed && (item.count ?? 0) > 0);
 
 export const customFolders = (folders: readonly MailFolder[], pathname: string) => folders.filter((row) =>
   !LISTED_ELSEWHERE.has(row.role) && ((row.here ?? 0) > 0 || (row.on_server ?? 0) > 0 || isCurrentMail(pathname, folderHref(row.name))),

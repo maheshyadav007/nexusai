@@ -4,9 +4,10 @@ import json
 import re
 import threading
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from nexusai.contracts.mail import MailRule, RuleActions, RuleCondition, RuleSet
 from nexusai.kernel.files import replace_file
@@ -59,7 +60,7 @@ WORTH_A_LOOK = re.compile(
 )
 
 
-# A reply to a [PLM] mail is still about PLM.
+# Used for grouping history, never for literal Exact prefix matching.
 REPLY_PREFIX = re.compile(r"^(?:\s*(?:re|fwd?|aw)\s*:\s*)+", re.I)
 
 
@@ -69,6 +70,7 @@ class RuleMatch:
     actions: RuleActions
     # Only a guess from its headers, so what it says can still bring it to the agent.
     look_closer: bool = False
+    extra_categories: tuple[str, ...] = ()
 
     @property
     def why(self) -> str:
@@ -127,9 +129,11 @@ def _condition_matches(condition: RuleCondition, parsed: ParsedMessage) -> bool:
     if condition.field == "subject":
         return needle in parsed.subject.lower()
     if condition.field == "subject_prefix":
-        return REPLY_PREFIX.sub("", parsed.subject).lower().startswith(needle)
+        return parsed.subject.lower().startswith(needle)
     if condition.field == "body":
         return needle in parsed.text.lower()
+    if condition.field == "sender_exact":
+        return needle == parsed.from_addr.lower()
     if condition.field == "sender":
         return needle in f"{parsed.from_name} {parsed.from_addr}".lower()
     if condition.field == "header":
@@ -144,15 +148,36 @@ def own_domain_of(address: str) -> str | None:
 
 
 def evaluate(
-    parsed: ParsedMessage, rules: list[MailRule], own_domain: str | None = None
+    parsed: ParsedMessage,
+    rules: list[MailRule],
+    own_domain: str | None = None,
+    folder_modes: Mapping[str, str] | None = None,
 ) -> RuleMatch | None:
     """The person's own rules come first, because they know their mail best."""
-    for rule in rules:
-        if rule.enabled and all(_condition_matches(c, parsed) for c in rule.conditions):
-            if rule.actions.read_replies and REPLY_PREFIX.match(parsed.subject):
-                return RuleMatch(rule.name, rule.actions.model_copy(update={"skip_agent": False}))
-            return RuleMatch(rule.name, rule.actions, rule.actions.read_replies)
-    return _builtin(parsed, own_domain)
+    matched = [
+        rule
+        for rule in rules
+        if rule.enabled
+        and all(_condition_matches(condition, parsed) for condition in rule.conditions)
+    ]
+    if matched:
+        first = matched[0]
+        extras = tuple(
+            dict.fromkeys(
+                rule.actions.category
+                for rule in matched[1:]
+                if rule.actions.category and rule.actions.category != first.actions.category
+            )
+        )
+        return RuleMatch(first.name, first.actions, extra_categories=extras)
+    match = _builtin(parsed, own_domain)
+    if (
+        match
+        and folder_modes is not None
+        and folder_modes.get(match.actions.category or "") != "exact"
+    ):
+        return None
+    return match
 
 
 def rules_path(home: Path) -> Path:
@@ -183,3 +208,31 @@ def change_rules(home: Path, change: Callable[[list[MailRule]], list[MailRule]])
     """Reads and writes as one step, so tools running side by side can't lose each other's rule."""
     with _WRITING:
         _write(home, RuleSet(rules=change(load_rules(home))))
+
+
+def for_folders(rules: list[MailRule], folders: list[Any], starters: set[str]) -> list[MailRule]:
+    """Personal rules precede starter/header rules; folder ties follow sidebar position."""
+    settings = {row["name"]: row for row in folders}
+    indexed = []
+    for index, rule in enumerate(rules):
+        category = rule.actions.category
+        folder = settings.get(category)
+        if folder is not None and folder["mode"] == "smart":
+            continue
+        if folder is not None:
+            rule = rule.model_copy(
+                update={
+                    "actions": rule.actions.model_copy(
+                        update={"skip_agent": True, "read_replies": False}
+                    )
+                }
+            )
+        indexed.append(
+            (
+                category in starters,
+                (folder["position"] or 1_000_000) if folder else index,
+                index,
+                rule,
+            )
+        )
+    return [item[3] for item in sorted(indexed, key=lambda item: item[:3])]

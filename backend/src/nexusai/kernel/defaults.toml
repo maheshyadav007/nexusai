@@ -92,6 +92,8 @@ no_key = "none"
 daily_token_cap = 0
 max_running_sessions = 3
 triage_batch = 10
+# A larger arrival uses grouped learning, rather than one model call per message.
+bulk_mail_threshold = 50
 triage_retry_seconds = 60
 # Model calls allowed in a minute, across every agent. 0 means no limit of our own.
 model_calls_per_minute = 0
@@ -107,10 +109,10 @@ memory_max_chars = 8000
 triage_token_limit = 30000
 # A suggested category shows once this many conversations would go in it.
 category_suggestion_min_threads = 5
-# How many past emails the rule engine didn't catch the Mail agent reads to learn about the person,
-# before it goes live. Each takes about one model call.
+# Compatibility setting: 0 disables grouped bulk learning; any positive value enables it.
+# Groups are learned in batches of 30. Known groups require no further learning call.
 learn_emails = 400
-# Older mail it reads can't become important on Home or start anything.
+# Legacy individual-learning window; grouped learning uses a fixed 7-day recent review.
 learn_recent_days = 7
 command_timeout_seconds = 120
 max_tool_output_chars = 20000

@@ -117,6 +117,13 @@ TOOL_ENTRIES = (
         "read",
     ),
     ToolEntry("list_mail", MAIL, "List mail", "See what's in a folder or category.", "read"),
+    ToolEntry(
+        "apply_mail_learning_answers",
+        MAIL,
+        "Apply mail learning answers",
+        "Update learned group importance from interview answers.",
+        "data",
+    ),
     ToolEntry("update_mail", MAIL, "Organize mail", "File, flag, mark and archive mail.", "data"),
     ToolEntry("trash_mail", MAIL, "Delete mail", "Move mail to Trash.", "data", ASK),
     ToolEntry("list_drafts", MAIL, "See drafts", "Read your saved drafts.", "read"),

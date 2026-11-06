@@ -36,10 +36,9 @@ def test_non_utc_default_schedule_uses_its_wall_clock(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("TZ", raising=False)
-    monkeypatch.setattr(
-        scheduler, "get_localzone_name", lambda: "Asia/Kolkata", raising=False
-    )
+    monkeypatch.setattr(scheduler, "get_localzone_name", lambda: "Asia/Kolkata", raising=False)
     schedule = Schedule(title="Brief", every="day", time="08:30")
-    assert scheduler.next_scheduled_run(
-        schedule, datetime(2026, 11, 4, 2, 59, tzinfo=UTC)
-    ) == "2026-11-04T03:00:00+00:00"
+    assert (
+        scheduler.next_scheduled_run(schedule, datetime(2026, 11, 4, 2, 59, tzinfo=UTC))
+        == "2026-11-04T03:00:00+00:00"
+    )

@@ -9,6 +9,7 @@ export interface ToastMessage {
   title: string;
   description?: string;
   tone?: "neutral" | "danger";
+  action?: { label: string; run: () => void };
 }
 
 let lastId = 0;
@@ -31,6 +32,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               <RadixToast.Title className={`text-md font-medium ${toast.tone === "danger" ? "text-status-danger" : ""}`}>{toast.title}</RadixToast.Title>
               {toast.description ? <RadixToast.Description className="mt-1 text-sm text-ink-muted">{toast.description}</RadixToast.Description> : null}
             </div>
+            {toast.action ? <RadixToast.Action altText={toast.action.label} onClick={toast.action.run} className="focus-ring text-sm text-ink-primary">{toast.action.label}</RadixToast.Action> : null}
             <RadixToast.Close asChild>
               <IconButton icon="close" label={t("common.close")} tooltip={false} />
             </RadixToast.Close>

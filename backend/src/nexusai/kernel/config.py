@@ -85,6 +85,7 @@ class AgentConfig:
     max_tool_output_chars: int
     max_agent_messages_per_run: int
     max_steps: int
+    bulk_mail_threshold: int = 50
 
 
 @dataclass(frozen=True)

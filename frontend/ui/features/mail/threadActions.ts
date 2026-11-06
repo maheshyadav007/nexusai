@@ -18,7 +18,7 @@ export function useThreadActions(thread: ThreadRow, href?: string): MenuItem[] {
   return [
     { id: "open", label: t("menu.open"), onSelect: () => router.push(href ?? `/mail/all/${thread.id}`) },
     { id: "read", label: t(unread ? "mail.markRead" : "mail.markUnread"), icon: "markUnread", onSelect: () => setRead.mutate({ id: thread.id, read: unread }) },
-    { id: "flag", label: t(thread.flagged ? "mail.unflag" : "mail.flag"), icon: "flag", onSelect: () => setFlag.mutate({ id: thread.id, flagged: !thread.flagged }) },
+    { id: "flag", label: t(thread.flagged ? "mail.unflag" : "mail.flag"), icon: "starred", onSelect: () => setFlag.mutate({ id: thread.id, flagged: !thread.flagged }) },
     { id: "ask", label: t("menu.askAgent"), icon: "chat", onSelect: () => assistant.start({ context: [`thread:${thread.id}`], title: thread.subject || t("mail.noSubject") }) },
     { id: "archive", label: t("mail.archive"), icon: "archive", onSelect: () => move.mutate({ id: thread.id, to: "archive" }) },
     { id: "delete", label: t("mail.delete"), icon: "trash", danger: true, onSelect: () => move.mutate({ id: thread.id, to: "trash" }) },

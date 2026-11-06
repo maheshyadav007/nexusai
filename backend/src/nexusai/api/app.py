@@ -118,7 +118,10 @@ def _open_database(config: Config, home: Path, key: str) -> tuple[Database, bool
             migration for module in MODULES for migration in module.migrations
         ]
         # Mail's background data conversion also records a completion marker here.
-        db.require_compatible(migrations, [KINDS_SORTED])
+        db.require_compatible(
+            migrations,
+            [KINDS_SORTED, "mail_organization_defaults_001", "mail_organization_provenance_001"],
+        )
         upgrading = db.pending(migrations)
     except Exception:
         db.close()

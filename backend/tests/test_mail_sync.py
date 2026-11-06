@@ -1220,3 +1220,64 @@ def test_sound_settings_save_and_come_back(client: TestClient) -> None:
     assert saved.status_code == 200, saved.text
     read = client.post("/api/queries/settings.get").json()
     assert (read["sound_muted"], read["sound_off"]) == (True, ["reminder"])
+
+
+def test_archive_restore_uses_current_server_uid_and_keeps_decisions(
+    client: TestClient, fake: FakeMail
+) -> None:
+    fake.state.deliver(make_mail(subject="Round trip", message_id="<restore@x>"))
+    connect(client, fake)
+    original = thread_with(client, "Round trip")
+    client.post(
+        "/api/commands/thread.setImportance", json={"id": original["id"], "importance": "high"}
+    )
+    client.post(
+        "/api/commands/thread.setCategory", json={"id": original["id"], "category": "Project"}
+    )
+    moved = client.post("/api/commands/thread.move", json={"id": original["id"], "to": "archive"})
+    assert moved.is_success
+    wait(lambda: not fake.state.boxes["INBOX"].mails, "archive on server")
+    restored = client.post("/api/commands/thread.move", json={"id": original["id"], "to": "inbox"})
+    assert restored.is_success
+    wait(lambda: bool(fake.state.boxes["INBOX"].mails), "restore on server")
+    result = thread_with(client, "Round trip")
+    assert result["id"] == original["id"]
+    assert result["importance"] == "high" and result["category"] == "Project"
+    assert not threads(client, folder="archive")
+
+
+def test_immediate_undo_supersedes_pending_move(client: TestClient, fake: FakeMail) -> None:
+    fake.state.deliver(make_mail(subject="Immediate undo", message_id="<undo@x>"))
+    connect(client, fake)
+    original = thread_with(client, "Immediate undo")
+    for target in ("archive", "inbox", "archive", "inbox"):
+        response = client.post(
+            "/api/commands/thread.move", json={"id": original["id"], "to": target}
+        )
+        assert response.is_success
+    wait(lambda: bool(fake.state.boxes["INBOX"].mails), "latest desired inbox state")
+    assert thread_with(client, "Immediate undo")["id"] == original["id"]
+    # Wait for all queued operations; an old Archive must not run after its Undo.
+    wait(
+        lambda: not client.app.state.bus.db.fetch_all("SELECT 1 FROM mail_outbox"),
+        "outbox to drain",
+    )
+    assert fake.state.boxes["INBOX"].mails
+
+
+def test_historical_chunks_do_not_emit_live_bulk_arrival(
+    client: TestClient, fake: FakeMail
+) -> None:
+    fill(fake, 160)
+    save(client, fake, pull_limit=60)
+    wait(lambda: status(client)["history_finished"], "first download completion")
+    assert status(client)["pulled"] == 60
+    assert not events(client, "mail.bulkArrived")
+    response = client.post("/api/commands/mail.history.more", json={"count": 100})
+    assert response.is_success
+    wait(
+        lambda: status(client)["pulled"] == 160 and status(client)["history_finished"],
+        "history completion",
+    )
+    assert not events(client, "mail.bulkArrived")
+    assert events(client, "mail.historyFinished")

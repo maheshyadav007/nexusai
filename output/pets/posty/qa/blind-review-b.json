@@ -1,0 +1,88 @@
+{
+  "pairs": [
+    {
+      "pair": "horizontal-1",
+      "A": "screen-left",
+      "B": "screen-right",
+      "reason": "A pupils sit toward the left of their white eye areas; B pupils sit toward the right."
+    },
+    {
+      "pair": "horizontal-2",
+      "A": "screen-right",
+      "B": "screen-left",
+      "reason": "A pupils sit at the right sides of the white eye areas; B pupils sit at the left sides."
+    },
+    {
+      "pair": "horizontal-3",
+      "A": "screen-left",
+      "B": "screen-right",
+      "reason": "A dark pupils occupy left portions of the eye whites; B dark pupils occupy right portions."
+    },
+    {
+      "pair": "horizontal-4",
+      "A": "screen-right",
+      "B": "screen-left",
+      "reason": "A pupils are rightward within the whites; B pupils are leftward."
+    },
+    {
+      "pair": "horizontal-5",
+      "A": "screen-right",
+      "B": "screen-left",
+      "reason": "A has more exposed white to the left of each pupil; B has more white to the right."
+    },
+    {
+      "pair": "horizontal-6",
+      "A": "screen-right",
+      "B": "ambiguous",
+      "reason": "A pupils appear rightward; the small lower pupils in B do not establish a sufficiently clear horizontal offset."
+    },
+    {
+      "pair": "horizontal-7",
+      "A": "screen-left",
+      "B": "screen-right",
+      "reason": "A pupils sit on the left/lower portions of the whites; B pupils sit on the right/lower portions."
+    },
+    {
+      "pair": "vertical-1",
+      "A": "down",
+      "B": "up",
+      "reason": "A pupils are at the lower edges of the eye whites; B pupils are near the upper edges."
+    },
+    {
+      "pair": "vertical-2",
+      "A": "up",
+      "B": "down",
+      "reason": "A pupils occupy upper portions of the white eyes; B pupils occupy lower portions."
+    },
+    {
+      "pair": "vertical-3",
+      "A": "down",
+      "B": "up",
+      "reason": "A pupils sit low within the whites; B pupils sit high."
+    },
+    {
+      "pair": "vertical-4",
+      "A": "up",
+      "B": "down",
+      "reason": "A pupils sit near the upper eye boundaries; B pupils sit near the lower boundaries."
+    },
+    {
+      "pair": "vertical-5",
+      "A": "up",
+      "B": "down",
+      "reason": "A dark pupils are high in their eye whites; B dark pupils are low."
+    },
+    {
+      "pair": "vertical-6",
+      "A": "down",
+      "B": "up",
+      "reason": "A pupils are at the lower sides of the whites; B pupils are at the upper sides."
+    },
+    {
+      "pair": "vertical-7",
+      "A": "up",
+      "B": "up",
+      "reason": "Both images show dark pupils toward the upper portions of the white eye areas, with white extending below them."
+    }
+  ]
+}

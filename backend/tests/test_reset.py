@@ -123,6 +123,75 @@ def test_a_fresh_home_works_again_in_the_same_process(
     )
 
 
+def test_reset_forgets_new_mail_learning_and_personalization_state(setup: Any) -> None:
+    from nexusai.modules.agent.module import current
+
+    client, home, _, _ = setup
+    db = current().ctx.bus.db
+    defaults = [
+        dict(row)
+        for row in db.fetch_all(
+            "SELECT name,mode,description,sender,subject,in_priority FROM mail_categories ORDER BY name"
+        )
+    ]
+    tables = (
+        "mail_learning_groups",
+        "mail_learning_members",
+        "mail_learning_batches",
+        "mail_learning_reviews",
+        "preferences",
+        "preference_versions",
+        "prompt_versions",
+        "mail_move_checks",
+        "mail_outbox",
+    )
+    with db.transaction() as tx:
+        tx.execute("UPDATE mail_categories SET in_priority=1,description='Old custom meaning'")
+        tx.execute(
+            "INSERT INTO mail_learning_groups(id,account,sender,subject,note,learned,created) VALUES('old','test','old@example.com','old','Old inference',1,'2026-01-01')"
+        )
+        tx.execute("INSERT INTO mail_learning_members VALUES(1,'old',1)")
+        tx.execute(
+            "INSERT INTO mail_learning_batches(account,groups_json,status,attempts,error) VALUES('test','[\"old\"]','failed',3,'Old failure')"
+        )
+        tx.execute(
+            "INSERT INTO mail_learning_reviews VALUES('test','failed','old-interview','2026-01-01')"
+        )
+        tx.execute(
+            "INSERT INTO preferences(purpose,instruction,status,revision,evidence,created,updated) VALUES('mail','Old preference','active',1,'[]','2026-01-01','2026-01-01')"
+        )
+        tx.execute(
+            "INSERT INTO preference_versions(preference,revision,snapshot,time) VALUES(1,1,'{}','2026-01-01')"
+        )
+        tx.execute(
+            "INSERT INTO prompt_versions(kind,name,content,time) VALUES('personal','importance','Old prompt','2026-01-01')"
+        )
+        tx.execute(
+            "INSERT INTO mail_move_checks(account,thread,target,preserved,time) VALUES('test',1,'archive',1,'2026-01-01')"
+        )
+        tx.execute(
+            "INSERT INTO mail_outbox(account,op,payload,attempts,failed_at,error) VALUES('test','move','{}',3,'2026-01-01','Old rejection')"
+        )
+    (home / "memory" / "learned.md").write_text("- Old inference [mail:1]")
+    (home / "prompts" / "personal").mkdir(parents=True, exist_ok=True)
+    (home / "prompts" / "personal" / "importance.md").write_text("Old personalized rule")
+
+    assert reset(client).is_success
+    assert client.post("/api/home/choose", json={"path": str(home)}).is_success
+    fresh = current().ctx.bus.db
+    for table in tables:
+        assert not fresh.fetch_all(f"SELECT 1 FROM {table} LIMIT 1"), table  # noqa: S608
+    assert not (home / "memory" / "learned.md").exists()
+    personal = home / "prompts" / "personal" / "importance.md"
+    assert not personal.exists() or "Old personalized rule" not in personal.read_text()
+    assert [
+        dict(row)
+        for row in fresh.fetch_all(
+            "SELECT name,mode,description,sender,subject,in_priority FROM mail_categories ORDER BY name"
+        )
+    ] == defaults
+
+
 @pytest.mark.parametrize("keep", [True, False])
 def test_downloaded_models_stay_only_if_asked(
     setup: Any, script: Script, fake: FakeMail, keep: bool

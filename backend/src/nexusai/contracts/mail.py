@@ -245,7 +245,7 @@ class MailPresets(BaseModel):
 class ListThreads(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    folder: FolderRole | Literal["priority", "all"] = "inbox"
+    folder: FolderRole | Literal["priority", "important", "starred", "all"] = "inbox"
     # One folder on the server, by its full name. This takes the place of folder.
     location: str | None = Field(default=None, max_length=500)
     category: str | None = Field(default=None, max_length=64)
@@ -253,6 +253,14 @@ class ListThreads(BaseModel):
     # For jumping to a place in the list, which a scrollbar can do.
     offset: int = Field(default=0, ge=0)
     limit: int = Field(default=100, ge=1, le=500)
+
+
+class MarkFolderRead(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    folder: FolderRole | Literal["priority", "important", "starred", "all"] = "all"
+    location: str | None = Field(default=None, max_length=500)
+    category: str | None = Field(default=None, max_length=64)
 
 
 class ThreadRow(BaseModel):
@@ -383,7 +391,9 @@ class MailDone(BaseModel):
 class RuleCondition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    field: Literal["subject", "subject_prefix", "body", "sender", "header", "has_attachment"]
+    field: Literal[
+        "subject", "subject_prefix", "body", "sender", "sender_exact", "header", "has_attachment"
+    ]
     value: str = Field(default="", max_length=500)
     header: str | None = Field(default=None, max_length=100)
 
@@ -410,6 +420,8 @@ class MailRule(BaseModel):
 
 
 class MailCategory(BaseModel):
+    mode: Literal["exact", "smart"] = "smart"
+    description: str = ""
     name: str
     source: Literal["user", "agent", "rule"]
     in_priority: bool
@@ -438,7 +450,9 @@ class SaveCategory(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=64)
-    in_priority: bool = False
+    in_priority: bool = True
+    mode: Literal["exact", "smart"] | None = None
+    description: str = Field(default="", max_length=500)
     sender: str | None = Field(default=None, max_length=320)
     subject: str | None = Field(default=None, max_length=500)
     source: Literal["user", "agent"] = "user"
@@ -457,6 +471,8 @@ class UpdateCategory(BaseModel):
     sender: str | None = Field(default=None, max_length=320)
     subject: str | None = Field(default=None, max_length=500)
     clear_rule: bool = False
+    mode: Literal["exact", "smart"] | None = None
+    description: str | None = Field(default=None, max_length=500)
 
 
 class MergeCategories(BaseModel):
@@ -568,7 +584,7 @@ class SearchMail(BaseModel):
     date_to: str | None = Field(default=None, max_length=32)
     category: str | None = Field(default=None, max_length=64)
     has_attachment: bool | None = None
-    folder: FolderRole | None = None
+    folder: FolderRole | Literal["priority", "important", "starred", "all"] | None = None
     # One folder on the server, by its full name.
     location: str | None = Field(default=None, max_length=500)
     recipient: str | None = Field(default=None, max_length=320)
@@ -732,3 +748,56 @@ class SendProblem(BaseModel):
 class SendCheckResult(BaseModel):
     problems: list[SendProblem]
     undo_seconds: int
+
+
+class LearningGroupView(BaseModel):
+    id: str
+    sender: str
+    subject: str
+    note: str
+    importance: Importance
+
+
+class FolderMergeSuggestion(BaseModel):
+    into: str
+    names: list[str]
+
+
+class LearningFolderSuggestion(BaseModel):
+    name: str
+    senders: int
+    emails: int
+
+
+class MissedConversation(BaseModel):
+    id: int
+    subject: str
+
+
+class MailOrganization(BaseModel):
+    metrics: dict[str, int] = Field(default_factory=dict)
+    state: str
+    interview: str | None = None
+    groups: list[LearningGroupView] = Field(default_factory=list)
+    done: int = 0
+    total: int = 0
+    missed: list[MissedConversation] = Field(default_factory=list)
+    merges: list[FolderMergeSuggestion] = Field(default_factory=list)
+    suggestions: list[LearningFolderSuggestion] = Field(default_factory=list)
+
+
+class FinishMailLearning(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    importance: dict[str, Importance] = Field(default_factory=dict, max_length=1000)
+
+
+class SortCategory(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=64)
+    confirm: bool = False
+
+
+class CategorySortEstimate(BaseModel):
+    conversations: int
+    estimated_tokens: int
+    queued: int = 0

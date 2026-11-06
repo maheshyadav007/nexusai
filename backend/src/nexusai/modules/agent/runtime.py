@@ -6,9 +6,10 @@ import threading
 import uuid
 from collections.abc import AsyncIterator, Callable
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import structlog
 from langchain.agents import create_agent
@@ -48,6 +49,7 @@ from nexusai.modules.agent import (
 from nexusai.modules.agent.context import PERSON, TurnRequest
 from nexusai.modules.agent.gateway import Layer
 from nexusai.modules.agent.model import GatewayChatModel
+from nexusai.modules.agent.prompt_data import untrusted
 from nexusai.modules.mail import accounts, store
 from nexusai.modules.semantic import module as semantic
 
@@ -112,6 +114,7 @@ ORIGIN_NOTES = {
     "mail-learn": "You're reading past mail to learn about the person. Nobody is waiting in the chat.",
     "schedule": "A schedule came due, and this run started by itself. Nobody is waiting in the chat.",
     "event": "Something happened that the person asked to hear about, and this run started by itself. Nobody is waiting in the chat.",
+    "setup": "A mail-learning interview started to clarify new uncertainties. Ask only what is unresolved, at most three questions.",
 }
 RESUMABLE = {"queued", "running"}
 KEEPALIVE_SECONDS = 15
@@ -227,8 +230,17 @@ class SessionRuntime:
         now = _now()
         with self.ctx.bus.unit_of_work() as work:
             work.tx.execute(
-                "INSERT INTO agent_sessions (id, title, agent, status, created, updated, context, model) VALUES (?, ?, ?, 'done', ?, ?, ?, ?)",
-                (session, title or "New session", agent, now, now, json.dumps(context), model),
+                "INSERT INTO agent_sessions (id, title, agent, status, created, updated, context, model, untrusted) VALUES (?, ?, ?, 'done', ?, ?, ?, ?, ?)",
+                (
+                    session,
+                    title or "New session",
+                    agent,
+                    now,
+                    now,
+                    json.dumps(context),
+                    model,
+                    int(agent == "interview"),
+                ),
             )
             work.emit(
                 "session.changed", {"id": session}, source="agent", trace_id=self.ctx.trace_id
@@ -307,7 +319,7 @@ class SessionRuntime:
             tx.execute(
                 "UPDATE agent_sessions SET untrusted = 1, context = '[]' WHERE id = ?", (session,)
             )
-        return "<untrusted>\n" + "\n\n".join(blocks) + "\n</untrusted>\n\n"
+        return untrusted("\n\n".join(blocks)) + "\n\n"
 
     def _latest_checkpoint(self, session: str) -> str | None:
         found = self.saver.get_tuple({"configurable": {"thread_id": session}})
@@ -383,6 +395,36 @@ class SessionRuntime:
                     json.loads(last["target"]) if last["target"] else None,
                     json.loads(last["context"]) if last["context"] else None,
                 )
+                # A retry uses today's explicit folder/personalization settings,
+                # while retaining the original evidence version for stale-mail protection.
+                target = request.target or {}
+                if row.agent == "mail" and target.get("thread"):
+                    from nexusai.modules.agent import mail_agent
+
+                    source = self.db.fetch_all(
+                        "SELECT decision_version,account FROM threads WHERE id=?",
+                        (target["thread"],),
+                    )
+                    if source and source[0]["decision_version"] == target.get("decision_version"):
+                        answers = [
+                            item["answer"]
+                            for item in target.get("messages", [])
+                            if item.get("answer")
+                        ]
+                        _, _, fresh_task = mail_agent.task_for(
+                            self.ctx, target["thread"], answers, live=not target.get("learning")
+                        )
+                        request = replace(
+                            request,
+                            task=fresh_task,
+                            target={
+                                **target,
+                                "account": source[0]["account"],
+                                "context_version": knowledge.decision_context_version(
+                                    self.ctx, "mail", source[0]["account"]
+                                ),
+                            },
+                        )
                 attached = last["attached"]
                 start_from = last["checkpoint"]
                 checkpoint = start_from
@@ -592,18 +634,43 @@ class SessionRuntime:
             "SELECT account FROM threads WHERE id=?", (target.get("thread"),)
         )
         own_context = json.loads(turn["context"]) if turn and turn["context"] else {}
+        source_threads = (
+            [target["thread"]]
+            if target.get("thread")
+            else [value for value in own_context.get("threads", []) if isinstance(value, int)]
+        )
+        source_senders = (
+            knowledge.sender_scope(self.ctx, source_threads)
+            if source_threads
+            else (
+                {str(value).casefold() for value in own_context["senders"]}
+                if "senders" in own_context
+                else (set() if origin != PERSON else None)
+            )
+        )
         layers = knowledge.layers_for(
             self.ctx,
             row.agent,
             f"{turn['text']}\n{task}" if turn else "",
             self._capabilities(),
             account=thread_account[0]["account"] if thread_account else own_context.get("account"),
+            senders=source_senders,
             scratch=str(config.home / "scratch" / session),
         )
-        now = datetime.now().astimezone()
+        zone = own_context.get("timezone")
+        now = datetime.now(ZoneInfo(zone)) if zone else datetime.now().astimezone()
         note = ORIGIN_NOTES.get(origin, ORIGIN_NOTES["schedule"])
+        if target.get("filing_only"):
+            note = "This is explicit historical filing only. Do not learn facts, change importance/status, notify, or create work."
+        elif target.get("bulk_batch") is not None:
+            note = "This is grouped learning. Record only supplied group IDs, inferred notes and folder suggestions; never create work or drafts."
+        elif target.get("sent"):
+            note = "The person sent the latest message. Assess commitments and follow-ups; do not draft another reply."
         layers.append(
-            Layer("This run", f"{note}\nNow: {now.strftime('%A %d %B %Y %H:%M')} ({now.tzname()})")
+            Layer(
+                "This run",
+                f"{note}\nNow: {now.strftime('%A %d %B %Y %H:%M')} ({zone or now.tzname()}); {now.isoformat(timespec='minutes')}",
+            )
         )
         model = GatewayChatModel(
             ctx=self.ctx, agent=row.agent, session=session, layers=layers, model_override=row.model
@@ -683,8 +750,20 @@ class SessionRuntime:
             gateway.DailyCapReached,
         ) as error:
             if not self._hold(session, turn, str(error)):
-                self._finish(session, turn, translator, "failed", str(error), "error")
-        except (providers.ModelFlagged, guard.DamagedToken, guard.GuardBlocked) as error:
+                detail = str(error)
+                if self._has_potential_effects(turn):
+                    detail = (
+                        "The model became unavailable after a tool may have changed data. Completed work is kept; review it before retrying. "
+                        + detail
+                    )
+                self._finish(session, turn, translator, "failed", detail, "error")
+        except (
+            providers.ModelFlagged,
+            providers.ModelContextExceeded,
+            providers.ModelResponseInvalid,
+            guard.DamagedToken,
+            guard.GuardBlocked,
+        ) as error:
             self._finish(session, turn, translator, "failed", str(error), "error")
         except gateway.RunLimitReached as error:
             self._finish(session, turn, translator, "stopped", str(error), "error")
@@ -709,7 +788,29 @@ class SessionRuntime:
             )
         finally:
             with self.lock:
-                self.live.pop(session, None)
+                # Completion can dispatch the next turn before this worker exits.
+                # Only release our own control, never the next turn's stop handle.
+                if self.live.get(session) is live:
+                    self.live.pop(session, None)
+
+    def _has_potential_effects(self, turn: int) -> bool:
+        """Do not replay a mutation whose outcome might already have happened."""
+        parts = [
+            json.loads(row["part"])
+            for row in self.db.fetch_all(
+                "SELECT part FROM agent_parts WHERE turn=? ORDER BY id", (turn,)
+            )
+        ]
+        denied = {
+            part.get("toolCallId") for part in parts if part.get("type") == "tool-output-denied"
+        }
+        for part in parts:
+            if part.get("type") != "tool-input-available" or part.get("toolCallId") in denied:
+                continue
+            entry = policy.TOOLS_BY_NAME.get(part.get("toolName", ""))
+            if entry is None or entry.action != "read":
+                return True
+        return False
 
     def _hold(self, session: str, turn: int, why: str) -> bool:
         """With no model, a triggered run takes itself back and waits in line, leaving no trace.
@@ -719,6 +820,8 @@ class SessionRuntime:
         """
         rows = self.db.fetch_all("SELECT origin FROM agent_turns WHERE id = ?", (turn,))
         if not rows or rows[0]["origin"] == PERSON or self.on_hold is None:
+            return False
+        if self._has_potential_effects(turn):
             return False
         with self.db.transaction() as tx:
             tx.execute(
@@ -797,7 +900,9 @@ class SessionRuntime:
                 work.emit("session.changed", payload, source="agent", trace_id=self.ctx.trace_id)
         self.notifier.wake(turn)
         if self.on_turn_end is not None:
-            self.on_turn_end(turn, error)
+            self.on_turn_end(
+                turn, error or ("Run stopped before completion." if status == "stopped" else None)
+            )
 
     def _announce_approvals(self, turn: int, pending: list[Any]) -> None:
         parts = []
@@ -970,9 +1075,9 @@ class SessionRuntime:
                 self.saver.get_tuple({"configurable": {"thread_id": row["id"]}}) is not None
             )
             said = self.db.fetch_all(
-                "SELECT text, model_text FROM agent_turns WHERE id = ?", (turn,)
+                "SELECT text, model_text, attached FROM agent_turns WHERE id = ?", (turn,)
             )[0]
-            turn_text = said["model_text"] or said["text"]
+            turn_text = said["attached"] + (said["model_text"] or said["text"])
             payload = (
                 None if has_checkpoint else {"messages": [{"role": "user", "content": turn_text}]}
             )

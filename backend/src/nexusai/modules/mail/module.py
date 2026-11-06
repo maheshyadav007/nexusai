@@ -1,3 +1,4 @@
+import hashlib
 import json
 import re
 import threading
@@ -14,6 +15,7 @@ from nexusai.contracts.mail import (
     CategoryList,
     CategoryName,
     CategorySaved,
+    CategorySortEstimate,
     ChangeThreadCategory,
     ChangeThreadFolder,
     CheckDraft,
@@ -51,6 +53,7 @@ from nexusai.contracts.mail import (
     MailStatus,
     MailSyncChanged,
     MailTestResult,
+    MarkFolderRead,
     MergeCategories,
     MoveThread,
     ProbeServer,
@@ -84,6 +87,7 @@ from nexusai.contracts.mail import (
     SetThreadImportance,
     SetThreadRead,
     SetThreadStatus,
+    SortCategory,
     StartPstUpload,
     StopHistory,
     TestMailAccount,
@@ -119,6 +123,7 @@ KINDS_BATCH = 200
 _sync: MailSync | None = None
 _closing = threading.Event()
 _sync_lock = threading.Lock()
+_maintenance: threading.Thread | None = None
 
 
 def _start_sync(ctx: Context) -> None:
@@ -174,7 +179,7 @@ def _sort_kinds_once(ctx: Context) -> None:
                 _, profiles = accounts.read_accounts(ctx.config)
                 profile = profiles.get(row["account"])
                 domain = own_domain_of(profile.address or profile.auth.user) if profile else None
-                match = rules.evaluate(parsed, home_rules, domain)
+                match = rules.evaluate(parsed, home_rules, domain, folder_modes(ctx))
                 if match is None:
                     continue
                 tx.execute(
@@ -201,19 +206,34 @@ def _sort_kinds_once(ctx: Context) -> None:
 def _startup(ctx: Context) -> None:
     _closing.clear()
     _add_starter_categories(ctx)
-    threading.Thread(target=_sort_kinds_once, args=(ctx,), daemon=True, name="mail-kinds").start()
+    _organization_defaults(ctx)
+    global _maintenance
+
+    def maintain() -> None:
+        try:
+            _sort_kinds_once(ctx)
+            if not _closing.is_set():
+                _organization_provenance(ctx)
+        except Exception:
+            log.exception("mail_maintenance_failed")
+
+    _maintenance = threading.Thread(target=maintain, daemon=True, name="mail-maintenance")
+    _maintenance.start()
     _start_sync(ctx)
     # An import that was running when the app closed carries on from its saved position.
     pst.runner.kick(ctx)
 
 
 def _shutdown() -> None:
-    global _sync
+    global _sync, _maintenance
     _closing.set()
     with _sync_lock:
         if _sync:
             _sync.stop()
             _sync = None
+    if _maintenance:
+        _maintenance.join(timeout=10)
+        _maintenance = None
 
 
 mail_module.on_start.append(_startup)
@@ -256,6 +276,12 @@ def _wake() -> None:
 
 
 def check_now() -> None:
+    if _sync:
+        with _sync.ctx.bus.db.transaction() as tx:
+            tx.execute(
+                "UPDATE mail_outbox SET failed_at=NULL,error=NULL,attempts=0 WHERE account=? AND failed_at IS NOT NULL",
+                (_sync.account,),
+            )
     _wake()
 
 
@@ -530,6 +556,14 @@ def get_status(query: GetMailStatus, ctx: Context) -> MailStatus:
             **kept,
         )
     live = _sync.status
+    failed_ops = ctx.bus.db.fetch_all(
+        "SELECT COUNT(*) AS n FROM mail_outbox WHERE account=? AND failed_at IS NOT NULL", (active,)
+    )[0]["n"]
+    failure = (
+        "A saved mail change could not sync. Run Mail sync from Pipelines to retry."
+        if failed_ops
+        else None
+    )
     return MailStatus(
         **{
             **kept,
@@ -540,8 +574,8 @@ def get_status(query: GetMailStatus, ctx: Context) -> MailStatus:
             "last_found_at": live.last_found_at,
         },
         account=active,
-        state=live.state,
-        message=live.message,
+        state="failed" if failed_ops and live.state == "live" else live.state,
+        message=live.message or failure,
         messages=count,
         pulled=pulled,
         backfill_remaining=live.backfill_remaining,
@@ -710,6 +744,29 @@ def set_read(command: SetThreadRead, ctx: Context) -> MailDone:
     return MailDone()
 
 
+@mail_module.command("mail.markFolderRead")
+def mark_folder_read(command: MarkFolderRead, ctx: Context) -> MailDone:
+    """Snapshot downloaded conversations in this scope; repeated calls are safe after partial failure."""
+    account = accounts.current_account(ctx.config)
+    where = [
+        "account = ?",
+        "unread_count > 0",
+        store.IN_LOCATION if command.location else store.FOLDER_FILTERS[command.folder],
+    ]
+    params: list[object] = [account, account, command.location] if command.location else [account]
+    if command.category:
+        where.append(store.IN_CATEGORY)
+        params.extend([command.category, command.category])
+    rows = ctx.bus.db.fetch_all(
+        f"SELECT id FROM threads WHERE {' AND '.join(where)} ORDER BY id",  # noqa: S608
+        params,
+    )
+    for row in rows:
+        # Use the regular read path: all copies get durable, retried IMAP outbox work.
+        set_read(SetThreadRead(id=row["id"], read=True), ctx)
+    return MailDone()
+
+
 @mail_module.command("thread.setFlag")
 def set_flag(command: SetThreadFlag, ctx: Context) -> MailDone:
     messages = _thread_messages(ctx, command.id)
@@ -742,39 +799,70 @@ def set_flag(command: SetThreadFlag, ctx: Context) -> MailDone:
 
 @mail_module.command("thread.move")
 def move_thread(command: MoveThread, ctx: Context) -> MailDone:
-    messages = _thread_messages(ctx, command.id)
+    _thread_messages(ctx, command.id)
+    if command.to not in {"inbox", "archive", "trash"}:
+        raise CommandError("thread.invalid_move", "Choose Inbox, Archive or Trash.", 422)
     with ctx.bus.unit_of_work() as work:
+        fields = "category,category_source,extra_categories,importance,status,next_action,follow_up_on,followup_notified,why"
+        before = tuple(
+            work.tx.execute(f"SELECT {fields} FROM threads WHERE id=?", (command.id,)).fetchone()
+        )
+        messages = work.tx.execute(
+            "SELECT * FROM messages WHERE thread_id = ?", (command.id,)
+        ).fetchall()
         for message in messages:
-            if message["folder_role"] != "inbox":
+            places = store.locations_of(work.tx, message["id"])
+            sources = [
+                place for place in places if place["role"] in {"inbox", "archive", "trash", "all"}
+            ]
+            if not sources or (
+                command.to != "inbox" and not any(p["role"] == "inbox" for p in sources)
+            ):
                 continue
-            account = str(message["account"])
+            account = message["account"]
             settings = store.sync_settings(ctx.bus.db, account)
             refused = command.to in DELETING_ROLES and (not settings or settings["never_delete"])
-            # Refused moves would only ever be refused again, so they stay on this computer.
-            if not refused:
+            server = [p for p in sources if not p["folder"].startswith(LOCAL_PREFIXES)]
+            if server and not refused:
+                source = min(server, key=lambda place: store.ROLE_RANK.get(place["role"], 99))
                 _outbox(
                     work.tx,
                     account,
                     "move",
                     {
                         "message": message["id"],
-                        "folder": message["folder"],
-                        "uid": message["uid"],
+                        "folder": source["folder"],
+                        "uid": source["uid"],
                         "role": command.to,
                     },
                 )
-            # Filed here straight away. Mail not otherwise downloaded would never come back.
+            work.tx.execute(
+                "UPDATE messages SET local_role=? WHERE id=?", (command.to, message["id"])
+            )
+            # Keep a local copy through server failures, restarts, or a refused delete.
             store.add_location(
-                work.tx,
-                int(str(message["id"])),
-                account,
-                f"local:{command.to}",
+                work.tx, message["id"], account, f"local:{command.to}", command.to, message["id"]
+            )
+            for place in sources:
+                if (
+                    place["folder"].startswith("local:")
+                    and place["folder"] != f"local:{command.to}"
+                ):
+                    store.remove_location(work.tx, account, place["folder"], place["uid"])
+        store.refresh_thread(work.tx, command.id)
+        after = tuple(
+            work.tx.execute(f"SELECT {fields} FROM threads WHERE id=?", (command.id,)).fetchone()
+        )
+        work.tx.execute(
+            "INSERT INTO mail_move_checks(account,thread,target,preserved,time) VALUES(?,?,?,?,?)",
+            (
+                messages[0]["account"],
+                command.id,
                 command.to,
-                int(str(message["id"])),
-            )
-            store.remove_location(
-                work.tx, account, str(message["folder"]), int(str(message["uid"]))
-            )
+                int(before == after),
+                datetime.now(UTC).isoformat(),
+            ),
+        )
         _changed(work, ctx, command.id, "folder", command.to)
     _wake()
     return MailDone()
@@ -849,7 +937,7 @@ def add_category(command: ChangeThreadCategory, ctx: Context) -> MailDone:
         elif command.name != rows[0]["category"]:
             extras = {*json.loads(rows[0]["extra_categories"]), command.name}
             work.tx.execute(
-                "UPDATE threads SET extra_categories = ? WHERE id = ?",
+                "UPDATE threads SET extra_categories = ?, category_source = 'user' WHERE id = ?",
                 (json.dumps(sorted(extras)), command.id),
             )
         _changed(work, ctx, command.id, "category", command.name)
@@ -873,13 +961,14 @@ def remove_thread_category(command: ChangeThreadCategory, ctx: Context) -> MailD
                 "UPDATE threads SET category = ?, category_source = ?, why = ? WHERE id = ?",
                 (
                     main,
-                    "user" if main else None,
+                    "user",
                     "You chose this category" if main else None,
                     command.id,
                 ),
             )
         work.tx.execute(
-            "UPDATE threads SET extra_categories = ? WHERE id = ?", (json.dumps(extras), command.id)
+            "UPDATE threads SET extra_categories = ?, category_source = 'user' WHERE id = ?",
+            (json.dumps(extras), command.id),
         )
         _changed(work, ctx, command.id, "category", command.name)
     return MailDone()
@@ -929,7 +1018,7 @@ def set_category(command: SetThreadCategory, ctx: Context) -> MailDone:
         old = work.tx.execute("SELECT category FROM threads WHERE id=?", (command.id,)).fetchone()[
             0
         ]
-        source = "user" if command.category else None
+        source = "user"
         why = "You chose this category" if command.category else None
         work.tx.execute(
             "UPDATE threads SET category = ?, category_source = ?, why = ? WHERE id = ?",
@@ -1007,9 +1096,9 @@ def category_rows(ctx: Context) -> list[MailCategory]:
         row["name"]: (row["n"], row["unread"])
         for row in db.fetch_all(
             "SELECT name, COUNT(*) AS n, SUM(unread_count > 0) AS unread FROM ("
-            " SELECT category AS name, unread_count FROM threads WHERE account = ?"
+            " SELECT category AS name, id AS thread, unread_count FROM threads WHERE account = ?"
             " AND category IS NOT NULL AND (in_inbox = 1 OR in_archive = 1)"
-            " UNION ALL SELECT e.value, t.unread_count FROM threads t, json_each(t.extra_categories) e"
+            " UNION SELECT e.value, t.id, t.unread_count FROM threads t, json_each(t.extra_categories) e"
             " WHERE t.account = ? AND t.extra_categories != '[]' AND (t.in_inbox = 1 OR t.in_archive = 1)"
             ") GROUP BY name",
             (account, account),
@@ -1048,6 +1137,8 @@ def category_rows(ctx: Context) -> list[MailCategory]:
         found.append(
             MailCategory(
                 name=row["name"],
+                mode=row["mode"],
+                description=row["description"],
                 source=row["source"],
                 in_priority=bool(row["in_priority"]),
                 proposed=row["proposed"] == SUGGESTED,
@@ -1088,45 +1179,88 @@ def category_rows(ctx: Context) -> list[MailCategory]:
     )
 
 
-def _apply_category_rule(ctx: Context, name: str, sender: str | None, subject: str | None) -> int:
+def _apply_category_rule(
+    ctx: Context, name: str, sender: str | None, subject: str | None, *, refile: bool = True
+) -> int:
     """Mail from now on follows the rule, and what's already here is filed too."""
     conditions = []
     if sender:
-        conditions.append(RuleCondition(field="sender", value=sender))
+        conditions.append(RuleCondition(field="sender_exact", value=sender))
     if subject:
-        conditions.append(RuleCondition(field="subject", value=subject))
+        conditions.append(RuleCondition(field="subject_prefix", value=subject))
     rule_name = CATEGORY_RULE_PREFIX + name
 
     def changed(existing: list[MailRule]) -> list[MailRule]:
-        kept = [rule for rule in existing if rule.name != rule_name]
+        kept = [
+            rule
+            for rule in existing
+            if rule.name != rule_name
+            and not (rule.name.startswith(rule_name + ": ") and not conditions)
+        ]
         if conditions:
             kept.append(
-                MailRule(name=rule_name, conditions=conditions, actions=RuleActions(category=name))
+                MailRule(
+                    name=rule_name,
+                    conditions=conditions,
+                    actions=RuleActions(category=name, skip_agent=True),
+                )
             )
         return kept
 
     rules.change_rules(ctx.config.home, changed)
-    if not conditions:
+    if not conditions or not refile:
         return 0
-    where = ["t.id = m.thread_id"]
-    params: list[object] = []
-    if sender:
-        where.append("(m.from_addr LIKE ? OR m.from_name LIKE ?)")
-        params += [f"%{sender}%", f"%{sender}%"]
-    if subject:
-        where.append("m.subject LIKE ?")
-        params.append(f"%{subject}%")
+    current_rules = ordered_rules(ctx)
+    active = accounts.current_account(ctx.config)
+    _, profiles = accounts.read_accounts(ctx.config)
+    profile = profiles.get(active)
+    domain = own_domain_of(profile.address or profile.auth.user) if profile else None
+    changed_threads: set[int] = set()
+    # Latest-message provenance and primary/extra filing are determined together.
     with ctx.bus.db.transaction() as tx:
-        cursor = tx.execute(
-            "UPDATE threads AS t SET category = ?, category_source = 'rule', why = ? WHERE"  # noqa: S608
-            " COALESCE(t.category_source, '') != 'user' AND EXISTS"
-            f" (SELECT 1 FROM messages m WHERE {' AND '.join(where)})",
-            (name, f"Matched the category “{name}”", *params),
-        )
-        return int(cursor.rowcount)
+        rows = tx.execute(
+            "SELECT m.id,m.thread_id FROM messages m WHERE m.account=? AND m.id=(SELECT id FROM messages WHERE thread_id=m.thread_id ORDER BY date DESC,id DESC LIMIT 1)",
+            (active,),
+        ).fetchall()
+        for row in rows:
+            raw = store.raw_of(ctx.bus.db, row["id"])
+            if raw is None:
+                continue
+            match = rules.evaluate(parse_message(raw), current_rules, domain, folder_modes(ctx))
+            if not match or not match.actions.category:
+                continue
+            if name not in {match.actions.category, *match.extra_categories}:
+                continue
+            tx.execute(
+                "UPDATE messages SET rule=?,why=? WHERE id=?", (match.name, match.why, row["id"])
+            )
+            tx.execute(
+                "UPDATE threads SET latest_rule=? WHERE id=?", (match.name, row["thread_id"])
+            )
+            current = tx.execute(
+                "SELECT category_source,extra_categories FROM threads WHERE id=?",
+                (row["thread_id"],),
+            ).fetchone()
+            if current and current["category_source"] != "user":
+                extras = list(
+                    dict.fromkeys(
+                        [*json.loads(current["extra_categories"]), *match.extra_categories]
+                    )
+                )
+                tx.execute(
+                    "UPDATE threads SET category=?,category_source='rule',why=?,extra_categories=? WHERE id=?",
+                    (
+                        match.actions.category,
+                        match.why,
+                        json.dumps([extra for extra in extras if extra != match.actions.category]),
+                        row["thread_id"],
+                    ),
+                )
+                changed_threads.add(row["thread_id"])
+    return len(changed_threads)
 
 
-SUBJECT_REPLY_PREFIXES = ("", "Re: ", "Fwd: ", "Fw: ")
+SUBJECT_REPLY_PREFIXES = ("",)
 
 
 def _add_starter_categories(ctx: Context) -> None:
@@ -1154,7 +1288,7 @@ def _add_starter_categories(ctx: Context) -> None:
                 MailRule(
                     name=rule_name,
                     conditions=[condition],
-                    actions=RuleActions(category=name, skip_agent=True, read_replies=True),
+                    actions=RuleActions(category=name, skip_agent=True, read_replies=False),
                 ),
             ]
 
@@ -1180,6 +1314,203 @@ def _add_starter_categories(ctx: Context) -> None:
             (datetime.now(UTC).isoformat(),),
         )
     _categories_changed(ctx)
+
+
+def _organization_defaults(ctx: Context) -> None:
+    """Idempotent upgrades for existing Homes; never reinstate a folder the person removed."""
+    marker = "mail_organization_defaults_001"
+    if ctx.bus.db.fetch_all("SELECT 1 FROM migrations WHERE id = ?", (marker,)):
+        return
+    defaults = {
+        "Updates": "exact",
+        "Promotions": "exact",
+        "Forums": "exact",
+        "Social": "exact",
+        "Broadcast": "smart",
+    }
+    with ctx.bus.db.transaction() as tx:
+        for name, mode in defaults.items():
+            tx.execute(
+                "INSERT OR IGNORE INTO mail_categories (name, source, mode, description, created) VALUES (?, 'rule', ?, ?, ?)",
+                (
+                    name,
+                    mode,
+                    "Mail to many people that no Exact rule caught" if mode == "smart" else name,
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+        tx.execute(
+            "UPDATE mail_categories SET mode = 'exact' WHERE name IN (SELECT name FROM mail_categories WHERE source = 'rule' AND name != 'Broadcast')"
+        )
+
+    existing_rules = rules.load_rules(ctx.config.home)
+    with ctx.bus.db.transaction() as tx:
+        for rule in existing_rules:
+            if not rule.actions.category:
+                continue
+            sender = next(
+                (
+                    condition.value
+                    for condition in rule.conditions
+                    if condition.field in {"sender", "sender_exact"}
+                ),
+                None,
+            )
+            subject = next(
+                (
+                    condition.value
+                    for condition in rule.conditions
+                    if condition.field in {"subject", "subject_prefix"}
+                ),
+                None,
+            )
+            if not (sender or subject):
+                continue
+            tx.execute(
+                "INSERT OR IGNORE INTO mail_categories(name,source,mode,description,sender,subject,created) VALUES(?,'rule','exact','',?,?,?)",
+                (rule.actions.category, sender, subject, datetime.now(UTC).isoformat()),
+            )
+            tx.execute(
+                "UPDATE mail_categories SET mode='exact',sender=COALESCE(sender,?),subject=COALESCE(subject,?) WHERE name=?",
+                (sender, subject, rule.actions.category),
+            )
+
+    def upgraded(existing: list[MailRule]) -> list[MailRule]:
+        starters = {item["name"] for item in ctx.config.mail.starter_categories}
+        result = []
+        for rule in existing:
+            if rule.actions.category in starters and rule.name == CATEGORY_RULE_PREFIX + str(
+                rule.actions.category
+            ):
+                rule = rule.model_copy(
+                    update={
+                        "actions": rule.actions.model_copy(
+                            update={"read_replies": False, "skip_agent": True}
+                        )
+                    }
+                )
+            result.append(rule)
+        return result
+
+    rules.change_rules(ctx.config.home, upgraded)
+    with ctx.bus.db.transaction() as tx:
+        tx.execute("INSERT INTO migrations (id) VALUES (?)", (marker,))
+
+
+def _organization_provenance(ctx: Context) -> None:
+    marker = "mail_organization_provenance_001"
+    if ctx.bus.db.fetch_all("SELECT 1 FROM migrations WHERE id=?", (marker,)):
+        return
+    try:
+        last = 0
+        home_rules = ordered_rules(ctx)
+        _, profiles = accounts.read_accounts(ctx.config)
+        while not _closing.is_set():
+            rows = ctx.bus.db.fetch_all(
+                "SELECT id,thread_id,account FROM messages WHERE id>? ORDER BY id LIMIT ?",
+                (last, KINDS_BATCH),
+            )
+            if not rows:
+                with ctx.bus.db.transaction() as tx:
+                    tx.execute("INSERT OR IGNORE INTO migrations(id) VALUES(?)", (marker,))
+                if last:
+                    _categories_changed(ctx)
+                return
+            with ctx.bus.db.transaction() as tx:
+                for row in rows:
+                    raw = store.raw_of(ctx.bus.db, row["id"])
+                    if raw is None:
+                        continue
+                    profile = profiles.get(row["account"])
+                    domain = (
+                        own_domain_of(profile.address or profile.auth.user) if profile else None
+                    )
+                    match = rules.evaluate(
+                        parse_message(raw), home_rules, domain, folder_modes(ctx)
+                    )
+                    tx.execute(
+                        "UPDATE messages SET rule=? WHERE id=?",
+                        (match.name if match else None, row["id"]),
+                    )
+                    store.refresh_thread(tx, row["thread_id"])
+            last = rows[-1]["id"]
+    except Exception:
+        log.exception("mail_organization_provenance_failed")
+
+
+def folder_modes(ctx: Context) -> dict[str, str]:
+    return {
+        row["name"]: row["mode"]
+        for row in ctx.bus.db.fetch_all("SELECT name,mode FROM mail_categories WHERE proposed=0")
+    }
+
+
+def ordered_rules(ctx: Context) -> list[MailRule]:
+    existing = rules.load_rules(ctx.config.home)
+    folders = ctx.bus.db.fetch_all("SELECT * FROM mail_categories WHERE proposed=0")
+    generated = {
+        CATEGORY_RULE_PREFIX + row["name"] for row in folders if row["sender"] or row["subject"]
+    }
+    kept = [rule for rule in existing if rule.name not in generated]
+    for folder in folders:
+        conditions = []
+        if folder["mode"] != "exact":
+            continue
+        rule_name = CATEGORY_RULE_PREFIX + folder["name"]
+        canonical = next((rule for rule in existing if rule.name == rule_name), None)
+        related = [rule for rule in existing if rule.actions.category == folder["name"]]
+        # Arbitrary personal rules can include body/header conditions that folder settings
+        # cannot represent. Never broaden those rules into a sender-only match.
+        if canonical is None and related:
+            continue
+        if canonical and (
+            any(
+                condition.field not in {"sender", "sender_exact", "subject", "subject_prefix"}
+                for condition in canonical.conditions
+            )
+            or sum(
+                condition.field in {"sender", "sender_exact"} for condition in canonical.conditions
+            )
+            > 1
+            or sum(
+                condition.field in {"subject", "subject_prefix"}
+                for condition in canonical.conditions
+            )
+            > 1
+        ):
+            kept.append(canonical)
+            continue
+        if folder["sender"]:
+            conditions.append(RuleCondition(field="sender_exact", value=folder["sender"]))
+        if folder["subject"]:
+            conditions.append(RuleCondition(field="subject_prefix", value=folder["subject"]))
+        if conditions:
+            kept.append(
+                MailRule(
+                    name=rule_name,
+                    enabled=canonical.enabled if canonical else True,
+                    conditions=conditions,
+                    actions=canonical.actions.model_copy(
+                        update={
+                            "category": folder["name"],
+                            "skip_agent": True,
+                            "read_replies": False,
+                        }
+                    )
+                    if canonical
+                    else RuleActions(category=folder["name"], skip_agent=True),
+                )
+            )
+    return rules.for_folders(
+        kept,
+        folders,
+        {item["name"] for item in ctx.config.mail.starter_categories},
+    )
+
+
+def sender_rule_name(category: str, sender: str) -> str:
+    suffix = hashlib.sha256(sender.casefold().encode()).hexdigest()[:12]
+    return f"Category: {category}: {suffix}"
 
 
 def file_by_sender(ctx: Context, name: str, sender: str) -> int:
@@ -1232,6 +1563,10 @@ def list_categories(query: ListCategories, ctx: Context) -> CategoryList:
 
 @mail_module.command("categories.save")
 def save_category(command: SaveCategory, ctx: Context) -> CategorySaved:
+    if command.mode == "exact" and not (command.sender or command.subject):
+        raise CommandError(
+            "category.rule_required", "An Exact folder needs a sender or subject prefix.", 422
+        )
     with ctx.bus.db.transaction() as tx:
         tx.execute(
             "INSERT INTO mail_categories (name, source, in_priority, proposed, sender, subject, created)"
@@ -1247,7 +1582,22 @@ def save_category(command: SaveCategory, ctx: Context) -> CategorySaved:
                 datetime.now(UTC).isoformat(),
             ),
         )
-    filed = _apply_category_rule(ctx, command.name, command.sender, command.subject)
+    mode = command.mode or ("exact" if command.sender or command.subject else "smart")
+    if mode == "exact" and not (command.sender or command.subject):
+        raise CommandError(
+            "category.rule_required", "An Exact folder needs a sender or subject prefix.", 422
+        )
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "UPDATE mail_categories SET mode = ?, description = ? WHERE name = ?",
+            (mode, command.description.strip() or command.name, command.name),
+        )
+    filed = _apply_category_rule(
+        ctx,
+        command.name,
+        command.sender if mode == "exact" else None,
+        command.subject if mode == "exact" else None,
+    )
     _categories_changed(ctx)
     return CategorySaved(categories=category_rows(ctx), filed=filed)
 
@@ -1267,11 +1617,60 @@ def update_category(command: UpdateCategory, ctx: Context) -> CategoryList:
             raise CommandError(
                 "category.exists", f"There's already a category called {new_name}.", 409
             )
-    sender = None if command.clear_rule else command.sender or (row["sender"] if row else None)
-    subject = None if command.clear_rule else command.subject or (row["subject"] if row else None)
+    sender = (
+        None
+        if command.clear_rule
+        else (command.sender or None)
+        if "sender" in command.model_fields_set
+        else (row["sender"] if row else None)
+    )
+    subject = (
+        None
+        if command.clear_rule
+        else (command.subject or None)
+        if "subject" in command.model_fields_set
+        else (row["subject"] if row else None)
+    )
     in_priority = (
         command.in_priority if command.in_priority is not None else bool(row and row["in_priority"])
     )
+    mode = command.mode or (
+        "smart"
+        if command.clear_rule
+        else "exact"
+        if command.sender or command.subject
+        else row["mode"]
+        if row
+        else "smart"
+    )
+    description = (
+        command.description
+        if command.description is not None
+        else (row["description"] if row else new_name)
+    )
+    if (
+        mode == "exact"
+        and not (sender or subject)
+        and command.name not in {"Updates", "Promotions", "Forums", "Social"}
+    ):
+        top = db.fetch_all(
+            "SELECT m.from_addr FROM messages m JOIN threads t ON t.id=m.thread_id WHERE t.account=? AND (t.category=? OR EXISTS(SELECT 1 FROM json_each(t.extra_categories) WHERE value=?)) GROUP BY LOWER(m.from_addr) ORDER BY COUNT(*) DESC LIMIT 1",
+            (accounts.current_account(ctx.config), command.name, command.name),
+        )
+        sender = top[0]["from_addr"] if top else None
+        if not sender:
+            raise CommandError(
+                "category.rule_required", "An Exact folder needs a sender or subject prefix.", 422
+            )
+    if mode == "smart" and row and row["mode"] == "exact" and command.description is None:
+        top = db.fetch_all(
+            "SELECT m.from_addr FROM messages m JOIN threads t ON t.id=m.thread_id WHERE t.account=? AND (t.category=? OR EXISTS(SELECT 1 FROM json_each(t.extra_categories) WHERE value=?)) GROUP BY LOWER(m.from_addr) ORDER BY COUNT(*) DESC LIMIT 3",
+            (accounts.current_account(ctx.config), command.name, command.name),
+        )
+        description = f"{new_name}: {sender or subject or new_name}" + (
+            ". Common senders: " + ", ".join(item["from_addr"] for item in top) if top else ""
+        )
+        description = description[:500]
     now = datetime.now(UTC).isoformat()
     with db.transaction() as tx:
         if row is None:
@@ -1281,8 +1680,8 @@ def update_category(command: UpdateCategory, ctx: Context) -> CategoryList:
             )
         tx.execute(
             "UPDATE mail_categories SET name = ?, in_priority = ?, sender = ?, subject = ?,"
-            " proposed = 0, updated = ? WHERE name = ?",
-            (new_name, int(in_priority), sender, subject, now, command.name),
+            " proposed = 0, updated = ?, mode = ?, description = ? WHERE name = ?",
+            (new_name, int(in_priority), sender, subject, now, mode, description, command.name),
         )
         tx.execute("UPDATE threads SET category = ? WHERE category = ?", (new_name, command.name))
         _rename_extras(tx, {command.name}, new_name)
@@ -1302,7 +1701,13 @@ def update_category(command: UpdateCategory, ctx: Context) -> CategoryList:
             ]
 
         rules.change_rules(ctx.config.home, renamed)
-    _apply_category_rule(ctx, new_name, sender, subject)
+    _apply_category_rule(
+        ctx,
+        new_name,
+        sender if mode == "exact" else None,
+        subject if mode == "exact" else None,
+        refile=False,
+    )
     _categories_changed(ctx)
     return CategoryList(categories=category_rows(ctx))
 
@@ -1314,8 +1719,8 @@ def merge_categories(command: MergeCategories, ctx: Context) -> CategoryList:
     others = [name for name in command.names if name != command.into]
     with db.transaction() as tx:
         tx.execute(
-            "INSERT OR IGNORE INTO mail_categories (name, source, created) VALUES (?, 'user', ?)",
-            (command.into, now),
+            "INSERT OR IGNORE INTO mail_categories (name, source, description, in_priority, created) VALUES (?, 'user', ?, 1, ?)",
+            (command.into, command.into, now),
         )
         for name in others:
             tx.execute("UPDATE threads SET category = ? WHERE category = ?", (command.into, name))
@@ -1369,6 +1774,24 @@ def decide_category(command: DecideCategory, ctx: Context) -> CategoryList:
         raise CommandError("category.not_found", "That category no longer exists.", 404)
     row = rows[0]
     if command.accept:
+        if row["mode"] == "exact" and not (row["sender"] or row["subject"]):
+            senders = ctx.bus.db.fetch_all(
+                "SELECT DISTINCT sender FROM mail_learning_groups WHERE folder=?", (command.name,)
+            )
+            if not senders:
+                raise CommandError(
+                    "category.rule_required",
+                    "Add a sender or prefix before accepting this Exact folder.",
+                    422,
+                )
+            with ctx.bus.db.transaction() as tx:
+                tx.execute(
+                    "UPDATE mail_categories SET sender=? WHERE name=?",
+                    (senders[0]["sender"], command.name),
+                )
+            row = ctx.bus.db.fetch_all(
+                "SELECT * FROM mail_categories WHERE name=?", (command.name,)
+            )[0]
         save_category(
             SaveCategory(
                 name=row["name"],
@@ -1376,9 +1799,33 @@ def decide_category(command: DecideCategory, ctx: Context) -> CategoryList:
                 sender=row["sender"],
                 subject=row["subject"],
                 source="agent",
+                mode=row["mode"],
+                description=row["description"],
             ),
             ctx,
         )
+        if row["mode"] == "exact":
+            senders = ctx.bus.db.fetch_all(
+                "SELECT DISTINCT sender FROM mail_learning_groups WHERE folder=?", (command.name,)
+            )
+
+            def add_group_rules(existing: list[MailRule]) -> list[MailRule]:
+                names = {rule.name for rule in existing}
+                for sender in senders:
+                    rule_name = sender_rule_name(command.name, sender["sender"])
+                    if rule_name not in names:
+                        existing.append(
+                            MailRule(
+                                name=rule_name,
+                                conditions=[
+                                    RuleCondition(field="sender_exact", value=sender["sender"])
+                                ],
+                                actions=RuleActions(category=command.name, skip_agent=True),
+                            )
+                        )
+                return existing
+
+            rules.change_rules(ctx.config.home, add_group_rules)
         # The agent already read this mail when it suggested the name, so nothing is read again.
         with ctx.bus.db.transaction() as tx:
             tx.execute(
@@ -1387,6 +1834,13 @@ def decide_category(command: DecideCategory, ctx: Context) -> CategoryList:
                 " AND COALESCE(category_source, '') NOT IN ('user', 'rule')",
                 (row["name"], row["name"]),
             )
+        group_reviews = ctx.bus.db.fetch_all(
+            "SELECT 1 FROM mail_learning_reviews WHERE state IN ('learning','asking') LIMIT 1"
+        )
+        if not group_reviews:
+            from nexusai.modules.agent import bulk_learning
+
+            bulk_learning.finalize(ctx)
         _categories_changed(ctx)
     else:
         with ctx.bus.db.transaction() as tx:
@@ -1769,3 +2223,43 @@ def pst_resume(command: PstImportAction, ctx: Context) -> PstImports:
         )
     pst.runner.kick(ctx)
     return _pst_rows(ctx)
+
+
+@mail_module.command("categories.sort")
+def sort_category(command: SortCategory, ctx: Context) -> CategorySortEstimate:
+    """Explicit historical sorting, with a cost estimate before any model work is queued."""
+    from nexusai.modules.agent import mail_agent
+    from nexusai.modules.agent import module as agent
+
+    rows = ctx.bus.db.fetch_all(
+        "SELECT * FROM mail_categories WHERE name=? AND proposed=0", (command.name,)
+    )
+    if not rows:
+        raise CommandError("category.not_found", "That folder no longer exists.", 404)
+    folder = rows[0]
+    candidates = ctx.bus.db.fetch_all(
+        "SELECT t.id,m.id AS message,t.decision_version FROM threads t JOIN messages m ON m.id=(SELECT id FROM messages WHERE thread_id=t.id ORDER BY date DESC,id DESC LIMIT 1) WHERE t.account=? AND t.in_trash=0 AND t.in_junk=0 AND COALESCE(t.category_source,'')!='user' ORDER BY t.last_date DESC,t.id DESC",
+        (accounts.current_account(ctx.config),),
+    )
+    tokens = (
+        len(candidates) * mail_agent.APPROX_TOKENS_PER_MESSAGE if folder["mode"] == "smart" else 0
+    )
+    if not command.confirm:
+        return CategorySortEstimate(conversations=len(candidates), estimated_tokens=tokens)
+    if folder["mode"] == "exact":
+        count = _apply_category_rule(ctx, folder["name"], folder["sender"], folder["subject"])
+        _categories_changed(ctx)
+        return CategorySortEstimate(conversations=len(candidates), estimated_tokens=0, queued=count)
+    for row in candidates:
+        mail_agent.enqueue(
+            ctx,
+            row["message"],
+            row["id"],
+            event=f"refile-{command.name}-{row['message']}-{row['decision_version']}",
+        )
+    dispatcher = agent._triggers
+    if dispatcher:
+        dispatcher.wake.set()
+    return CategorySortEstimate(
+        conversations=len(candidates), estimated_tokens=tokens, queued=len(candidates)
+    )

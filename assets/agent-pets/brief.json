@@ -1,0 +1,25 @@
+{
+  "scope": "NexusAI local animated avatars; not a ChatGPT Work upload or full v2 roaming pet.",
+  "requested_states": [
+    "idle"
+  ],
+  "core_agents": {
+    "session": "pip",
+    "mail": "post",
+    "interview": "moss",
+    "daily-prep": "dawn",
+    "scheduled": "tick"
+  },
+  "mail_runs": {
+    "mail-reader": "post",
+    "inbox-review": "post"
+  },
+  "helpers": {
+    "summary": "dawn",
+    "draft-reply": "post",
+    "compact": "pip"
+  },
+  "names_are": "Suggested mascot names alongside existing functional agent labels.",
+  "style": "One original family of compact rounded birds; terracotta, blue, sage, gold and plum; cream markings and charcoal eyes; clean matte sticker illustration; no props or detached effects.",
+  "animation": "Six generated idle poses per avatar; connected pose extraction and row inspection through the installed skill; stable shared scale and baseline; no CSS-synthesized character frames."
+}

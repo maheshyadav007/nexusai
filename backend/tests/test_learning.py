@@ -1,6 +1,7 @@
 """After mail syncs, the Mail agent reads past mail to learn about the person, then goes live."""
 # ruff: noqa: F811
 
+import re
 from collections.abc import Iterator
 from dataclasses import replace
 from typing import Any
@@ -22,7 +23,7 @@ from test_agent_work import (  # noqa: F401
     triage_reply,
     wait,
 )
-from test_chat_engine import status, view
+from test_chat_engine import view
 
 
 @pytest.fixture
@@ -52,112 +53,97 @@ def state(client: TestClient) -> str:
     return str(rows[0]["value"]) if rows else ""
 
 
-def replying(script: Script, notes: list[str]) -> None:
-    """Judges past mail with a note, wraps up when asked, and asks nothing else."""
-
+def replying(script: Script, notes: list[str], *, uncertain: bool = False) -> None:
     def stream(request: Any) -> Iterator[Any]:
         script.requests.append(request)
-        names = {tool.name for tool in request.tools}
-        if "record_triage" in names:
+        text = "\n".join(str(message.text) for message in request.messages)
+        ids = list(dict.fromkeys(re.findall(r'"id": "([^"]+)"', text)))
+        if ids:
             yield ToolCall(
-                "call-triage",
+                "learn-groups",
                 "record_triage",
                 {
-                    "category": "Work",
-                    "importance": "high",
-                    "status": "waiting_on_you",
-                    "summary": "A summary.",
-                    "reason": "A reason.",
-                    "learned": notes,
-                    "question": "Should anyone see this?",
-                    "tasks": [{"title": "Should not be added"}],
+                    "groups": [
+                        {
+                            "id": key,
+                            "importance": "low",
+                            "note": "; ".join(notes),
+                            "uncertain": uncertain,
+                        }
+                        for key in ids
+                    ]
                 },
             )
-        elif "save_what_i_learned" in names and not memory.learned(HOME[0]).startswith("Role"):
-            yield ToolCall("call-save", "save_what_i_learned", {"summary": "Role: engineer."})
         else:
-            yield TextChunk("Here's what I learned.")
+            yield TextChunk("What should matter most about this sender?")
 
     script.stream = stream  # type: ignore[method-assign]
 
 
-def test_it_reads_the_newest_mail_rules_missed_oldest_first_then_starts_the_interview(
+def test_it_learns_groups_then_asks_before_marking_and_does_not_create_old_work(
     client: TestClient, script: Script, fake: FakeMail, app_config: Config
 ) -> None:
-    replying(script, ["Works with Priya on the budget."])
+    replying(script, ["Works with Priya on the budget."], uncertain=True)
     for number in range(5):
         fake.state.deliver(
             make_mail(subject=f"Past {number}", date=f"Mon, 0{number + 1} Jan 2024 10:00:00 +0000")
         )
-    # Rules catch this one, so it's never read and uses no tokens.
     fake.state.deliver(make_mail(subject="Sale", headers={"List-Unsubscribe": "<mailto:u@x>"}))
     connect(client, fake)
-    wait(lambda: state(client) == "done", "reading to finish")
-    read = [text for text in said(client) if "past mail" in text and " of " in text]
-    assert [text.split(": ", 1)[0] for text in read] == [
-        "Read my past mail so you learn how I work, 1 of 3",
-        "Read my past mail so you learn how I work, 2 of 3",
-        "Read my past mail so you learn how I work, 3 of 3",
-    ]
-    subjects = [text.rsplit(", ", 1)[1].rstrip(".") for text in read]
-    assert subjects == ["Past 2", "Past 3", "Past 4"]
-    assert not any("Sale" in text for text in said(client))
+    wait(lambda: state(client) == "asking", "group learning to ask")
+    assert said(client) == ["Learn 1 sender groups from past mail."]
+    notes = memory.learned(app_config.home)
+    assert "Guess from mail: Works with Priya" in notes
+    assert not client.post("/api/queries/tasks.list").json()["tasks"]
+    old = thread_named(client, "Past 3")
+    assert old["importance"] == "normal" and old["category"] is None
 
-    # What it learned is kept, once, and it's told as data when it comes back.
-    assert memory.learned(app_config.home).strip() == "Role: engineer."
-    assert any("what you've learned" in line for line in said(client))
+    def interviews() -> list[dict[str, Any]]:
+        return [
+            row
+            for row in client.post("/api/queries/sessions.list", json={}).json()["sessions"]
+            if row["agent"] == "interview"
+        ]
 
-    # Old mail can't ask, notify or add work, however it reads.
-    assert client.post("/api/queries/channel.list").json().get("items", []) == []
-    assert client.post("/api/queries/tasks.list").json()["tasks"] == []
-    thread = thread_named(client, "Past 3")
-    assert thread["importance"] == "normal"
-    assert thread["category"] == "Work"
-
-    # Then the Interview, once, with those notes marked as coming from mail.
-    def interview() -> list[dict[str, Any]]:
-        rows = client.post("/api/queries/sessions.list", json={}).json()["sessions"]
-        return [row for row in rows if row["agent"] == "interview"]
-
-    wait(interview, "the Interview to start")
-    session = interview()[0]["id"]
-    wait(lambda: status(client, session) not in {"queued", "running"}, "its first answer")
-    assert said(client, session) == ["Let's get set up. Ask me what you need to know."]
-    # Found by what it says, because the inbox review can run alongside it.
-    words = next(
-        request.messages[-1].text
-        for request in reversed(script.requests)
-        if "Role: engineer." in request.messages[-1].text
-    )
-    assert words.index("<untrusted>") < words.index("Role: engineer.") < words.index("</untrusted>")
-    assert len(interview()) == 1
+    wait(interviews, "new uncertainty interview")
+    assert len(interviews()) == 1
+    answer = client.post("/api/commands/mail.learning.finish", json={})
+    assert answer.is_success, answer.text
+    wait(lambda: state(client) == "done", "marking to finish")
+    assert thread_named(client, "Past 3")["importance"] == "high"
+    assert not client.post("/api/queries/tasks.list").json()["tasks"]
 
 
-def test_it_goes_ahead_with_less_once_no_more_mail_is_coming(
+def test_one_group_finishes_without_interview_when_nothing_new_is_unclear(
     client: TestClient, script: Script, fake: FakeMail
 ) -> None:
     replying(script, [])
-    fake.state.deliver(make_mail(subject="Only one"))
+    fake.state.deliver(make_mail(subject="Only one", date="Mon, 01 Jan 2024 10:00:00 +0000"))
     connect(client, fake)
-    wait(lambda: state(client) == "done", "reading to finish")
-    assert any("1 of 1" in text for text in said(client))
+    wait(lambda: state(client) == "done", "group learning to finish")
+    assert said(client) == ["Learn 1 sender groups from past mail."]
+    assert not [
+        row
+        for row in client.post("/api/queries/sessions.list", json={}).json()["sessions"]
+        if row["agent"] == "interview"
+    ]
 
 
-def test_new_mail_goes_ahead_of_past_mail_and_is_judged_as_new(
+def test_new_mail_still_gets_a_live_judgement_after_group_learning(
     client: TestClient, script: Script, fake: FakeMail
 ) -> None:
     replying(script, [])
     for number in range(3):
-        fake.state.deliver(make_mail(subject=f"Old {number}"))
+        fake.state.deliver(
+            make_mail(subject=f"Old {number}", date="Mon, 01 Jan 2024 10:00:00 +0000")
+        )
     connect(client, fake)
-    wait(lambda: state(client) == "done", "reading to finish")
+    wait(lambda: state(client) == "done", "group learning to finish")
     del script.stream
-    # The Interview may ask first, so this isn't the next reply so much as every one.
     script.default = triage_reply(importance="high")
     fake.state.deliver(make_mail(subject="Brand new"))
-    wait(lambda: any("Brand new" in text for text in said(client)), "the new mail to run")
+    wait(lambda: thread_named(client, "Brand new")["importance"] == "high", "new mail judgement")
     assert any(text.startswith("New email from") for text in said(client))
-    wait(lambda: thread_named(client, "Brand new")["importance"] == "high", "it to be judged high")
 
 
 def test_a_note_can_only_reach_the_mail_agent_and_only_as_data(app_config: Config) -> None:

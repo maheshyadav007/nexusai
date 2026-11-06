@@ -1,0 +1,88 @@
+{
+  "pairs": [
+    {
+      "pair": "horizontal-1",
+      "A": "ambiguous",
+      "B": "screen-right",
+      "reason": "A pupils appear horizontally centered within their white eye areas; B pupils sit close to the right edges with more white on their left."
+    },
+    {
+      "pair": "horizontal-2",
+      "A": "screen-right",
+      "B": "screen-left",
+      "reason": "A pupils are at the right edges of both eye whites; B pupils are at the left edges with white extending rightward."
+    },
+    {
+      "pair": "horizontal-3",
+      "A": "screen-left",
+      "B": "screen-right",
+      "reason": "A pupils hug the left sides of the eye whites; B pupils hug the right sides."
+    },
+    {
+      "pair": "horizontal-4",
+      "A": "screen-right",
+      "B": "screen-left",
+      "reason": "A has white extending mainly leftward from the pupils; B has white extending mainly rightward."
+    },
+    {
+      "pair": "horizontal-5",
+      "A": "screen-right",
+      "B": "screen-left",
+      "reason": "A pupils are toward the right ends of the short eye whites; B pupils occupy the left ends."
+    },
+    {
+      "pair": "horizontal-6",
+      "A": "screen-right",
+      "B": "screen-left",
+      "reason": "A left-eye pupil is clearly toward the right of its white, and the other pupil is also on the rightward side overall; B pupils sit toward the left sides."
+    },
+    {
+      "pair": "horizontal-7",
+      "A": "screen-left",
+      "B": "screen-right",
+      "reason": "A pupils sit near the left edges at the bottoms of their eye whites; B pupils sit near the right edges."
+    },
+    {
+      "pair": "vertical-1",
+      "A": "down",
+      "B": "up",
+      "reason": "A pupils sit at the bottom of tall white eye areas; B pupils sit along the top with white below."
+    },
+    {
+      "pair": "vertical-2",
+      "A": "up",
+      "B": "down",
+      "reason": "A pupils touch the upper parts of the eye whites; B pupils are at the bottom with white above."
+    },
+    {
+      "pair": "vertical-3",
+      "A": "down",
+      "B": "up",
+      "reason": "A pupils occupy the bottom of their white eye areas; B pupils occupy the top."
+    },
+    {
+      "pair": "vertical-4",
+      "A": "up",
+      "B": "down",
+      "reason": "A pupils sit at the upper edges of the eye whites; B pupils sit at the lower edges of shallower eye whites."
+    },
+    {
+      "pair": "vertical-5",
+      "A": "up",
+      "B": "down",
+      "reason": "A pupils sit high with white extending below; B pupils sit low with white extending above."
+    },
+    {
+      "pair": "vertical-6",
+      "A": "down",
+      "B": "up",
+      "reason": "A pupils sit at the lower edges of their whites; B pupils sit along the upper edges."
+    },
+    {
+      "pair": "vertical-7",
+      "A": "ambiguous",
+      "B": "ambiguous",
+      "reason": "Both A and B pupils appear around the vertical middle of the white eye areas, with visible white above and below; neither has a clear upward or downward offset."
+    }
+  ]
+}

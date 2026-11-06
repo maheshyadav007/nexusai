@@ -254,10 +254,10 @@ def writing_samples(ctx: Context, sender: str, account: str | None = None) -> li
 MOST_FEW_THREADS = 3
 
 
-def sender_table(ctx: Context) -> str:
+def sender_table(ctx: Context, account: str | None = None) -> str:
     """The inbox by sender, for recommending where whole groups of mail should go."""
     db = ctx.bus.db
-    account = accounts.current_account(ctx.config)
+    account = account or accounts.current_account(ctx.config)
     own = own_addresses(ctx)
     engaged = _written_in(ctx, own)
     broad = ", ".join(f"'{name}'" for name in BROAD_CATEGORIES)
@@ -276,8 +276,8 @@ def sender_table(ctx: Context) -> str:
             continue
         threads = {int(item) for item in str(row["threads"]).split(",")}
         subjects = db.fetch_all(
-            "SELECT DISTINCT subject FROM messages WHERE LOWER(from_addr) = ? ORDER BY date DESC LIMIT 2",
-            (row["sender"],),
+            "SELECT DISTINCT subject FROM messages WHERE LOWER(from_addr) = ? AND account=? ORDER BY date DESC LIMIT 2",
+            (row["sender"], account),
         )
         shown = " | ".join(str(item["subject"])[:60] for item in subjects)
         lines.append(

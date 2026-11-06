@@ -8,6 +8,7 @@ from typing import Any
 from nexusai.kernel.database import Migration
 from nexusai.kernel.module import Context
 from nexusai.modules.agent import ui_stream
+from nexusai.modules.agent.prompt_data import untrusted
 from nexusai.modules.mail import accounts
 
 MIGRATION = Migration(
@@ -75,9 +76,8 @@ def snapshot(ctx: Context) -> str:
         f"Coverage: {coverage}\n"
         f"Snapshot at {datetime.now(UTC).isoformat()}; account {account}; {pending} mail events not yet judged. "
         "This snapshot may be incomplete while mail is syncing or being judged. Counts include omitted detail; use list_tasks/list_reminders/read_work_board when needed. "
-        f"Historical learning state: {learning[0]['value'] if learning else 'not started or skipped'}.\n<untrusted>\n"
-        + "\n\n".join(sections)
-        + "\n</untrusted>"
+        f"Historical learning state: {learning[0]['value'] if learning else 'not started or skipped'}.\n"
+        + untrusted("\n\n".join(sections))
     )
 
 

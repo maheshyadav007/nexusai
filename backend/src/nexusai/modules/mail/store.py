@@ -221,6 +221,29 @@ WHEN NEW.clean_text IS NOT OLD.clean_text OR NEW.subject IS NOT OLD.subject OR N
 BEGIN UPDATE threads SET decision_version = decision_version + 1 WHERE id IN (OLD.thread_id, NEW.thread_id); END;
 """,
     ),
+    Migration(
+        "mail_organization_001",
+        """
+ALTER TABLE mail_categories ADD COLUMN mode TEXT NOT NULL DEFAULT 'smart' CHECK (mode IN ('exact','smart'));
+ALTER TABLE mail_categories ADD COLUMN description TEXT NOT NULL DEFAULT '';
+UPDATE mail_categories SET mode = 'exact' WHERE sender IS NOT NULL OR subject IS NOT NULL OR source = 'rule';
+UPDATE mail_categories SET description = name WHERE mode = 'smart';
+UPDATE mail_categories SET in_priority = 0, mode = 'exact' WHERE name IN ('Updates','Promotions','Forums','Social');
+ALTER TABLE threads ADD COLUMN latest_rule TEXT;
+ALTER TABLE messages ADD COLUMN local_role TEXT;
+CREATE TABLE mail_move_checks (id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, thread INTEGER NOT NULL, target TEXT NOT NULL, preserved INTEGER NOT NULL, time TEXT NOT NULL);
+DROP TRIGGER thread_decision_changed;
+CREATE TRIGGER thread_decision_changed AFTER UPDATE OF status,importance,category,extra_categories,category_source,latest_rule,importance_user_message,status_user_message,next_action,follow_up_on ON threads
+WHEN NEW.status IS NOT OLD.status OR NEW.importance IS NOT OLD.importance OR NEW.category IS NOT OLD.category OR NEW.extra_categories IS NOT OLD.extra_categories OR NEW.category_source IS NOT OLD.category_source OR NEW.latest_rule IS NOT OLD.latest_rule OR NEW.importance_user_message IS NOT OLD.importance_user_message OR NEW.status_user_message IS NOT OLD.status_user_message OR NEW.next_action IS NOT OLD.next_action OR NEW.follow_up_on IS NOT OLD.follow_up_on
+BEGIN UPDATE threads SET decision_version=decision_version+1 WHERE id=NEW.id; END;
+UPDATE threads SET latest_rule = (SELECT rule FROM messages WHERE thread_id = threads.id ORDER BY date DESC, id DESC LIMIT 1);
+""",
+    ),
+    Migration(
+        "mail_outbox_failures_001",
+        "ALTER TABLE mail_outbox ADD COLUMN failed_at TEXT;"
+        "ALTER TABLE mail_outbox ADD COLUMN error TEXT;",
+    ),
 ]
 ATTACHMENTS_FROM_PARTS = (
     "UPDATE messages SET has_attachments = EXISTS (SELECT 1 FROM message_parts p WHERE p.message = ?"
@@ -240,12 +263,16 @@ FOLDER_FILTERS = {
     **{name: f"{column} = 1" for name, column in THREAD_COLUMNS.items()},
     # What came in, wherever it's been filed since.
     "all": "(in_inbox = 1 OR in_archive = 1)",
-    # What needs attention: judged important, waiting on the person, in a category they marked,
-    # or not judged yet and recent, so new mail isn't hidden just because no model has looked at it.
+    "starred": "(flagged = 1 AND (in_inbox = 1 OR in_archive = 1 OR in_sent = 1 OR in_drafts = 1 OR in_other = 1))",
+    "important": "(in_inbox = 1 AND (importance = 'high' OR status = 'waiting_on_you'))",
     "priority": (
         "(in_inbox = 1 AND (importance = 'high' OR status = 'waiting_on_you'"
-        " OR (category IS NULL AND importance != 'low' AND last_date > date('now', '-7 days'))"
-        " OR category IN (SELECT name FROM mail_categories WHERE in_priority = 1)))"
+        " OR (category IS NULL AND extra_categories = '[]')"
+        " OR category IN (SELECT name FROM mail_categories WHERE in_priority = 1 AND proposed = 0)"
+        " OR EXISTS (SELECT 1 FROM json_each(extra_categories) e WHERE e.value IN"
+        " (SELECT name FROM mail_categories WHERE in_priority = 1 AND proposed = 0))"
+        " OR (latest_rule IS NULL AND COALESCE(category,'') != 'Broadcast'"
+        " AND NOT EXISTS (SELECT 1 FROM json_each(extra_categories) WHERE value='Broadcast'))))"
     ),
 }
 SUBJECT_WINDOW_DAYS = 30
@@ -444,21 +471,22 @@ def refresh_thread(tx: sqlite3.Connection, thread: int) -> None:
     """Recounts a thread from its messages. The same mail in two folders counts once."""
     rows = tx.execute(
         "SELECT message_id, folder_role, read, flagged, date, snippet, subject, from_addr, to_json,"
-        " cc_json, has_attachments FROM messages WHERE thread_id = ? ORDER BY date",
+        " cc_json, has_attachments, rule FROM messages WHERE thread_id = ? ORDER BY date, id",
         (thread,),
     ).fetchall()
     if not rows:
         tx.execute("DELETE FROM threads WHERE id = ?", (thread,))
         return
     seen: dict[str, bool] = {}
-    roles = {
-        row[0]
-        for row in tx.execute(
-            "SELECT DISTINCT l.role FROM message_locations l JOIN messages m ON m.id = l.message"
-            " WHERE m.thread_id = ?",
-            (thread,),
-        )
-    }
+    roles = set()
+    for place in tx.execute(
+        "SELECT l.role,m.local_role FROM message_locations l JOIN messages m ON m.id=l.message WHERE m.thread_id=?",
+        (thread,),
+    ):
+        if place["local_role"] and place["role"] in {"inbox", "archive", "trash", "all"}:
+            roles.add(place["local_role"])
+        else:
+            roles.add(place["role"])
     # On Gmail, what's filed nowhere but All Mail is what the person archived.
     if "all" in roles and not roles & {"inbox", "sent", "drafts"}:
         roles.add("archive")
@@ -473,7 +501,7 @@ def refresh_thread(tx: sqlite3.Connection, thread: int) -> None:
     assignments = ", ".join(f"{column} = ?" for column in columns)
     tx.execute(
         f"UPDATE threads SET last_date = ?, snippet = ?, message_count = ?, unread_count = ?,"  # noqa: S608
-        f" flagged = ?, has_attachments = ?, participants = ?, {assignments} WHERE id = ?",
+        f" flagged = ?, has_attachments = ?, participants = ?, latest_rule = ?, {assignments} WHERE id = ?",
         (
             latest["date"],
             latest["snippet"],
@@ -482,6 +510,7 @@ def refresh_thread(tx: sqlite3.Connection, thread: int) -> None:
             int(any(row["flagged"] for row in rows)),
             int(any(row["has_attachments"] for row in rows)),
             json.dumps(people),
+            latest["rule"],
             *columns.values(),
             thread,
         ),
@@ -565,12 +594,32 @@ def store_message(
         "INSERT INTO mail_search (rowid, subject, sender, body, attachments) VALUES (?, ?, ?, ?, ?)",
         (message, parsed.subject, f"{parsed.from_name} {parsed.from_addr}", parsed.own, ""),
     )
-    if match and match.actions.category:
+    if (
+        match
+        and match.actions.category
+        and not tx.execute(
+            "SELECT 1 FROM messages WHERE thread_id = ? AND (date > ? OR (date = ? AND id > ?))",
+            (thread, parsed.date, parsed.date, message),
+        ).fetchone()
+    ):
         tx.execute(
             "UPDATE threads SET category = ?, category_source = 'rule', why = ?"
             " WHERE id = ? AND COALESCE(category_source, '') != 'user'",
             (match.actions.category, match.why, thread),
         )
+        if match.extra_categories:
+            row = tx.execute(
+                "SELECT extra_categories, category, category_source FROM threads WHERE id = ?",
+                (thread,),
+            ).fetchone()
+            if row and row["category_source"] != "user":
+                extras = list(
+                    dict.fromkeys([*json.loads(row["extra_categories"]), *match.extra_categories])
+                )
+                tx.execute(
+                    "UPDATE threads SET extra_categories = ? WHERE id = ?",
+                    (json.dumps([n for n in extras if n != row["category"]]), thread),
+                )
     refresh_thread(tx, thread)
     return Stored(
         message=message,
@@ -616,7 +665,17 @@ def _settle_primary(tx: sqlite3.Connection, message: int) -> None:
     ).fetchall()
     if not rows:
         return
-    best = min(rows, key=lambda row: ROLE_RANK.get(row["role"], ROLE_RANK["other"]))
+    local = tx.execute("SELECT local_role FROM messages WHERE id=?", (message,)).fetchone()
+    preferred = [
+        row
+        for row in rows
+        if local and local["local_role"] and row["folder"] == f"local:{local['local_role']}"
+    ]
+    best = (
+        preferred[0]
+        if preferred
+        else min(rows, key=lambda row: ROLE_RANK.get(row["role"], ROLE_RANK["other"]))
+    )
     tx.execute(
         "UPDATE messages SET folder = ?, folder_role = ?, uid = ? WHERE id = ?",
         (best["folder"], best["role"], best["uid"], message),
@@ -830,6 +889,7 @@ def thread_view(db: Database, thread: int, remote_images: str = "load") -> Threa
                 folders=[
                     MailFolderRef(name=row["folder"], role=row["role"])
                     for row in locations_of(db, message["id"])
+                    if not message["local_role"] or row["role"] not in {"inbox", "archive", "trash", "all"} or row["folder"] == f"local:{message['local_role']}"
                 ],
                 id=message["id"],
                 subject=message["subject"],
@@ -1068,10 +1128,10 @@ def _filters(account: str, query: SearchMail) -> tuple[list[str], list[object]]:
         conditions.append("m.has_attachments = ?")
         params.append(int(query.has_attachment))
     if query.folder:
-        conditions.append(
-            "EXISTS (SELECT 1 FROM message_locations l WHERE l.message = m.id AND l.role = ?)"
-        )
-        params.append(query.folder)
+        if query.folder in {"priority", "important", "starred", "all"}:
+            conditions.append(FOLDER_FILTERS[query.folder])
+        else:
+            conditions.append(f"t.{THREAD_COLUMNS[query.folder]} = 1")
     else:
         conditions.append(f"m.folder_role NOT IN {SET_APART}")
     if query.location:

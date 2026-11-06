@@ -241,6 +241,11 @@ class ImapSession:
     def append(self, folder: str, raw: bytes, flags: tuple[bytes, ...]) -> None:
         self.client.append(folder, raw, flags=flags)
 
+    def message_uids(self, message_id: str) -> list[int]:
+        """Resolve a moved message by identity, rather than reusing an old folder UID."""
+        found = [int(uid) for uid in self.client.search(["HEADER", "Message-ID", message_id])]
+        return [uid for uid, identity in self.message_ids(found).items() if identity == message_id]
+
     def draft_uids(self, marker: str) -> list[int]:
         return [int(uid) for uid in self.client.search(["HEADER", "X-NexusAI-Draft", marker])]
 

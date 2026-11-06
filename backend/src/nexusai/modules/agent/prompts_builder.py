@@ -51,7 +51,10 @@ def personal_prompts(home: Path) -> str:
     # Read fresh every run, so edits made outside the app are picked up.
     names = [n for n in PERSONAL_ORDER if (folder / n).exists()]
     names += sorted(p.name for p in folder.glob("*.md") if p.name not in PERSONAL_ORDER)
-    return "\n\n".join((folder / name).read_text("utf-8").strip() for name in names).strip()
+    return "\n\n".join(
+        f"[personal prompt: {Path(name).stem}]\n{(folder / name).read_text('utf-8').strip()}"
+        for name in names
+    ).strip()
 
 
 def agent_prompt(home: Path, agent: str) -> str:

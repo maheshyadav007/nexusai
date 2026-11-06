@@ -26,7 +26,7 @@ import { TextLink } from "@/ui/primitives/TextLink";
 import { TextView } from "@/ui/primitives/TextView";
 import { t, tn, type StringKey } from "@/ui/strings";
 
-// How much more it reads at a time when asked, so the cost of one click stays small.
+// One grouped learning call at most for newly discovered groups on a manual click.
 const READ_MORE_BATCH = 30;
 const NOT_READ = "";
 const TRUST_LABEL: Record<string, StringKey> = { "built-in": "knows.trust.builtIn", yours: "knows.trust.yours", counted: "knows.trust.counted", mixed: "knows.trust.mixed" };

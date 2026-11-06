@@ -20,6 +20,18 @@
           "href": "/mail/priority"
         },
         {
+          "id": "important",
+          "labelKey": "nav.important",
+          "icon": "important",
+          "href": "/mail/important"
+        },
+        {
+          "id": "starred",
+          "labelKey": "nav.starred",
+          "icon": "starred",
+          "href": "/mail/starred"
+        },
+        {
           "id": "all-mail",
           "labelKey": "nav.allMail",
           "icon": "inbox",

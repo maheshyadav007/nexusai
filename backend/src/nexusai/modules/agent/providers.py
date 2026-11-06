@@ -64,6 +64,21 @@ class ModelFlagged(Exception):
     """The provider refused this content. Trying again wouldn't help."""
 
 
+class ModelContextExceeded(Exception):
+    """The input must change; retrying it unchanged will not recover."""
+
+
+class ModelResponseInvalid(Exception):
+    """A malformed tool result is a failed attempt, not a network outage."""
+
+
+CONTEXT_EXCEEDED = re.compile(
+    r"context[_ ]length[_ ]exceeded|maximum context length|context window.{0,80}(?:exceed|limit)|(?:input|prompt).{0,40}too (?:long|large)|input token.{0,40}exceed",
+    re.I,
+)
+CONTEXT_HELP = "This run exceeds the model's context limit. Reduce attached context, shorten personalized prompts, compact earlier history, or choose a larger-context model."
+
+
 class ModelNotConfigured(Exception):
     pass
 
@@ -202,6 +217,8 @@ class ChatGptProvider:
         except ChatGptLimited as error:
             raise ModelRateLimited(str(error)) from error
         except ChatGptError as error:
+            if CONTEXT_EXCEEDED.search(str(error)):
+                raise ModelContextExceeded(CONTEXT_HELP) from error
             if FLAGGED.search(str(error)):
                 raise ModelFlagged(str(error)) from error
             raise ModelUnavailable(str(error)) from error
@@ -211,8 +228,12 @@ def _arguments(text: str) -> dict[str, Any]:
     try:
         parsed = json.loads(text or "{}")
     except ValueError as error:
-        raise ModelUnavailable("The model sent an unreadable tool call.") from error
-    return parsed if isinstance(parsed, dict) else {}
+        raise ModelResponseInvalid(
+            "The model sent an unreadable tool call. Retry with a model that supports these tools."
+        ) from error
+    if not isinstance(parsed, dict):
+        raise ModelResponseInvalid("The model returned tool arguments that are not an object.")
+    return parsed
 
 
 def _json_values(text: str) -> Iterator[tuple[int, Any]]:
@@ -454,6 +475,8 @@ class OpenAiCompatibleProvider:
             ) as response:
                 if response.status_code != 200:
                     detail = response.read().decode("utf-8", "replace")
+                    if response.status_code == 413 or CONTEXT_EXCEEDED.search(detail):
+                        raise ModelContextExceeded(CONTEXT_HELP)
                     if FLAGGED.search(detail):
                         raise ModelFlagged("The model refused this content under its policy.")
                     if response.status_code == 429:

@@ -145,13 +145,14 @@ from nexusai.contracts.agent import (
     UsageView,
 )
 from nexusai.contracts.events import AppEvent
-from nexusai.contracts.mail import GetMailStatus, MailStatus
+from nexusai.contracts.mail import FinishMailLearning, GetMailStatus, MailOrganization, MailStatus
 from nexusai.contracts.semantic import IndexInfo
 from nexusai.kernel import backups
 from nexusai.kernel.database import Migration
 from nexusai.kernel.module import CommandError, Context, Module
 from nexusai.modules.agent import (
     briefs,
+    bulk_learning,
     channel,
     citations,
     cockpit,
@@ -215,6 +216,7 @@ agent_module = Module(
         mail_agent.MIGRATION,
         mail_agent.TRIGGER_MIGRATION,
         mail_agent.EVIDENCE_MIGRATION,
+        bulk_learning.MIGRATION,
         scheduler.MIGRATION,
         scheduler.TIMES_MIGRATION,
         scheduler.CONTEXT_MIGRATION,
@@ -257,9 +259,10 @@ def _startup(ctx: Context) -> None:
         )
     with _runtime_lock:
         _runtime = runtime.SessionRuntime(ctx)
-        _runtime.resume_after_restart()
         _triggers = triggers.Triggers(ctx, _runtime)
         _triggers.start()
+        # Completion/hold listeners must exist before recovered workers can finish.
+        _runtime.resume_after_restart()
         # By default it runs on each email and on the hour. Choosing otherwise is remembered.
         if mail_agent.mode(ctx) != "each":
             scheduler.set_hourly(ctx, True)
@@ -388,12 +391,24 @@ def learn_from_corrections(event: AppEvent, ctx: Context) -> None:
 
 @agent_module.on("mail.changed", "agent.learn_when_enough_mail")
 def learn_when_enough_mail(event: AppEvent, ctx: Context) -> None:
-    if _triggers:
+    if _triggers and event.payload.get("reason") != "group-learning":
         _triggers.consider_learning()
 
 
 @agent_module.on("mail.historyFinished", "agent.learn_when_history_finished")
 def learn_when_history_finished(event: AppEvent, ctx: Context) -> None:
+    if _triggers:
+        _triggers.consider_learning(history_finished=True)
+
+
+@agent_module.on("pst.progress", "agent.learn_from_pst")
+def learn_from_pst(event: AppEvent, ctx: Context) -> None:
+    if _triggers and event.payload.get("status") == "done":
+        _triggers.consider_learning(history_finished=True)
+
+
+@agent_module.on("mail.bulkArrived", "agent.learn_from_bulk")
+def learn_from_bulk(event: AppEvent, ctx: Context) -> None:
     if _triggers:
         _triggers.consider_learning(history_finished=True)
 
@@ -1770,7 +1785,7 @@ def get_agent_queue(query: GetAgentQueue, ctx: Context) -> AgentQueue:
 def act_agent_queue(command: QueueAction, ctx: Context) -> AgentDone:
     with ctx.bus.unit_of_work() as work:
         row = work.tx.execute(
-            "SELECT status FROM trigger_runs WHERE id=?", (command.id,)
+            "SELECT status,trigger,event FROM trigger_runs WHERE id=?", (command.id,)
         ).fetchone()
         if not row:
             raise CommandError("queue.not_found", "That work is no longer available.", 404)
@@ -1787,6 +1802,23 @@ def act_agent_queue(command: QueueAction, ctx: Context) -> AgentDone:
                 command.id,
             ),
         )
+        if (
+            command.action == "retry"
+            and row["trigger"] == mail_agent.MAIL_TRIGGER
+            and row["event"].startswith(bulk_learning.PREFIX)
+        ):
+            batch = int(row["event"][len(bulk_learning.PREFIX) :])
+            work.tx.execute(
+                "UPDATE mail_learning_batches SET attempts=0,error=NULL WHERE id=?", (batch,)
+            )
+            work.tx.execute(
+                "UPDATE mail_learning_reviews SET state='learning',updated=? WHERE account=(SELECT account FROM mail_learning_batches WHERE id=?)",
+                (mail_agent._now(), batch),
+            )
+            work.tx.execute(
+                "INSERT INTO agent_defaults(key,value) VALUES(?,'reading') ON CONFLICT(key) DO UPDATE SET value='reading'",
+                (mail_agent.LEARNING_STATE,),
+            )
         work.emit("queue.changed", {}, source="agent", trace_id=ctx.trace_id)
     if _triggers:
         _triggers.wake.set()
@@ -1840,9 +1872,30 @@ def expire_note(command: ExpireLearnedNote, ctx: Context) -> AgentDone:
 
 @agent_module.command("mailAgent.retryLearning")
 def retry_learning(command: GetMailAgentSettings, ctx: Context) -> AgentDone:
+    account = accounts.current_account(ctx.config)
+    interview = ctx.bus.db.fetch_all(
+        "SELECT r.interview FROM mail_learning_reviews r JOIN agent_sessions s ON s.id=r.interview WHERE r.account=? AND r.state='asking' AND s.status IN ('failed','stopped')",
+        (account,),
+    )
+    if interview:
+        with ctx.bus.db.transaction() as tx:
+            tx.execute(
+                "UPDATE mail_learning_reviews SET interview=NULL WHERE account=? AND interview=?",
+                (account, interview[0]["interview"]),
+            )
+        mail_agent.set_learning_state(ctx, "asking")
+        if _triggers:
+            _triggers.wake.set()
+        return AgentDone()
     if mail_agent.learning_state(ctx) != "failed":
         raise CommandError("learning.changed", "There is no failed learning wrap-up to retry.", 409)
-    mail_agent.set_learning_state(ctx, "reading")
+    if ctx.bus.db.fetch_all(
+        "SELECT 1 FROM mail_learning_batches WHERE account=? AND status!='done' AND attempts>=3 LIMIT 1",
+        (accounts.current_account(ctx.config),),
+    ):
+        bulk_learning.queue(ctx, retry_failed=True, limit_groups=0)
+    else:
+        mail_agent.set_learning_state(ctx, "reading")
     if _triggers:
         _triggers.wake.set()
     return AgentDone()
@@ -1882,7 +1935,12 @@ def simulate_preference(command: SimulatePreference, ctx: Context) -> Preference
         if command.topic and command.topic.casefold() not in task.casefold():
             continue
         layers = knowledge.layers_for(
-            ctx, "mail", task, account=row["account"], exclude_preference=command.id
+            ctx,
+            "mail",
+            task,
+            account=row["account"],
+            exclude_preference=command.id,
+            senders=knowledge.sender_scope(ctx, [row["id"]]),
         )
         layers.append(
             gateway.Layer(
@@ -1901,6 +1959,8 @@ def simulate_preference(command: SimulatePreference, ctx: Context) -> Preference
             )
         except (
             providers.ModelUnavailable,
+            providers.ModelContextExceeded,
+            providers.ModelResponseInvalid,
             providers.ModelNotConfigured,
             providers.ModelFlagged,
             gateway.DailyCapReached,
@@ -1946,3 +2006,21 @@ def simulate_preference(command: SimulatePreference, ctx: Context) -> Preference
         if len(results) == 3:
             break
     return PreferenceSimulation(decisions=results)
+
+
+@agent_module.query("mail.organization")
+def mail_organization(query: GetMailStatus, ctx: Context) -> MailOrganization:
+    return MailOrganization.model_validate(bulk_learning.overview(ctx))
+
+
+@agent_module.command("mail.learning.finish")
+def finish_mail_learning(command: FinishMailLearning, ctx: Context) -> MailOrganization:
+    review = bulk_learning.overview(ctx)
+    if review["state"] != "asking":
+        raise CommandError(
+            "learning.not_asking", "Wait until grouped learning finishes before continuing.", 409
+        )
+    bulk_learning.finalize(ctx, command.importance)
+    if _triggers:
+        _triggers.wake.set()
+    return MailOrganization.model_validate(bulk_learning.overview(ctx))

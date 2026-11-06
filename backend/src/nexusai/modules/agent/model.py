@@ -19,6 +19,7 @@ from pydantic import ConfigDict
 
 from nexusai.kernel.module import Context
 from nexusai.modules.agent.gateway import Layer, stream_model
+from nexusai.modules.agent.prompt_data import untrusted
 from nexusai.modules.agent.providers import (
     Message,
     ReasoningChunk,
@@ -55,13 +56,13 @@ def to_messages(messages: Sequence[BaseMessage]) -> tuple[list[Message], list[La
     extra: list[Layer] = []
     for message in messages:
         if isinstance(message, SystemMessage):
-            extra.append(Layer("Earlier in this session", _text_of(message.content)))
+            extra.append(Layer("Earlier in this session", untrusted(_text_of(message.content))))
         elif is_summary(message):
             # It may retell mail, so it can't carry the person's authority.
             extra.append(
                 Layer(
                     "Earlier in this session",
-                    f"<untrusted>\n{_text_of(message.content)}\n</untrusted>",
+                    untrusted(_text_of(message.content)),
                 )
             )
         elif isinstance(message, ToolMessage):

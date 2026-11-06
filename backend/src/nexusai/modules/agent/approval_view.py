@@ -43,7 +43,7 @@ DATA_TOOLS = {
     "reorder_categories", "delete_rules", "update_memory", "forget_memory", "propose_memory",
     "save_personal_prompt", "delete_documents", "remove_panels", "remove_agents", "run_agent",
     "recommend_mail_change", "fold_suggested_categories", "recommend_priority", "suggest", "tell", "notify_person", "use", "write_work_board", "update_category", "save_rule",
-    "update_documents", "save_panel", "create_agent", "update_agent",
+    "update_documents", "save_panel", "create_agent", "update_agent", "apply_mail_learning_answers",
 }  # fmt: skip
 # Tools that only read never reach a person, unless their permission was set to ask.
 READ_TOOLS = {

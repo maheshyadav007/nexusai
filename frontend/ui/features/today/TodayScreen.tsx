@@ -1,5 +1,6 @@
 "use client";
 
+import { MailOrganizationCard } from "./MailOrganizationCard";
 import Link from "next/link";
 import appConfig from "@/app.config.json";
 import { useEffect, useState, type ReactNode } from "react";
@@ -574,6 +575,7 @@ export function TodayScreen() {
       </header>
       <MorningBrief />
       <FinishSetup />
+      <MailOrganizationCard />
       {today.isError ? <ErrorState title={t("today.error")} onRetry={() => void today.refetch()} /> : null}
       {today.isPending ? <Skeleton className="h-6 w-full" /> : null}
       {today.data && noMail ? <EmptyState icon="today" title={t("today.empty.title")} description={t("today.empty.description")} action={<TextLink href="/connectors">{t("mail.noAccount.action")}</TextLink>} /> : null}

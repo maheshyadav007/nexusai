@@ -1,0 +1,82 @@
+{
+  "ok": true,
+  "frames_root": "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/rows/waving/frames",
+  "states": [
+    "waving"
+  ],
+  "errors": [],
+  "warnings": [],
+  "rows": [
+    {
+      "state": "waving",
+      "expected_frames": 4,
+      "actual_frames": 4,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/rows/waving/frames/waving/00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 16061,
+          "bbox": [
+            10,
+            41,
+            182,
+            167
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 12
+        },
+        {
+          "index": 1,
+          "file": "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/rows/waving/frames/waving/01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 16225,
+          "bbox": [
+            6,
+            41,
+            185,
+            167
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 60
+        },
+        {
+          "index": 2,
+          "file": "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/rows/waving/frames/waving/02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 16070,
+          "bbox": [
+            6,
+            41,
+            186,
+            167
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 57
+        },
+        {
+          "index": 3,
+          "file": "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/rows/waving/frames/waving/03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 15963,
+          "bbox": [
+            6,
+            41,
+            186,
+            167
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 47
+        }
+      ]
+    }
+  ]
+}

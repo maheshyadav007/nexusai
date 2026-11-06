@@ -15,7 +15,7 @@ from typing import Any, cast
 import numpy as np
 import pytest
 
-from nexusai.api.app import MODULES, _open_database
+from nexusai.api.app import BUS_MIGRATIONS, MODULES, _open_database
 from nexusai.contracts.mail import SearchMail
 from nexusai.kernel import backups
 from nexusai.kernel.config import Config
@@ -126,6 +126,7 @@ def mailbox(tmp_path_factory: pytest.TempPathFactory) -> Any:
     home: Path = tmp_path_factory.mktemp("speed")
     config = replace(load_config(home), home_dir=home)
     db = Database(home / "system" / "nexusai.db", KEY)
+    db.migrate(BUS_MIGRATIONS)
     for module in MODULES:
         db.migrate(module.migrations)
     rng = random.Random(7)

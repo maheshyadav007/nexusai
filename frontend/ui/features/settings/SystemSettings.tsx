@@ -5,6 +5,7 @@ import { copyText } from "@/ui/client/browser";
 import { useState } from "react";
 import { RecoverySettings } from "@/ui/features/home/RecoveryKey";
 import { useHomeStatus, useResetEverything } from "@/ui/client/home";
+import { ApiRequestError } from "@/ui/client/api";
 import { useDiagnostics, useNetworkCheck } from "@/ui/client/system";
 import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
@@ -94,7 +95,8 @@ export function ResetSettings() {
   const [word, setWord] = useState("");
   const [keepModels, setKeepModels] = useState(true);
   const required = t("reset.word");
-  const run = () =>
+  const run = () => {
+    if (reset.isPending) return;
     reset.mutate(
       { confirm: word, keep_models: keepModels },
       {
@@ -109,12 +111,14 @@ export function ResetSettings() {
         },
       },
     );
+  };
   return (
     <Card title={t("reset.title")} description={t("reset.description")}>
       <Dialog
         title={t("reset.dialog")}
         open={open}
         onOpenChange={(next) => {
+          if (reset.isPending) return;
           setOpen(next);
           setWord("");
         }}
@@ -131,15 +135,16 @@ export function ResetSettings() {
             <p className="text-ink-primary">{t("reset.gone")}</p>
             <ul className="flex list-disc flex-col gap-1 pl-5">
               <li>{t("reset.gone.mail")}</li>
+              <li>{t("reset.gone.organization")}</li>
               <li>{t("reset.gone.files")}</li>
               <li>{t("reset.gone.settings")}</li>
               <li>{t("reset.gone.signins")}</li>
             </ul>
             <p className="mt-2 text-sm text-ink-muted">{t("reset.stays")}</p>
           </div>
-          <Checkbox checked={keepModels} onChange={setKeepModels} label={t("reset.keepModels")} />
+          <Checkbox checked={keepModels} onChange={setKeepModels} disabled={reset.isPending} label={t("reset.keepModels")} />
           <Field label={t("reset.confirm", { word: required })}>{({ invalid, ...control }) => <Input autoComplete="off" spellCheck={false} invalid={invalid} value={word} onChange={(event) => setWord(event.target.value)} {...control} />}</Field>
-          {reset.isError ? <ErrorState title={t("reset.failed")} /> : null}
+          {reset.isError ? <ErrorState title={t("reset.failed")} description={reset.error instanceof ApiRequestError ? reset.error.detail.message : t("reset.failed.note")} /> : null}
           <div>
             <Button type="submit" variant="danger" loading={reset.isPending} disabled={word !== required}>{t("reset.action")}</Button>
           </div>

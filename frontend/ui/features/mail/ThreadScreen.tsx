@@ -23,6 +23,7 @@ import { Pressable } from "@/ui/primitives/Pressable";
 import { Select } from "@/ui/primitives/Select";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { TextLink } from "@/ui/primitives/TextLink";
+import { useToast } from "@/ui/primitives/Toast";
 import { t, tn } from "@/ui/strings";
 import { Composer } from "./Composer";
 import { SafeMailFrame } from "./SafeMailFrame";
@@ -204,6 +205,7 @@ function MessageCard({ message, open: startsOpen, onReply, threadWhy }: { messag
 const NO_CATEGORY = "none";
 
 export function ThreadScreen({ id, onLeave, folder: backTo }: { id: number; onLeave?: () => void; folder?: string }) {
+  const toast = useToast();
   const router = useRouter();
   const pathname = usePathname();
   const folder = backTo ?? pathname.slice(0, pathname.lastIndexOf("/"));
@@ -271,7 +273,8 @@ export function ThreadScreen({ id, onLeave, folder: backTo }: { id: number; onLe
     if (thread.error instanceof ApiRequestError && thread.error.detail.code === "thread.not_found") {
       return (
         <div className="mx-auto max-w-reading p-6">
-          <h2 className="mb-4 text-xl font-medium text-ink-primary">{t("mail.gone.title")}</h2>
+          {move.error ? <ErrorState title={move.error.message} /> : null}
+        <h2 className="mb-4 text-xl font-medium text-ink-primary">{t("mail.gone.title")}</h2>
           <EmptyState icon="inbox" title={t("mail.gone.description")} action={<TextLink href={folder}>{t("mail.backToInbox")}</TextLink>} />
         </div>
       );
@@ -282,7 +285,11 @@ export function ThreadScreen({ id, onLeave, folder: backTo }: { id: number; onLe
   const reply = (message: MessageView, replyAll: boolean) => replyDraft.mutate({ message_id: message.id, reply_all: replyAll }, { onSuccess: (result) => setComposing({ draft: result.draft, dropped: result.dropped }) });
   const names = (categories.data?.categories ?? []).filter((item) => !item.proposed).map((item) => item.name);
   const categoryOptions = [{ value: NO_CATEGORY, label: t("mail.category.none") }, ...[...new Set([...names, ...(row.category ? [row.category] : [])])].map((name) => ({ value: name, label: name }))];
-  const leave = { onSuccess: () => (onLeave ? onLeave() : router.push(folder)) };
+  const moveAway = (to: "archive" | "trash") => move.mutate({ id, to }, { onSuccess: () => {
+    toast({ title: t(to === "archive" ? "mail.moved.archive" : "mail.moved.trash"), action: { label: t("mail.undo"), run: () => move.mutate({ id, to: "inbox" }, { onError: (error) => toast({ title: error.message, tone: "danger" }) }) } });
+    if (onLeave) onLeave(); else router.push(folder);
+  } });
+  const canRestore = messages.some((message) => message.folder === "archive" || message.folder === "trash") && !messages.some((message) => message.folder === "inbox");
   return (
     <div className="mx-auto flex max-w-reading animate-fade flex-col gap-4 p-6">
       <header className="flex flex-col gap-3">
@@ -292,10 +299,11 @@ export function ThreadScreen({ id, onLeave, folder: backTo }: { id: number; onLe
           <SummaryAction id={id} pending={summarize.isPending} run={() => summarize.mutate(id)} />
           <Button variant="ai" thinking data-testid="draft-reply" loading={drafting} disabled={composing !== null} onClick={draftReply}>{t(drafting ? "mail.draftReply.working" : "mail.draftReply")}</Button>
           <span className="flex-1" />
-          <IconButton icon="flag" label={t(row.flagged ? "mail.unflag" : "mail.flag")} onClick={() => setFlag.mutate({ id, flagged: !row.flagged })} />
+          <IconButton icon="starred" label={t(row.flagged ? "mail.unflag" : "mail.flag")} onClick={() => setFlag.mutate({ id, flagged: !row.flagged })} />
           <IconButton icon="markUnread" label={t("mail.markUnread")} onClick={() => setRead.mutate({ id, read: false })} />
-          <IconButton icon="archive" label={t("mail.archive")} onClick={() => move.mutate({ id, to: "archive" }, leave)} />
-          <IconButton icon="trash" label={t("mail.delete")} onClick={() => move.mutate({ id, to: "trash" }, leave)} />
+          {canRestore ? <Button disabled={move.isPending} onClick={() => move.mutate({ id, to: "inbox" })}>{t("mail.restore")}</Button> : null}
+          <IconButton icon="archive" label={t("mail.archive")} disabled={move.isPending} onClick={() => moveAway("archive")} />
+          <IconButton icon="trash" label={t("mail.delete")} disabled={move.isPending} onClick={() => moveAway("trash")} />
         </div>
         <h2 className="break-words text-xl font-medium text-ink-primary">{row.subject || t("mail.noSubject")}</h2>
         <div className="flex flex-wrap items-center gap-2">

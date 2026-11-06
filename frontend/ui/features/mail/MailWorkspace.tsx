@@ -21,6 +21,8 @@ const FIRST_PAGE = [0];
 
 const FOLDERS: Readonly<Record<string, { title: StringKey; icon: IconName; empty: StringKey; role: FolderRole }>> = {
   priority: { title: "nav.priority", icon: "priority", empty: "mail.empty.priority", role: "priority" },
+  important: { title: "nav.important", icon: "important", empty: "mail.empty.important", role: "important" },
+  starred: { title: "nav.starred", icon: "starred", empty: "mail.empty.starred", role: "starred" },
   all: { title: "nav.allMail", icon: "inbox", empty: "mail.empty.inbox", role: "all" },
   sent: { title: "nav.sent", icon: "sent", empty: "mail.empty.sent", role: "sent" },
   archive: { title: "nav.archive", icon: "archive", empty: "mail.empty.archive", role: "archive" },
@@ -47,7 +49,7 @@ export function NothingOpen() {
 /** A quick search inside the folder on screen, in place of its list. */
 function FilteredList({ text, role, category, location, base, title }: { text: string; role: FolderRole; category: string | null; location: string | null; base: string; title: string }) {
   const pathname = usePathname();
-  const search = useSearch({ query: text, ...(category ? { category } : {}), ...(location ? { location } : role === "all" || role === "priority" ? {} : { folder: role }) }, true);
+  const search = useSearch({ query: text, ...(category ? { category } : {}), ...(location ? { location } : { folder: role }) }, true);
   const hits = search.data?.hits ?? [];
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">

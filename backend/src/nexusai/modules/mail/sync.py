@@ -35,7 +35,7 @@ from nexusai.modules.mail.imap import (
 )
 from nexusai.modules.mail.parse import parse_message
 from nexusai.modules.mail.pop3 import Pop3Session
-from nexusai.modules.mail.rules import evaluate, load_rules, own_domain_of
+from nexusai.modules.mail.rules import evaluate, own_domain_of
 
 log = structlog.get_logger()
 DRAFT_HEADER = "x-nexusai-draft"
@@ -500,6 +500,7 @@ class MailSync:
             return 0, 0
         uids = session.uids_after(last_uid)
         pulled = 0
+        bulk = len(uids) > self.ctx.config.agent.bulk_mail_threshold
         for start in range(0, len(uids), self.config.backfill_batch):
             if self._stop.is_set():
                 break
@@ -507,10 +508,14 @@ class MailSync:
             # A week with the laptop closed can take a while, so that shows as downloading.
             if len(uids) > len(batch):
                 self._set_state("syncing")
-            self._ingest(session, folder, batch, live=True, advance=True)
-            pulled += len(batch)
+            pulled += self._ingest(session, folder, batch, live=True, advance=True, bulk=bulk)
             if len(uids) > len(batch):
                 self._note_progress()
+        if bulk and pulled:
+            with self.ctx.bus.unit_of_work() as work:
+                work.emit(
+                    "mail.bulkArrived", {"count": pulled}, source="mail", trace_id=self.ctx.trace_id
+                )
         return len(uids), pulled
 
     def _next_history(self, folders: list[Folder]) -> tuple[Folder, int, bool] | None:
@@ -574,18 +579,8 @@ class MailSync:
         return True
 
     def _deserves_a_look(self, tx: Any, result: store.Stored) -> bool:
-        """Headers filed it, but it says something that could matter, or it's a conversation
-        the person is part of, and those always get read."""
-        if result.worth_a_look:
-            return True
-        marks = ", ".join("?" * len(self._own))
-        return bool(
-            tx.execute(
-                "SELECT 1 FROM messages WHERE thread_id = ?"  # noqa: S608
-                f" AND LOWER(from_addr) IN ({marks}) LIMIT 1",
-                (result.thread, *self._own),
-            ).fetchone()
-        )
+        """Only generated Updates with a consequential subject bypass an Exact match."""
+        return result.worth_a_look
 
     def _note_copies(self, session: MailSession, folder: Folder, uids: list[int]) -> list[int]:
         """Files what's already held under this folder too, and returns what needs downloading."""
@@ -627,14 +622,24 @@ class MailSync:
         return fetched
 
     def _ingest(
-        self, session: MailSession, folder: Folder, uids: list[int], *, live: bool, advance: bool
+        self,
+        session: MailSession,
+        folder: Folder,
+        uids: list[int],
+        *,
+        live: bool,
+        advance: bool,
+        bulk: bool = False,
     ) -> int:
         """How many emails were new to this computer. One already here just gains this folder."""
         if not uids:
             return 0
         wanted = self._note_copies(session, folder, uids)
         fetched = self._download(session, wanted)
-        rules = load_rules(self.ctx.config.home)
+        from nexusai.modules.mail.module import folder_modes, ordered_rules
+
+        rules = ordered_rules(self.ctx)
+        modes = folder_modes(self.ctx)
         prepared = []
         for item in fetched:
             try:
@@ -651,7 +656,7 @@ class MailSync:
             # NexusAI's own saved drafts are shown from the drafts list, not as mail.
             if DRAFT_HEADER in parsed.headers:
                 continue
-            prepared.append((item, parsed, evaluate(parsed, rules, self._own_domain)))
+            prepared.append((item, parsed, evaluate(parsed, rules, self._own_domain, modes)))
         with self.ctx.bus.unit_of_work() as work:
             stored = []
             for item, parsed, match in prepared:
@@ -701,7 +706,14 @@ class MailSync:
                     source="mail",
                     trace_id=self.ctx.trace_id,
                 )
-            if live and folder.role == "sent":
+            if live and not bulk and len(stored) > self.ctx.config.agent.bulk_mail_threshold:
+                work.emit(
+                    "mail.bulkArrived",
+                    {"count": len(stored)},
+                    source="mail",
+                    trace_id=self.ctx.trace_id,
+                )
+            if live and not bulk and folder.role == "sent":
                 for result in stored:
                     work.emit(
                         "mail.sent",
@@ -719,7 +731,11 @@ class MailSync:
                         source="mail",
                         trace_id=self.ctx.trace_id,
                     )
-                    if not result.skip_agent or self._deserves_a_look(work.tx, result):
+                    if (
+                        not bulk
+                        and len(stored) <= self.ctx.config.agent.bulk_mail_threshold
+                        and not result.skip_agent
+                    ) or self._deserves_a_look(work.tx, result):
                         work.emit(
                             "mail.needsTriage",
                             {"message_id": result.message, "thread_id": result.thread},
@@ -794,7 +810,8 @@ class MailSync:
     def _drain_outbox(self, session: MailSession) -> None:
         """Local changes, kept in the database so they survive a restart or a dropped connection."""
         rows = self.ctx.bus.db.fetch_all(
-            "SELECT id, op, payload, attempts FROM mail_outbox WHERE account = ? ORDER BY id",
+            "SELECT id, op, payload, attempts FROM mail_outbox WHERE account = ?"
+            " AND failed_at IS NULL ORDER BY id",
             (self.account,),
         )
         for row in rows:
@@ -808,8 +825,33 @@ class MailSync:
                 continue
             except ConnectionFailed as error:
                 if not isinstance(error, OSError) and row["attempts"] + 1 >= 3:
-                    log.warning("mail_op_dropped", op=row["op"], error=type(error).__name__)
-                    self._finish_op(row["id"])
+                    log.warning("mail_op_needs_attention", op=row["op"], error=type(error).__name__)
+                    with self.ctx.bus.unit_of_work() as work:
+                        work.tx.execute(
+                            "UPDATE mail_outbox SET failed_at=?,error=?,attempts=attempts+1"
+                            " WHERE id=?",
+                            (datetime.now(UTC).isoformat(), str(error)[:500], row["id"]),
+                        )
+                        work.emit(
+                            "notification.requested",
+                            NotificationRequested(
+                                kind="mail-sync",
+                                title="A mail change could not sync",
+                                detail=(
+                                    "Your local change is saved. Open Cockpit, then Pipelines. "
+                                    "Run Mail sync to retry after fixing the server problem."
+                                ),
+                                link="/cockpit",
+                            ).model_dump(),
+                            source="mail",
+                            trace_id=self.ctx.trace_id,
+                        )
+                        work.emit(
+                            "mail.syncChanged",
+                            {"state": "failed", "message": "A saved mail change needs retrying."},
+                            source="mail",
+                            trace_id=self.ctx.trace_id,
+                        )
                     continue
                 with self.ctx.bus.db.transaction() as tx:
                     tx.execute(
@@ -846,6 +888,30 @@ class MailSync:
                     session.delete(uid)
             return
         folder_name, uid = str(payload["folder"]), int(str(payload["uid"]))
+        if op == "move" and isinstance(session, ImapSession):
+            rows = self.ctx.bus.db.fetch_all(
+                "SELECT message_id,local_role FROM messages WHERE id=?", (payload.get("message"),)
+            )
+            if not rows or (rows[0]["local_role"] and rows[0]["local_role"] != payload["role"]):
+                return  # A later Restore/Undo superseded this queued move.
+            identity = rows[0]["message_id"]
+            source = None
+            folders = list(dict.fromkeys([folder_name, *self.status.folders.values()]))
+            for candidate in folders:
+                session.select(candidate)
+                # Check the cheap known UID first; retries then resolve the new UID after a move.
+                if candidate == folder_name and session.message_ids([uid]).get(uid) == identity:
+                    source = (candidate, uid)
+                    break
+                found = session.message_uids(identity)
+                if found:
+                    source = (candidate, found[0])
+                    break
+            if source is None:
+                raise OSError("The moved message is not available on the server yet.")
+            folder_name, uid = source
+            if self.status.folders.get(str(payload["role"])) == folder_name:
+                return  # Replayed move already reached its destination.
         session.select(folder_name)
         if op == "read":
             session.set_read(uid, bool(payload["value"]))

@@ -1,0 +1,56 @@
+{
+  "running": {
+    "translation_y": 3,
+    "source_ground": 185,
+    "target_ground": 188,
+    "scale": 1.0
+  },
+  "idle": {
+    "translation_y": 9,
+    "source_ground": 179,
+    "target_ground": 188,
+    "scale": 1.0
+  },
+  "running-right": {
+    "translation_y": 1,
+    "source_ground": 187,
+    "target_ground": 188,
+    "scale": 1.0
+  },
+  "waving": {
+    "translation_y": 21,
+    "source_ground": 167,
+    "target_ground": 188,
+    "scale": 1.0
+  },
+  "failed": {
+    "translation_y": 12,
+    "source_ground": 176,
+    "target_ground": 188,
+    "scale": 1.0
+  },
+  "jumping": {
+    "translation_y": -4,
+    "source_ground": 192,
+    "target_ground": 188,
+    "scale": 1.0
+  },
+  "waiting": {
+    "translation_y": 22,
+    "source_ground": 166,
+    "target_ground": 188,
+    "scale": 1.0
+  },
+  "review": {
+    "translation_y": 16,
+    "source_ground": 172,
+    "target_ground": 188,
+    "scale": 1.0
+  },
+  "running-left": {
+    "translation_y": 1,
+    "source_ground": 187,
+    "target_ground": 188,
+    "scale": 1.0
+  }
+}

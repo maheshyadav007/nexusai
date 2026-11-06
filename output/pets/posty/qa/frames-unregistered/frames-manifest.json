@@ -1,0 +1,125 @@
+{
+  "ok": true,
+  "chroma_key": {
+    "hex": "#FF00FF",
+    "rgb": [
+      255,
+      0,
+      255
+    ],
+    "threshold": 96.0
+  },
+  "rows": [
+    {
+      "state": "idle",
+      "frames": [
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/idle/00.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/idle/01.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/idle/02.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/idle/03.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/idle/04.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/idle/05.png"
+      ],
+      "method": "components"
+    },
+    {
+      "state": "running-right",
+      "frames": [
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/running-right/00.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/running-right/01.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/running-right/02.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/running-right/03.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/running-right/04.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/running-right/05.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/running-right/06.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/running-right/07.png"
+      ],
+      "method": "components"
+    },
+    {
+      "state": "running-left",
+      "frames": [
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/running-left/00.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/running-left/01.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/running-left/02.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/running-left/03.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/running-left/04.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/running-left/05.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/running-left/06.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/running-left/07.png"
+      ],
+      "method": "components"
+    },
+    {
+      "state": "waving",
+      "frames": [
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/waving/00.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/waving/01.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/waving/02.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/waving/03.png"
+      ],
+      "method": "components"
+    },
+    {
+      "state": "jumping",
+      "frames": [
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/jumping/00.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/jumping/01.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/jumping/02.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/jumping/03.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/jumping/04.png"
+      ],
+      "method": "components"
+    },
+    {
+      "state": "failed",
+      "frames": [
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/failed/00.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/failed/01.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/failed/02.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/failed/03.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/failed/04.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/failed/05.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/failed/06.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/failed/07.png"
+      ],
+      "method": "components"
+    },
+    {
+      "state": "waiting",
+      "frames": [
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/waiting/00.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/waiting/01.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/waiting/02.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/waiting/03.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/waiting/04.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/waiting/05.png"
+      ],
+      "method": "components"
+    },
+    {
+      "state": "running",
+      "frames": [
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/running/00.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/running/01.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/running/02.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/running/03.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/running/04.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/running/05.png"
+      ],
+      "method": "components"
+    },
+    {
+      "state": "review",
+      "frames": [
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/review/00.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/review/01.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/review/02.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/review/03.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/review/04.png",
+        "/Users/maheshyadav/Projects/nexusai/output/pets/posty/qa/frames-unregistered/review/05.png"
+      ],
+      "method": "components"
+    }
+  ]
+}

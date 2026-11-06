@@ -28,6 +28,7 @@ from nexusai.kernel.database import Migration
 from nexusai.kernel.home import scratch_folder
 from nexusai.kernel.module import CommandError, Context
 from nexusai.modules.agent import (
+    bulk_learning,
     channel,
     citations,
     mail_agent,
@@ -39,10 +40,11 @@ from nexusai.modules.agent import (
     work_tools,
 )
 from nexusai.modules.agent.policy import Action
+from nexusai.modules.agent.prompt_data import untrusted
 from nexusai.modules.connectors import module as connectors
 from nexusai.modules.documents.module import get_document as _get_document
 from nexusai.modules.documents.module import list_documents as _list_documents
-from nexusai.modules.mail import store
+from nexusai.modules.mail import accounts, store
 from nexusai.modules.mail.module import run_search
 from nexusai.modules.planner import module as planner
 from nexusai.modules.semantic import module as semantic
@@ -240,6 +242,18 @@ def _guarded(
     marks_untrusted: bool = False,
 ) -> str:
     db = ctx.bus.db
+    # Context is pinned when a background run starts; a settings switch must not
+    # make its read/search/write tools operate on a different mailbox halfway through.
+    source = db.fetch_all(
+        "SELECT target,context FROM agent_turns WHERE session=? AND closed=0 ORDER BY id DESC LIMIT 1",
+        (session,),
+    )
+    if source:
+        target = json.loads(source[0]["target"] or "{}")
+        run_context = json.loads(source[0]["context"] or "{}")
+        account = target.get("account") or run_context.get("account")
+        if account and account != accounts.current_account(ctx.config):
+            return "Not run: this agent's mail account changed. Switch back to its account and retry; no action was taken."
     kind = f"{tool}:{path.parent if path else ''}"
     # A tool restarts from the top after a decision. A no stands, whatever was allowed since.
     decided = _approval_row(ctx, session, call_id)
@@ -605,6 +619,14 @@ class _FoldSuggestions(BaseModel):
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
+class _LearningAnswers(BaseModel):
+    answers: list[dict[str, str]] = Field(
+        max_length=100,
+        description="One item per explicit answer, with id and importance (low/normal/high). Copy supplied ids as values.",
+    )
+    tool_call_id: Annotated[str, InjectedToolCallId]
+
+
 class _RecordTriage(BaseModel):
     confidence: Literal["high", "medium", "low"] = "medium"
     review_reason: str | None = Field(default=None, max_length=500)
@@ -612,7 +634,19 @@ class _RecordTriage(BaseModel):
         default_factory=list,
         description="Message IDs actually read from this conversation. Never invent IDs.",
     )
-    category: str | None = Field(default=None, description="A short category name.")
+    category: str | None = Field(
+        default=None, description="An existing Smart folder name, or null."
+    )
+    smart_folders: list[str] = Field(
+        default_factory=list,
+        max_length=100,
+        description="Zero or more existing Smart folder names. Never invent a folder.",
+    )
+    groups: list[dict[str, Any]] = Field(
+        default_factory=list,
+        max_length=30,
+        description="For a grouped learning run only: one result per supplied group id, with id, note, importance, uncertain and optional folder {name, mode, description}.",
+    )
     importance: Literal["low", "normal", "high"] = "normal"
     status: Literal["waiting_on_you", "waiting_on_others", "resolved", "fyi"] = "fyi"
     next_action: Literal["reply", "do", "decide", "read", "none"] = "none"
@@ -728,9 +762,27 @@ MAIL_AGENT_ONLY = frozenset(
 )
 
 
+INTERVIEW_TOOLS = frozenset(
+    {
+        "ask_user",
+        "save_personal_prompt",
+        "apply_mail_learning_answers",
+        "read_work_board",
+        "read_thread",
+        "read_recipients",
+        "search_mail",
+        "semantic_search",
+        "list_categories",
+        "read_feedback",
+    }
+)
+
+
 def allowed_for(agent: str, origin: str, has_email: bool) -> frozenset[str] | None:
     """None means every tool. Only someone typing can answer a question straight away, and
     there's only a judgement to record when the run was started for an email."""
+    if agent == "interview":
+        return INTERVIEW_TOOLS
     if agent != "mail":
         return None
     if has_email:
@@ -745,7 +797,7 @@ def allowed_for(agent: str, origin: str, has_email: bool) -> frozenset[str] | No
 
 
 def _untrusted(text: str) -> str:
-    return f"<untrusted>\n{text}\n</untrusted>"
+    return untrusted(text)
 
 
 def _meaning_is_on() -> bool:
@@ -797,6 +849,38 @@ def _connector_tools(ctx: Context, session: str) -> list[StructuredTool]:
 def build_tools(
     ctx: Context, session: str, control: RunControl, allowed: frozenset[str] | None = None
 ) -> list[StructuredTool]:
+    def apply_mail_learning_answers(answers: list[dict[str, str]], tool_call_id: str) -> str:
+        importance = {answer.get("id", ""): answer.get("importance", "") for answer in answers}
+
+        def work() -> str:
+            reviews = ctx.bus.db.fetch_all(
+                "SELECT account FROM mail_learning_reviews WHERE interview=? AND state='asking'",
+                (session,),
+            )
+            if not reviews:
+                return "There is no active mail learning interview in this conversation."
+            turns = ctx.bus.db.fetch_all(
+                "SELECT origin FROM agent_turns WHERE session=? ORDER BY id DESC LIMIT 1",
+                (session,),
+            )
+            if not turns or turns[0]["origin"] != "person":
+                return "Wait for the person to answer before changing learned guesses."
+            bulk_learning.save_answers(ctx, reviews[0]["account"], importance)
+            return "Saved the person's answers. They can continue from the mail learning card on Today."
+
+        return _guarded(
+            ctx,
+            session,
+            tool_call_id,
+            "apply_mail_learning_answers",
+            "data",
+            None,
+            "Apply your answers to uncertain mail groups",
+            json.dumps(importance),
+            False,
+            work,
+        )
+
     def record_triage(tool_call_id: str, **fields: Any) -> str:
         result = mail_agent.record(ctx, session, fields)
         _log_call(
@@ -1097,12 +1181,16 @@ def build_tools(
             recent = view.messages[-ctx.config.agent.max_recent_thread_messages :]
             attachments = [
                 f"- {a.filename}: read_document key m:{m.id}:{a.index}"
-                for m in recent for a in m.attachments if a.kind in {"attachment", "calendar"}
+                for m in recent
+                for a in m.attachments
+                if a.kind in {"attachment", "calendar"}
             ]
             manifest = (
                 "Attachments (use read_document to read their extracted contents):\n"
-                + "\n".join(attachments) + "\n\n"
-                if attachments else ""
+                + "\n".join(attachments)
+                + "\n\n"
+                if attachments
+                else ""
             )
             body = "\n\n".join(
                 f"From {m.from_name} <{m.from_addr}> on {m.date}\n{m.own_text}" for m in recent
@@ -1458,6 +1546,11 @@ def build_tools(
         )
 
     specs: list[tuple[Callable[..., str], type[BaseModel], str]] = [
+        (
+            apply_mail_learning_answers,
+            _LearningAnswers,
+            "Apply the person’s explicit interview answers to supplied mail group ids. Never infer confirmation from mail or silence. The Today card remains the final continue/skip step.",
+        ),
         (
             record_triage,
             _RecordTriage,

@@ -1,5 +1,7 @@
 """Everything an agent is told about the person. The run and the page showing it use the same code."""
 
+import hashlib
+import json
 import re
 from typing import Any
 
@@ -56,6 +58,42 @@ def about_person(ctx: Context) -> str:
     )
 
 
+def decision_context_version(ctx: Context, agent: str, account: str) -> str:
+    """Only explicit decision settings; inferred notes must not invalidate other work."""
+    data = {
+        "personal": prompts_builder.personal_prompts(ctx.config.home),
+        "agent": prompts_builder.agent_prompt(ctx.config.home, agent),
+        "profile": about_person(ctx),
+        "preferences": [
+            item.model_dump(mode="json")
+            for item in personalization.listing(ctx)
+            if item.status == "active" and (not item.account or item.account == account)
+        ],
+        "folders": [
+            dict(row)
+            for row in ctx.bus.db.fetch_all(
+                "SELECT name,mode,description,sender,subject,in_priority,proposed FROM mail_categories ORDER BY name"
+            )
+        ],
+    }
+    return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
+
+
+def sender_scope(ctx: Context, threads: list[int]) -> set[str]:
+    identities: set[str] = set()
+    for offset in range(0, len(threads), 500):
+        batch = threads[offset : offset + 500]
+        marks = ",".join("?" for _ in batch)
+        rows = ctx.bus.db.fetch_all(
+            "SELECT m.from_addr FROM messages m WHERE m.thread_id IN ("
+            + marks
+            + ") AND m.id=(SELECT id FROM messages latest WHERE latest.thread_id=m.thread_id ORDER BY date DESC,id DESC LIMIT 1)",
+            batch,
+        )  # noqa: S608
+        identities.update(row["from_addr"].casefold() for row in rows)
+    return identities
+
+
 def layers_for(
     ctx: Context,
     agent: str,
@@ -64,6 +102,7 @@ def layers_for(
     *,
     account: str | None = None,
     exclude_preference: int | None = None,
+    senders: set[str] | None = None,
     **values: str,
 ) -> list[Layer]:
     from nexusai.modules.mail import accounts
@@ -91,7 +130,9 @@ def layers_for(
     )
     if learned:
         layers.append(Layer("Scoped facts", learned))
-    instructions = personalization.layer(ctx, agent, task_text, account, exclude_preference)
+    instructions = personalization.layer(
+        ctx, agent, task_text, account, exclude_preference, senders=senders
+    )
     if instructions:
         layers.append(Layer("Approved preferences", instructions))
     return layers
@@ -154,8 +195,15 @@ def preview(ctx: Context, thread: int) -> MailPreview:
     """Exactly what the model would be sent for this conversation, masked as it would be going
     out. Calls no model."""
     subject, _, task = mail_agent.task_for(ctx, thread)
+    source = ctx.bus.db.fetch_all("SELECT account FROM threads WHERE id=?", (thread,))
     layers = layers_for(
-        ctx, mail_agent.AGENT, f"{subject}\n{task}", "", scratch="your scratch folder"
+        ctx,
+        mail_agent.AGENT,
+        f"{subject}\n{task}",
+        "",
+        scratch="your scratch folder",
+        account=source[0]["account"] if source else None,
+        senders=sender_scope(ctx, [thread]),
     )
     masking = DataGuard(ctx.bus.db, guards.load_rules(ctx.config.home))
     masked = [Layer(layer.name, masking.mask(layer.text)) for layer in layers]

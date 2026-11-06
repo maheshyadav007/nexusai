@@ -159,9 +159,14 @@ def test_same_thread_new_message_discards_the_old_judgement(
     wait(lambda: thread_named(client, "Changed request")["message_count"] == 2)
     # Persistence and listener delivery are separate. Hold the response until both inputs
     # are queued, so this specifically tests one stale run followed by one combined retry.
-    wait(lambda: agent.current().db.fetch_all(
-        "SELECT COUNT(*) n FROM trigger_runs WHERE thread=?", (thread["id"],)
-    )[0]["n"] == 2)
+    wait(
+        lambda: (
+            agent.current().db.fetch_all(
+                "SELECT COUNT(*) n FROM trigger_runs WHERE thread=?", (thread["id"],)
+            )[0]["n"]
+            == 2
+        )
+    )
     script.gate.set()
     triaged(client, "Changed request")
     wait(
@@ -556,7 +561,14 @@ def test_empty_digest_does_not_advance_cursor_and_can_be_retried(
     post(client, "agentQueue.act", {"id": failed[0]["id"], "action": "retry"})
     wait(lambda: db.fetch_all("SELECT value FROM agent_defaults WHERE key LIKE 'last_digest_id:%'"))
     # The cursor is recorded before queue completion; wait for the actual terminal state.
-    wait(lambda: db.fetch_all("SELECT status FROM trigger_runs WHERE id=?", (failed[0]["id"],))[0]["status"] == "done")
+    wait(
+        lambda: (
+            db.fetch_all("SELECT status FROM trigger_runs WHERE id=?", (failed[0]["id"],))[0][
+                "status"
+            ]
+            == "done"
+        )
+    )
     assert (
         db.fetch_all("SELECT status FROM trigger_runs WHERE id=?", (failed[0]["id"],))[0]["status"]
         == "done"
@@ -673,5 +685,5 @@ def test_digest_scope_and_cursor_are_separate_for_each_mail_account(
         and "Account B request" in result[0].task
         and "Account A request" not in result[0].task
     )
-    assert result[0].context == {"account": "other"}
+    assert result[0].context == {"account": "other", "threads": [second["id"]]}
     assert dispatcher._digest_key() != key_a

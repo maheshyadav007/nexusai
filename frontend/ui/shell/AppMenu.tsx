@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { desktopApi } from "@/ui/client/desktop";
 import { useProfile } from "@/ui/client/onboarding";
-import { Avatar } from "@/ui/primitives/Avatar";
+import { Avatar, initialsOf } from "@/ui/primitives/Avatar";
 import { Button } from "@/ui/primitives/Button";
 import { Menu, type MenuItem } from "@/ui/primitives/Menu";
 import { useToast } from "@/ui/primitives/Toast";
@@ -16,6 +16,7 @@ export function AppMenu({ collapsed }: { collapsed: boolean }) {
   const profile = useProfile();
   const name = profile.data?.name?.trim() || t("nav.userFallback");
   const label = t("nav.accountMenu", { name });
+  const triggerLabel = t("nav.accountMenu", { name: `${initialsOf(name)} ${name}` });
   const [desktop, setDesktop] = useState(false);
   useEffect(() => setDesktop(Boolean(desktopApi())), []);
   const run = (action: "restart" | "quit") => void desktopApi()?.action(action).catch(() => toast({ title: t("desktop.actionFailed") }));
@@ -36,8 +37,8 @@ export function AppMenu({ collapsed }: { collapsed: boolean }) {
     ]),
   ];
   return <Menu side="top" variant="account" label={label} items={items} trigger={
-    <Button variant="quiet" data-testid="account-menu-trigger" className={`account-trigger w-full min-w-0 ${collapsed ? "justify-center px-0" : "justify-start px-2"}`} aria-label={label}>
-      <span aria-hidden className="flex shrink-0"><Avatar name={name} size="md" /></span>
+    <Button variant="quiet" data-testid="account-menu-trigger" className={`account-trigger w-full min-w-0 ${collapsed ? "justify-center px-0" : "justify-start px-2"}`} aria-label={triggerLabel}>
+      <span aria-hidden className="flex shrink-0"><Avatar name={name} size="md" /></span>{" "}
       {collapsed ? null : <><span className="min-w-0 flex-1 truncate text-left">{name}</span><Icon name="chevronDown" className="account-chevron shrink-0 rotate-180 text-ink-muted transition-transform duration-fast" /></>}
     </Button>
   } />;

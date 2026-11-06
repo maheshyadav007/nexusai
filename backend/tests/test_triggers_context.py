@@ -121,6 +121,7 @@ def test_a_run_with_no_judgement_says_so_and_can_be_tried_again(
     fake.state.deliver(make_mail(subject="No judgement"))
     wait(lambda: "Not triaged" in (thread_named(client, "No judgement")["why"] or ""), "the note")
     settle(client)
+    client.post("/api/commands/categories.save", json={"name": "Team", "mode": "smart"})
     script.replies = [triage_reply(category="Team")]
     current().dispatch(TurnRequest(mail_agent.SESSION_ID, "ignored"), retry=True)
     assert triaged(client, "No judgement")["category"] == "Team"

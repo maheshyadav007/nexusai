@@ -60,7 +60,7 @@ export function ThreadRowView({ thread, excerpt, href, active = false, highlight
           <span className="mt-1 flex min-h-5 items-center gap-2 text-sm text-ink-muted">
             {thread.flagged ? (
               <span role="img" aria-label={t("mail.flagged")} className="text-accent-default">
-                <Icon name="flag" className="h-3 w-3" />
+                <Icon name="starred" className="h-3 w-3" />
               </span>
             ) : null}
             {thread.has_attachments ? (

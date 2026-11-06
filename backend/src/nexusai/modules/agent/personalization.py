@@ -1,6 +1,7 @@
 """A versioned prompt-feedback loop. Observations never become policy without approval."""
 
 import json
+import re
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -142,9 +143,20 @@ def save(ctx: Context, value: SavePreference, *, proposed: bool = False) -> Pref
 
 
 def layer(
-    ctx: Context, agent: str, task: str, account: str | None, exclude_id: int | None = None
+    ctx: Context,
+    agent: str,
+    task: str,
+    account: str | None,
+    exclude_id: int | None = None,
+    *,
+    senders: set[str] | None = None,
 ) -> str:
-    purpose = {"mail": "mail", "draft-reply": "draft", "daily-prep": "brief"}.get(agent, "all")
+    purpose = {
+        "mail": "mail",
+        "draft-reply": "draft",
+        "daily-prep": "brief",
+        "interview": "mail",
+    }.get(agent, "all")
     relevant = []
     for item in listing(ctx):
         if item.id == exclude_id:
@@ -153,8 +165,14 @@ def layer(
             continue
         if agent != "session" and item.purpose not in {"all", purpose}:
             continue
-        if item.sender and item.sender.casefold() not in task.casefold():
-            continue
+        if item.sender:
+            actual = (
+                senders
+                if senders is not None
+                else set(re.findall(r"[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9.-]+", task, re.I))
+            )
+            if item.sender.casefold() not in {sender.casefold() for sender in actual}:
+                continue
         if item.topic and item.topic.casefold() not in task.casefold():
             continue
         scope = (

@@ -98,6 +98,7 @@ def tasks_of(client: TestClient, **query: Any) -> list[dict[str, Any]]:
 
 def two_filed_threads(client: TestClient, script: Script, fake: FakeMail) -> list[int]:
     connect(client, fake)
+    client.post("/api/commands/categories.save", json={"name": "Reports", "mode": "smart"})
     script.replies = [triage_reply(category="Reports"), triage_reply(category="Reports")]
     fake.state.deliver(make_mail(subject="Report one"))
     first = triaged(client, "Report one")["id"]
@@ -117,18 +118,20 @@ def test_a_category_can_be_renamed_with_its_mail_and_rule(
         json={"name": "Reports", "subject": "report", "in_priority": True},
     )
     result = use_tool(
-        client, script, ToolCall("c", "update_category", {"name": "Reports", "new_name": "Updates"})
+        client,
+        script,
+        ToolCall("c", "update_category", {"name": "Reports", "new_name": "Reporting"}),
     )
-    assert result == "Updated Updates."
+    assert result == "Updated Reporting."
     assert category_named(client, "Reports") is None
-    renamed = category_named(client, "Updates")
+    renamed = category_named(client, "Reporting")
     assert renamed
     assert (renamed["count"], renamed["in_priority"], renamed["subject"]) == (2, True, "report")
-    assert set(subjects(client, folder="all", category="Updates")) == {"Report one", "Report two"}
-    assert [r["name"] for r in rules_of(client)] == ["Category: Updates"]
+    assert set(subjects(client, folder="all", category="Reporting")) == {"Report one", "Report two"}
+    assert [r["name"] for r in rules_of(client)] == ["Category: Reporting"]
     # New mail follows the renamed rule.
     fake.state.deliver(make_mail(subject="Report three"))
-    wait(lambda: "Report three" in subjects(client, folder="all", category="Updates"), "new mail")
+    wait(lambda: "Report three" in subjects(client, folder="all", category="Reporting"), "new mail")
 
 
 def test_renaming_onto_a_name_in_use_is_refused(client: TestClient, script: Script) -> None:
@@ -181,10 +184,11 @@ def test_categories_keep_their_order_and_can_be_removed_in_bulk(
     order = {"names": ["Cherries", "Apples", "Bananas"]}
     use_tool(client, script, ToolCall("c", "reorder_categories", order))
     rows = client.post("/api/queries/categories.list").json()["categories"]
-    assert [c["name"] for c in rows] == order["names"]
+    assert [c["name"] for c in rows if c["name"] in order["names"]] == order["names"]
     use_tool(client, script, ToolCall("d", "delete_categories", {"names": ["Cherries", "Apples"]}))
     rows = client.post("/api/queries/categories.list").json()["categories"]
-    assert [c["name"] for c in rows] == ["Bananas"]
+    assert "Bananas" in {c["name"] for c in rows}
+    assert not {"Cherries", "Apples"} & {c["name"] for c in rows}
 
 
 def test_categories_saved_side_by_side_all_keep_their_rules(
@@ -454,3 +458,29 @@ def test_nothing_is_announced_when_no_count_changed(
     time.sleep(0.5)
     assert len(category_events(client)) == before
     assert json.dumps(category_events(client)[-1]["payload"])
+
+
+def test_category_tool_sets_and_reads_personalized_settings(
+    client: TestClient, script: Script
+) -> None:
+    client.post("/api/commands/categories.save", json={"name": "Research"})
+    result = use_tool(
+        client,
+        script,
+        ToolCall(
+            "personalize",
+            "update_category",
+            {
+                "name": "Research",
+                "mode": "smart",
+                "description": "Only wireless network research",
+                "in_priority": False,
+            },
+        ),
+    )
+    assert result == "Updated Research."
+    saved = category_named(client, "Research")
+    assert saved and saved["description"] == "Only wireless network research"
+    assert saved["mode"] == "smart" and not saved["in_priority"]
+    listed = use_tool(client, script, ToolCall("read-folders", "list_categories", {}))
+    assert "Only wireless network research" in listed and "mode: smart" in listed

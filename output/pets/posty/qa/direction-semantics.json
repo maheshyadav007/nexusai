@@ -1,0 +1,118 @@
+{
+  "directions": [
+    {
+      "label": "000",
+      "expected": "up",
+      "observed": "up",
+      "verdict": "pass",
+      "evidence": "Both square pupils sit along the top of their white eye surfaces; eye pair high on envelope."
+    },
+    {
+      "label": "022.5",
+      "expected": "up-right",
+      "observed": "up-right",
+      "verdict": "warning",
+      "evidence": "Pupils remain high and move a little right within both eyes; small horizontal step is subtle."
+    },
+    {
+      "label": "045",
+      "expected": "up-right",
+      "observed": "up-right",
+      "verdict": "pass",
+      "evidence": "Both pupils occupy upper-right of their square whites; eye group shifts right."
+    },
+    {
+      "label": "067.5",
+      "expected": "up-right",
+      "observed": "up-right",
+      "verdict": "pass",
+      "evidence": "Pupils strongly favor right edges and remain above eye centers."
+    },
+    {
+      "label": "090",
+      "expected": "right",
+      "observed": "right",
+      "verdict": "pass",
+      "evidence": "Both pupils and eye group favor screen-right; vertical positions near center."
+    },
+    {
+      "label": "112.5",
+      "expected": "down-right",
+      "observed": "down-right",
+      "verdict": "warning",
+      "evidence": "Both pupils favor right edges and sit below their eye centers; downward cue is small."
+    },
+    {
+      "label": "135",
+      "expected": "down-right",
+      "observed": "down-right",
+      "verdict": "pass",
+      "evidence": "Pupils are visibly low and right in both white squares."
+    },
+    {
+      "label": "157.5",
+      "expected": "down-right",
+      "observed": "down-right",
+      "verdict": "warning",
+      "evidence": "Pupils remain low with slight right displacement; horizontal cue is subtle."
+    },
+    {
+      "label": "180",
+      "expected": "down",
+      "observed": "down",
+      "verdict": "pass",
+      "evidence": "Both pupils at bottom of white eye squares, eye group lower on envelope."
+    },
+    {
+      "label": "202.5",
+      "expected": "down-left",
+      "observed": "down-left",
+      "verdict": "warning",
+      "evidence": "Both pupils low, with modest screen-left displacement inside squares."
+    },
+    {
+      "label": "225",
+      "expected": "down-left",
+      "observed": "down-left",
+      "verdict": "pass",
+      "evidence": "Both pupils low-left in square whites and face group shifts left."
+    },
+    {
+      "label": "247.5",
+      "expected": "down-left",
+      "observed": "down-left",
+      "verdict": "warning",
+      "evidence": "Both pupils touch left side, slightly below eye center; vertical cue is subtle."
+    },
+    {
+      "label": "270",
+      "expected": "left",
+      "observed": "left",
+      "verdict": "pass",
+      "evidence": "Both pupils and printed eyes favor screen-left, at centered vertical height."
+    },
+    {
+      "label": "292.5",
+      "expected": "up-left",
+      "observed": "up-left",
+      "verdict": "warning",
+      "evidence": "Both pupils favor left edges, a little above eye centers; vertical cue is subtle."
+    },
+    {
+      "label": "315",
+      "expected": "up-left",
+      "observed": "up-left",
+      "verdict": "pass",
+      "evidence": "Both square pupils clearly occupy upper-left of eye whites."
+    },
+    {
+      "label": "337.5",
+      "expected": "up-left",
+      "observed": "up-left",
+      "verdict": "warning",
+      "evidence": "Both pupils at upper edges and slightly left of eye centers; horizontal cue is subtle."
+    }
+  ],
+  "continuity_review": "All body feet anchors stable. Small metric outliers follow eye landmark changes; no visible whole-sprite rotation, loop reversal or scale pop. Reported low alpha gaps are intentional space between separate legs below envelope body, not missing paper.",
+  "blind_review_followup": "Three isolated reviews agree on all four cardinals. Reviewed 337.5 horizontal cue and 247.5 vertical cue as subtle: labeled full-loop review confirms leftward face-group displacement at 337.5 and small downward pupil offset at 247.5. Both remain warning verdicts; neither reverses or enters wrong quadrant."
+}

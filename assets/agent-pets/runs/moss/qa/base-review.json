@@ -1,0 +1,12 @@
+{
+  "job": "base",
+  "ok": true,
+  "source": "/Users/maheshyadav/.codex/generated_images/01a1a2c0-0bb4-7190-878e-17f0ef09bdcf/exec-a664eb72-6638-4945-a6b1-35eb63b0c802.png",
+  "selected_artifact": "decoded/base.png",
+  "method": "built-in image_gen; visual inspection of source",
+  "identity": "Sage green owl with cream face disk and belly, soft ear tufts, dark bead eyes, grounded tiny feet. No props. Matches Pip compact bird family, dark contour and restrained volume.",
+  "background": "Flat magenta visible with no scenery or detached effects. Chroma extraction pending during strip assembly.",
+  "spacing": "One centered full-body pose with generous margin.",
+  "clipping": "No clipped feet, tufts, wings or body.",
+  "scope": "Base only; no animation or Work validation claimed."
+}

@@ -2,6 +2,7 @@
 # ruff: noqa: F811
 
 import json
+import time
 from dataclasses import replace
 from typing import Any
 
@@ -192,7 +193,7 @@ def test_automated_mail_is_only_read_when_it_could_matter(
     assert all("Your weekly tips" not in told(request) for request in script.requests)
 
 
-def test_a_filed_reply_in_their_own_conversation_is_still_read(
+def test_a_header_match_without_a_consequential_subject_uses_no_model(
     client: TestClient, fake: FakeMail, script: Script
 ) -> None:
     connect(client, fake)
@@ -210,7 +211,9 @@ def test_a_filed_reply_in_their_own_conversation_is_still_read(
             body="Thanks, we'd like to talk.",
         )
     )
-    wait(lambda: any("we'd like to talk" in told(r) for r in script.requests), "a judgement")
+    thread_named(client, "Hiring")
+    time.sleep(0.2)
+    assert not any("we'd like to talk" in told(r) for r in script.requests)
 
 
 def test_interrupting_is_decided_apart_from_importance(
@@ -315,12 +318,14 @@ def test_a_note_says_where_it_came_from_and_can_be_confirmed_or_removed(
     memory.add_learned(home, ["Works on Atlas", "Likes tea"], 13)
     assert memory.learned(home).splitlines() == [
         "- Works on Atlas [mail:12]",
+        "- Works on Atlas [mail:13]",
         "- Likes tea [mail:13]",
     ]
     notes = post(client, "mailAgent.knowledge")["notes"]
     assert notes[0]["text"] == "Works on Atlas" and notes[0]["thread"] == 12
     post(client, "memory.confirmNote", "commands", line=notes[0]["line"])
-    post(client, "memory.removeNote", "commands", line=notes[1]["line"])
+    for note in notes[1:]:
+        post(client, "memory.removeNote", "commands", line=note["line"])
     assert memory.learned(home).strip() == ""
     from nexusai.modules.agent import knowledge
     from nexusai.modules.agent.module import current
@@ -514,22 +519,27 @@ def test_the_built_ins_can_be_turned_off(client: TestClient) -> None:
     assert not current["morning_brief"] and current["inbox_review"]
 
 
-def test_near_duplicate_category_names_become_one_and_it_cant_make_endless_ones(
+def test_the_model_can_only_use_existing_smart_folders(
     client: TestClient, fake: FakeMail, script: Script
 ) -> None:
     connect(client, fake)
     script.replies.append(triage_reply(category="Atlas launch"))
-    script.replies.append(triage_reply(category="atlas"))
     fake.state.deliver(make_mail(subject="Name one", message_id="<y1@x>"))
-    assert judged(client, "Name one")["category"] == "Atlas launch"
+    assert judged(client, "Name one")["category"] is None
+    assert not any(
+        folder["name"] == "Atlas launch" for folder in post(client, "categories.list")["categories"]
+    )
+    post(
+        client,
+        "categories.save",
+        "commands",
+        name="Atlas",
+        mode="smart",
+        description="Atlas project",
+    )
+    script.replies.append(triage_reply(smart_folders=["Atlas", "atlas launch", "Made up"]))
     fake.state.deliver(make_mail(subject="Name two", message_id="<y2@x>"))
-    assert judged(client, "Name two")["category"] == "Atlas launch"
-    with client.app.state.bus.db.transaction() as tx:  # type: ignore[attr-defined]
-        for number in range(mail_agent.MOST_AGENT_CATEGORIES):
-            tx.execute(
-                "INSERT INTO mail_categories (name, source, created) VALUES (?, 'agent', 'now')",
-                (f"Made {number}",),
-            )
+    assert judged(client, "Name two")["category"] == "Atlas"
     script.replies.append(triage_reply(category="Brand new"))
     fake.state.deliver(make_mail(subject="Name three", message_id="<y3@x>"))
     assert judged(client, "Name three")["category"] is None
@@ -604,7 +614,7 @@ def test_the_same_mail_isnt_offered_twice_under_another_name(
     assert len(post(client, "suggestions.list")["suggestions"]) == 1
 
 
-def test_the_agent_can_refile_a_header_guess_in_their_conversation_but_not_their_own_rule(
+def test_exact_header_folder_keeps_primary_and_smart_filing_is_extra(
     client: TestClient, fake: FakeMail, script: Script
 ) -> None:
     connect(client, fake)
@@ -618,7 +628,8 @@ def test_the_agent_can_refile_a_header_guess_in_their_conversation_but_not_their
     )
     first = thread_named(client, "Interview")
     assert first["category"] == "Promotions"
-    script.default = triage_reply(category="Job search", status="waiting_on_others")
+    post(client, "categories.save", "commands", name="Job search", mode="smart")
+    script.default = triage_reply(smart_folders=["Job search"], status="waiting_on_others")
     fake.state.deliver(
         make_mail(
             subject="Re: Interview",
@@ -638,10 +649,14 @@ def test_the_agent_can_refile_a_header_guess_in_their_conversation_but_not_their
             in_reply_to="<ab2@x>",
         )
     )
-    wait(lambda: row(client, first["id"])["category"] == "Job search", "the agent to refile it")
+    wait(
+        lambda: "Job search" in json.loads(row(client, first["id"])["extra_categories"]),
+        "Smart filing as extra",
+    )
+    assert row(client, first["id"])["category"] == "Updates"
 
 
-def test_read_more_reads_only_conversations_they_wrote_in(
+def test_read_more_groups_incoming_and_sent_conversations(
     client: TestClient, fake: FakeMail, script: Script
 ) -> None:
     connect(client, fake)
@@ -653,4 +668,4 @@ def test_read_more_reads_only_conversations_they_wrote_in(
     )
     thread_named(client, "Not theirs")
     wait(lambda: mail_agent.conversations_not_read(mail_context(client)), "their conversation")
-    assert mail_agent.queue_learning(mail_context(client), 5) == 1
+    assert mail_agent.queue_learning(mail_context(client), 5) == 2

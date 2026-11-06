@@ -5,6 +5,7 @@ The clock only says something came due. Starting the agent is the same as for an
 
 import os
 import threading
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -248,16 +249,18 @@ class Scheduler:
 
     def _loop(self) -> None:
         while not self.stopping.is_set():
+            seconds = float(LONGEST_SLEEP_SECONDS)
             try:
                 self.tick(_local_now())
+                due = self._next_due()
+                if due is not None:
+                    seconds = max(
+                        1.0, min((due - datetime.now(UTC)).total_seconds(), LONGEST_SLEEP_SECONDS)
+                    )
             except Exception:
+                # Reading the next due time can fail too; keep the timer alive.
                 log.exception("scheduler_failed")
-            due = self._next_due()
-            seconds = float(LONGEST_SLEEP_SECONDS)
-            if due is not None:
-                seconds = max(
-                    1.0, min((due - datetime.now(UTC)).total_seconds(), LONGEST_SLEEP_SECONDS)
-                )
+                seconds = min(60.0, LONGEST_SLEEP_SECONDS)
             self.wake.wait(seconds)
             self.wake.clear()
 
@@ -266,20 +269,32 @@ class Scheduler:
         day = now.strftime("%Y-%m-%d")
         if self.pruned_on == day:
             return
-        self.pruned_on = day
         keep = timedelta(days=self.ctx.config.log_retention_days)
         self.ctx.bus.prune((datetime.now(UTC) - keep).isoformat())
+        self.pruned_on = day
 
     def tick(self, now: datetime) -> None:
-        self._prune_events(now)
+        jobs: list[tuple[str, Callable[[datetime], object]]] = [("prune", self._prune_events)]
         if time_check_enabled(self.ctx):
-            planner.fire_due_reminders(self.ctx, now)
-            self._overdue(now)
-            self._follow_ups(now)
-        self._run_due(now)
+            jobs.extend(
+                [
+                    ("reminders", lambda instant: planner.fire_due_reminders(self.ctx, instant)),
+                    ("overdue", self._overdue),
+                    ("follow-ups", self._follow_ups),
+                ]
+            )
+        jobs.append(("schedules", self._run_due))
+        for name, job in jobs:
+            try:
+                job(now)
+            except Exception:
+                # One broken reminder must not stop all scheduled agents.
+                log.exception("scheduler_job_failed", job=name)
 
     def _overdue(self, now: datetime) -> None:
         """Work board deadlines that have passed. Uses no model, and tells the person once."""
+        if channel.in_quiet_hours(channel.load_quiet(self.ctx.bus.db), now):
+            return
         today = now.strftime("%Y-%m-%d")
         rows = self.ctx.bus.db.fetch_all(
             "SELECT id, title, thread FROM work_board WHERE done = 0 AND due IS NOT NULL AND due < ? AND kind = 'deadline' AND overdue_notified_at IS NULL",
@@ -302,6 +317,8 @@ class Scheduler:
 
     def _follow_ups(self, now: datetime) -> None:
         """Nobody's answered by the day it was worth chasing. Uses no model, and tells them once."""
+        if channel.in_quiet_hours(channel.load_quiet(self.ctx.bus.db), now):
+            return
         today = now.strftime("%Y-%m-%d")
         rows = self.ctx.bus.db.fetch_all(
             "SELECT id, subject FROM threads WHERE status = 'waiting_on_others' AND follow_up_on <= ?"

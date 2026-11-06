@@ -149,14 +149,16 @@ def decide(ctx: Context, identifier: int, accept: bool) -> None:
 
 def _apply(ctx: Context, category: str, senders: list[str], quiet: bool) -> None:
     """Files what's here and what's coming. A quiet group also skips the agent and leaves the inbox."""
-    mail.save_category(SaveCategory(name=category, source="agent"), ctx)
+    mail.save_category(
+        SaveCategory(name=category, source="agent", mode="exact", sender=senders[0]), ctx
+    )
     for sender in senders:
         mail.upsert_rule(
             ctx,
             MailRule(
-                name=f"{category}: {sender}",
-                conditions=[RuleCondition(field="sender", value=sender)],
-                actions=RuleActions(category=category, skip_agent=quiet),
+                name=mail.sender_rule_name(category, sender),
+                conditions=[RuleCondition(field="sender_exact", value=sender)],
+                actions=RuleActions(category=category, skip_agent=True),
             ),
         )
         mail.file_by_sender(ctx, category, sender)

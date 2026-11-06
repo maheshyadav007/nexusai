@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 const categories = ["Action needed", "Projects", "Finance", "People", "Travel", "Newsletters", "Team updates", "Reference"].map((name) => ({ name, source: "user", in_priority: false, proposed: false, count: 3, unread: 0 }));
@@ -24,7 +25,7 @@ test("five custom rows expand within a scroll area and collapse with the selecte
   const rows = nav.locator('[data-testid="nav-folder"], [data-testid="nav-category"]');
   const list = nav.getByRole("region", { name: "Categories and custom folders" });
   const today = nav.getByRole("link", { name: "Today", exact: true });
-  const priority = nav.getByRole("link", { name: "Priority inbox", exact: true });
+  const priority = nav.getByRole("link", { name: "Priority", exact: true });
   await expect(rows).toHaveCount(5);
   await expect(today).toHaveAttribute("aria-current", "page");
   const homeBox = await today.boundingBox();
@@ -89,11 +90,11 @@ test("account menu aligns above the user button and supports keyboard and collap
   await page.route("**/api/queries/profile.get", (route) => route.fulfill({ json: { name: "Mahesh Yadav", role: "", tone: "friendly" } }));
   await page.goto("/today");
   const trigger = page.getByTestId("account-menu-trigger");
-  await expect(trigger).toHaveAccessibleName("Account menu for Mahesh Yadav");
+  await expect(trigger).toHaveAccessibleName("Account menu for MY Mahesh Yadav");
   await expect(trigger).toContainText("MY");
   await expect(trigger).toContainText("Mahesh Yadav");
   await trigger.click();
-  const menu = page.getByRole("menu", { name: "Account menu for Mahesh Yadav" });
+  const menu = page.getByRole("menu", { name: "Account menu for MY Mahesh Yadav" });
   await expect(menu).toHaveAttribute("data-side", "top");
   await expect(menu).toHaveCSS("animation-name", "account-menu-in");
   await menu.evaluate((node) => Promise.all(node.getAnimations().map((animation) => animation.finished)));
@@ -114,6 +115,9 @@ test("account menu aligns above the user button and supports keyboard and collap
   await expect(page.getByRole("dialog", { name: "Settings", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
+  await expect(trigger).toHaveAccessibleName("Account menu for MY Mahesh Yadav");
+  const { violations } = await new AxeBuilder({ page }).include('[data-testid="account-menu-trigger"]').withRules(["label-content-name-mismatch"]).analyze();
+  expect(violations).toEqual([]);
   await trigger.click();
   await expect(menu).toHaveAttribute("data-side", "top");
   await menu.evaluate((node) => Promise.all(node.getAnimations().map((animation) => animation.finished)));
@@ -135,11 +139,11 @@ test("long user names stay inside the footer and an empty profile has a usable f
   await page.route("**/api/queries/profile.get", (route) => route.fulfill({ json: { name: "Alexandra Catherine Montgomery Wellington", role: "", tone: "friendly" } }));
   await page.goto("/today");
   const trigger = page.getByTestId("account-menu-trigger");
-  await expect(trigger).toHaveAccessibleName("Account menu for Alexandra Catherine Montgomery Wellington");
+  await expect(trigger).toHaveAccessibleName("Account menu for AC Alexandra Catherine Montgomery Wellington");
   expect(await trigger.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
   await page.route("**/api/queries/profile.get", (route) => route.fulfill({ json: { name: "  ", role: "", tone: "friendly" } }));
   await page.reload();
-  await expect(trigger).toHaveAccessibleName("Account menu for You");
+  await expect(trigger).toHaveAccessibleName("Account menu for Y You");
   await trigger.click();
   await expect(page.getByRole("menuitem", { name: "Settings", exact: true })).toBeVisible();
 });

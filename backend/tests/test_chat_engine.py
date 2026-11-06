@@ -3,6 +3,7 @@
 
 import json
 import threading
+import time
 from dataclasses import replace
 from typing import Any
 
@@ -615,6 +616,10 @@ def test_priority_inbox_is_a_filter_of_all_mail(
     fake: FakeMail,
 ) -> None:
     connect(client, fake)
+    client.post(
+        "/api/commands/categories.save",
+        json={"name": "Reports", "mode": "smart", "in_priority": False},
+    )
     script.default = None
     script.replies = [
         triage_reply(importance="high", status="waiting_on_you", category="Action"),
@@ -626,7 +631,7 @@ def test_priority_inbox_is_a_filter_of_all_mail(
     triaged(client, "Monthly report")
 
     assert set(subjects(client, folder="all")) == {"Needs a decision", "Monthly report"}
-    assert subjects(client, folder="priority") == ["Needs a decision"]
+    assert set(subjects(client, folder="priority")) == {"Needs a decision", "Monthly report"}
     client.post("/api/commands/categories.save", json={"name": "Reports", "in_priority": True})
     assert set(subjects(client, folder="priority")) == {"Needs a decision", "Monthly report"}
     assert subjects(client, folder="all", category="Reports") == ["Monthly report"]
@@ -642,7 +647,8 @@ def test_a_category_files_old_mail_and_new_mail(
     fake.state.deliver(make_mail(subject="Invoice one", sender="billing@vendor.example"))
     triaged(client, "Invoice one")
     saved = client.post(
-        "/api/commands/categories.save", json={"name": "Invoices", "sender": "vendor.example"}
+        "/api/commands/categories.save",
+        json={"name": "Invoices", "sender": "billing@vendor.example"},
     ).json()
     assert saved["filed"] == 1
     fake.state.deliver(make_mail(subject="Invoice two", sender="billing@vendor.example"))
@@ -817,7 +823,10 @@ def test_old_overlaps_are_tidied_without_a_model(
     listed = client.post("/api/queries/categories.list").json()["categories"]
     names = {c["name"] for c in listed}
     assert {"Product", "Updates", "HR", "Travel"} <= names
-    assert not {"Product updates", "HR feedback"} & names
+    assert "Product updates" in names  # Accepted folders require a merge decision.
+    assert "HR feedback" not in names
+    proposed_merges = client.post("/api/queries/mail.organization", json={}).json()["merges"]
+    assert any("Product updates" in suggestion["names"] for suggestion in proposed_merges)
     assert len(script.requests) == calls
 
 
@@ -838,7 +847,7 @@ def test_starter_categories_file_by_subject_and_old_mail_too(
         fake.state.deliver(make_mail(subject="Re: [PLM] Sprint plan", message_id="<p2@x>"))
         fake.state.deliver(make_mail(subject="About [PLM] next week", message_id="<p3@x>"))
         wait(lambda: len(subjects(live, folder="all")) == 3)
-        wait(lambda: len(subjects(live, folder="all", category="PLM")) == 2)
+        wait(lambda: len(subjects(live, folder="all", category="PLM")) == 1)
         filed = subjects(live, folder="all", category="PLM")
         assert "About [PLM] next week" not in filed
         rows = {
@@ -860,14 +869,15 @@ def test_automated_starter_mail_stays_filed_and_replies_reach_the_agent(
         wait(lambda: subjects(live, folder="all", category="PLM"))
         assert not script.requests
         assert "[PLM] Build 12 passed" not in subjects(live, folder="priority")
-        # Automated, but saying it's escalated is worth a look.
+        # A personal Exact rule has no subject exception; only header Updates do.
         script.replies = [triage_reply(importance="high"), triage_reply(importance="high")]
         fake.state.deliver(make_mail(subject="[PLM] Issue 7 escalated", message_id="<a2@x>"))
-        wait(lambda: len(script.requests) == 1)
+        time.sleep(0.1)
+        assert not script.requests
         fake.state.deliver(make_mail(subject="Re: [PLM] Build 13 failed", message_id="<a3@x>"))
-        wait(lambda: len(script.requests) == 2)
+        wait(lambda: len(script.requests) == 1)
         wait(lambda: "Re: [PLM] Build 13 failed" in subjects(live, folder="priority"))
-        assert "Re: [PLM] Build 13 failed" in subjects(live, folder="all", category="PLM")
+        assert "Re: [PLM] Build 13 failed" not in subjects(live, folder="all", category="PLM")
         # Nobody suggests the folder itself, though it can still be added by hand.
         rows = {
             c["name"]: c for c in live.post("/api/queries/categories.list").json()["categories"]
@@ -879,7 +889,7 @@ def test_a_category_can_be_suggested_for_priority_and_a_no_is_remembered(
     client: TestClient,
     script: Script,
 ) -> None:
-    client.post("/api/commands/categories.save", json={"name": "Customers"})
+    client.post("/api/commands/categories.save", json={"name": "Customers", "in_priority": False})
     assert agent_module._triggers is not None
     ctx = agent_module._triggers.ctx
     assert "Suggested" in mail_module.suggest_priority(ctx, "Customers", "Most of it needs you.")

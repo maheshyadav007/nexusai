@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { ApiRequestError } from "@/ui/client/api";
 import type { ContextProfile, ContextSettings, MailAgentSettings } from "@/ui/client/contracts.generated";
 import { useContextSettings, useMailAgent, useRunMailAgent, useSaveContextSettings, useSaveMailAgent } from "@/ui/client/work";
@@ -8,6 +7,7 @@ import { SessionGeneration } from "@/ui/features/agent/SessionGeneration";
 import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
 import { Input } from "@/ui/primitives/Input";
+import { Switch } from "@/ui/primitives/Switch";
 import { Select } from "@/ui/primitives/Select";
 import { SettingRow } from "@/ui/primitives/SettingRow";
 import { Skeleton } from "@/ui/primitives/Skeleton";
@@ -16,35 +16,19 @@ import { t } from "@/ui/strings";
 
 type Mode = NonNullable<MailAgentSettings["mode"]>;
 
-/** How much past mail it reads to learn about the person, once, before going live. */
+/** Repeated grouped learning after onboarding, imports and larger downloads. */
 function LearnEmails() {
   const settings = useMailAgent();
   const save = useSaveMailAgent();
-  const saved = settings.data?.learn_emails ?? 0;
-  const [count, setCount] = useState("");
-  const shown = count || String(saved);
   const state = settings.data?.learning_state;
-  const tokens = (Number(shown) || 0) * (settings.data?.tokens_per_email ?? 0);
-  return (
-    <SettingRow label={t("agentRuns.mail.learn")} wide>
-      <div className="flex flex-col gap-1">
-        <Input
-          type="number"
-          min={1}
-          aria-label={t("agentRuns.mail.learn")}
-          className="py-1"
-          value={shown}
-          onChange={(event) => setCount(event.target.value)}
-          onBlur={() => {
-            if (Number(count) >= 1 && Number(count) !== saved) save.mutate({ mode: settings.data?.mode ?? "both", learn_emails: Number(count) });
-          }}
-        />
-        <p className="text-sm text-ink-muted">{t("agentRuns.mail.learn.hint", { tokens: tokens.toLocaleString() })}</p>
-        {state === "reading" ? <p role="status" className="text-sm tabular-nums text-ink-secondary">{t("agentRuns.mail.learn.state.reading", { done: settings.data?.learning_done ?? 0, total: settings.data?.learning_total ?? 0 })}</p> : null}
-        {state === "done" || state === "wrapping" ? <p className="text-sm text-ink-secondary">{t("agentRuns.mail.learn.state.done")}</p> : null}
-      </div>
-    </SettingRow>
-  );
+  return <SettingRow label={t("agentRuns.mail.learn")} wide>
+    <div className="flex flex-col gap-1">
+      <Switch label={t("agentRuns.mail.learn")} checked={(settings.data?.learn_emails ?? 0) > 0} onChange={(enabled) => save.mutate({ mode: settings.data?.mode ?? "both", learn_emails: enabled ? 400 : 0 })} />
+      <p className="text-sm text-ink-muted">{t("agentRuns.mail.learn.hint")}</p>
+      {state === "reading" ? <p role="status" className="text-sm tabular-nums text-ink-secondary">{t("agentRuns.mail.learn.state.reading", { done: settings.data?.learning_done ?? 0, total: settings.data?.learning_total ?? 0 })}</p> : null}
+      {state === "done" ? <p className="text-sm text-ink-secondary">{t("agentRuns.mail.learn.state.done")}</p> : null}
+    </div>
+  </SettingRow>;
 }
 
 export function MailAgentCard() {

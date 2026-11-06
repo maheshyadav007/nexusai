@@ -2,6 +2,8 @@
 
 import { useSessions } from "@/ui/client/sessions";
 import { usePlannerCounts, useWaitingCount } from "@/ui/client/work";
+import { MailNavMenu } from "./MailNavMenu";
+import type { MarkFolderRead } from "@/ui/client/contracts.generated";
 import { CategoryNavActions } from "./CategoryNav";
 import { CustomMailNav } from "./CustomMailNav";
 import Link from "next/link";
@@ -44,12 +46,13 @@ function NavRow({ item, active, collapsed, count, attention }: { item: NavItem; 
       </span>
     </Link>
   );
+  const mailRow = item.href.startsWith("/mail/") ? <MailNavMenu href={item.href} scope={{ folder: (item.id === "all-mail" ? "all" : item.id) as MarkFolderRead["folder"] }}>{row}</MailNavMenu> : row;
   return collapsed ? (
     <Tooltip content={label} side="right">
-      {row}
+      <span className="block">{mailRow}</span>
     </Tooltip>
   ) : (
-    row
+    mailRow
   );
 }
 
@@ -65,7 +68,7 @@ function useWaitingCounts(): Readonly<Record<string, number>> {
 function useUnreadCounts(): Readonly<Record<string, number>> {
   const folders = useMailFolders();
   const found = folders.data?.counts ?? {};
-  return { priority: found.priority ?? 0, "all-mail": found.all ?? 0, sent: found.sent ?? 0, drafts: found.drafts ?? 0, archive: found.archive ?? 0, trash: found.trash ?? 0 };
+  return { priority: found.priority ?? 0, important: found.important ?? 0, starred: found.starred ?? 0, "all-mail": found.all ?? 0, sent: found.sent ?? 0, drafts: found.drafts ?? 0, archive: found.archive ?? 0, trash: found.trash ?? 0 };
 }
 
 export function NavSidebar({ counts }: { counts?: Readonly<Record<string, number>> }) {

@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "artifact": "decoded/base.png",
+  "frame_count": 1,
+  "identity": "Compact blue swallow; two dark highlighted eyes, short beak, cream envelope-chevron bib, forked blue tail and grounded tiny feet. Family proportions, contour and matte sticker volume match Pip.",
+  "background": "Flat pure magenta surround; no scenery, cast shadow or detached effects observed.",
+  "spacing": "Single centered full-body pose with ample magenta margin.",
+  "clipping": "All feet, wing edges and forked tail tips fully visible.",
+  "notes": "Canonical base only; animation QA pending idle generation."
+}

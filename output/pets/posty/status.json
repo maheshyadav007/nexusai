@@ -1,0 +1,10 @@
+{
+  "name": "Posty",
+  "artwork_complete": true,
+  "quality_ok": true,
+  "pets_preflight_valid": true,
+  "saved_to_library": false,
+  "pet_created": false,
+  "active": false,
+  "blocker": "Library saving tools unavailable; required by invoked skill before upload."
+}
