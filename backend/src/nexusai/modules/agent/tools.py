@@ -76,6 +76,8 @@ class RunControl:
 
     def __init__(self) -> None:
         self.stopped = threading.Event()
+        # Why it stopped, when the harness stopped it rather than the person.
+        self.reason: str | None = None
         self._process: subprocess.Popen[str] | None = None
 
     def attach(self, process: subprocess.Popen[str] | None) -> None:
@@ -345,6 +347,53 @@ def _log_call(
             ),
         )
     log.info("tool_call", tool=tool, status=status, approved_by=approved_by, ms=ms, session=session)
+    if status in REFUSED:
+        _after_refusal(ctx, session)
+
+
+REFUSED = frozenset({"refused", "denied"})
+# Each live run's stop handle, so a run that keeps being refused can be stopped from its tools.
+RUN_CONTROLS: dict[str, "RunControl"] = {}
+
+
+def _after_refusal(ctx: Context, session: str) -> None:
+    """Deny and carry on, until it's clearly stuck: then the run stops and the person is told."""
+    db = ctx.bus.db
+    turn = db.fetch_all(
+        "SELECT created FROM agent_turns WHERE session = ? AND closed = 0 ORDER BY id DESC LIMIT 1",
+        (session,),
+    )
+    if not turn or not turn[0]["created"]:
+        return
+    statuses = [
+        row["status"]
+        for row in db.fetch_all(
+            "SELECT status FROM tool_calls WHERE session = ? AND started >= ? ORDER BY id DESC",
+            (session, turn[0]["created"]),
+        )
+    ]
+    in_a_row = next(
+        (i for i, status in enumerate(statuses) if status not in REFUSED), len(statuses)
+    )
+    total = sum(status in REFUSED for status in statuses)
+    limits = ctx.config.team
+    if in_a_row < limits.refusals_in_a_row and total < limits.refusals_per_run:
+        return
+    control = RUN_CONTROLS.get(session)
+    if control is None or control.stopped.is_set():
+        return
+    control.reason = "refusals"
+    control.stop()
+    with ctx.bus.unit_of_work() as work:
+        channel.notify(
+            ctx,
+            work,
+            "An agent was refused too many times, so its run stopped. Check what it was trying to do.",
+            "",
+            f"/agent/sessions/{session}",
+            "agent",
+            False,
+        )
 
 
 def _resolve(ctx: Context, session: str, requested: str) -> Path:
@@ -885,6 +934,8 @@ def _connector_tools(ctx: Context, session: str) -> list[StructuredTool]:
 def build_tools(
     ctx: Context, session: str, control: RunControl, allowed: frozenset[str] | None = None
 ) -> list[StructuredTool]:
+    RUN_CONTROLS[session] = control
+
     def apply_mail_learning_answers(answers: list[dict[str, str]], tool_call_id: str) -> str:
         importance = {answer.get("id", ""): answer.get("importance", "") for answer in answers}
 
@@ -1788,6 +1839,7 @@ def build_tools(
         )
 
     specs += work_tools.specs(ctx, guarded, _untrusted, session)
+
     own = [
         StructuredTool.from_function(
             func=func,

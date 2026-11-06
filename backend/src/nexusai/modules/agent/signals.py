@@ -304,3 +304,44 @@ def category_table(ctx: Context) -> str:
         f" {row['opened']} marked read"
         for row in rows
     )
+
+
+def recipient_notes(ctx: Context, recipients: list[str], thread: int | None) -> list[str]:
+    """For an approval: who each recipient is to the person, so a new or outside address stands
+    out instead of hiding among people they write to every day."""
+    own = own_addresses(ctx)
+    domains = {address.split("@", 1)[1] for address in own}
+    notes = []
+    for raw in recipients:
+        address = raw.strip().lower()
+        domain = address.split("@", 1)[1] if "@" in address else ""
+        pattern = f'%"{address}"%'
+        on_thread = bool(
+            thread
+            and ctx.bus.db.fetch_all(
+                "SELECT 1 FROM messages WHERE thread_id = ? AND (LOWER(from_addr) = ?"
+                " OR LOWER(to_json) LIKE ? OR LOWER(cc_json) LIKE ?) LIMIT 1",
+                (thread, address, pattern, pattern),
+            )
+        )
+        written = bool(
+            own
+            and ctx.bus.db.fetch_all(
+                f"SELECT 1 FROM messages WHERE LOWER(from_addr) IN ({_placeholders(own)})"  # noqa: S608
+                " AND (LOWER(to_json) LIKE ? OR LOWER(cc_json) LIKE ?) LIMIT 1",
+                (*own, pattern, pattern),
+            )
+        )
+        if address in own:
+            where = "you"
+        elif on_thread:
+            where = "on this conversation"
+        elif written:
+            where = "you've written to them before"
+        else:
+            where = "NEW: you've never written to them"
+        outside = domains and domain not in domains and not on_thread and not written
+        notes.append(
+            f"{address}: {where}" + (f", outside {', '.join(sorted(domains))}" if outside else "")
+        )
+    return notes

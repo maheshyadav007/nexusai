@@ -753,6 +753,7 @@ class SessionRuntime:
                 profile,
                 task,
                 on_compacted=lambda before, after: self._auto_compacted(session, before, after),
+                notes=lambda: team.take_notes(self.ctx, session),
             ),
             checkpointer=self.saver,
         )
@@ -814,7 +815,15 @@ class SessionRuntime:
                 self._append(turn, translator.feed(event))
             if live.control.stopped.is_set():
                 if not self.closing:
-                    self._finish(session, turn, translator, "stopped", None, "abort", "stopped")
+                    reason = live.control.reason
+                    detail = (
+                        "It was refused too many times, so it stopped. Check what it was trying to do."
+                        if reason == "refusals"
+                        else None
+                    )
+                    self._finish(
+                        session, turn, translator, "stopped", detail, "abort", reason or "stopped"
+                    )
                 return
             pending = list(stream.interrupts or [])
             if pending:

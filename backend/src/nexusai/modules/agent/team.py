@@ -523,6 +523,38 @@ def note_from_person(ctx: Context, task: int, text: str) -> None:
         work.emit("team.changed", {"task": task}, source="person", trace_id=ctx.trace_id)
 
 
+def take_notes(ctx: Context, session: str) -> str:
+    """Notes for the task this session is doing that it hasn't seen yet, delivered at its next
+    step. Once seen here, the task needn't wake for them after the run."""
+    db = ctx.bus.db
+    row = session_task(db, session)
+    if row is None or row["state"] in CLOSED:
+        return ""
+    rows = db.fetch_all(
+        "SELECT id, sender_agent, text, untrusted, read_by FROM agent_channel"
+        " WHERE task = ? AND kind = 'note' AND recipient_agent = ? ORDER BY id",
+        (row["id"], row["owner"]),
+    )
+    fresh = [r for r in rows if session not in json.loads(r["read_by"] or "[]")]
+    if not fresh:
+        return ""
+    with db.transaction() as tx:
+        for note in fresh:
+            seen = [*json.loads(note["read_by"] or "[]"), session]
+            tx.execute(
+                "UPDATE agent_channel SET read_by = ? WHERE id = ?", (json.dumps(seen), note["id"])
+            )
+        tx.execute(
+            "UPDATE team_tasks SET wake = NULL WHERE id = ? AND wake = ?", (row["id"], OWNER)
+        )
+    lines = "\n".join(
+        f"- from {'the person' if n['sender_agent'] == PERSON else cards.name(db, n['sender_agent'])}: {n['text']}"
+        for n in fresh
+    )
+    text = f"New note on task {row['id']}, take it into account:\n{lines}"
+    return untrusted(text) if any(n["untrusted"] for n in fresh) else text
+
+
 # What a run is told
 
 

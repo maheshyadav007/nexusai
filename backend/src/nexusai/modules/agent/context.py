@@ -205,6 +205,20 @@ class TaskContent(AgentMiddleware):
         return handler(request.override(messages=messages))
 
 
+class TaskNotes(AgentMiddleware):
+    """Before each model call, adds notes on this run's task that it hasn't seen yet, so a note the
+    person or the giver writes reaches it at its next step, not its next run. They join the
+    conversation, so later steps and runs still have them."""
+
+    def __init__(self, take: Callable[[], str]) -> None:
+        super().__init__()
+        self.take = take
+
+    def before_model(self, state: Any, runtime: Any) -> dict[str, Any] | None:
+        notes = self.take()
+        return {"messages": [HumanMessage(content=notes)]} if notes else None
+
+
 def summarizer(
     model: Any,
     settings: ContextSettings,
@@ -230,6 +244,7 @@ def middleware(
     profile: ContextProfile,
     task: str,
     on_compacted: Callable[[int, int], None] | None = None,
+    notes: Callable[[], str] | None = None,
 ) -> list[Any]:
     chain: list[Any] = []
     if profile.mode == "auto_compact":
@@ -239,6 +254,8 @@ def middleware(
         chain.append(TrimSaved(profile.keep_messages))
     else:
         chain.append(TrimView(profile.keep_messages))
+    if notes is not None:
+        chain.append(TaskNotes(notes))
     if task:
         chain.append(TaskContent(task))
     chain.append(

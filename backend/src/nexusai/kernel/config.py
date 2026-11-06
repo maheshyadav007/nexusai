@@ -101,6 +101,9 @@ class TeamConfig:
     lease_seconds: int
     max_attempts: int
     ping_pong_messages: int
+    sends_per_hour: int
+    refusals_in_a_row: int
+    refusals_per_run: int
 
 
 @dataclass(frozen=True)

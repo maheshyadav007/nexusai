@@ -512,11 +512,18 @@ Built:
 - Agents page: Team tab with player cards (mascot, live state, usage, record, rename, new face, talk to), Tasks tab with each task's contract, thread, budget, and Retry, Cancel and notes. `@` in the chat box suggests handles.
 - Tests: `tests/test_team.py`, 19 cases with a scripted model, no real model.
 
+**2026-11-07, phase 1 (second slice): safety.**
+
+- Send approvals list every recipient as on this conversation, written to before, or new, and flag addresses outside the person's own domains. Every link in the message is listed too. The chat's mail card shows these under "Check before sending". Each send is still approved on its own, and an approval is never remembered.
+- Agents may send at most `team.sends_per_hour` emails an hour, whoever approves them. Past it, the send is refused before it reaches the person.
+- A run refused `team.refusals_in_a_row` times in a row, or `team.refusals_per_run` times in all, stops with the failure type `refusals`, and the person gets a notice.
+- A note from the person to a running task reaches the agent before its next model call, in the same run. It's a LangChain `before_model` middleware (`TaskNotes` in `context.py`), the same mechanism the app already uses for trimming, and the note joins the conversation once.
+- Fixed a race in which waking the giver could clear a wake-up the person's note had just asked for.
+- Agents can't attach files or forward mail, and mail rules can't forward, so there was nothing to gate there. Drafts are plain text, so remote images can't be embedded; links are listed on the approval instead.
+
 Still to do in phase 1:
 
-- Safety S4, S5 and S7: approval for new recipients, forwards and attachments inside an approved reply; the send rate limit and stopping after repeated refusals; removing remote images from drafts made by untrusted runs. S1 is mostly in place already: untrusted runs ask before changing data or running commands, and sending always asks.
-- A person's note to a running task arrives at its next run, not its next step.
-- Cards for agents the person makes, so scheduled agents get their own names and handles.
+- Cards for agents the person makes, so scheduled agents get their own names and handles and can be written to with `@`.
 
 ### Later
 

@@ -204,6 +204,9 @@ export function MailCard({ part, approval }: { part: ToolPart; approval?: ToolAp
   const cc = Array.isArray(input.cc) ? input.cc.join(", ") : "";
   const sent = part.state === "output-available" && part.output === "Sent.";
   const stopped = part.state === "output-denied" || (part.state === "output-available" && !sent);
+  // The backend lists each recipient and link on the approval. New people, other domains and links
+  // are what mail someone else wrote could have slipped in, so they're shown before Send.
+  const checks = approval ? approval.detail.split("\n").filter((line) => line.startsWith("- ") && /NEW|outside|https?:\/\//.test(line)).map((line) => line.slice(2)) : [];
   return (
     <Shell testid="mail-card">
       <dl className="flex flex-col gap-1 border-b border-line-subtle pb-2">
@@ -212,6 +215,14 @@ export function MailCard({ part, approval }: { part: ToolPart; approval?: ToolAp
         <Field label={t("mail.subject")} value={String(input.subject ?? "")} />
       </dl>
       <p className="max-h-popover overflow-y-auto whitespace-pre-wrap break-words text-md text-ink-primary">{String(input.body ?? "")}</p>
+      {checks.length ? (
+        <div data-testid="send-checks" className="flex flex-col gap-1 rounded-md bg-surface-sunken p-2 text-sm">
+          <p className="font-medium text-status-warning">{t("chat.mail.check")}</p>
+          <ul className="flex flex-col gap-px text-ink-primary">
+            {checks.map((line) => <li key={line} className="break-words">{line}</li>)}
+          </ul>
+        </div>
+      ) : null}
       {approval ? <Decisions approval={approval} allow={t("chat.mail.send")} deny={t("chat.mail.dontSend")} /> : null}
       {sent ? (
         <p className="flex items-center gap-2 text-sm text-status-success">

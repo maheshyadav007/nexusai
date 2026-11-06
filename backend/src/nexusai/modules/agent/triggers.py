@@ -587,6 +587,10 @@ class Triggers:
     def _wake_owner(self, row: Any) -> None:
         db = self.ctx.bus.db
         session = row["owner_session"]
+        if row["state"] not in {"queued", "working", "blocked"}:
+            # Reported or closed while the note waited: the giver decides from here.
+            self._set_task(row["id"], wake=None)
+            return
         if row["state"] == "queued" or not session:
             # A fresh session for each task: only the card, the task and its references.
             title = f"Task {row['id']}: {row['objective'][:50]}"
@@ -612,7 +616,8 @@ class Triggers:
         def prepare(tx: Any, turn: int, task: Any = row, owner: str = session) -> None:
             tx.execute(
                 "UPDATE team_tasks SET state = CASE WHEN state IN ('queued','blocked') THEN 'working' ELSE state END,"
-                " owner_session = ?, owner_turn = ?, lease_until = ?, wake = NULL,"
+                " owner_session = ?, owner_turn = ?, lease_until = ?,"
+                " wake = CASE WHEN wake = 'owner' THEN NULL ELSE wake END,"
                 " attempts = attempts + CASE WHEN state = 'queued' THEN 1 ELSE 0 END WHERE id = ?",
                 (owner, turn, lease, task["id"]),
             )
@@ -649,7 +654,11 @@ class Triggers:
         )
 
         def prepare(tx: Any, turn: int, task: Any = row, giver: str = session) -> None:
-            tx.execute("UPDATE team_tasks SET wake = NULL WHERE id = ?", (task["id"],))
+            # Only the wake this run answers. A note can ask for the owner in the meantime.
+            tx.execute(
+                "UPDATE team_tasks SET wake = NULL WHERE id = ? AND wake = ?",
+                (task["id"], team.ASSIGNER),
+            )
             # What came back is no more trusted than what it was built from.
             if task["untrusted"]:
                 tx.execute("UPDATE agent_sessions SET untrusted = 1 WHERE id = ?", (giver,))

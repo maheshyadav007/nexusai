@@ -46,7 +46,7 @@ from nexusai.contracts.mail import RemoveDraft as RemoveDraftCommand
 from nexusai.contracts.panels import GetPanelBoard, Panel, PanelBoard, PanelFilters
 from nexusai.kernel.database import connect_raw
 from nexusai.kernel.module import CommandError, Context
-from nexusai.modules.agent import citations, memory
+from nexusai.modules.agent import citations, memory, signals
 from nexusai.modules.documents import module as documents_module
 from nexusai.modules.mail import module as mail
 from nexusai.modules.mail import rules as mail_rules
@@ -80,6 +80,10 @@ MOVABLE = {"inbox", "archive"}
 
 Guard = Callable[..., str]
 Spec = tuple[Callable[..., str], type[BaseModel], str]
+
+
+# Any web address in a message, listed on the approval so a link built from mail is seen.
+LINK = re.compile(r"https?://[^\s<>\")\]]+")
 
 
 class _Call(BaseModel):
@@ -833,8 +837,36 @@ def specs(
                 return f"Not sent: {error.message}"
             return "Sent."
 
-        detail = f"To: {', '.join(to)}\nSubject: {subject}\n\n{body}"
+        limit = ctx.config.team.sends_per_hour
+        since = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+        sent = ctx.bus.db.fetch_all(
+            "SELECT COUNT(*) AS n FROM tool_calls WHERE tool = 'send_mail' AND status = 'done'"
+            " AND started > ?",
+            (since,),
+        )[0]["n"]
+        if sent >= limit:
+            return (
+                f"Not sent: agents have sent {limit} emails in the last hour, the most allowed. "
+                "Save it as a draft for the person instead."
+            )
+        # The approval shows who each person is, and every link, so a recipient or link that came
+        # from mail someone else wrote stands out before it's sent.
+        who = signals.recipient_notes(ctx, [*to, *(cc or [])], thread_id)
+        links = sorted(set(LINK.findall(body)))
+        new = [note for note in who if "NEW" in note]
+        detail = "\n".join(
+            [
+                "Recipients:",
+                *(f"- {note}" for note in who),
+                *(["Links in this message:", *(f"- {link}" for link in links)] if links else []),
+                f"Subject: {subject}",
+                "",
+                body,
+            ]
+        )
         summary = f"Send mail to {', '.join(to)}: {subject}"
+        if new:
+            summary = f"Send mail to someone new ({len(new)}): {subject}"
         return guard(tool_call_id, "send_mail", "send", summary, detail, work)
 
     def list_drafts(tool_call_id: str) -> str:
