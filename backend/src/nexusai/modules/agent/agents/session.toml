@@ -1,0 +1,20 @@
+# The lead: who the person talks to by default, in every gateway. The id never changes and is
+# never shown. Everything below it can, and nothing else in the app spells this agent's name.
+id = "session"
+name = "Posty"
+handle = "posty"
+default = true
+role = "Talks to you everywhere, and runs the team."
+can_do = [
+  "Answers questions about your mail, documents and work",
+  "Finds, drafts and organizes mail when you ask",
+  "Plans your tasks and reminders",
+  "Hands work to the right agent, checks it, and tells you",
+]
+may_assign_to = ["mail", "daily-prep"]
+talks_to_person = true
+accepts = ["person", "ask", "note"]
+
+[mascot]
+style = "round"
+seed = "posty"

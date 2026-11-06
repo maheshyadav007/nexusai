@@ -2,7 +2,7 @@
 
 import { ApiRequestError } from "@/ui/client/api";
 import type { ContextProfile, ContextSettings, MailAgentSettings } from "@/ui/client/contracts.generated";
-import { useContextSettings, useMailAgent, useRunMailAgent, useSaveContextSettings, useSaveMailAgent } from "@/ui/client/work";
+import { useAgentName, useContextSettings, useMailAgent, useRunMailAgent, useSaveContextSettings, useSaveMailAgent } from "@/ui/client/work";
 import { SessionGeneration } from "@/ui/features/agent/SessionGeneration";
 import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
@@ -36,13 +36,14 @@ export function MailAgentCard() {
   const settings = useMailAgent();
   const save = useSaveMailAgent();
   const run = useRunMailAgent();
+  const mailAgent = useAgentName()("mail");
   const options = [
     { value: "each", label: t("agentRuns.mail.each") },
     { value: "hourly", label: t("agentRuns.mail.hourly") },
     { value: "both", label: t("agentRuns.mail.both") },
   ];
   return (
-    <Card title={t("agentRuns.mail.title")} description={t("agentRuns.mail.description")}>
+    <Card title={t("agentRuns.mail.title", { agent: mailAgent })} description={t("agentRuns.mail.description")}>
       <SettingRow label={t("agentRuns.mail.when")} wide>
         {settings.data ? <Select label={t("agentRuns.mail.when")} value={settings.data.mode ?? "both"} options={options} onChange={(mode) => save.mutate({ mode: mode as Mode })} /> : <Skeleton className="h-6 w-full" />}
       </SettingRow>
@@ -53,7 +54,7 @@ export function MailAgentCard() {
           loading={run.isPending}
           onClick={() =>
             run.mutate(undefined, {
-              onSuccess: (result) => toast({ title: t(result.outcome === "started" ? "agentRuns.mail.started" : "agentRuns.mail.nothing") }),
+              onSuccess: (result) => toast({ title: t(result.outcome === "started" ? "agentRuns.mail.started" : "agentRuns.mail.nothing", { agent: mailAgent }) }),
               onError: (error) => toast({ title: error instanceof ApiRequestError ? error.detail.message : t("agentRuns.mail.nothing") }),
             })
           }

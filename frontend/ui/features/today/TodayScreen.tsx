@@ -9,7 +9,7 @@ import { useDateOnly, useDateTime, useShortDate } from "@/ui/client/format";
 import { useCategories, useDecideCategory, useDecidePriority, useMailStatus, useSetImportance, useSetStatus } from "@/ui/client/mail";
 import { groupApprovals, useApprovals, useDecideApprovals, useSessions } from "@/ui/client/sessions";
 import { useProfile } from "@/ui/client/onboarding";
-import { useChannel, useCockpit, useDecideMemory, useDecideSuggestion, useSuggestions, useDismissChannel, useMarkTodaySeen, useMemory, useReactToBrief, useReminders, useRemoveReminder, useRemoveTask, useRespondChannel, useSaveReminder, useSaveTask, useTasks, useToday, useWaitingCount } from "@/ui/client/work";
+import { useChannel, useCockpit, useDecideMemory, useDecideSuggestion, useSuggestions, useDismissChannel, useMarkTodaySeen, useMemory, useReactToBrief, useReminders, useRemoveReminder, useRemoveTask, useRespondChannel, useSaveReminder, useSaveTask, useTasks, useToday, useWaitingCount, useAgentName } from "@/ui/client/work";
 import { AskAgent } from "@/ui/features/agent/AskAgent";
 import { useAssistant } from "@/ui/features/assistant/AssistantProvider";
 import { ApprovalGroupCard, QuestionCard } from "@/ui/features/assistant/Cards";
@@ -507,6 +507,7 @@ function DueToday({ items }: { items: readonly DueItem[] }) {
 }
 
 function SinceYouLooked() {
+  const mailAgent = useAgentName()("mail");
   const today = useToday();
   const assistant = useAssistant();
   const since = today.data?.since_last_look;
@@ -515,8 +516,8 @@ function SinceYouLooked() {
     <section aria-label={t("today.since")} data-testid="since-last-look" className="flex flex-col gap-1 rounded-lg border border-line-subtle bg-surface-raised p-4 shadow-raised">
       <h2 className="text-lg font-medium text-ink-primary">{t("today.since")}</h2>
       <p className="text-md tabular-nums text-ink-secondary">{t("today.since.counts", { mail: since.mail ?? 0, important: since.important ?? 0, filed: since.filed ?? 0 })}</p>
-      {since.proposed ? <p className="text-md tabular-nums text-ink-secondary">{tn("today.since.proposed", since.proposed)}</p> : null}
-      <Pressable onClick={() => assistant.openSession(MAIL_AGENT)} className="self-start rounded-sm text-sm text-ink-secondary underline underline-offset-2 hover:text-ink-primary">{t("today.since.open")}</Pressable>
+      {since.proposed ? <p className="text-md tabular-nums text-ink-secondary">{tn("today.since.proposed", since.proposed, { agent: mailAgent })}</p> : null}
+      <Pressable onClick={() => assistant.openSession(MAIL_AGENT)} className="self-start rounded-sm text-sm text-ink-secondary underline underline-offset-2 hover:text-ink-primary">{t("today.since.open", { agent: mailAgent })}</Pressable>
     </section>
   );
 }

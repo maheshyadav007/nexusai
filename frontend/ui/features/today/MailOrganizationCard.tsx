@@ -5,6 +5,7 @@ import { useState } from "react";
 import { command, query } from "@/ui/client/api";
 import type { Importance, MergeCategories } from "@/ui/client/contracts.generated";
 import { useHomeReady } from "@/ui/client/home";
+import { useAgentName } from "@/ui/client/work";
 import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
 import { ErrorState } from "@/ui/primitives/ErrorState";
@@ -15,6 +16,7 @@ import { t } from "@/ui/strings";
 /** One review for new uncertainty; cached sender groups do not ask again. */
 export function MailOrganizationCard() {
   const ready = useHomeReady();
+  const mailAgent = useAgentName()("mail");
   const client = useQueryClient();
   const organization = useQuery({ queryKey: ["mail-organization"], queryFn: () => query("mail.organization", {}), enabled: ready, refetchInterval: 5000 });
   const [choices, setChoices] = useState<Record<string, Importance>>({});
@@ -26,7 +28,7 @@ export function MailOrganizationCard() {
   if (!data || (!data.merges.length && !data.missed.length && !["learning", "asking", "failed"].includes(data.state))) return null;
   return <Card title={t("mail.organization.title")}>
     {data.state === "learning" ? <p role="status">{t("mail.organization.progress", { done: data.done, total: data.total })}</p> : null}
-    {data.state === "failed" ? <ErrorState title={t("mail.organization.failed")} onRetry={() => retry.mutate()} /> : null}
+    {data.state === "failed" ? <ErrorState title={t("mail.organization.failed", { agent: mailAgent })} onRetry={() => retry.mutate()} /> : null}
     {data.state === "asking" ? <div className="flex flex-col gap-3">
       {data.interview ? <TextLink href={`/agent/sessions/${data.interview}`}>{t("mail.organization.interview")}</TextLink> : null}
       {data.groups.map((group) => <Select key={group.id} label={`${group.sender}: ${group.subject}`} value={choices[group.id] ?? group.importance} options={[{ value: "low", label: t("mail.importance.low") }, { value: "normal", label: t("mail.importance.normal") }, { value: "high", label: t("mail.importance.high") }]} onChange={(value) => setChoices((current) => ({ ...current, [group.id]: value as Importance }))} />)}

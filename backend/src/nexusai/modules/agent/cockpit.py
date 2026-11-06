@@ -7,6 +7,7 @@ from typing import Any
 from nexusai.contracts.agent import CockpitEvent, CockpitEvents, GetCockpitEvents
 from nexusai.contracts.events import AppEvent
 from nexusai.kernel.module import Context
+from nexusai.modules.agent import cards, mail_agent
 
 BATCH = 200
 MOST_BATCHES = 10
@@ -35,10 +36,11 @@ def _subject(ctx: Context, thread: Any) -> str:
 def _triggered(ctx: Context, event: AppEvent) -> Line:
     session = event.payload["session"]
     title, _ = _session(ctx, session)
+    mail = cards.name(ctx.bus.db, mail_agent.AGENT)
     words = {
-        "mail": "Mail agent started on new mail",
-        "mail-hourly": "Mail agent started on the hourly check",
-        "mail-review": "Mail agent started its inbox review",
+        "mail": f"{mail} started on new mail",
+        "mail-hourly": f"{mail} started on the hourly check",
+        "mail-review": f"{mail} started its inbox review",
         "schedule": f"Schedule started: {title}",
         "event": f"Trigger started: {title}",
     }

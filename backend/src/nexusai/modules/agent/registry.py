@@ -4,7 +4,7 @@ from typing import Any
 
 from nexusai.contracts.agent import AgentEntry
 from nexusai.kernel.module import Context
-from nexusai.modules.agent import mail_agent
+from nexusai.modules.agent import cards, mail_agent
 
 INTERVIEW_AGENT = "interview"
 WEEKDAYS = ("Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays", "Sundays")
@@ -57,10 +57,11 @@ def _mail_entry(ctx: Context, schedules: list[Any], is_running: Any) -> AgentEnt
     else:
         when = "Only when you ask"
     enabled = mail_agent.enabled(ctx) and (on_mail or on_timer)
+    card = cards.card(ctx.bus.db, mail_agent.AGENT)
     return AgentEntry(
         id="mail-agent",
-        name="Mail agent",
-        does="Judges your mail: what matters, what needs a reply, what to chase and where it goes.",
+        name=card.name if card else mail_agent.AGENT,
+        does=card.role if card else "",
         state="running" if is_running(session) else "active" if enabled else "off",
         when=when,
         next_run=hourly["next_run"] if hourly and on_timer else None,
@@ -128,15 +129,16 @@ def _knowing_you(ctx: Context, is_running: Any) -> AgentEntry:
         if session
         else "active"
     )
+    card = cards.card(ctx.bus.db, INTERVIEW_AGENT)
     return AgentEntry(
         id="know-you-better",
-        name="First meeting",
-        does="Asks a few questions so the agents judge your mail the way you would.",
+        name=card.name if card else INTERVIEW_AGENT,
+        does=card.role if card else "",
         state=state,
         when="Once, after it has read your past mail",
         next_condition="Waiting for your answer or approval"
         if waiting
-        else "Waiting for the Mail agent to finish reading"
+        else f"Waiting for {cards.name(ctx.bus.db, mail_agent.AGENT)} to finish reading"
         if not session
         else None,
         last_run=last,

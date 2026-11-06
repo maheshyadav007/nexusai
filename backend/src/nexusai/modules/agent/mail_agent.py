@@ -21,6 +21,7 @@ from nexusai.kernel.home import scratch_folder
 from nexusai.kernel.module import CommandError, Context
 from nexusai.modules.agent import (
     bulk_learning,
+    cards,
     category_names,
     channel,
     feedback,
@@ -283,8 +284,8 @@ def ensure_session(ctx: Context) -> None:
     with ctx.bus.db.transaction() as tx:
         tx.execute(
             "INSERT OR IGNORE INTO agent_sessions (id, title, agent, status, untrusted, created, updated)"
-            " VALUES (?, 'Mail agent', 'mail', 'done', 1, ?, ?)",
-            (SESSION_ID, now, now),
+            " VALUES (?, ?, ?, 'done', 1, ?, ?)",
+            (SESSION_ID, cards.name(ctx.bus.db, AGENT), AGENT, now, now),
         )
 
 
@@ -1114,7 +1115,7 @@ class Triage:
             channel.post(
                 ctx,
                 "ask",
-                "Mail agent",
+                cards.name(ctx.bus.db, AGENT),
                 question,
                 session=SESSION_ID,
                 thread=thread,
@@ -1182,7 +1183,7 @@ class Triage:
                     str(item["what"])[:300],
                     thread,
                     _valid_date(item.get("due")),
-                    "Mail agent",
+                    cards.name(ctx.bus.db, AGENT),
                 )
         for item in parsed.get("tasks") or []:
             if (
@@ -1221,7 +1222,10 @@ class Triage:
             self._draft(thread, str(parsed["draft"]), subject)
         if parsed.get("memory"):
             memory.propose(
-                ctx.bus.db, "Mail agent", str(parsed["memory"])[:2000], f"/mail/thread/{thread}"
+                ctx.bus.db,
+                cards.name(ctx.bus.db, AGENT),
+                str(parsed["memory"])[:2000],
+                f"/mail/thread/{thread}",
             )
 
     def _draft(self, thread: int, body: str, subject: str) -> None:

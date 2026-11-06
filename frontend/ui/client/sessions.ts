@@ -105,6 +105,7 @@ export const isManagedSession = (row: Pick<SessionRow, "agent"> | undefined) => 
 // Unsent drafts survive view changes, without writing their contents to browser storage.
 const drafts = new Map<string, unknown>();
 export const clearChatDraft = (id: string) => void drafts.delete(id);
+export const setChatDraft = (id: string, value: unknown) => void drafts.set(id, value);
 export function useChatDraft<T>(id: string, initial: T): [T, (value: T) => void] {
   const [value, setValue] = useState<T>(() => (drafts.get(id) as T | undefined) ?? initial);
   return [value, (next) => { drafts.set(id, next); setValue(next); }];

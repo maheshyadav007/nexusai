@@ -5,6 +5,31 @@ import { Icon } from "@/ui/icons";
 import { t } from "@/ui/strings";
 import { Swap } from "@/ui/primitives/Motion";
 import { BareTextarea, Pressable } from "@/ui/primitives/Pressable";
+import { Mascot } from "@/ui/primitives/Mascot";
+import { useAgentCards } from "@/ui/client/work";
+
+const TYPING_HANDLE = /^@([a-z0-9-]*)$/i;
+
+/** While the message is only "@…", the agents it could go to. Picking one fills in its handle. */
+function AgentSuggestions({ value, onPick }: { value: string; onPick: (handle: string) => void }) {
+  const cards = useAgentCards().data?.cards ?? [];
+  const typed = TYPING_HANDLE.exec(value)?.[1]?.toLowerCase();
+  if (typed === undefined) return null;
+  const matches = cards.filter((card) => card.accepts.includes("person") && card.handle.startsWith(typed));
+  if (!matches.length) return null;
+  return (
+    <ul aria-label={t("chat.agents")} className="flex flex-wrap gap-1 px-1">
+      {matches.map((card) => (
+        <li key={card.id}>
+          <Pressable onClick={() => onPick(card.handle)} className="flex items-center gap-1 rounded-full border border-line-subtle px-2 py-px text-sm text-ink-secondary hover:border-line-strong hover:text-ink-primary">
+            <Mascot seed={card.mascot.seed} shape={card.mascot.style} name={card.name} size="sm" />
+            <span>{t("chat.agentChoice", { agent: card.name, handle: card.handle })}</span>
+          </Pressable>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 const ACTION = "flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-ink-secondary transition-colors duration-fast hover:bg-surface-sunken hover:text-ink-primary disabled:cursor-not-allowed disabled:bg-transparent disabled:text-ink-faint";
 
@@ -18,6 +43,7 @@ export function Composer({ value, onChange, onSubmit, busy = false, onStop, stop
         onSubmit();
       }}
     >
+      <AgentSuggestions value={value} onPick={(handle) => onChange(`@${handle} `)} />
       <BareTextarea
         ref={inputRef}
         aria-label={label}

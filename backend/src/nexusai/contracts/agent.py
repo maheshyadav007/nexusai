@@ -1027,6 +1027,179 @@ class AgentRegistry(BaseModel):
     agents: list[AgentEntry]
 
 
+# Agent cards: who each agent is. Names live only in the card files and the person's renames.
+
+TaskState = Literal[
+    "queued",
+    "working",
+    "input_required",
+    "blocked",
+    "reported",
+    "verified",
+    "rejected",
+    "failed",
+    "canceled",
+]
+OPEN_TASK_STATES = ("queued", "working", "input_required", "blocked", "reported")
+HANDLE_PATTERN = r"^[a-z][a-z0-9-]{1,23}$"
+
+
+class AgentMascot(BaseModel):
+    style: str
+    seed: str
+
+
+class AgentNow(BaseModel):
+    """What the agent is doing this moment, worked out from runs and tasks."""
+
+    state: Literal["idle", "working", "waiting", "blocked", "off"]
+    task_id: int | None = None
+    waiting_on: str | None = None
+    since: str | None = None
+    reason: str | None = None
+
+
+class AgentUsage(BaseModel):
+    tokens_today: int = 0
+    tokens_week: int = 0
+    messages_today: int = 0
+    tasks_verified: int = 0
+    tasks_rejected: int = 0
+    tasks_blocked: int = 0
+
+
+class AgentCard(BaseModel):
+    id: str
+    name: str
+    handle: str
+    role: str
+    can_do: list[str]
+    default: bool
+    may_assign_to: list[str]
+    talks_to_person: bool
+    accepts: list[str]
+    mascot: AgentMascot
+    version: str
+    renamed: bool = False
+    tools: list[str] = Field(default_factory=list)
+    now: AgentNow = Field(default_factory=lambda: AgentNow(state="idle"))
+    usage: AgentUsage = Field(default_factory=AgentUsage)
+
+
+class ListCards(BaseModel):
+    pass
+
+
+class CardList(BaseModel):
+    cards: list[AgentCard]
+
+
+class RenameAgent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(max_length=40)
+    name: str = Field(min_length=1, max_length=40)
+    handle: str = Field(pattern=HANDLE_PATTERN)
+
+    @field_validator("name")
+    @classmethod
+    def _trimmed(cls, value: str) -> str:
+        value = " ".join(value.split())
+        if not value:
+            raise ValueError("A name can't be blank.")
+        return value
+
+
+class ResetAgentName(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(max_length=40)
+
+
+class SetMascot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(max_length=40)
+    seed: str = Field(min_length=1, max_length=40)
+
+
+class TeamTask(BaseModel):
+    id: int
+    objective: str
+    expected_output: str
+    done_criteria: str
+    references: list[str]
+    assigner: str
+    owner: str
+    state: TaskState
+    outcome: str | None = None
+    evidence: list[str] = Field(default_factory=list)
+    verdict: str | None = None
+    failure: str | None = None
+    untrusted: bool
+    parent: int | None = None
+    due: str | None = None
+    budget_tokens: int
+    tokens_used: int = 0
+    attempts: int = 0
+    owner_session: str | None = None
+    assigner_session: str | None = None
+    created: str
+    updated: str
+
+
+class TeamMessage(BaseModel):
+    id: int
+    task_id: int | None
+    kind: str
+    sender: str
+    recipient: str | None
+    text: str
+    time: str
+    untrusted: bool
+
+
+class ListTeamTasks(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    open_only: bool = False
+
+
+class TeamTaskList(BaseModel):
+    tasks: list[TeamTask]
+
+
+class GetTeamTask(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+
+
+class TeamTaskView(BaseModel):
+    task: TeamTask
+    messages: list[TeamMessage]
+    children: list[TeamTask]
+
+
+class NoteOnTeamTask(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class CancelTeamTask(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+
+
+class RetryTeamTask(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+
+
 class TodayView(BaseModel):
     brief: str
     needs_you: list[TodayThread]

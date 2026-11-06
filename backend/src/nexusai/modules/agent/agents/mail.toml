@@ -1,0 +1,17 @@
+id = "mail"
+name = "Mail agent"
+handle = "mail"
+role = "Judges your mail: what matters, what needs a reply, what to chase and where it goes."
+can_do = [
+  "Judges new mail and files it",
+  "Learns what matters to you from past mail",
+  "Drafts replies for you to check",
+  "Suggests tasks, reminders and categories",
+]
+may_assign_to = []
+talks_to_person = false
+accepts = ["person", "assign", "ask", "note"]
+
+[mascot]
+style = "square"
+seed = "mail"

@@ -1,6 +1,7 @@
 """Runs sessions in the background, so work carries on when the person looks away or restarts."""
 
 import asyncio
+import hashlib
 import json
 import threading
 import uuid
@@ -33,6 +34,7 @@ from nexusai.kernel.home import scratch_folder
 from nexusai.kernel.module import CommandError, Context
 from nexusai.modules.agent import (
     approval_view,
+    cards,
     channel,
     citations,
     context,
@@ -43,6 +45,7 @@ from nexusai.modules.agent import (
     policy,
     prompts_builder,
     providers,
+    team,
     tools,
     ui_stream,
 )
@@ -105,6 +108,17 @@ ALTER TABLE agent_turns ADD COLUMN target TEXT;
 ALTER TABLE agent_turns ADD COLUMN context TEXT;
 """,
 )
+LINEAGE_MIGRATION = Migration(
+    "agent_turns_lineage_001",
+    """
+ALTER TABLE agent_turns ADD COLUMN agent TEXT;
+ALTER TABLE agent_turns ADD COLUMN cause TEXT;
+ALTER TABLE agent_turns ADD COLUMN parent_turn INTEGER;
+ALTER TABLE agent_turns ADD COLUMN versions TEXT;
+ALTER TABLE agent_turns ADD COLUMN failure TEXT;
+CREATE INDEX agent_turns_parent ON agent_turns (parent_turn);
+""",
+)
 FINISHED = {"done", "failed", "stopped"}
 ORIGIN_NOTES = {
     PERSON: "The person sent this message, and they're there to reply.",
@@ -115,8 +129,12 @@ ORIGIN_NOTES = {
     "schedule": "A schedule came due, and this run started by itself. Nobody is waiting in the chat.",
     "event": "Something happened that the person asked to hear about, and this run started by itself. Nobody is waiting in the chat.",
     "setup": "A mail-learning interview started to clarify new uncertainties. Ask only what is unresolved, at most three questions.",
+    "task": "Another agent gave you this task, and this run started by itself. Nobody is waiting in the chat. Work only on the task, then report it.",
+    "task-report": "Work you handed out, or a question about it, needs you now. The person may not be looking, so check it and say what matters in your reply.",
 }
 RESUMABLE = {"queued", "running"}
+# Bumped when the harness changes how runs are put together, and recorded on every run.
+HARNESS_VERSION = "2026.11.1"
 KEEPALIVE_SECONDS = 15
 TITLE_LENGTH = 60
 
@@ -363,7 +381,37 @@ class SessionRuntime:
         # Acknowledging the composer warning allows a new message, never rewriting a run.
         if retry or not acknowledge_managed:
             self.require_personal(session)
-        return self.dispatch(TurnRequest(session, text), retry)
+        agent, cleaned = self.route(session, text) if not retry else (None, text)
+        return self.dispatch(
+            TurnRequest(
+                session,
+                text,
+                model_text=cleaned if agent else None,
+                agent=agent,
+                cause="gateway:app",
+            ),
+            retry,
+        )
+
+    def route(self, session: str, text: str) -> tuple[str | None, str]:
+        """The one router rule: "@handle" goes to that agent, anything else to the chat's own."""
+        found, cleaned, unknown = cards.addressed(self.db, text)
+        if unknown is not None:
+            handles = ", ".join(card.at for card in cards.all_cards(self.db).values())
+            raise CommandError(
+                "agent.unknown_handle",
+                f"No agent is called @{unknown}. The team is {handles}.",
+                422,
+            )
+        if found is None or found.id == self.row(session).agent:
+            return None, text
+        if cards.PERSON not in found.accepts:
+            raise CommandError(
+                "agent.not_addressable",
+                f"{found.name} can't take messages here. Open its own chat instead.",
+                422,
+            )
+        return found.id, cleaned
 
     def dispatch(
         self,
@@ -394,6 +442,9 @@ class SessionRuntime:
                     last["task"],
                     json.loads(last["target"]) if last["target"] else None,
                     json.loads(last["context"]) if last["context"] else None,
+                    last["agent"],
+                    last["cause"],
+                    last["parent_turn"],
                 )
                 # A retry uses today's explicit folder/personalization settings,
                 # while retaining the original evidence version for stale-mail protection.
@@ -448,8 +499,8 @@ class SessionRuntime:
                     )
                 cursor = tx.execute(
                     "INSERT INTO agent_turns (session, text, created, checkpoint, retry_of, attached,"
-                    " origin, model_text, task, target, context)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    " origin, model_text, task, target, context, agent, cause, parent_turn)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         session,
                         request.text,
@@ -462,6 +513,9 @@ class SessionRuntime:
                         request.task,
                         json.dumps(request.target) if request.target else None,
                         json.dumps(request.context) if request.context else None,
+                        request.agent,
+                        request.cause or request.origin,
+                        request.parent_turn,
                     ),
                 )
                 turn = int(cursor.lastrowid or 0)
@@ -623,10 +677,12 @@ class SessionRuntime:
     def _agent(self, session: str, row: SessionRow, control: tools.RunControl) -> Any:
         config = self.ctx.config
         latest = self.db.fetch_all(
-            "SELECT text, task, origin, context, target FROM agent_turns WHERE session = ? ORDER BY id DESC LIMIT 1",
+            "SELECT id, text, task, origin, context, target, agent FROM agent_turns"
+            " WHERE session = ? ORDER BY id DESC LIMIT 1",
             (session,),
         )
         turn = latest[0] if latest else None
+        agent = (turn["agent"] if turn else None) or row.agent
         origin = turn["origin"] if turn else PERSON
         task = turn["task"] if turn else ""
         target = json.loads(turn["target"]) if turn and turn["target"] else {}
@@ -650,7 +706,7 @@ class SessionRuntime:
         )
         layers = knowledge.layers_for(
             self.ctx,
-            row.agent,
+            agent,
             f"{turn['text']}\n{task}" if turn else "",
             self._capabilities(),
             account=thread_account[0]["account"] if thread_account else own_context.get("account"),
@@ -666,14 +722,19 @@ class SessionRuntime:
             note = "This is grouped learning. Record only supplied group IDs, inferred notes and folder suggestions; never create work or drafts."
         elif target.get("sent"):
             note = "The person sent the latest message. Assess commitments and follow-ups; do not draft another reply."
+        stable = list(layers)
+        # Last, because it changes: open tasks, then the time.
+        live = team.live_block(self.db, agent)
         layers.append(
             Layer(
                 "This run",
-                f"{note}\nNow: {now.strftime('%A %d %B %Y %H:%M')} ({zone or now.tzname()}); {now.isoformat(timespec='minutes')}",
+                f"{note}\n{live + chr(10) if live else ''}Now: {now.strftime('%A %d %B %Y %H:%M')} ({zone or now.tzname()}); {now.isoformat(timespec='minutes')}",
             )
         )
+        if turn is not None:
+            self._stamp(turn["id"], agent, stable, row.model)
         model = GatewayChatModel(
-            ctx=self.ctx, agent=row.agent, session=session, layers=layers, model_override=row.model
+            ctx=self.ctx, agent=agent, session=session, layers=layers, model_override=row.model
         )
         settings = context.load_settings(self.db, config)
         own = json.loads(turn["context"]) if turn and turn["context"] else None
@@ -684,7 +745,7 @@ class SessionRuntime:
                 self.ctx,
                 session,
                 control,
-                tools.allowed_for(row.agent, origin, bool(turn and turn["target"])),
+                tools.allowed_for(agent, origin, bool(turn and turn["target"])),
             ),
             middleware=context.middleware(
                 model,
@@ -695,6 +756,24 @@ class SessionRuntime:
             ),
             checkpointer=self.saver,
         )
+
+    def _stamp(self, turn: int, agent: str, layers: list[Layer], model: str | None) -> None:
+        """Which versions this run used, so a drop in quality can be traced to the change."""
+        card = cards.card(self.db, agent)
+        prompt = hashlib.sha256(
+            "\n\n".join(f"{layer.name}\n{layer.text}" for layer in layers).encode()
+        ).hexdigest()[:12]
+        versions = {
+            "agent": agent,
+            "card": card.version if card else None,
+            "prompt": prompt,
+            "model": model or "default",
+            "harness": HARNESS_VERSION,
+        }
+        with self.db.transaction() as tx:
+            tx.execute(
+                "UPDATE agent_turns SET versions = ? WHERE id = ?", (json.dumps(versions), turn)
+            )
 
     def _run(self, session: str, turn: int, payload: Any, checkpoint: str | None = None) -> None:
         if self.closing:
@@ -713,6 +792,7 @@ class SessionRuntime:
                 "turn": turn,
                 "versions": self._versions(session, turn),
                 "thread": self._turn_thread(turn),
+                "agent": self._turn_agent(session, turn),
             },
         )
         self._append(turn, translator.start())
@@ -734,7 +814,7 @@ class SessionRuntime:
                 self._append(turn, translator.feed(event))
             if live.control.stopped.is_set():
                 if not self.closing:
-                    self._finish(session, turn, translator, "stopped", None, "abort")
+                    self._finish(session, turn, translator, "stopped", None, "abort", "stopped")
                 return
             pending = list(stream.interrupts or [])
             if pending:
@@ -756,7 +836,9 @@ class SessionRuntime:
                         "The model became unavailable after a tool may have changed data. Completed work is kept; review it before retrying. "
                         + detail
                     )
-                self._finish(session, turn, translator, "failed", detail, "error")
+                self._finish(
+                    session, turn, translator, "failed", detail, "error", "model_unavailable"
+                )
         except (
             providers.ModelFlagged,
             providers.ModelContextExceeded,
@@ -764,9 +846,16 @@ class SessionRuntime:
             guard.DamagedToken,
             guard.GuardBlocked,
         ) as error:
-            self._finish(session, turn, translator, "failed", str(error), "error")
+            kind = (
+                "model_refused"
+                if isinstance(error, providers.ModelFlagged)
+                else "policy_refusal"
+                if isinstance(error, guard.GuardBlocked)
+                else "model_error"
+            )
+            self._finish(session, turn, translator, "failed", str(error), "error", kind)
         except gateway.RunLimitReached as error:
-            self._finish(session, turn, translator, "stopped", str(error), "error")
+            self._finish(session, turn, translator, "stopped", str(error), "error", "budget")
         except GraphRecursionError:
             self._finish(
                 session,
@@ -775,6 +864,7 @@ class SessionRuntime:
                 "failed",
                 "This session took too many steps, so it stopped. Ask it to continue if needed.",
                 "error",
+                "too_many_steps",
             )
         except Exception:
             log.exception("session_failed", session=session)
@@ -785,6 +875,7 @@ class SessionRuntime:
                 "failed",
                 "The session hit a problem. You can try again.",
                 "error",
+                "harness_error",
             )
         finally:
             with self.lock:
@@ -792,6 +883,14 @@ class SessionRuntime:
                 # Only release our own control, never the next turn's stop handle.
                 if self.live.get(session) is live:
                     self.live.pop(session, None)
+
+    def _turn_agent(self, session: str, turn: int) -> str:
+        rows = self.db.fetch_all(
+            "SELECT t.agent AS turn_agent, s.agent FROM agent_turns t JOIN agent_sessions s"
+            " ON s.id = t.session WHERE t.id = ?",
+            (turn,),
+        )
+        return str(rows[0]["turn_agent"] or rows[0]["agent"]) if rows else ""
 
     def _has_potential_effects(self, turn: int) -> bool:
         """Do not replay a mutation whose outcome might already have happened."""
@@ -861,6 +960,7 @@ class SessionRuntime:
         status: str,
         error: str | None,
         ending: str,
+        failure: str | None = None,
     ) -> None:
         parts = translator.close_open_blocks()
         if translator.citations is not None:
@@ -882,9 +982,9 @@ class SessionRuntime:
                 (session,),
             ).fetchone()
             work.tx.execute(
-                "UPDATE agent_turns SET closed = 1, end_checkpoint = ?,"
+                "UPDATE agent_turns SET closed = 1, end_checkpoint = ?, failure = ?,"
                 " last_call = (SELECT MAX(id) FROM model_calls WHERE session = ?) WHERE id = ?",
-                (checkpoint, session, turn),
+                (checkpoint, failure, session, turn),
             )
             work.tx.execute(
                 "UPDATE agent_sessions SET input_tokens = ?, output_tokens = ?,"

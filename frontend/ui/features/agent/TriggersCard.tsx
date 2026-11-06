@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { SaveTrigger, Trigger } from "@/ui/client/contracts.generated";
-import { useRemoveTrigger, useSaveTrigger, useTriggers } from "@/ui/client/work";
+import { useAgentName, useRemoveTrigger, useSaveTrigger, useTriggers } from "@/ui/client/work";
 import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
 import { ErrorState } from "@/ui/primitives/ErrorState";
@@ -116,7 +116,8 @@ function TriggerRow({ trigger, label }: { trigger: Trigger; label: string }) {
 export function TriggersCard() {
   const triggers = useTriggers();
   const rows = triggers.data?.triggers ?? [];
-  const labelOf = (trigger: Trigger) => (trigger.kind === "mail" ? t("triggers.builtIn") : (triggers.data?.events.find((row) => row.event === trigger.event)?.label ?? trigger.event));
+  const mailAgent = useAgentName()("mail");
+  const labelOf = (trigger: Trigger) => (trigger.kind === "mail" ? t("triggers.builtIn", { agent: mailAgent }) : (triggers.data?.events.find((row) => row.event === trigger.event)?.label ?? trigger.event));
   return (
     <Card title={t("triggers.title")} description={t("triggers.description")}>
       <div className="flex flex-col gap-4">

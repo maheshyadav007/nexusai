@@ -437,8 +437,9 @@ def test_what_it_knows_is_what_a_real_run_is_sent(
     sent = told(script.requests[-1])
     known = post(client, "mailAgent.knowledge")
     names = [layer["name"] for layer in known["layers"]]
-    assert names[:4] == [
+    assert names[:5] == [
         "System prompt",
+        "Who you are",
         "Agent prompt",
         "About the person",
         "Personalized prompts",

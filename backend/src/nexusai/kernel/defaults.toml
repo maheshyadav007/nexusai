@@ -122,6 +122,26 @@ max_tool_output_chars = 20000
 max_agent_messages_per_run = 20
 max_steps = 40
 
+# How agents work together. Every limit is enforced by the harness, and no agent can raise its own.
+[team]
+# Lead → specialist → helper is a depth of 2.
+delegation_depth = 2
+# Open tasks one task may hand out at once.
+fan_out = 3
+assignments_per_run = 5
+# Tokens a task may use when the assigner doesn't say, and the most it may ask for.
+task_token_budget = 60000
+task_token_budget_max = 200000
+# A report longer than this is cut, and the rest should go in an artifact passed by id.
+report_max_chars = 4000
+# When an unanswered task becomes blocked, if the assigner didn't set a due time.
+task_due_minutes = 60
+# A working task whose run is gone for this long goes back in line, up to max_attempts.
+lease_seconds = 900
+max_attempts = 2
+# Two agents swapping more messages than this on one task are looping, so the task pauses.
+ping_pong_messages = 8
+
 # Typed messages. The chat shows everything, and this is only what the model is sent.
 [context.chat]
 # "trim" or "auto_compact".

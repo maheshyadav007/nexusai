@@ -332,38 +332,6 @@ def test_schedule_dst_policy(after: str, time: str, expected: str) -> None:
     assert scheduler.next_scheduled_run(schedule, datetime.fromisoformat(after)) == expected
 
 
-def test_one_run_cannot_spend_the_next_runs_message_budget(app_config: Any, script: Script) -> None:
-    from dataclasses import replace
-
-    from nexusai.api.app import create_app
-
-    limited = replace(app_config, agent=replace(app_config.agent, max_agent_messages_per_run=1))
-    with TestClient(create_app(limited), base_url="http://127.0.0.1:4100") as client:
-        ctx = agent.current().ctx
-        session = post(client, "session.create", {})["id"]
-        script.replies = [
-            [
-                ToolCall("a", "post_to_agents", {"text": "First"}),
-                ToolCall("b", "post_to_agents", {"text": "Second"}),
-            ],
-            [TextChunk("Done")],
-        ]
-        with client.stream(
-            "POST", "/api/sessions/chat", json={"id": session, "text": "Post"}
-        ) as response:
-            list(response.iter_lines())
-        assert (
-            len(ctx.bus.db.fetch_all("SELECT * FROM agent_channel WHERE sender=?", (session,))) == 1
-        )
-        _, result = run_tool(
-            client, script, ToolCall("c", "post_to_agents", {"text": "Next run"}), session=session
-        )
-        assert result.startswith("Posted")
-        assert (
-            len(ctx.bus.db.fetch_all("SELECT * FROM agent_channel WHERE sender=?", (session,))) == 2
-        )
-
-
 def test_digest_cursor_catches_up_in_bounded_batches_only_after_success(
     client: TestClient, script: Script, fake: FakeMail
 ) -> None:
@@ -582,67 +550,6 @@ def test_plain_legacy_learned_notes_remain_untrusted_context(client: TestClient)
     memory.replace_learned(ctx.config.home, "Role: engineer.")
     selected = facts.layer(ctx, None, "engineering", 1000)
     assert "<untrusted>" in selected and "Role: engineer." in selected
-
-
-def test_handoff_requires_recipient_outcome_and_unreported_work_is_blocked(
-    client: TestClient, script: Script
-) -> None:
-    owner = post(client, "session.create", {})["id"]
-    recipient = post(client, "session.create", {})["id"]
-    script.default = [TextChunk("I reviewed the assignment.")]
-    run_tool(
-        client,
-        script,
-        ToolCall(
-            "assign",
-            "post_to_agents",
-            {
-                "text": "Review the open commitments.",
-                "to_session": recipient,
-                "purpose": "Find unresolved commitments",
-                "expected_output": "Report source IDs and what remains open",
-                "evidence": [],
-            },
-        ),
-        session=owner,
-    )
-    db = agent.current().db
-    row = wait(
-        lambda: db.fetch_all(
-            "SELECT * FROM agent_channel WHERE recipient=? AND state='blocked'", (recipient,)
-        )
-    )[0]
-    assert row["owner_turn"] is not None
-    _, refused = run_tool(
-        client,
-        script,
-        ToolCall(
-            "wrong-owner",
-            "report_handoff",
-            {"id": row["id"], "state": "reported", "outcome": "Done"},
-        ),
-        session=owner,
-    )
-    assert "not open" in refused
-    _, recorded = run_tool(
-        client,
-        script,
-        ToolCall(
-            "right-owner",
-            "report_handoff",
-            {
-                "id": row["id"],
-                "state": "reported",
-                "outcome": "No unresolved commitments found in the supplied evidence.",
-            },
-        ),
-        session=recipient,
-    )
-    assert "Outcome recorded" in recorded
-    assert (
-        db.fetch_all("SELECT state FROM agent_channel WHERE id=?", (row["id"],))[0]["state"]
-        == "reported"
-    )
 
 
 def test_digest_scope_and_cursor_are_separate_for_each_mail_account(

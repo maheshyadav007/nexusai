@@ -7,7 +7,7 @@ import { useDismissChecklist, useOnboarding } from "@/ui/client/onboarding";
 import { usePstImports } from "@/ui/client/documents";
 import { useSemantic } from "@/ui/client/semantic";
 import { useSessions } from "@/ui/client/sessions";
-import { usePrompts } from "@/ui/client/work";
+import { useAgentName, usePrompts } from "@/ui/client/work";
 import { useAssistant } from "@/ui/features/assistant/AssistantProvider";
 import { Icon } from "@/ui/icons";
 import { Button } from "@/ui/primitives/Button";
@@ -62,6 +62,7 @@ export function FinishSetup() {
   const prompts = usePrompts();
   const imports = usePstImports();
   const assistant = useAssistant();
+  const agentName = useAgentName();
   const items: readonly Item[] = [
     { id: "mail", title: "finish.mail.title", detail: "finish.mail.detail", done: Boolean(mail.data?.account), href: "/connectors" },
     { id: "model", title: "finish.model.title", detail: "finish.model.detail", done: Boolean(model.data?.connected), href: "/settings?section=models" },
@@ -71,7 +72,7 @@ export function FinishSetup() {
       title: "finish.interview.title",
       detail: "finish.interview.detail",
       done: Boolean(sessions.data?.sessions.some((row) => row.agent === "interview")),
-      run: () => assistant.start({ title: t("setup.interview.label"), agent: "interview" }),
+      run: () => assistant.start({ title: t("setup.interview.label", { agent: agentName("interview") }), agent: "interview" }),
     },
     { id: "priorities", title: "finish.priorities.title", detail: "finish.priorities.detail", done: Boolean(prompts.data?.prompts.some((prompt) => prompt.kind === "personal" && prompt.content.trim() && prompt.content.trim() !== prompt.starter?.trim())), href: "/agent/memory" },
     { id: "archive", title: "finish.archive.title", detail: "finish.archive.detail", done: Boolean(imports.data?.imports.length), href: "/connectors" },

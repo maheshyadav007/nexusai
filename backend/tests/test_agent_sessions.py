@@ -610,7 +610,8 @@ def test_final_prompt_is_viewable_by_session_with_each_layer(
     call = client.post("/api/queries/modelCall.get", json={"session": session}).json()
     names = [layer["name"] for layer in call["layers"]]
     assert (
-        names[0] == "System prompt" and names[1] == "Agent prompt" and names[-1] == "Task content"
+        names[:3] == ["System prompt", "Who you are", "Agent prompt"]
+        and names[-1] == "Task content"
     )
     assert SECRET in call["layers"][-1]["real"] and SECRET not in call["layers"][-1]["masked"]
     assert "This computer:" in call["layers"][0]["real"]

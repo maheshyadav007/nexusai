@@ -119,6 +119,8 @@ interface TurnFacts {
   versions?: Versions | null;
   origin?: string | null;
   thread?: number | null;
+  /** Which agent's card answered: another agent when the person wrote "@handle". */
+  agent?: string | null;
 }
 
 /** Which turn an answer came from, and how it's been rated and tried again. */

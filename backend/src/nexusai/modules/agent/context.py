@@ -46,6 +46,11 @@ class TurnRequest:
     target: dict[str, Any] | None = None
     # A schedule's own way of keeping context, over the default.
     context: dict[str, Any] | None = None
+    # Who answers, when it isn't the chat's own agent: "@mail …" typed in the lead's chat.
+    agent: str | None = None
+    # What started it, and the run that led to it, so every run has a place in the tree.
+    cause: str | None = None
+    parent_turn: int | None = None
 
 
 def load_settings(db: Database, config: Config) -> ContextSettings:

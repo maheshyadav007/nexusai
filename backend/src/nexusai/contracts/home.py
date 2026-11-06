@@ -10,6 +10,8 @@ class HomeStatus(BaseModel):
     path: str | None = None
     default_path: str
     message: str | None = None
+    # The default agent's name, from its card, so setup can greet the person before a Home exists.
+    lead_name: str = ""
 
 
 class CheckHome(BaseModel):

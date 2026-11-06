@@ -12,6 +12,7 @@ import { Skeleton } from "@/ui/primitives/Skeleton";
 import { StatusDot } from "@/ui/primitives/StatusDot";
 import { Tabs } from "@/ui/primitives/Tabs";
 import { SessionLink } from "@/ui/features/assistant/SessionLink";
+import { TeamCards, TeamTasks } from "@/ui/features/agent/TeamScreens";
 import { t, type StringKey } from "@/ui/strings";
 
 export function ActivityScreen() {
@@ -89,7 +90,15 @@ export function AgentChannelScreen() {
   return (
     <div className="mx-auto flex max-w-reading flex-col gap-5 p-6">
       <PageHeader title={t("nav.channel")} />
-      <Tabs label={t("nav.channel")} tabs={[{ value: "agents", label: t("agents.title"), content: <AgentList /> }, { value: "messages", label: t("agents.messages"), content: <ChannelMessages /> }]} />
+      <Tabs
+        label={t("nav.channel")}
+        tabs={[
+          { value: "team", label: t("team.title"), content: <TeamCards /> },
+          { value: "tasks", label: t("team.tasks.title"), content: <TeamTasks /> },
+          { value: "agents", label: t("team.runs"), content: <AgentList /> },
+          { value: "messages", label: t("agents.messages"), content: <ChannelMessages /> },
+        ]}
+      />
     </div>
   );
 }

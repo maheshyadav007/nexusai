@@ -12,6 +12,11 @@ export function useHomeStatus() {
   return useQuery({ queryKey: ["home"], queryFn: () => post<HomeStatus>("/api/home/status", {}), retry: STARTUP_RETRIES, retryDelay: STARTUP_RETRY_MS });
 }
 
+/** The default agent's name, from its card. Known before a Home exists, so setup can use it too. */
+export function useLeadName(): string {
+  return useHomeStatus().data?.lead_name ?? "";
+}
+
 export function useHomeReady(): boolean {
   return useHomeStatus().data?.state === "ready";
 }

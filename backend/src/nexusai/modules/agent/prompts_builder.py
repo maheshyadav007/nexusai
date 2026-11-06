@@ -8,6 +8,8 @@ from importlib import resources
 from pathlib import Path
 
 from nexusai.kernel.config import Config
+from nexusai.kernel.database import Database
+from nexusai.modules.agent import cards
 from nexusai.modules.agent.gateway import Layer
 
 SH_LIKE = frozenset({"bash", "zsh", "sh", "dash", "ksh"})
@@ -72,6 +74,7 @@ def build_layers(
     corrections: str = "",
     mailbox: str = "",
     brief_wishes: str = "",
+    db: Database | None = None,
     **values: str,
 ) -> list[Layer]:
     home = config.home
@@ -79,15 +82,21 @@ def build_layers(
     text = agent_prompt(home, agent)
     for name, value in values.items():
         text = text.replace(f"{{{name}}}", value)
+    if db is not None:
+        text = cards.fill(db, text, agent)
     layers = [
         Layer(
             "System prompt",
             packaged("system.md")
             .format(system_context=system_context(config), capabilities=capabilities)
             .strip(),
-        ),
-        Layer("Agent prompt", text),
+        )
     ]
+    # Second, and stable: it changes only when a card does, so the model server can cache it.
+    team = cards.who_you_are(db, agent) if db is not None else ""
+    if team:
+        layers.append(Layer("Who you are", team))
+    layers.append(Layer("Agent prompt", text))
     if about:
         layers.append(Layer("About the person", about))
     personal = personal_prompts(home)

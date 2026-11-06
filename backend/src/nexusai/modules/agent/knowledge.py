@@ -122,6 +122,7 @@ def layers_for(
         corrections=feedback.layer(ctx.bus.db, account) if is_mail else "",
         brief_wishes=feedback.brief_layer(ctx.bus.db) if agent == "daily-prep" else "",
         mailbox=signals.mailbox_layer(ctx, account) if is_mail else "",
+        db=ctx.bus.db,
         **values,
     )
 

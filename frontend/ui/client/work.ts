@@ -4,7 +4,7 @@ import type { SimulatePreference, ExpireLearnedNote, QueueAction, SavePreference
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { command, query } from "./api";
-import type { ContextSettings, SaveTrigger, GetCockpitEvents, MailAgentSettings, QuietHours, Schedule, SaveMemory, SavePrompt, SaveReminder, SaveTask, SendCheckSettings, SetSessionContext, GuardRules, SaveModelProvider, ListProviderModels } from "./contracts.generated";
+import type { RenameAgent, SetMascot, ContextSettings, SaveTrigger, GetCockpitEvents, MailAgentSettings, QuietHours, Schedule, SaveMemory, SavePrompt, SaveReminder, SaveTask, SendCheckSettings, SetSessionContext, GuardRules, SaveModelProvider, ListProviderModels } from "./contracts.generated";
 import { useHomeReady } from "./home";
 import { useGenerationCommand } from "./generation";
 import { useCategories } from "./mail";
@@ -77,6 +77,27 @@ export const useSuggestions = () => useReady(["suggestions"], () => query("sugge
 export const useDecideSuggestion = () => useCommand(["suggestions", "today", "threads", "categories"], (input: { id: number; accept: boolean }) => command("suggestions.decide", input));
 export const useReactToBrief = () => useCommand(["today", "knowledge"], (input: { session: string; artifact?: number; rating: "up" | "down" | null; comment: string }) => command("brief.react", input));
 export const useAgents = () => useReady(["agents"], () => query("agents.registry", {}));
+
+// Agent cards: who each agent is. Names come only from here, never from the code.
+export const useAgentCards = () => useReady(["agent-cards"], () => query("agents.cards", {}));
+export const useRenameAgent = () => useCommand(["agent-cards", "sessions", "agents"], (input: RenameAgent) => command("agent.rename", input));
+export const useResetAgentName = () => useCommand(["agent-cards", "sessions", "agents"], (input: { id: string }) => command("agent.resetName", input));
+export const useSetMascot = () => useCommand(["agent-cards"], (input: SetMascot) => command("agent.setMascot", input));
+export const useTeamTasks = (openOnly: boolean) => useReady(["team-tasks", openOnly], () => query("team.tasks", { open_only: openOnly }));
+export const useTeamTask = (id: number | null) => {
+  const ready = useHomeReady();
+  return useQuery({ queryKey: ["team-task", id], queryFn: () => query("team.task", { id: id ?? 0 }), enabled: ready && id !== null });
+};
+export const useNoteOnTask = () => useCommand(["team-task", "team-tasks"], (input: { id: number; text: string }) => command("team.note", input));
+export const useCancelTask = () => useCommand(["team-task", "team-tasks", "agent-cards"], (input: { id: number }) => command("team.cancel", input));
+export const useRetryTask = () => useCommand(["team-task", "team-tasks", "agent-cards"], (input: { id: number }) => command("team.retry", input));
+
+/** A name for an agent id, from its card. Ids are never shown, so a missing card shows nothing. */
+export function useAgentName(): (id: string | null | undefined) => string {
+  const cards = useAgentCards();
+  const byId = new Map((cards.data?.cards ?? []).map((card) => [card.id, card.name]));
+  return (id) => (id ? byId.get(id) ?? "" : "");
+}
 export const useRunMailAgent = () => useCommand(["sessions"], () => command("mailAgent.runNow", {}));
 export const useContextSettings = () => useReady(["context"], () => query("context.get", {}));
 export const useSaveContextSettings = () => useCommand(["context"], (input: ContextSettings) => command("context.save", input));

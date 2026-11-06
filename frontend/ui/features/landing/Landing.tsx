@@ -1,6 +1,6 @@
 "use client";
 
-import { PostyGuide } from "@/ui/shell/PostyGuide";
+import { AssistantGuide } from "@/ui/shell/AssistantGuide";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useHomeStatus } from "@/ui/client/home";
@@ -45,7 +45,7 @@ export function Landing() {
       </header>
       <main className="mx-auto grid w-full max-w-page flex-1 items-stretch px-6 py-7 lg:min-h-0 lg:grid-cols-5">
         <div className="relative flex min-h-drawer flex-col items-start justify-center py-5 lg:col-span-2 lg:pr-7">
-          <PostyGuide prominent title={t("landing.headline")} message="posty.welcome" />
+          <AssistantGuide prominent title={t("landing.headline")} message="guide.welcome" />
           <div className="flex flex-col items-start gap-2">
             <Button variant="primary" onClick={() => router.push("/setup")}>
               {t("landing.start")}

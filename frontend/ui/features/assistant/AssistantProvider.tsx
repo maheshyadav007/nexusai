@@ -6,7 +6,7 @@ import { createContext, use, useCallback, useEffect, useMemo, useRef, useState, 
 import appConfig from "@/app.config.json";
 import type { CreateSession } from "@/ui/client/contracts.generated";
 import { query } from "@/ui/client/api";
-import { clearChatDraft, leaveFirstMessage, useCreateSession } from "@/ui/client/sessions";
+import { clearChatDraft, setChatDraft, leaveFirstMessage, useCreateSession } from "@/ui/client/sessions";
 
 interface Start {
   text?: string;
@@ -42,6 +42,8 @@ interface Assistant {
   setPinned: (pinned: boolean) => void;
   openSession: (id: string) => void;
   newChat: () => void;
+  /** A new chat with "@handle " already typed, so the message goes to that agent. */
+  talkTo: (handle: string) => void;
   openDraft: () => void;
   start: (input: Start) => void;
 }
@@ -178,6 +180,13 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       },
       newChat: () => {
         clearChatDraft("new");
+        setDraftRevision((value) => value + 1);
+        setSession(null);
+        setStartError(null);
+        setOpen(true);
+      },
+      talkTo: (handle) => {
+        setChatDraft("new", { text: `@${handle} `, model: null, attached: [] });
         setDraftRevision((value) => value + 1);
         setSession(null);
         setStartError(null);

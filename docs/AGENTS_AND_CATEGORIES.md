@@ -6,14 +6,14 @@ Settings named like `agent.learn_emails` are in `backend/src/nexusai/kernel/defa
 
 ## Agents
 
-There are **5 agents**, plus 3 helpers that make a single model call. All of them are one engine with different instructions and tools, and every model call goes through the gateway (`modules/agent/gateway.py`). The Agents list on the Agent channel page shows what runs and when it runs next.
+There are **5 agents**, plus 3 helpers that make a single model call. All of them are one engine with different instructions and tools, and every model call goes through the gateway (`modules/agent/gateway.py`). Each agent has a card in `modules/agent/agents/<id>.toml` with its name, `@handle`, role and mascot, and names appear nowhere else (see the [agent harness plan](AGENT_HARNESS_PLAN.md)). The Agent channel page shows the cards, the tasks agents give each other, and what runs and when it runs next.
 
 | Agent | What it does | Prompt | Tools |
 |---|---|---|---|
-| **Chat** | Talks to the person, and does what they ask | `session.md` | All, with risky ones asking first |
+| **Posty** (card `session`, the default) | Talks to the person, does what they ask, and gives work to the others | `session.md` | All, with risky ones asking first |
 | **Mail agent** | Judges mail, learns about the person, and suggests where mail should go | `mail.md` | A small set for mail (`MAIL_AGENT_TOOLS`) |
 | **First meeting** | Asks a few questions, so mail is judged the way the person would | `interview.md` | All. Changes ask first, because it read mail |
-| **Your brief** | Writes the brief at the top of Today | `daily-prep.md` | All |
+| **Brief writer** | Writes the brief at the top of Today | `daily-prep.md` | All |
 | **Scheduled** | Runs a prompt the person set up, on a schedule or an event | `scheduled.md` | All |
 
 | Helper | What it does | Started by |

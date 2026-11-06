@@ -47,6 +47,7 @@ from nexusai.kernel.event_bus import EventBus
 from nexusai.kernel.logging import configure_logging, sink
 from nexusai.kernel.module import CommandError, Context, Endpoint, Listener, Module
 from nexusai.kernel.secrets import secret_store
+from nexusai.modules.agent import cards
 from nexusai.modules.agent import module as agent
 from nexusai.modules.agent.module import agent_module
 from nexusai.modules.connectors.module import connectors_module
@@ -286,6 +287,14 @@ def create_app(config: Config | None = None) -> FastAPI:
             return JSONResponse(result.model_dump(mode="json"), headers={"x-trace-id": trace_id})
 
     def home_status() -> HomeStatus:
+        return _home_status().model_copy(update={"lead_name": _lead_name()})
+
+    def _lead_name() -> str:
+        return (
+            cards.default(runtime.bus.db).name if runtime is not None else cards.file_default().name
+        )
+
+    def _home_status() -> HomeStatus:
         default = str(cfg.home_dir or homes.default_home())
         if runtime is not None:
             return HomeStatus(state="ready", path=str(runtime.config.home), default_path=default)

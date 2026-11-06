@@ -7,6 +7,7 @@ import { ErrorBoundary } from "@/ui/primitives/ErrorBoundary";
 import { Card } from "@/ui/primitives/Card";
 import { Dialog } from "@/ui/primitives/Dialog";
 import { ActiveMark, Rise } from "@/ui/primitives/Motion";
+import { useAgentName } from "@/ui/client/work";
 import { t, type StringKey } from "@/ui/strings";
 import { ConnectorsContent } from "@/ui/features/connectors/ConnectorsScreen";
 import { CategorySettings } from "./CategorySettings";
@@ -20,7 +21,8 @@ import { ProfileForm } from "./ProfileForm";
 import { RulesSettings } from "./RulesSettings";
 import { AboutSettings, HomeSettings, NetworkSettings, ResetSettings } from "./SystemSettings";
 
-const SECTIONS: readonly { id: string; group: StringKey; label: StringKey; content: () => ReactNode }[] = [
+// A section about one agent names its id, and its label takes that agent's name from its card.
+const SECTIONS: readonly { id: string; group: StringKey; label: StringKey; agent?: string; content: () => ReactNode }[] = [
   { id: "appearance", group: "settings.group.you", label: "settings.appearance.title", content: () => <AppearanceSettings /> },
   {
     id: "profile", group: "settings.group.you",
@@ -38,7 +40,7 @@ const SECTIONS: readonly { id: string; group: StringKey; label: StringKey; conte
   { id: "send-checks", group: "settings.group.mail", label: "checks.title", content: () => <SendCheckSettingsCard /> },
   { id: "models", group: "settings.group.agents", label: "settings.models.title", content: () => <ModelSettings /> },
   { id: "local-models", group: "settings.group.agents", label: "semantic.title", content: () => <LocalModelSettings /> },
-  { id: "mail-agent", group: "settings.group.agents", label: "agentRuns.mail.title", content: () => <MailAgentCard /> },
+  { id: "mail-agent", group: "settings.group.agents", label: "agentRuns.mail.title", agent: "mail", content: () => <MailAgentCard /> },
   { id: "context", group: "settings.group.agents", label: "context.title", content: () => <ContextCard /> },
   { id: "permissions", group: "settings.group.agents", label: "permissions.title", content: () => <PermissionsSettings /> },
   { id: "guard", group: "settings.group.agents", label: "guard.title", content: () => <GuardSettings /> },
@@ -52,6 +54,7 @@ const SECTIONS: readonly { id: string; group: StringKey; label: StringKey; conte
 
 function SettingsBody({ overPage = false }: { overPage?: boolean }) {
   const requested = useSearchParams().get("section");
+  const agentName = useAgentName();
   const current = SECTIONS.find((section) => section.id === requested) ?? (SECTIONS[0] as (typeof SECTIONS)[number]);
   return (
       <div className={`flex items-stretch gap-0 ${overPage ? "min-h-0 flex-1" : ""}`}>
@@ -71,7 +74,7 @@ function SettingsBody({ overPage = false }: { overPage?: boolean }) {
                         className={`focus-ring relative block rounded-md px-3 py-1 text-md transition-colors duration-fast ${section.id === current.id ? "font-medium text-accent-default" : "text-ink-secondary hover:bg-surface-raised hover:text-ink-primary"}`}
                       >
                         {section.id === current.id ? <ActiveMark group="settings-active" className="absolute inset-0 rounded-md border border-line-subtle bg-surface-raised shadow-raised" /> : null}
-                        <span className="relative">{t(section.label)}</span>
+                        <span className="relative">{t(section.label, { agent: agentName(section.agent) })}</span>
                       </Link>
                     </li>
                   ))}

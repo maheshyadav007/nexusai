@@ -1,0 +1,13 @@
+# The agent behind every prompt the person schedules. Each schedule has its own title too.
+id = "scheduled"
+name = "Scheduled agent"
+handle = "scheduled"
+role = "Runs the instructions you gave it, on your schedule."
+can_do = ["Runs a prompt you set up, on a schedule or when something happens"]
+may_assign_to = []
+talks_to_person = false
+accepts = []
+
+[mascot]
+style = "square"
+seed = "scheduled"

@@ -1,3 +1,4 @@
+import type { CancelTeamTask, CardList, GetTeamTask, ListCards, ListTeamTasks, NoteOnTeamTask, RenameAgent, ResetAgentName, RetryTeamTask, SetMascot, TeamTaskList, TeamTaskView } from "./contracts.generated";
 import type { MarkFolderRead } from "./contracts.generated";
 import type { MailOrganization, FinishMailLearning, MergeCategories, SortCategory, CategorySortEstimate } from "./contracts.generated";
 import type {SimulatePreference, PreferenceSimulation} from "./contracts.generated";
@@ -329,6 +330,12 @@ interface Commands {
   "channel.respond": [RespondChannel, AgentDone];
   "channel.dismiss": [DismissChannel, AgentDone];
   "agentChannel.setMuted": [SetTopicMuted, AgentDone];
+  "agent.rename": [RenameAgent, CardList];
+  "agent.resetName": [ResetAgentName, CardList];
+  "agent.setMascot": [SetMascot, CardList];
+  "team.note": [NoteOnTeamTask, TeamTaskView];
+  "team.cancel": [CancelTeamTask, TeamTaskView];
+  "team.retry": [RetryTeamTask, TeamTaskView];
   "tasks.save": [SaveTask, PlannerDone];
   "tasks.remove": [TaskAction, PlannerDone];
   "reminders.save": [SaveReminder, PlannerDone];
@@ -446,6 +453,9 @@ interface Queries {
   "board.list": [ListBoard, BoardList];
   "agentChannel.list": [ListAgentChannel, AgentChannelList];
   "agents.registry": [ListAgents, AgentRegistry];
+  "agents.cards": [ListCards, CardList];
+  "team.tasks": [ListTeamTasks, TeamTaskList];
+  "team.task": [GetTeamTask, TeamTaskView];
   "tasks.list": [ListTasks, TaskList];
   "reminders.list": [ListReminders, ReminderList];
   "schedules.list": [ListSchedules, ScheduleList];

@@ -1,6 +1,6 @@
 "use client";
 
-import { PostyGuide } from "@/ui/shell/PostyGuide";
+import { AssistantGuide } from "@/ui/shell/AssistantGuide";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, type ReactNode } from "react";
 import { useHomeStatus } from "@/ui/client/home";
@@ -63,7 +63,7 @@ function Frame({ step, index, actions, children }: { step: Step; index: number; 
       </header>
       <main ref={main} className="min-h-0 flex-1 overflow-y-auto overscroll-contain lg:grid lg:grid-cols-5 lg:overflow-hidden">
         <aside className="relative flex min-h-drawer flex-col justify-between px-6 py-6 lg:col-span-2 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:px-7 lg:py-7">
-          <PostyGuide prominent title={t(step.title)} message={`posty.setup.${step.id}` as StringKey} />
+          <AssistantGuide prominent title={t(step.title)} message={`guide.setup.${step.id}` as StringKey} />
           <p className="mt-6 text-sm text-ink-muted">{t(index === STEPS.length - 1 ? "setup.lastStep" : "setup.time")}</p>
           <span aria-hidden className="absolute right-0 top-1/2 hidden h-popover w-px -translate-y-1/2 bg-line-subtle lg:block" />
         </aside>

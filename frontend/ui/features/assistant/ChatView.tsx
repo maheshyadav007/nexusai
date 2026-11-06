@@ -29,6 +29,8 @@ import { AnsweredQuestion, ApprovalGroupCard, MailCard, QuestionCard, ResultCard
 import { AttachedChips, AttachMenu, ModelPicker, useAttachedReading, type Attached } from "./ChatControls";
 import { Composer } from "./Composer";
 import { Markdown } from "./Markdown";
+import { useAgentCards } from "@/ui/client/work";
+import { Mascot } from "@/ui/primitives/Mascot";
 import { factsOf, failureOf, followUpsOf, sourcesOf, isFinished, mergeResults, showsItsWork, textOf, timeOf, toBlocks, toolName, type ToolPart, type Versions } from "./parts";
 import { ThinkingTrace } from "./ThinkingTrace";
 
@@ -169,7 +171,19 @@ function QuestionPart({ part, session }: { part: ToolPart; session: string }) {
   );
 }
 
-function AssistantMessage({ message, session, running, isLast, onFollowUp, followUpsDisabled, canRetry, onRetry, onChooseVersion }: { message: UIMessage; session: string; running: boolean; isLast: boolean; onFollowUp: (text: string) => void; followUpsDisabled: boolean; canRetry: boolean; onRetry: () => void; onChooseVersion: (turn: number) => void }) {
+/** Who answered, shown when it isn't the chat's own agent, so "@mail" replies say they're from it. */
+function Byline({ agent }: { agent: string }) {
+  const card = (useAgentCards().data?.cards ?? []).find((item) => item.id === agent);
+  if (!card) return null;
+  return (
+    <p data-testid="reply-byline" className="flex items-center gap-2 text-sm text-ink-secondary">
+      <Mascot seed={card.mascot.seed} shape={card.mascot.style} name={card.name} size="sm" />
+      <span>{t("chat.byline", { agent: card.name, handle: card.handle })}</span>
+    </p>
+  );
+}
+
+function AssistantMessage({ message, session, ownAgent, running, isLast, onFollowUp, followUpsDisabled, canRetry, onRetry, onChooseVersion }: { message: UIMessage; session: string; ownAgent: string | undefined; running: boolean; isLast: boolean; onFollowUp: (text: string) => void; followUpsDisabled: boolean; canRetry: boolean; onRetry: () => void; onChooseVersion: (turn: number) => void }) {
   const approvals = useApprovals();
   const pending = useMemo(() => new Map((approvals.data?.approvals ?? []).filter((item) => item.session === session).map((item) => [item.tool_call_id, item])), [approvals.data, session]);
   const blocks = toBlocks(message, new Set(pending.keys()));
@@ -181,7 +195,7 @@ function AssistantMessage({ message, session, running, isLast, onFollowUp, follo
   const sources = sourcesOf(message);
   const openSource = useOpenSource();
   const settled = !running || !isLast;
-  const { turn, feedback, versions, thread } = factsOf(message);
+  const { turn, feedback, versions, thread, agent } = factsOf(message);
   const menu: MenuItem[] = [
     ...(text ? [{ id: "copy", label: t("menu.copy"), onSelect: () => void copyText(text) }] : []),
     ...(canRetry ? [{ id: "retry", label: t("menu.retry"), icon: "retry" as const, onSelect: onRetry }] : []),
@@ -189,6 +203,7 @@ function AssistantMessage({ message, session, running, isLast, onFollowUp, follo
   return (
     <ContextMenu items={settled ? menu : []}>
     <article data-testid="agent-message" className="group flex flex-col gap-3">
+      {agent && ownAgent && agent !== ownAgent ? <Byline agent={agent} /> : null}
       {merged.map((block) => {
         if (block.kind === "text") return <Markdown key={block.key} text={block.text} sources={sources} onOpenSource={openSource} />;
         if (block.kind === "trace") return <ThinkingTrace key={block.key} steps={block.steps} running={running && isLast && block.key === blocks[blocks.length - 1]?.key} />;
@@ -403,7 +418,7 @@ export function ChatView({ id, initial, active, footer }: { id: string; initial:
               <UserMessage key={message.id} message={message} {...(!managed ? { onEdit: edit } : {})} />
             ) : (
               <Fragment key={message.id}>
-              <AssistantMessage message={message} session={id} running={working && !waiting} isLast={index === messages.length - 1} followUpsDisabled={working || managed} onFollowUp={say} canRetry={!managed && index === lastAssistant && !working} onRetry={() => void regenerate()} onChooseVersion={(turn) => chooseVersion.mutate({ id, turn }, { onSuccess: (view) => setMessages(view.messages as unknown as UIMessage[]) })} />
+              <AssistantMessage message={message} session={id} ownAgent={session.data?.session.agent} running={working && !waiting} isLast={index === messages.length - 1} followUpsDisabled={working || managed} onFollowUp={say} canRetry={!managed && index === lastAssistant && !working} onRetry={() => void regenerate()} onChooseVersion={(turn) => chooseVersion.mutate({ id, turn }, { onSuccess: (view) => setMessages(view.messages as unknown as UIMessage[]) })} />
                 {(session.data?.compactions ?? []).filter((entry) => entry.after_turn === factsOf(message).turn).map((entry) => (
                   <WavyDivider key={entry.time}>{t("chat.compacted", { when: format(entry.time), before: tokensOf(entry.before_tokens), after: tokensOf(entry.after_tokens) })}</WavyDivider>
                 ))}

@@ -90,6 +90,20 @@ class AgentConfig:
 
 
 @dataclass(frozen=True)
+class TeamConfig:
+    delegation_depth: int
+    fan_out: int
+    assignments_per_run: int
+    task_token_budget: int
+    task_token_budget_max: int
+    report_max_chars: int
+    task_due_minutes: int
+    lease_seconds: int
+    max_attempts: int
+    ping_pong_messages: int
+
+
+@dataclass(frozen=True)
 class Config:
     host: str
     port: int
@@ -112,6 +126,7 @@ class Config:
     chatgpt: ChatGptConfig
     mail: MailConfig
     agent: AgentConfig
+    team: TeamConfig
     # What the model sees of a conversation. Settings can change it, so it's checked there.
     context: dict[str, Any]
     secrets_test_file: Path | None = None
@@ -243,6 +258,7 @@ def load_config(home_dir: Path | None = None) -> Config:
                 ),
             }
         ),
+        team=TeamConfig(**raw["team"]),
         context=raw["context"],
         chatgpt=ChatGptConfig(
             issuer=os.environ.get("NEXUSAI_CHATGPT_ISSUER", chatgpt["issuer"]),

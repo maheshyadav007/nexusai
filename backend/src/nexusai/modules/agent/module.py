@@ -17,6 +17,8 @@ from nexusai.contracts.agent import (
     ApprovalList,
     BoardList,
     BriefReacted,
+    CancelTeamTask,
+    CardList,
     ChangeLearnedNote,
     ChannelList,
     ChooseVersion,
@@ -48,6 +50,7 @@ from nexusai.contracts.agent import (
     GetPermissions,
     GetPreferences,
     GetQuietHours,
+    GetTeamTask,
     GetThreadRuns,
     GetToday,
     GetToolCatalog,
@@ -63,6 +66,7 @@ from nexusai.contracts.agent import (
     ListAgents,
     ListApprovals,
     ListBoard,
+    ListCards,
     ListChannel,
     ListJobs,
     ListMailSuggestions,
@@ -71,6 +75,7 @@ from nexusai.contracts.agent import (
     ListPrompts,
     ListSchedules,
     ListSessions,
+    ListTeamTasks,
     MailAgentRun,
     MailAgentSettings,
     MailPreview,
@@ -78,6 +83,7 @@ from nexusai.contracts.agent import (
     MarkTodaySeen,
     MemoryList,
     ModelCallView,
+    NoteOnTeamTask,
     PausePipeline,
     Permissions,
     PipelineList,
@@ -104,10 +110,13 @@ from nexusai.contracts.agent import (
     RemoveMemory,
     RemoveSchedule,
     RemoveTrigger,
+    RenameAgent,
     RenameSession,
+    ResetAgentName,
     RespondChannel,
     RestorePreference,
     RestorePrompt,
+    RetryTeamTask,
     RunMailAgent,
     RunPipeline,
     RunSchedule,
@@ -124,12 +133,15 @@ from nexusai.contracts.agent import (
     SessionView,
     SetDailyCap,
     SetDefaults,
+    SetMascot,
     SetSessionContext,
     SetSessionModel,
     SetTopicMuted,
     SimulatePreference,
     SinceLastLook,
     SummarizeThread,
+    TeamTaskList,
+    TeamTaskView,
     TestGuardRules,
     ThreadRuns,
     ThreadSummary,
@@ -153,6 +165,7 @@ from nexusai.kernel.module import CommandError, Context, Module
 from nexusai.modules.agent import (
     briefs,
     bulk_learning,
+    cards,
     channel,
     citations,
     cockpit,
@@ -175,6 +188,7 @@ from nexusai.modules.agent import (
     signals,
     suggestions,
     summaries,
+    team,
     tools,
     triggers,
 )
@@ -191,7 +205,8 @@ PERSONAL_PROMPTS = (
     ("senders", "Instructions for specific people"),
     ("topics", "Instructions for specific topics"),
 )
-AGENT_PROMPTS = (("mail", "Mail agent"), ("session", "Sessions"), ("daily-prep", "Daily prep"))
+# Agents whose prompt the person can add to, titled by their cards.
+AGENT_PROMPTS = ("mail", "session", "daily-prep")
 
 agent_module = Module(
     name="agent",
@@ -235,6 +250,9 @@ agent_module = Module(
         briefs.MIGRATION,
         facts.MIGRATION,
         summaries.MIGRATION,
+        cards.MIGRATION,
+        team.MIGRATION,
+        runtime.LINEAGE_MIGRATION,
         Migration(
             "agent_friendly_names_001",
             "UPDATE schedules SET title='Your brief' WHERE kind='mail-brief' AND title='Morning brief';"
@@ -252,6 +270,8 @@ _runtime_lock = threading.Lock()
 def _startup(ctx: Context) -> None:
     global _runtime, _triggers, _scheduler
     guard.load_rules(ctx.config.home)
+    # A name changed in a card file reaches the chats and schedules titled after it.
+    cards.sync(ctx.bus.db)
     # A process that ended cannot still be generating; resumed sessions start a new call.
     with ctx.bus.db.transaction() as tx:
         tx.execute(
@@ -286,6 +306,82 @@ def _shutdown() -> None:
         if _runtime:
             _runtime.close()
             _runtime = None
+
+
+@agent_module.on("team.changed", "agent.team_changed")
+def team_changed(event: AppEvent, ctx: Context) -> None:
+    if _triggers:
+        _triggers.wake.set()
+
+
+def _card_list(ctx: Context) -> CardList:
+    runtime = current()
+    return CardList(
+        cards=team.listing(ctx, lambda session: runtime.active_turn(session) is not None)
+    )
+
+
+@agent_module.query("agents.cards")
+def agent_cards(query: ListCards, ctx: Context) -> CardList:
+    return _card_list(ctx)
+
+
+@agent_module.command("agent.rename")
+def rename_agent(command: RenameAgent, ctx: Context) -> CardList:
+    cards.rename(ctx.bus.db, command.id, command.name, command.handle)
+    _cards_changed(ctx)
+    return _card_list(ctx)
+
+
+@agent_module.command("agent.resetName")
+def reset_agent_name(command: ResetAgentName, ctx: Context) -> CardList:
+    cards.reset_name(ctx.bus.db, command.id)
+    _cards_changed(ctx)
+    return _card_list(ctx)
+
+
+@agent_module.command("agent.setMascot")
+def set_agent_mascot(command: SetMascot, ctx: Context) -> CardList:
+    cards.set_mascot(ctx.bus.db, command.id, command.seed)
+    _cards_changed(ctx)
+    return _card_list(ctx)
+
+
+def _cards_changed(ctx: Context) -> None:
+    with ctx.bus.unit_of_work() as work:
+        work.emit("agents.changed", {}, source="person", trace_id=ctx.trace_id)
+
+
+@agent_module.query("team.tasks")
+def list_team_tasks(query: ListTeamTasks, ctx: Context) -> TeamTaskList:
+    return TeamTaskList(tasks=team.task_list(ctx.bus.db, query.open_only))
+
+
+@agent_module.query("team.task")
+def get_team_task(query: GetTeamTask, ctx: Context) -> TeamTaskView:
+    return team.view(ctx.bus.db, query.id)
+
+
+@agent_module.command("team.note")
+def note_team_task(command: NoteOnTeamTask, ctx: Context) -> TeamTaskView:
+    team.note_from_person(ctx, command.id, command.text)
+    return team.view(ctx.bus.db, command.id)
+
+
+@agent_module.command("team.cancel")
+def cancel_team_task(command: CancelTeamTask, ctx: Context) -> TeamTaskView:
+    row = team.get(ctx.bus.db, command.id)
+    team.cancel(ctx, command.id, team.PERSON, "Canceled by the person.")
+    owner = row["owner_session"] if row is not None else None
+    if owner and current().active_turn(owner) is not None:
+        current().stop(owner)
+    return team.view(ctx.bus.db, command.id)
+
+
+@agent_module.command("team.retry")
+def retry_team_task(command: RetryTeamTask, ctx: Context) -> TeamTaskView:
+    team.retry(ctx, command.id)
+    return team.view(ctx.bus.db, command.id)
 
 
 @agent_module.on("mail.needsTriage", "agent.triage")
@@ -656,7 +752,8 @@ def _personal_files(ctx: Context) -> list[PromptFile]:
 def list_prompts(query: ListPrompts, ctx: Context) -> PromptList:
     agents = []
     folder = ctx.config.home / "prompts" / "agents"
-    for name, title in AGENT_PROMPTS:
+    for name in AGENT_PROMPTS:
+        title = cards.name(ctx.bus.db, name)
         path = folder / f"{name}.md"
         agents.append(
             PromptFile(
@@ -859,7 +956,11 @@ def list_schedules(query: ListSchedules, ctx: Context) -> ScheduleList:
 @agent_module.command("schedules.save")
 def save_schedule(command: Schedule, ctx: Context) -> ScheduleList:
     if command.kind in scheduler.BUILT_IN_KINDS:
-        raise CommandError("schedule.reserved", "That schedule belongs to the Mail agent.", 422)
+        raise CommandError(
+            "schedule.reserved",
+            f"That schedule belongs to {cards.name(ctx.bus.db, mail_agent.AGENT)}.",
+            422,
+        )
     if command.timezone is None:
         previous = (
             ctx.bus.db.fetch_all("SELECT timezone FROM schedules WHERE id=?", (command.id,))
@@ -1280,7 +1381,7 @@ def list_jobs(query: ListJobs, ctx: Context) -> JobList:
             Job(
                 id="mail-learning",
                 kind="trigger",
-                title="Mail agent reading your past mail",
+                title=f"{cards.name(db, mail_agent.AGENT)} reading your past mail",
                 status="running",
                 progress=reading,
                 total=read_total,
@@ -1384,7 +1485,7 @@ def list_jobs(query: ListJobs, ctx: Context) -> JobList:
             Job(
                 id="triage",
                 kind="triage",
-                title="Mail agent",
+                title=cards.name(db, mail_agent.AGENT),
                 status=status,
                 progress=None,
                 total=waiting,

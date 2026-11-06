@@ -80,6 +80,28 @@ for (const root of process.argv.slice(2)) {
     if (path.endsWith(".tsx")) scanJsx(name, text, report);
   }
 }
+// Agent names live only in the backend's card files, so a rename is one change. Strings take them
+// as {agent}, filled from the cards the backend sends.
+const CARDS = join(process.cwd(), "..", "backend", "src", "nexusai", "modules", "agent", "agents");
+const agentNames = readdirSync(CARDS)
+  .filter((entry) => entry.endsWith(".toml"))
+  .map((entry) => /^name = "(.+)"$/m.exec(readFileSync(join(CARDS, entry), "utf8"))?.[1])
+  .filter(Boolean);
+const named = (text) => agentNames.find((agent) => new RegExp(`\\b${agent.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(text));
+for (const [key, value] of Object.entries(JSON.parse(readFileSync("ui/strings/en.json", "utf8")))) {
+  const agent = named(value);
+  if (agent) report("ui/strings/en.json", key, `says "${agent}"; write {agent} and pass the name from its card`);
+}
+for (const root of process.argv.slice(2)) {
+  for (const path of files(root)) {
+    const name = relative(process.cwd(), path).split(sep).join("/");
+    if (name.startsWith("ui/client/contracts.generated.ts")) continue;
+    readFileSync(path, "utf8").split("\n").forEach((line, i) => {
+      const agent = named(line);
+      if (agent && !/^\s*(?:\/\/|\*|\/\*)/.test(line)) report(name, i + 1, `says "${agent}"; take agent names from their cards`);
+    });
+  }
+}
 if (problems.length) {
   console.error(`Hardcoded values found:\n${problems.join("\n")}`);
   process.exit(1);

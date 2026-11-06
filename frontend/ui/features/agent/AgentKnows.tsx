@@ -1,6 +1,6 @@
 "use client";
 
-import { useExpireNote, useRetryLearning } from "@/ui/client/work";
+import { useAgentName, useExpireNote, useRetryLearning } from "@/ui/client/work";
 import { Field } from "@/ui/primitives/Field";
 import { Input } from "@/ui/primitives/Input";
 
@@ -32,6 +32,7 @@ const NOT_READ = "";
 const TRUST_LABEL: Record<string, StringKey> = { "built-in": "knows.trust.builtIn", yours: "knows.trust.yours", counted: "knows.trust.counted", mixed: "knows.trust.mixed" };
 const LAYER_LABEL: Record<string, StringKey> = {
   "System prompt": "knows.layer.system",
+  "Who you are": "knows.layer.team",
   "Agent prompt": "knows.layer.agent",
   "About the person": "knows.layer.about",
   "Personalized prompts": "knows.layer.personal",
@@ -41,20 +42,21 @@ const LAYER_LABEL: Record<string, StringKey> = {
   Memory: "knows.layer.memory",
 };
 
-function layerTitle(name: string): string {
+function layerTitle(name: string, agent: string): string {
   const key = LAYER_LABEL[name];
-  return key ? t(key) : name;
+  return key ? t(key, { agent }) : name;
 }
 
 function Layers({ layers }: { layers: readonly KnowledgeLayer[] }) {
+  const agent = useAgentName()("mail");
   return (
     <ol aria-label={t("knows.layers")} className="flex flex-col gap-2">
       {layers.map((layer, index) => {
         const trust = TRUST_LABEL[layer.trust];
         return (
           <li key={layer.name}>
-            <ExpandRow label={t("prompts.open", { title: layerTitle(layer.name) })} testid="knowledge-layer" title={`${index + 1}. ${layerTitle(layer.name)}`} meta={t("knows.layer.size", { count: layer.text.length })} aside={trust ? <Badge>{t(trust)}</Badge> : null}>
-              <TextView title={layerTitle(layer.name)} text={layer.text} />
+            <ExpandRow label={t("prompts.open", { title: layerTitle(layer.name, agent) })} testid="knowledge-layer" title={`${index + 1}. ${layerTitle(layer.name, agent)}`} meta={t("knows.layer.size", { count: layer.text.length })} aside={trust ? <Badge>{t(trust)}</Badge> : null}>
+              <TextView title={layerTitle(layer.name, agent)} text={layer.text} />
             </ExpandRow>
           </li>
         );

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import light from "@/ui/theme/themes/nexus-light.json";
 import { useChatDraft, useSessions } from "@/ui/client/sessions";
 import { useWaitingCount } from "@/ui/client/work";
+import { useLeadName } from "@/ui/client/home";
 import { Icon } from "@/ui/icons";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { ErrorState } from "@/ui/primitives/ErrorState";
@@ -132,6 +133,7 @@ export function AssistantRoom() {
 
 /** The chat, from anywhere in the app. It tucks into a small pill when it isn't needed. */
 export function AssistantDock() {
+  const lead = useLeadName();
   const assistant = useAssistant();
   const pathname = usePathname();
   const sessions = useSessions("");
@@ -146,7 +148,7 @@ export function AssistantDock() {
       ) : (
         <RiseButton key="pill" onClick={() => assistant.setOpen(true)} data-testid="assistant-pill" className="ai-glow focus-ring fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full px-4 py-2 text-md font-medium text-ink-primary shadow-overlay">
           <Icon name="chat" />
-          {t("chat.pill")}
+          {t("chat.pill", { agent: lead })}
           {waiting ? (
             <span className="flex items-center gap-1 text-sm tabular-nums text-accent-default">
               <StatusDot tone="waiting" />
