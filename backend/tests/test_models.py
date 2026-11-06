@@ -239,3 +239,12 @@ def test_a_model_server_set_up_in_settings_counts_as_connected(client: TestClien
     assert current["connected"] is True
     assert current["selected_model"] == "company-model"
     assert "connected" in event_changes(client)
+
+
+def test_a_slow_model_gets_minutes_but_an_unreachable_server_fails_fast() -> None:
+    from nexusai.kernel.config import load_config
+    from nexusai.modules.models.chatgpt import model_timeout
+
+    timeout = model_timeout(load_config().chatgpt)
+    assert (timeout.read, timeout.write, timeout.pool) == (500, 500, 500)
+    assert timeout.connect == 30

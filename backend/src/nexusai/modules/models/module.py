@@ -42,6 +42,7 @@ from nexusai.modules.models.chatgpt import (
     Tokens,
     account_email,
     is_expiring,
+    model_timeout,
     plan_type,
 )
 
@@ -487,7 +488,7 @@ def _test_system_model(ctx: Context, system: SystemModel, prompt: str) -> ModelR
             f"{system.base_url}/chat/completions",
             headers={"Authorization": f"Bearer {system.api_key}"},
             json={"model": model, "messages": [{"role": "user", "content": prompt}]},
-            timeout=ctx.config.chatgpt.timeout_seconds,
+            timeout=model_timeout(ctx.config.chatgpt),
         )
         response.raise_for_status()
         text = str(response.json()["choices"][0]["message"]["content"] or "")

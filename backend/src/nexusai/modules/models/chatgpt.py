@@ -79,11 +79,16 @@ def is_expiring(access_token: str, skew_seconds: float) -> bool:
     return not isinstance(expires, (int, float)) or expires - time.time() <= skew_seconds
 
 
+def model_timeout(config: ChatGptConfig) -> httpx.Timeout:
+    """Waits long for a model's reply, but not for a server that can't be reached."""
+    return httpx.Timeout(config.timeout_seconds, connect=config.connect_timeout_seconds)
+
+
 class ChatGptClient:
     def __init__(self, config: ChatGptConfig) -> None:
         self.config = config
         self.http = httpx.Client(
-            timeout=config.timeout_seconds,
+            timeout=model_timeout(config),
             headers={"User-Agent": f"NexusAI/{__version__}", "originator": config.originator},
         )
 

@@ -25,7 +25,10 @@ base_url = "https://chatgpt.com/backend-api/codex"
 # Codex's public sign-in client. OpenAI hasn't issued one for NexusAI.
 client_id = "app_EMoamEEZ73f0CkXaXp7hrann"
 originator = "nexusai"
-timeout_seconds = 60
+# Longest silence while a model answers: slow servers may think for minutes before the first word.
+timeout_seconds = 500
+# Reaching the server at all; an unreachable one should fail fast.
+connect_timeout_seconds = 30
 login_timeout_seconds = 900
 min_poll_seconds = 3
 refresh_skew_seconds = 120

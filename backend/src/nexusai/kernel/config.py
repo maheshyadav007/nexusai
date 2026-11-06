@@ -13,6 +13,7 @@ class ChatGptConfig:
     client_id: str
     originator: str
     timeout_seconds: float
+    connect_timeout_seconds: float
     login_timeout_seconds: float
     min_poll_seconds: float
     refresh_skew_seconds: float
@@ -249,6 +250,7 @@ def load_config(home_dir: Path | None = None) -> Config:
             client_id=chatgpt["client_id"],
             originator=chatgpt["originator"],
             timeout_seconds=chatgpt["timeout_seconds"],
+            connect_timeout_seconds=chatgpt["connect_timeout_seconds"],
             login_timeout_seconds=chatgpt["login_timeout_seconds"],
             min_poll_seconds=chatgpt["min_poll_seconds"],
             refresh_skew_seconds=chatgpt["refresh_skew_seconds"],

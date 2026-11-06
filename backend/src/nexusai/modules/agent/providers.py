@@ -13,7 +13,12 @@ import structlog
 from nexusai.kernel.config import Config
 from nexusai.kernel.module import Context
 from nexusai.modules.models import module as models
-from nexusai.modules.models.chatgpt import ChatGptError, ChatGptLimited, SignInRequired
+from nexusai.modules.models.chatgpt import (
+    ChatGptError,
+    ChatGptLimited,
+    SignInRequired,
+    model_timeout,
+)
 
 log = structlog.get_logger()
 
@@ -435,7 +440,9 @@ class OpenAiCompatibleProvider:
 
     name = "litellm"
 
-    def __init__(self, base_url: str, api_key: str, supports_tools: bool, timeout: float) -> None:
+    def __init__(
+        self, base_url: str, api_key: str, supports_tools: bool, timeout: float | httpx.Timeout
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.supports_tools = supports_tools
         self.http = httpx.Client(timeout=timeout, headers={"Authorization": f"Bearer {api_key}"})
@@ -543,5 +550,5 @@ def active_provider(ctx: Context) -> tuple[ModelProvider, str]:
     return ChatGptProvider(ctx), settings.model
 
 
-def _timeout(config: Config) -> float:
-    return config.chatgpt.timeout_seconds
+def _timeout(config: Config) -> httpx.Timeout:
+    return model_timeout(config.chatgpt)
