@@ -49,8 +49,18 @@ jobs:
       - name: Build and verify automatic and manual Beta upgrades
         shell: powershell
         run: |
-          if ($env:GITHUB_REF -like 'refs/tags/desktop-beta/*') { $betaVersion = ($env:GITHUB_REF_NAME -split '/')[1]; .\desktop.cmd beta -Version $betaVersion } else { .\desktop.cmd ci }
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $command = if ($env:GITHUB_REF -like 'refs/tags/desktop-beta/*') { '.\desktop.cmd beta -Version ' + ($env:GITHUB_REF_NAME -split '/')[1] } else { '.\desktop.cmd ci' }
+          $log = Join-Path $env:RUNNER_TEMP 'desktop-ci.log'
+          # cmd merges stderr into stdout, so PowerShell neither stops on nor reorders native error output.
+          cmd /c "$command 2>&1" | Tee-Object -FilePath $log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            # Annotations are readable without signing in, unlike step logs: publish the end of the output there.
+            $tail = (Get-Content -LiteralPath $log -Tail 60) -join "`n"
+            $tail = $tail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error title=Desktop build or upgrade test failed (exit $code)::$tail"
+            exit $code
+          }
       - name: Collect installer diagnostics
         if: always()
         shell: powershell
