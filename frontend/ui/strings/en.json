@@ -1761,5 +1761,6 @@
   "team.usage.week": "This week",
   "team.usage.recordLine": "Tasks: {verified} verified, {rejected} rejected, {blocked} blocked",
   "team.givesTo": "Gives tasks to {agents}",
-  "chat.mail.check": "Check before sending"
+  "chat.mail.check": "Check before sending",
+  "team.yours": "Yours"
 }

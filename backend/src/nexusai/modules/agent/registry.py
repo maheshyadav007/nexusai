@@ -197,7 +197,8 @@ def _past(ctx: Context, known: set[str | None]) -> list[AgentEntry]:
     """Agents that ran and have since been removed, so what used to run stays on record."""
     rows = ctx.bus.db.fetch_all(
         "SELECT id, title, updated, input_tokens + output_tokens AS tokens FROM agent_sessions"
-        " WHERE agent IN ('scheduled', 'daily-prep') AND archived = 0 ORDER BY updated DESC"
+        " WHERE (agent IN ('scheduled', 'daily-prep') OR agent LIKE 'schedule-%'"
+        " OR agent LIKE 'trigger-%') AND archived = 0 ORDER BY updated DESC"
     )
     return [
         AgentEntry(

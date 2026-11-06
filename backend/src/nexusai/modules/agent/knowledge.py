@@ -27,6 +27,7 @@ CHARS_PER_TOKEN = 4
 TRUST = {
     "System prompt": "built-in",
     "Agent prompt": "built-in",
+    "Your instructions": "yours",
     "About the person": "yours",
     "Personalized prompts": "yours",
     "What you corrected": "yours",

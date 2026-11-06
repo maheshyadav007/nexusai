@@ -836,7 +836,10 @@ def test_schedules_run_miss_catch_up_and_keep_history(client: TestClient, script
         "session",
     )
     view = client.post("/api/queries/session.get", json={"id": done["last_session"]}).json()
-    assert view["session"]["title"] == "Friday summary" and view["session"]["agent"] == "scheduled"
+    assert (
+        view["session"]["title"] == "Friday summary"
+        and view["session"]["agent"] == f"schedule-{row['id']}"
+    )
 
 
 def test_a_one_time_schedule_runs_once(client: TestClient, script: Script) -> None:

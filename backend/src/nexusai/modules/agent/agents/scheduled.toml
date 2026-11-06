@@ -7,6 +7,9 @@ can_do = ["Runs a prompt you set up, on a schedule or when something happens"]
 may_assign_to = []
 talks_to_person = false
 accepts = []
+# A template: each schedule or trigger the person makes becomes its own agent, with this one's
+# prompt and tools, so this card itself isn't on the team.
+hidden = true
 
 [mascot]
 style = "square"

@@ -71,7 +71,7 @@ function RenameDialog({ card }: { card: AgentCard }) {
           {(control) => <Input {...control} value={handle} onChange={(event) => setHandle(event.target.value)} maxLength={24} />}
         </Field>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {card.renamed ? <Button type="button" variant="quiet" loading={reset.isPending} onClick={() => void reset.mutateAsync({ id: card.id }).then(() => setOpen(false), () => undefined)}>{t("team.rename.reset")}</Button> : null}
+          {card.renamed && card.kind !== "yours" ? <Button type="button" variant="quiet" loading={reset.isPending} onClick={() => void reset.mutateAsync({ id: card.id }).then(() => setOpen(false), () => undefined)}>{t("team.rename.reset")}</Button> : null}
           <Button type="submit" variant="primary" loading={rename.isPending} disabled={!name.trim() || !handle.trim()}>{t("team.rename.save")}</Button>
         </div>
       </form>
@@ -97,6 +97,7 @@ function ProfileCard({ card }: { card: AgentCard }) {
             {card.name}
             <span className="text-sm font-normal text-ink-muted">@{card.handle}</span>
             {card.default ? <Badge tone="accent">{t("team.default")}</Badge> : null}
+            {card.kind === "yours" ? <Badge>{t("team.yours")}</Badge> : null}
           </h3>
           <p className="text-md text-ink-secondary">{card.role}</p>
           <p data-testid="agent-now" data-state={now.state} className="flex items-center gap-2 text-sm text-ink-primary">

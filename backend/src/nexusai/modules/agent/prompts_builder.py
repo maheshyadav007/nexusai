@@ -78,8 +78,11 @@ def build_layers(
     **values: str,
 ) -> list[Layer]:
     home = config.home
+    # An agent the person made runs with its template's prompt, as itself.
+    found = cards.card(db, agent) if db is not None else None
+    base = found.engine if found is not None and found.engine else agent
     # Only the known fields are filled in, so braces in someone's own prompt stay as written.
-    text = agent_prompt(home, agent)
+    text = agent_prompt(home, base)
     for name, value in values.items():
         text = text.replace(f"{{{name}}}", value)
     if db is not None:
@@ -97,6 +100,8 @@ def build_layers(
     if team:
         layers.append(Layer("Who you are", team))
     layers.append(Layer("Agent prompt", text))
+    if found is not None and found.instructions:
+        layers.append(Layer("Your instructions", found.instructions.strip()))
     if about:
         layers.append(Layer("About the person", about))
     personal = personal_prompts(home)

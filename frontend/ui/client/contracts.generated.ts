@@ -1406,6 +1406,7 @@ export type TalksToPerson = boolean;
 export type Accepts = string[];
 export type Version = string;
 export type Renamed = boolean;
+export type Kind14 = "built_in" | "yours";
 export type Tools2 = string[];
 export type Cards = AgentCard[];
 export type Id61 = string;
@@ -1439,7 +1440,7 @@ export type Created3 = string;
 export type Updated6 = string;
 export type Id65 = number;
 export type TaskId2 = number | null;
-export type Kind14 = string;
+export type Kind15 = string;
 export type Sender9 = string;
 export type Recipient3 = string | null;
 export type Text8 = string;
@@ -1558,13 +1559,13 @@ export type RestoreRevision = number;
 export type Id76 = string;
 export type Thread7 = number;
 export type Action3 = "opened";
-export type Kind15 = "personal" | "agent";
+export type Kind16 = "personal" | "agent";
 export type Name34 = string;
 export type Id77 = number;
 export type Content5 = string;
 export type Time13 = string;
 export type Versions1 = PromptVersion[];
-export type Kind16 = "personal" | "agent";
+export type Kind17 = "personal" | "agent";
 export type Name35 = string;
 export type Version1 = number;
 export type Id78 = number | null;
@@ -1672,7 +1673,7 @@ export type State10 = "missing" | "downloading" | "ready" | "failed";
 export type DownloadedBytes = number;
 export type Error5 = string | null;
 export type Active2 = boolean;
-export type Kind17 = "mail" | "document";
+export type Kind18 = "mail" | "document";
 export type State11 = "off" | "current" | "partial" | "out_of_date";
 export type Indexed = number;
 export type Total8 = number;
@@ -1694,13 +1695,13 @@ export type Reachable = boolean;
 export type MemoryBytes = number;
 export type FreeBytes = number;
 export type Cores = number;
-export type Kind18 = "mail" | "document";
+export type Kind19 = "mail" | "document";
 export type Id90 = string | null;
 export type Id91 = string;
 export type Mirror1 = string | null;
 export type Id92 = string;
 export type Folder10 = string;
-export type Kind19 = "mail" | "document";
+export type Kind20 = "mail" | "document";
 export type Ref1 = string;
 export type Score = number;
 export type Excerpt1 = string;
@@ -1710,7 +1711,7 @@ export type Name36 = string;
 export type Description5 = string;
 export type Id94 = string;
 export type Name37 = string;
-export type Kind20 = "email" | "mcp";
+export type Kind21 = "email" | "mcp";
 export type Url1 = string | null;
 export type Audience = ("internal" | "public") | null;
 export type Enabled7 = boolean;
@@ -1845,11 +1846,11 @@ export type Tone = "formal" | "friendly" | "brief";
 export type Vips = string;
 export type About = string;
 export type Fields = string[];
-export type Kind21 = string | null;
+export type Kind22 = string | null;
 export type Id99 = number | null;
 export type Id100 = number;
 export type Time18 = string;
-export type Kind22 = string;
+export type Kind23 = string;
 export type Title20 = string;
 export type Detail5 = string;
 export type Link5 = string | null;
@@ -1857,7 +1858,7 @@ export type Read3 = boolean;
 export type Items4 = Notification[];
 export type Unread3 = number;
 export type Kinds = string[];
-export type Kind23 = string;
+export type Kind24 = string;
 export type Title21 = string;
 export type Detail6 = string;
 export type Link6 = string | null;
@@ -4952,6 +4953,7 @@ export interface AgentCard {
   mascot: AgentMascot;
   version: Version;
   renamed?: Renamed;
+  kind?: Kind14;
   tools?: Tools2;
   now?: AgentNow;
   usage?: AgentUsage;
@@ -5032,7 +5034,7 @@ export interface TeamTask {
 export interface TeamMessage {
   id: Id65;
   task_id: TaskId2;
-  kind: Kind14;
+  kind: Kind15;
   sender: Sender9;
   recipient: Recipient3;
   text: Text8;
@@ -5377,7 +5379,7 @@ export interface RecordInteraction {
  * via the `definition` "PromptHistory".
  */
 export interface PromptHistory {
-  kind: Kind15;
+  kind: Kind16;
   name: Name34;
   [k: string]: unknown;
 }
@@ -5404,7 +5406,7 @@ export interface PromptVersions {
  * via the `definition` "RestorePrompt".
  */
 export interface RestorePrompt {
-  kind: Kind16;
+  kind: Kind17;
   name: Name35;
   version: Version1;
   [k: string]: unknown;
@@ -5668,7 +5670,7 @@ export interface LocalModel {
  * via the `definition` "IndexInfo".
  */
 export interface IndexInfo {
-  kind: Kind17;
+  kind: Kind18;
   state: State11;
   indexed: Indexed;
   total: Total8;
@@ -5724,7 +5726,7 @@ export interface ModelDetection {
  * via the `definition` "RebuildIndex".
  */
 export interface RebuildIndex {
-  kind: Kind18;
+  kind: Kind19;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -5769,7 +5771,7 @@ export interface ImportModel {
  * via the `definition` "SemanticHit".
  */
 export interface SemanticHit {
-  kind: Kind19;
+  kind: Kind20;
   ref: Ref1;
   score: Score;
   excerpt: Excerpt1;
@@ -5806,7 +5808,7 @@ export interface Parameters {
 export interface Connector {
   id: Id94;
   name: Name37;
-  kind: Kind20;
+  kind: Kind21;
   url?: Url1;
   audience?: Audience;
   enabled?: Enabled7;
@@ -6328,7 +6330,7 @@ export interface ProfileChanged {
  * via the `definition` "ListNotifications".
  */
 export interface ListNotifications {
-  kind?: Kind21;
+  kind?: Kind22;
 }
 /**
  * No id means all of them.
@@ -6346,7 +6348,7 @@ export interface MarkNotificationsRead {
 export interface Notification {
   id: Id100;
   time: Time18;
-  kind: Kind22;
+  kind: Kind23;
   title: Title20;
   detail: Detail5;
   link: Link5;
@@ -6370,7 +6372,7 @@ export interface NotificationList {
  * via the `definition` "NotificationRequested".
  */
 export interface NotificationRequested {
-  kind: Kind23;
+  kind: Kind24;
   title: Title21;
   detail?: Detail6;
   link?: Link6;

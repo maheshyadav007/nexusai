@@ -578,7 +578,7 @@ class SessionRuntime:
                 ctx=self.ctx,
                 agent=row.agent,
                 session=session,
-                layers=prompts_builder.build_layers(self.ctx.config, row.agent),
+                layers=prompts_builder.build_layers(self.ctx.config, row.agent, db=self.db),
                 model_override=row.model,
             )
             config: dict[str, Any] = {"configurable": {"thread_id": session, "checkpoint_ns": ""}}
@@ -745,7 +745,9 @@ class SessionRuntime:
                 self.ctx,
                 session,
                 control,
-                tools.allowed_for(agent, origin, bool(turn and turn["target"])),
+                tools.allowed_for(
+                    cards.engine(self.db, agent), origin, bool(turn and turn["target"])
+                ),
             ),
             middleware=context.middleware(
                 model,

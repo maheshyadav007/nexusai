@@ -521,9 +521,13 @@ Built:
 - Fixed a race in which waking the giver could clear a wake-up the person's note had just asked for.
 - Agents can't attach files or forward mail, and mail rules can't forward, so there was nothing to gate there. Drafts are plain text, so remote images can't be embedded; links are listed on the approval instead.
 
-Still to do in phase 1:
+**2026-11-07, phase 1 (third slice): the person's own agents.**
 
-- Cards for agents the person makes, so scheduled agents get their own names and handles and can be written to with `@`.
+- Every schedule and event trigger the person makes is an agent with a card (`schedule-<id>`, `trigger-<id>`). Its name is its title, its handle is made from the title and can be changed, and its role is the start of its instructions. Renaming one renames its schedule or trigger. The Team page marks them "Yours".
+- They run on the `scheduled` card's prompt and tools, as themselves: the team block names them, and their instructions are a prompt layer of their own. The `scheduled` card is now a hidden template, not a team member.
+- The lead may give them tasks, and the person can write to them with `@`. Their chats, old and new, belong to them, not the template.
+
+Phase 1 is done.
 
 ### Later
 

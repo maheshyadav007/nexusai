@@ -1081,6 +1081,8 @@ class AgentCard(BaseModel):
     mascot: AgentMascot
     version: str
     renamed: bool = False
+    # "yours" for an agent the person made, named by its schedule's or trigger's title.
+    kind: Literal["built_in", "yours"] = "built_in"
     tools: list[str] = Field(default_factory=list)
     now: AgentNow = Field(default_factory=lambda: AgentNow(state="idle"))
     usage: AgentUsage = Field(default_factory=AgentUsage)

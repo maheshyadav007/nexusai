@@ -251,6 +251,7 @@ agent_module = Module(
         facts.MIGRATION,
         summaries.MIGRATION,
         cards.MIGRATION,
+        cards.YOURS_MIGRATION,
         team.MIGRATION,
         runtime.LINEAGE_MIGRATION,
         Migration(
@@ -1498,7 +1499,10 @@ def list_jobs(query: ListJobs, ctx: Context) -> JobList:
         jobs.append(
             Job(
                 id=f"session-{row['id']}",
-                kind="schedule" if row["agent"] in {"scheduled", "daily-prep"} else "session",
+                kind="schedule"
+                if row["agent"] in {"scheduled", "daily-prep"}
+                or row["agent"].startswith(("schedule-", "trigger-"))
+                else "session",
                 title=row["title"],
                 status=row["status"],
                 link=f"/agent/sessions/{row['id']}",

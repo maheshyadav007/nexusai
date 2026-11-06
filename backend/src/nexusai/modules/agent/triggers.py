@@ -706,7 +706,7 @@ class Triggers:
             "SELECT 1 FROM agent_sessions WHERE id = ? AND archived = 0", (last,)
         ):
             return str(last)
-        session = str(self.runtime.create(trigger["title"], [], CUSTOM_AGENT).id)
+        session = str(self.runtime.create(trigger["title"], [], f"trigger-{trigger['id']}").id)
         with self.ctx.bus.db.transaction() as tx:
             tx.execute(
                 "UPDATE agent_triggers SET session = ? WHERE id = ?", (session, trigger["id"])
@@ -933,7 +933,12 @@ class Triggers:
             "SELECT 1 FROM agent_sessions WHERE id = ? AND archived = 0", (last,)
         ):
             return str(last)
-        agent = SCHEDULE_AGENTS.get(schedule["kind"], "scheduled")
+        # A prompt the person scheduled is an agent of theirs, with a card of its own.
+        agent = (
+            f"schedule-{schedule['id']}"
+            if schedule["kind"] == "prompt"
+            else SCHEDULE_AGENTS.get(schedule["kind"], "scheduled")
+        )
         session = self.runtime.create(schedule["title"], [], agent).id
         with self.ctx.bus.db.transaction() as tx:
             tx.execute(

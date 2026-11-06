@@ -21,6 +21,18 @@ CREATE TABLE agent_card_overrides (
   id TEXT PRIMARY KEY, name TEXT, handle TEXT, mascot_seed TEXT, updated TEXT NOT NULL);
 """,
 )
+# Chats of the person's own schedules and triggers belong to those agents, not the template.
+YOURS_MIGRATION = Migration(
+    "agent_cards_yours_001",
+    """
+UPDATE agent_sessions SET agent = 'schedule-' || (
+  SELECT id FROM schedules WHERE last_session = agent_sessions.id AND kind = 'prompt')
+  WHERE id IN (SELECT last_session FROM schedules WHERE kind = 'prompt');
+UPDATE agent_sessions SET agent = 'trigger-' || (
+  SELECT id FROM agent_triggers WHERE session = agent_sessions.id AND kind = 'custom')
+  WHERE id IN (SELECT session FROM agent_triggers WHERE kind = 'custom');
+""",
+)
 PERSON = "person"
 HANDLE = re.compile(HANDLE_PATTERN)
 # An @handle at the very start of a message: "@mail why is this in Finance?"
@@ -43,6 +55,13 @@ class Card:
     mascot_seed: str
     version: str
     renamed: bool = False
+    # "yours" for an agent the person made. Its name is its schedule's or trigger's title.
+    kind: str = "built_in"
+    # Whose prompt and tools it runs with. Built-in agents are their own engine.
+    engine: str = ""
+    instructions: str = ""
+    # A template for the person's own agents, not a member of the team.
+    hidden: bool = False
 
     @property
     def at(self) -> str:
@@ -73,6 +92,8 @@ def _files() -> dict[str, Card]:
             mascot_seed=str(mascot.get("seed", raw["id"])),
             # From the file itself, so it changes whenever the card does and is never forgotten.
             version=hashlib.sha256(text.encode()).hexdigest()[:12],
+            engine=raw["id"],
+            hidden=bool(raw.get("hidden", False)),
         )
         if entry.name != f"{card.id}.toml":
             raise ValueError(f"Card {entry.name} must be named after its id, {card.id}.toml")
@@ -88,16 +109,22 @@ def _files() -> dict[str, Card]:
     return found
 
 
-def all_cards(db: Database) -> dict[str, Card]:
-    """Every card, with the person's renames on top of the files."""
-    cards = dict(_files())
+def all_cards(db: Database, *, include_hidden: bool = False) -> dict[str, Card]:
+    """Every card: the files, the agents the person made, and the person's renames on top."""
+    cards = {card.id: card for card in _files().values() if include_hidden or not card.hidden}
+    yours = _yours(db, {card.handle for card in _files().values()})
+    cards.update(yours)
+    lead = next(card for card in cards.values() if card.default)
+    # The lead may give work to any agent the person made, as well as those in its file.
+    cards[lead.id] = replace(lead, may_assign_to=(*lead.may_assign_to, *yours))
     for row in db.fetch_all("SELECT * FROM agent_card_overrides"):
         card = cards.get(row["id"])
         if card is None:
             continue
         cards[card.id] = replace(
             card,
-            name=row["name"] or card.name,
+            # A person's agent is named by its title, so only its handle and face are overridden.
+            name=(row["name"] if card.kind == "built_in" else None) or card.name,
             handle=row["handle"] or card.handle,
             mascot_seed=row["mascot_seed"] or card.mascot_seed,
             renamed=bool(row["name"] or row["handle"]),
@@ -105,8 +132,62 @@ def all_cards(db: Database) -> dict[str, Card]:
     return cards
 
 
+YOURS = (
+    ("schedule", "SELECT id, title, prompt, created FROM schedules WHERE kind = 'prompt'"),
+    ("trigger", "SELECT id, title, prompt, created FROM agent_triggers WHERE kind = 'custom'"),
+)
+SHAPES = ("round", "square", "tall")
+ENGINE = "scheduled"
+
+
+def _slug(title: str) -> str:
+    words = re.sub(r"[^a-z0-9]+", "-", title.casefold()).strip("-")
+    words = words if words[:1].isalpha() else f"agent-{words}"
+    return (words or "agent")[:20].rstrip("-")
+
+
+def _yours(db: Database, taken: set[str]) -> dict[str, Card]:
+    """Each schedule and trigger the person made is an agent with a card of its own."""
+    found: dict[str, Card] = {}
+    used = set(taken)
+    for prefix, query in YOURS:
+        for row in db.fetch_all(query):
+            identifier = f"{prefix}-{row['id']}"
+            handle = _slug(row["title"])
+            base, number = handle, 2
+            while handle in used:
+                handle, number = f"{base[:17]}-{number}", number + 1
+            used.add(handle)
+            prompt = " ".join(str(row["prompt"] or "").split())
+            role = prompt if len(prompt) <= 140 else prompt[:139].rstrip() + "…"
+            found[identifier] = Card(
+                id=identifier,
+                name=row["title"],
+                handle=handle,
+                role=role or "Runs the instructions you gave it.",
+                can_do=(),
+                default=False,
+                may_assign_to=(),
+                talks_to_person=True,
+                accepts=("person", "assign", "ask", "note"),
+                mascot_style=SHAPES[int(hashlib.sha256(identifier.encode()).hexdigest(), 16) % 3],
+                mascot_seed=identifier,
+                version=hashlib.sha256(f"{row['title']}\n{prompt}".encode()).hexdigest()[:12],
+                kind="yours",
+                engine=ENGINE,
+                instructions=str(row["prompt"] or ""),
+            )
+    return found
+
+
 def card(db: Database, agent: str) -> Card | None:
-    return all_cards(db).get(agent)
+    return all_cards(db, include_hidden=True).get(agent)
+
+
+def engine(db: Database, agent: str) -> str:
+    """Whose prompt file and tools an agent runs with: itself, or the template it was made from."""
+    found = card(db, agent)
+    return found.engine if found is not None and found.engine else agent
 
 
 def name(db: Database, agent: str) -> str:
@@ -205,6 +286,7 @@ def to_contract(found: Card, tools: list[str] | None = None) -> AgentCard:
         mascot=AgentMascot(style=found.mascot_style, seed=found.mascot_seed),
         version=found.version,
         renamed=found.renamed,
+        kind="yours" if found.kind == "yours" else "built_in",
         tools=tools or [],
     )
 
@@ -235,8 +317,15 @@ def rename(db: Database, agent: str, new_name: str, new_handle: str) -> Card:
             "INSERT INTO agent_card_overrides (id, name, handle, updated) VALUES (?, ?, ?, ?)"
             " ON CONFLICT (id) DO UPDATE SET name = excluded.name, handle = excluded.handle,"
             " updated = excluded.updated",
-            (agent, new_name, new_handle, _now()),
+            (agent, new_name if current.kind == "built_in" else None, new_handle, _now()),
         )
+        if current.kind == "yours":
+            # Its title is its name, so the schedule or trigger itself is renamed.
+            table = "schedules" if agent.startswith("schedule-") else "agent_triggers"
+            tx.execute(
+                f"UPDATE {table} SET title = ? WHERE id = ?",  # noqa: S608
+                (new_name, agent.split("-", 1)[1]),
+            )
     sync(db)
     return all_cards(db)[agent]
 
@@ -244,6 +333,10 @@ def rename(db: Database, agent: str, new_name: str, new_handle: str) -> Card:
 def reset_name(db: Database, agent: str) -> Card:
     current = card(db, agent)
     original = _files().get(agent)
+    if current is not None and current.kind == "yours":
+        raise CommandError(
+            "agent.not_built_in", "This agent is yours, so its name is the one you gave it.", 409
+        )
     if current is None or original is None:
         raise CommandError("agent.not_found", "There's no agent with that id.", 404)
     taken = next(

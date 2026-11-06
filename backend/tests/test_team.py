@@ -89,6 +89,7 @@ def post(client: TestClient, name: str, body: dict[str, Any] | None = None) -> A
         "approvals.list",
         "permissions.get",
         "notifications.list",
+        "schedules.list",
     }
     kind = "queries" if name in queries else "commands"
     response = client.post(f"/api/{kind}/{name}", json=body or {})
@@ -610,3 +611,71 @@ def test_a_note_reaches_a_running_agent_in_the_same_run(
     assert len(turns) == 1, "the note arrived in the same run, not a new one"
     third = [request for speaker, request in script.requests if speaker == mail()][2]
     assert any("Only threads with a PLM tag" in m.text for m in third.messages if m.role == "user")
+
+
+# The person's own agents
+
+
+def make_agent(client: TestClient, title: str, prompt: str) -> dict[str, Any]:
+    post(
+        client,
+        "schedules.save",
+        {"title": title, "prompt": prompt, "every": "week", "timezone": "UTC"},
+    )
+    cards_now = post(client, "agents.cards")["cards"]
+    return next(c for c in cards_now if c["name"] == title)
+
+
+def test_an_agent_the_person_makes_gets_its_own_card(client: TestClient) -> None:
+    card = make_agent(client, "Friday status", "Write my Friday status from this week's mail.")
+    assert card["kind"] == "yours" and card["handle"] == "friday-status"
+    assert card["role"].startswith("Write my Friday status")
+    listed = post(client, "agents.cards")["cards"]
+    # The template it runs on isn't a member of the team.
+    assert "scheduled" not in {c["id"] for c in listed}
+    lead_card = next(c for c in listed if c["default"])
+    assert card["id"] in lead_card["may_assign_to"]
+    twin = make_agent(client, "Friday status!", "Another one.")
+    assert twin["handle"] != card["handle"]
+
+
+def test_writing_to_your_own_agent_runs_it_as_itself(
+    client: TestClient, script: TeamScript
+) -> None:
+    make_agent(client, "Friday status", "Write my Friday status from this week's mail.")
+    session = post(client, "session.create")["id"]
+    chat(client, session, "@friday-status what did you write last week?")
+    speaker, request = script.requests[-1]
+    assert speaker == "Friday status"
+    assert "Write my Friday status from this week's mail." in request.instructions
+    assert "team_close" in {tool.name for tool in request.tools}
+
+
+def test_the_lead_can_give_your_agent_a_task(client: TestClient, script: TeamScript) -> None:
+    card = make_agent(client, "Friday status", "Write my Friday status.")
+    session = post(client, "session.create")["id"]
+    script.say(
+        "Friday status",
+        [ToolCall("r", "team_close", {"task": 1, "action": "report", "outcome": "Written"})],
+        [TextChunk("ok")],
+    )
+    script.say(
+        lead(),
+        [ToolCall("a", "team_assign", {**ASSIGN, "to": "@friday-status"})],
+        [TextChunk("ok")],
+    )
+    chat(client, session, "Get my status written")
+    wait(lambda: task_row(1)["state"] == "reported" or None, "reported", 20)
+    owner = agent.current().db.fetch_all(
+        "SELECT agent FROM agent_sessions WHERE id = ?", (task_row(1)["owner_session"],)
+    )[0]
+    assert owner["agent"] == card["id"]
+
+
+def test_renaming_your_agent_renames_its_schedule(client: TestClient) -> None:
+    card = make_agent(client, "Friday status", "Write my Friday status.")
+    post(client, "agent.rename", {"id": card["id"], "name": "Weekly wrap", "handle": "wrap"})
+    titles = [s["title"] for s in post(client, "schedules.list")["schedules"]]
+    assert "Weekly wrap" in titles and "Friday status" not in titles
+    refused = client.post("/api/commands/agent.resetName", json={"id": card["id"]})
+    assert refused.status_code == 409
