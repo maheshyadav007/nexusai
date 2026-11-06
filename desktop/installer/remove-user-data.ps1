@@ -25,12 +25,9 @@ function Remove-Tree([string]$Path) {
     $item = Get-Item -LiteralPath $Path -Force
     try {
         if (Test-Link $item) { $item.Delete() }
-        elseif ($item.PSIsContainer) {
-            Get-ChildItem -LiteralPath $Path -Recurse -Force -File -ErrorAction SilentlyContinue |
-                Where-Object { $_.Attributes -band [IO.FileAttributes]::ReadOnly } |
-                ForEach-Object { $_.Attributes = $_.Attributes -band (-bnot [IO.FileAttributes]::ReadOnly) }
-            [IO.Directory]::Delete($Path, $true)
-        } else { $item.Delete() }
+        # No recursive listing here: in Windows PowerShell it can follow links out of the folder.
+        elseif ($item.PSIsContainer) { [IO.Directory]::Delete($Path, $true) }
+        else { $item.Delete() }
         Write-Log "removed $Path"
     } catch {
         Write-Log "could not remove ${Path}: $($_.Exception.Message)"
@@ -52,7 +49,7 @@ try {
     $data = [IO.Path]::GetFullPath($DataDirectory).TrimEnd('\')
     $appData = [IO.Path]::GetFullPath($env:APPDATA).TrimEnd('\')
     if ([IO.Path]::GetDirectoryName($data) -ine $appData -or $siblingDataFolders -notcontains [IO.Path]::GetFileName($data)) {
-        throw "Refusing to delete $data: it is not a NexusAI data folder."
+        throw "Refusing to delete ${data}: it is not a NexusAI data folder."
     }
     $others = @($siblingDataFolders | ForEach-Object { Join-Path $appData $_ } | Where-Object { -not (Test-SamePath $_ $data) -and (Test-Path -LiteralPath $_) })
 

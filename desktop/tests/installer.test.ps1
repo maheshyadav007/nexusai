@@ -1,4 +1,10 @@
 $ErrorActionPreference = 'Stop'
+# A PowerShell syntax error makes a script do nothing at all, so every installer script must parse.
+foreach ($script in Get-ChildItem "$PSScriptRoot\..\installer\*.ps1") {
+    $errors = $null
+    $null = [System.Management.Automation.Language.Parser]::ParseFile($script.FullName, [ref]$null, [ref]$errors)
+    if ($errors.Count -gt 0) { throw "$($script.Name) does not parse: $($errors | ForEach-Object { "line $($_.Extent.StartLineNumber): $($_.Message)" })" }
+}
 . "$PSScriptRoot\..\installer\check-install.ps1" -FunctionsOnly
 $root = 'C:\Apps\NexusAI Beta'
 $entry = [PSCustomObject]@{ ProcessId = 42; ExecutablePath = 'C:\Apps\NexusAI Beta\resources\python\python.exe' }
