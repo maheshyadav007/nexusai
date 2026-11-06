@@ -1,5 +1,7 @@
 # Side-by-side Windows updates
 
+Status: all eight Windows CI scenarios below passed on 6 November 2026 in [Windows run 42204820510](https://github.com/maheshyadav007/nexusai/actions/runs/42204820510) (commit `477aa71`). One real update on a company laptop with its security software, and a fresh install on a second drive, are still to be checked by hand.
+
 ## Why
 
 Updates failed with "Could not remove the previous installation (uninstaller exit code 2)", while uninstall followed by a fresh install worked.

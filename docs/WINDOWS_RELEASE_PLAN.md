@@ -1,6 +1,6 @@
 # Windows installation and reliable updates
 
-Status: implementation and scripts added, 2026-11-04. Follow the [Windows release guide](WINDOWS_RELEASE_GUIDE.md) for commands and local configuration. No packaged Windows build or Windows update cycle has been verified yet; the acceptance gates below remain required.
+Status, 2026-11-06: packaging, installation and installed-app updates pass on hosted Windows CI, including side-by-side updates while a file is locked ([Windows run 42204820510](https://github.com/maheshyadav007/nexusai/actions/runs/42204820510)). Follow the [Windows release guide](WINDOWS_RELEASE_GUIDE.md) for commands and local configuration. Organization-device and internal-feed acceptance below remain required.
 
 ## Goal and constraints
 
@@ -12,7 +12,7 @@ The first supported target is Windows 11 x64. Keep the current React/Next.js and
 
 1. Develop the generic application and scripts on any supported development system. Trigger the GitHub.com Windows validation workflow using `desktop.sh ci-trigger`; it builds generic A/B versions, installs A, and tests its update to B against a loopback feed. After that gate passes, an operator prepares a private deployment profile on Linux, transfers it to a Windows x64 machine/VM, and uses the same build tools for customized artifacts. Internal distribution is a later gate.
 2. Electron supervises the packaged Next.js standalone server and bundled Python backend. Bundle all runtime dependencies; users do not install Node, Python, uv, or development tools. Verify the Node execution mechanism and Next.js standalone compatibility in the packaging spike before standardizing it.
-3. Build a full per-user NSIS installer with electron-builder. Use electron-updater's generic HTTPS provider. Pin compatible stable versions; do not adopt unreleased builder/updater behavior from the documentation's default branch.
+3. Build a full per-user NSIS installer with electron-builder, installing each version side by side in the folder the user chose ([SIDE_BY_SIDE_UPDATES.md](SIDE_BY_SIDE_UPDATES.md)), so an update never replaces files in use. Use electron-updater's generic HTTPS provider to download. Pin compatible stable versions; do not adopt unreleased builder/updater behavior from the documentation's default branch.
 4. Serve release files from a small internal HTTPS host, such as Nginx with persistent storage. The release script copies artifacts to this host. Employee clients never fetch private GitHub assets directly. No custom update API or on-demand GitHub proxy is needed initially.
 5. Maintain separate pilot and stable feed directories, with versioned immutable installers and generated metadata. Validate uploads and atomically replace the channel manifest last. Keep old artifacts for recovery and clients with pending downloads. Disable caching of channel manifests; allow caching of immutable versioned files. Test byte-range responses if differential downloads are enabled.
 

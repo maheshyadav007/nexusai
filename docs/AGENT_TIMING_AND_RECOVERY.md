@@ -24,6 +24,7 @@ A session cannot run overlapping turns. Global concurrency defaults to three run
 
 | Failure | Recovery and visibility |
 | --- | --- |
+| Slow or unreachable model server | A reply may be silent for up to 500 seconds before it fails (`chatgpt.timeout_seconds`), so slow servers can think before the first word; a streaming reply is never cut off while words keep arriving. Reaching the server fails after 30 seconds (`chatgpt.connect_timeout_seconds`). Both apply to the ChatGPT subscription, the company model and the connection test. A failure is then handled as "model unavailable" below. |
 | Model unavailable before a possible mutation | Background work waits and retries. Default dispatcher retry interval is 60 seconds; configuration changes can wake it sooner. Rate limiting and daily caps also hold work. Mail download/rule processing continues independently. |
 | Model unavailable after a tool may have changed data | Keep the run and its partial work, mark failure, and require review/manual retry. Unknown connector actions are treated conservatively. Automatic replay is allowed only when the recorded tools are known to be read-only. |
 | Unexpected agent error, guard rejection, or missing required brief/review/digest result | Mark the run failed and expose its error in the session/queue. Retry is explicit. A digest cursor advances only after a successful result, so failed summaries do not consume unseen judgements. |
