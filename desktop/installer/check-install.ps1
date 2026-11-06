@@ -3,7 +3,7 @@ param(
     [string]$AppGuid,
     [string]$Version,
     [int]$InstallerProcessId = 0,
-    [ValidateSet('install', 'uninstall', 'services')][string]$Mode = 'install',
+    [ValidateSet('install', 'version', 'uninstall', 'services')][string]$Mode = 'install',
     [int]$TimeoutSeconds = 120,
     [string]$LogFile,
     [switch]$FunctionsOnly
@@ -37,7 +37,7 @@ try {
     foreach ($hive in @('HKCU:', 'HKLM:')) {
         $key = Get-ItemProperty -LiteralPath "$hive\Software\$AppGuid" -ErrorAction SilentlyContinue
         if ($key -and $key.InstallLocation) { $roots += $key.InstallLocation }
-        if ($Mode -eq 'install') {
+        if ($Mode -in @('install', 'version')) {
             $old = Get-ItemProperty -LiteralPath "$hive\Software\Microsoft\Windows\CurrentVersion\Uninstall\$AppGuid" -ErrorAction SilentlyContinue
             if ($old -and $old.DisplayVersion -and [Version]$old.DisplayVersion -gt [Version]$Version) {
                 Write-InstallLog "A newer version ($($old.DisplayVersion)) is installed. Downgrade to $Version was blocked; no files were changed."
@@ -56,6 +56,11 @@ try {
             Write-InstallLog 'Move the installer outside the installation folder and any similarly named sibling path, then run it again. No files were changed.'
             exit 13
         }
+    }
+    # Adding a version beside the running one never touches its files: only version and location are checked.
+    if ($Mode -eq 'version') {
+        Write-InstallLog 'Version and installer location checked. A running NexusAI can stay open.'
+        exit 0
     }
     $owned = @($processes | Where-Object { Test-InstallProcess $_ $roots $excluded })
     foreach ($entry in $owned) {

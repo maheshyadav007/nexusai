@@ -75,8 +75,69 @@ async function verifyArtifacts(directory, manifest) {
   if (!manifest.files.some((file) => file.name.endsWith('.exe')) || !seen.has('latest.yml')) throw new Error('Missing installer or update metadata.');
 }
 
+// Unused parts of the standard library and package test suites. Fewer files means a smaller download and
+// less for security scanners to hold open.
+const unusedPython = ['Lib/test', 'Lib/idlelib', 'Lib/tkinter', 'Lib/turtledemo', 'Lib/turtle.py', 'tcl',
+  'DLLs/_tkinter.pyd', 'DLLs/tcl86t.dll', 'DLLs/tk86t.dll'];
+function countFiles(target) {
+  const stat = fs.lstatSync(target);
+  if (!stat.isDirectory()) return 1;
+  return fs.readdirSync(target).reduce((total, name) => total + countFiles(path.join(target, name)), 0);
+}
+async function trimPython(pythonRoot) {
+  const targets = unusedPython.map((relative) => path.join(pythonRoot, relative)).filter((target) => fs.existsSync(target));
+  const site = path.join(pythonRoot, 'Lib', 'site-packages');
+  const walk = (directory) => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const child = path.join(directory, entry.name);
+      if (entry.name === 'tests' && directory !== site) targets.push(child); else walk(child);
+    }
+  };
+  if (fs.existsSync(site)) walk(site);
+  let removed = 0;
+  for (const target of targets) { removed += countFiles(target); await fs.promises.rm(target, { recursive: true, force: true }); }
+  return removed;
+}
+
+// Compiles installer/launcher.nsi with the makensis electron-builder uses.
+async function compileLauncher({ productName, icon, outFile, run }) {
+  const { getMakeNsisPath } = require('app-builder-lib/out/toolsets/windows');
+  const makensis = await getMakeNsisPath(null);
+  await fs.promises.mkdir(path.dirname(outFile), { recursive: true });
+  await fs.promises.rm(outFile, { force: true });
+  // LC_CTYPE: the macOS/Linux makensis builds abort on Unicode scripts without a UTF-8 character type.
+  await run(makensis.path, ['-V2', '-WX', '-INPUTCHARSET', 'UTF8', `-DPRODUCT_NAME=${productName}`, `-DPRODUCT_EXE=${productName}.exe`, `-DICON=${icon}`,
+    `-DOUTFILE=${outFile}`, path.join(__dirname, 'installer', 'launcher.nsi')], { env: { ...process.env, ...makensis.env, LC_CTYPE: 'UTF-8' } });
+  if (!fs.existsSync(outFile)) throw new Error('The NexusAI launcher was not built.');
+  return outFile;
+}
+
+function windowsBuilderConfig({ appId, productName, packageName, version, output, launcher, signed, signing, updateBaseUrl, setupName }) {
+  return {
+    appId, productName, asar: true,
+    directories: { output, buildResources: 'build-resources' },
+    files: ['main.cjs', 'runtime.cjs', 'layout.cjs', 'loading.html', 'shutdown.html', 'preload.cjs', 'build-resources/icon.png', 'build-resources/LICENSE.lucide', 'package.json'],
+    extraResources: [{ from: 'resources', to: '.', filter: ['**/*'] },
+      { from: 'frontend-server.cjs', to: 'frontend-server.cjs' },
+      { from: 'installer/check-install.ps1', to: 'check-install.ps1' }],
+    extraFiles: [{ from: launcher, to: 'nexusai-launcher.exe' }],
+    extraMetadata: { name: packageName, version },
+    artifactName: setupName,
+    win: { icon: path.join(__dirname, 'build-resources', 'icon.ico'), target: [{ target: 'nsis', arch: ['x64'] }], verifyUpdateCodeSignature: signed,
+      ...(signed ? { certificateFile: signing.certificateFile, publisherName: signing.publisherName } : {}) },
+    nsis: { oneClick: false, perMachine: false, allowElevation: false, allowToChangeInstallationDirectory: true,
+      guid: installationGuid(appId),
+      include: path.join(__dirname, 'installer', 'installer.nsh'),
+      deleteAppDataOnUninstall: false, createDesktopShortcut: true, runAfterFinish: true },
+    forceCodeSigning: signed,
+    ...(updateBaseUrl ? { publish: [{ provider: 'generic', url: updateBaseUrl }] } : {}),
+  };
+}
+
 function quote(value) { return `'${String(value).replaceAll("'", "'\\''")}'`; }
 function feedUrl(config, signed) { return new URL(signed ? './' : 'unsigned/', config.updateBaseUrl).href; }
 function installationGuid(appId) { return UUID.v5(appId, UUID.parse('50e065bc-3134-11e6-9bab-38c9862bdaf3')); }
 
-module.exports = { validateConfig, sha256, safeName, makeChannelMetadata, verifyArtifacts, quote, feedUrl, installationGuid };
+module.exports = { validateConfig, sha256, safeName, makeChannelMetadata, verifyArtifacts, quote, feedUrl, installationGuid, trimPython, compileLauncher,
+  windowsBuilderConfig };

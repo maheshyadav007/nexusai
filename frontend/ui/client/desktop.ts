@@ -1,7 +1,7 @@
 "use client";
 
 export interface DesktopStatus {
-  state: "idle" | "checking" | "available" | "downloading" | "ready" | "current" | "error";
+  state: "idle" | "checking" | "available" | "downloading" | "installing" | "ready" | "current" | "error";
   version: string;
   availableVersion: string | null;
   percent: number;

@@ -136,6 +136,7 @@ async function build(config) {
   const wheel = (await fsp.readdir(wheels)).find((file) => file.endsWith('.whl'));
   if (!wheel) throw new Error('Backend wheel was not produced.');
   await run(uv, ['pip', 'install', '--python', python, '--target', site, '--no-deps', path.join(wheels, wheel)]);
+  console.log(`Removed ${await lib.trimPython(pythonRoot)} unused Python files (tests, Tcl/Tk, IDLE).`);
   await run(python, ['-c', 'import sqlcipher3, pypff, cryptography, onnxruntime, tokenizers; from zoneinfo import ZoneInfo, reset_tzpath; reset_tzpath([]); [ZoneInfo(z) for z in ("UTC", "Asia/Kolkata", "America/New_York")]; from nexusai.kernel.config import load_config; from nexusai.api.desktop import DesktopControl; c=sqlcipher3.connect(":memory:"); c.execute("PRAGMA key=\'smoke\'"); assert c.execute("PRAGMA cipher_version").fetchone(); load_config(); print("Bundled native dependencies and backend imports OK")']);
   await fsp.mkdir(path.join(resources, 'node'), { recursive: true });
   await fsp.copyFile(process.execPath, path.join(resources, 'node', 'node.exe'));
@@ -155,29 +156,18 @@ async function build(config) {
     ciProbe: config.ciProbe === true, acceptanceProbe: config.acceptanceProbe === true, dataDirectory: config.ciProbe ? productName : signed ? 'NexusAI' : 'NexusAI Pilot', signed,
     updateBaseUrl: config.updateBaseUrl ? lib.feedUrl(config, signed) : '' };
   await fsp.writeFile(path.join(resources, 'runtime.json'), JSON.stringify(runtime, null, 2));
-  const builder = {
-    appId: runtime.appId, productName, asar: true,
-    directories: { output, buildResources: 'build-resources' },
-    files: ['main.cjs', 'runtime.cjs', 'loading.html', 'shutdown.html', 'preload.cjs', 'build-resources/icon.png', 'build-resources/LICENSE.lucide', 'package.json'],
-    extraResources: [{ from: 'resources', to: '.', filter: ['**/*'] },
-      { from: 'frontend-server.cjs', to: 'frontend-server.cjs' },
-      { from: 'installer/check-install.ps1', to: 'check-install.ps1' }],
-    extraMetadata: { name: config.ciProbe ? 'nexusai-ci' : signed ? 'nexusai' : 'nexusai-pilot', version },
-    artifactName: `NexusAI${config.ciProbe ? '-CI' : signed ? '' : '-Beta'}-Setup-${version}.exe`,
-    win: { icon: path.join(__dirname, 'build-resources', 'icon.ico'), target: [{ target: 'nsis', arch: ['x64'] }], verifyUpdateCodeSignature: signed,
-      ...(signed ? { certificateFile: config.signing.certificateFile, publisherName: config.signing.publisherName } : {}) },
-    nsis: { oneClick: false, perMachine: false, allowElevation: false, allowToChangeInstallationDirectory: true,
-      guid: lib.installationGuid(runtime.appId),
-      include: path.join(__dirname, 'installer', 'installer.nsh'),
-      deleteAppDataOnUninstall: false, createDesktopShortcut: true, runAfterFinish: true },
-    forceCodeSigning: signed,
-    ...(runtime.updateBaseUrl ? { publish: [{ provider: 'generic', url: runtime.updateBaseUrl }] } : {}),
-  };
+  // The launcher ships inside every version folder (so electron-builder signs it with the app); the installer
+  // copies it to the top of the installation folder.
+  const launcher = path.join(work, 'launcher', 'nexusai-launcher.exe');
+  await lib.compileLauncher({ productName, icon: path.join(__dirname, 'build-resources', 'icon.ico'), outFile: launcher, run });
+  const builder = lib.windowsBuilderConfig({ appId: runtime.appId, productName, version, output, launcher, signed, signing: config.signing,
+    packageName: config.ciProbe ? 'nexusai-ci' : signed ? 'nexusai' : 'nexusai-pilot', updateBaseUrl: runtime.updateBaseUrl,
+    setupName: `NexusAI${config.ciProbe ? '-CI' : signed ? '' : '-Beta'}-Setup-${version}.exe` });
   const builderConfig = path.join(work, 'builder.json');
   await fsp.writeFile(builderConfig, JSON.stringify(builder, null, 2));
   const signingEnv = { ...process.env, CSC_IDENTITY_AUTO_DISCOVERY: signed ? 'true' : 'false' };
   if (signed && !signingEnv.CSC_KEY_PASSWORD) signingEnv.CSC_KEY_PASSWORD = await ssh.secret('Code-signing certificate password');
-  await withInstallerTemplates(path.join(__dirname, 'node_modules/app-builder-lib/templates/nsis/include/installUtil.nsh'), () =>
+  await withInstallerTemplates(path.join(__dirname, 'node_modules/app-builder-lib/templates/nsis'), () =>
     run(process.execPath, [path.join(__dirname, 'node_modules/electron-builder/out/cli/cli.js'),
       '--win', 'nsis', '--x64', '--config', builderConfig, '--publish', 'never'], { cwd: __dirname, env: signingEnv }));
   if (!runtime.updateBaseUrl) {
@@ -214,7 +204,8 @@ async function test(config, install = false) {
   if (install && manifest.signed && fs.existsSync(path.join(process.env.APPDATA || os.homedir(), 'NexusAI', 'home-pointer.json'))) {
     throw new Error('Run signed installer tests in a disposable Windows account/VM. This account already has a NexusAI Home.');
   }
-  const executable = path.join(install ? testInstall : path.join(directory, 'win-unpacked'), `${manifest.productName}.exe`);
+  // Installed builds: smoke-test the exact version folder; the launcher at the top only starts it and exits.
+  const executable = path.join(install ? path.join(testInstall, `app-${version}`) : path.join(directory, 'win-unpacked'), `${manifest.productName}.exe`);
   if (install) {
     const active = capture('powershell.exe', ['-NoProfile', '-Command',
       `$target = '${manifest.productName.replaceAll("'", "''")}'; @(Get-Process | Where-Object { $_.ProcessName -eq $target }).Count`]);
