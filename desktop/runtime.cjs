@@ -71,17 +71,33 @@ function waitExit(child, timeout = 120000, name = 'Service') {
   });
 }
 
-async function launchInstaller(update, spawnProcess = spawn) {
+async function verifyInstaller(update) {
   if (!update || !path.isAbsolute(update.file) || !update.file.toLowerCase().endsWith('.exe') || typeof update.sha512 !== 'string') {
     throw new Error('No verified update installer is ready. Download the update again.');
   }
   const hash = createHash('sha512');
   for await (const chunk of createReadStream(update.file)) hash.update(chunk);
   if (hash.digest('base64') !== update.sha512) throw new Error('The downloaded installer changed. Download the update again.');
+}
+
+async function launchInstaller(update, spawnProcess = spawn) {
+  await verifyInstaller(update);
   await new Promise((resolve, reject) => {
     const installer = spawnProcess(update.file, ['--updated', '/S', '--force-run'], { detached: true, stdio: 'ignore', windowsHide: true });
     installer.once('error', reject);
     installer.once('spawn', () => { installer.unref(); resolve(); });
+  });
+}
+
+// Runs a downloaded, checksum-verified installer silently and returns its exit code. With the side-by-side
+// layout this happens while NexusAI keeps running: the installer only adds and activates a version folder.
+async function runInstaller(update, spawnProcess = spawn, timeout = 20 * 60 * 1000) {
+  await verifyInstaller(update);
+  return new Promise((resolve, reject) => {
+    const installer = spawnProcess(update.file, ['--updated', '/S'], { stdio: 'ignore', windowsHide: true });
+    const timer = setTimeout(() => reject(new Error('The update installer did not finish within 20 minutes. Details: %TEMP%\\nexusai-setup.log')), timeout);
+    installer.once('error', error => { clearTimeout(timer); reject(error); });
+    installer.once('exit', code => { clearTimeout(timer); resolve(code); });
   });
 }
 
@@ -99,4 +115,4 @@ function waitInstalledServices(resources, executable, spawnProcess = spawn) {
   });
 }
 
-module.exports = { freePort, persistentFrontendPort, waitReady, waitExit, isAlive, launchInstaller, waitInstalledServices };
+module.exports = { freePort, persistentFrontendPort, waitReady, waitExit, isAlive, launchInstaller, runInstaller, waitInstalledServices };

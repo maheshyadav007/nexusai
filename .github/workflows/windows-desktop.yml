@@ -28,6 +28,20 @@ jobs:
           Set-TimeZone -Id 'India Standard Time'
           Remove-Item Env:TZ -ErrorAction SilentlyContinue
           'NEXUSAI_TEST_WINDOWS_ZONE=Asia/Kolkata' >> $env:GITHUB_ENV
+      - name: Download the published single-folder Beta to test its conversion
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 0.1.0 is the last Beta installed as a single folder; later Betas install versions side by side.
+          $tag = gh release list --repo $env:GITHUB_REPOSITORY --limit 50 --json tagName --jq '[.[] | select(.tagName | startswith("desktop-beta/0.1.0/"))][0].tagName'
+          if (-not $tag) { throw 'No published single-folder Beta 0.1.0 release to convert.' }
+          $folder = Join-Path $env:RUNNER_TEMP 'legacy-beta'
+          gh release download $tag --repo $env:GITHUB_REPOSITORY --pattern '*.exe' --dir $folder
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $installer = @(Get-ChildItem $folder -Filter '*.exe')
+          if ($installer.Count -ne 1) { throw "Expected one installer in $tag." }
+          "NEXUSAI_LEGACY_INSTALLER=$($installer[0].FullName)" >> $env:GITHUB_ENV
       - name: Build and verify automatic and manual Beta upgrades
         shell: powershell
         run: |
@@ -38,7 +52,8 @@ jobs:
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force .release/installer-logs | Out-Null
-          Get-ChildItem "$env:TEMP/nexusai-installer-*.log" -ErrorAction SilentlyContinue | Copy-Item -Destination .release/installer-logs
+          Get-ChildItem "$env:TEMP/nexusai-*.log" -ErrorAction SilentlyContinue | Copy-Item -Destination .release/installer-logs
+          Get-ChildItem "$env:LOCALAPPDATA/NexusAI-Pipeline-*/logs/*.log" -ErrorAction SilentlyContinue | Copy-Item -Destination .release/installer-logs
       - name: Upload test evidence and generic installer
         if: always()
         uses: actions/upload-artifact@v7
@@ -51,7 +66,7 @@ jobs:
             .release/artifacts/unsigned/*/*.exe
             .release/artifacts/unsigned/*/release.json
             .release/artifacts/unsigned/*/smoke.json
-            .release/artifacts/ci/0.0.2/*.exe
+            .release/artifacts/ci/0.1.2/*.exe
             .release/artifacts/ci/*/release.json
             .release/artifacts/ci/*/smoke.json
             .release/artifacts/acceptance/*/release.json
@@ -98,7 +113,9 @@ jobs:
           acceptance = json.loads(Path('evidence/acceptance.json').read_text())
           assert acceptance['sourceCommit'] == manifest['sourceCommit'] == os.environ['GITHUB_SHA']
           assert acceptance['appId'] == manifest['appId'] == 'com.nexusai.pilot'
-          assert acceptance['downgradeBlocked'] and acceptance['orphanServiceBlocked']
+          assert acceptance['downgradeBlocked'] and acceptance['orphanServiceBlocked'] and acceptance['lockedOldFileUpdate'] and acceptance['launcherRecovery']
+          assert acceptance['uninstallKeepsData'] and acceptance['uninstallDeletesOnlyNexusData'] and acceptance['legacyConverted']
+          assert acceptance['automatic']['oldVersion'] == 'kept' and acceptance['manual']['oldVersion'] == 'removed'
           for mode in ('automatic', 'manual'):
               assert all(acceptance[mode][key] for key in ('ok', 'settingsPreserved', 'browserStoragePreserved', 'appDataPreserved', 'homeReady'))
           smoke = json.loads((root / 'smoke.json').read_text())
@@ -116,7 +133,9 @@ jobs:
 
           Includes guided deterministic Posty onboarding (outline robot placeholder), password visibility, clearer mail-download guidance, simplified chat waiting states, attachment discovery for agents, OS certificate trust for search-model downloads, desktop app/update controls and a single Windows header with native window buttons.
 
-          Automated gates: non-UTC backend checks, installed automatic and manual Beta upgrades preserving test data, manual-downgrade rejection, orphan-service blocking, and a separate distributable Beta startup/shutdown smoke test.
+          Windows updates now install each version beside the previous one and switch to it on restart, so files held by security scanning no longer block an update. You can still choose the installation folder; updates stay in it. Uninstall keeps your data unless you tick "Also delete my NexusAI data".
+
+          Automated gates: non-UTC backend checks, installed automatic and manual Beta upgrades preserving test data, an update while an old file is held open, launcher recovery, downgrade rejection, orphan-service blocking, uninstall with and without data removal, conversion of the previous single-folder Beta, and a separate distributable Beta startup/shutdown smoke test.
 
           This generic Beta installer contains no internal credentials and no configured update server. About & Updates explains that updates are manual until an internal feed is configured. Acceptance uses the real Beta identity in a guarded disposable runner, synthetic data and a temporary local feed; acceptance installers are not distributed. Windows notification policies, internal model/download access and real-mail behavior still need target-device testing.
           EOF

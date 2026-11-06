@@ -5,10 +5,14 @@ const { randomBytes } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { freePort, persistentFrontendPort, waitReady, waitExit, isAlive, launchInstaller, waitInstalledServices } = require('./runtime.cjs');
+const { freePort, persistentFrontendPort, waitReady, waitExit, isAlive, launchInstaller, runInstaller, waitInstalledServices } = require('./runtime.cjs');
+const layout = require('./layout.cjs');
 
 const resources = app.isPackaged ? process.resourcesPath : path.join(__dirname, 'resources');
 const config = require(path.join(resources, 'runtime.json'));
+const exeName = path.basename(process.execPath);
+// <install folder>\app-<version>\<exe>; the launcher one level up starts the active version.
+const installHome = process.platform === 'win32' && app.isPackaged ? layout.installRoot(process.execPath) : null;
 const smokeAt = process.argv.indexOf('--smoke-dir');
 const smokeDir = smokeAt >= 0 ? process.argv[smokeAt + 1] : null;
 if (smokeAt >= 0 && !smokeDir) throw new Error('--smoke-dir needs a directory');
@@ -44,7 +48,7 @@ ipcMain.handle('nexus:caption', (event, colors) => {
   if (!valid(colors?.color) || !valid(colors?.symbolColor)) throw new Error('Invalid caption colors');
   window.setTitleBarOverlay({ color: colors.color, symbolColor: colors.symbolColor, height: 44 });
 });
-ipcMain.handle('nexus:status' , (event) => { if (!trustedSender(event)) throw new Error('Untrusted window'); return updateState; });
+ipcMain.handle('nexus:status' , (event) => { if (!trustedSender(event)) throw new Error('Untrusted window'); noticeLocalUpdate(); return updateState; });
 ipcMain.handle('nexus:action', async (event, action) => {
   if (!trustedSender(event)) throw new Error('Untrusted window');
   if (lifecycleMode && !['retry-shutdown', 'restart', 'quit', 'logs'].includes(action)) throw new Error('Finish shutdown before continuing.');
@@ -53,10 +57,10 @@ ipcMain.handle('nexus:action', async (event, action) => {
   if (action === 'restart' && lifecycleMode) {
     if (isAlive(backend) || isAlive(frontend)) throw new Error('Local services are still stopping. Retry shutdown first.');
     if (process.platform === 'win32' && app.isPackaged) await waitInstalledServices(resources, app.getPath('exe'));
-    app.relaunch(); canQuit = true; app.exit(0); return updateState;
+    await relaunch(); canQuit = true; app.exit(0); return updateState;
   }
   if (action === 'check') {
-    if (!config.updateBaseUrl) return updateState;
+    if (!config.updateBaseUrl || updateReady || installingBeside) return updateState;
     updateState = { ...updateState, state: 'checking', error: null };
     try { await autoUpdater.checkForUpdates(); } catch (error) { updateState = { ...updateState, state: 'error', error: error.message }; }
   } else if (action === 'download') {
@@ -156,10 +160,16 @@ async function shutdown(update = false, failedStartup = false) {
       installing = true;
       await lifecycleScreen('Checking that all bundled local services have stopped…');
       if (process.platform === 'win32' && app.isPackaged) await waitInstalledServices(resources, app.getPath('exe'));
-      await lifecycleScreen('Starting the verified update installer…');
-      await launchInstaller(downloadedUpdate);
+      if (installHome) {
+        // The new version is already installed beside this one; restarting is all that is left.
+        await lifecycleScreen('Starting the updated NexusAI…');
+        await relaunch();
+      } else {
+        await lifecycleScreen('Starting the verified update installer…');
+        await launchInstaller(downloadedUpdate);
+      }
       canQuit = true; app.exit(0);
-    } else { canQuit = true; if (restartRequested && !failedStartup) app.relaunch(); app.exit(failedStartup || errors.length ? 1 : 0); }
+    } else { canQuit = true; if (restartRequested && !failedStartup) await relaunch(); app.exit(failedStartup || errors.length ? 1 : 0); }
   } catch (error) {
     log(error.stack);
     shuttingDown = false;
@@ -214,31 +224,106 @@ function setupUpdates() {
   ]);
   Menu.setApplicationMenu(menu);
   if (process.platform !== 'darwin') window.removeMenu();
-  autoUpdater.on('checking-for-update', () => { updateState = { ...updateState, state: 'checking', error: null }; });
-  autoUpdater.on('update-available', (info) => { updateState = { ...updateState, state: 'available', availableVersion: info.version }; });
-  autoUpdater.on('update-not-available', () => { updateState = { ...updateState, state: 'current' }; });
+  // Once a version is installed beside this one, later checks must not replace "ready" with "available".
+  const settled = () => updateReady || installingBeside;
+  autoUpdater.on('checking-for-update', () => { if (!settled()) updateState = { ...updateState, state: 'checking', error: null }; });
+  autoUpdater.on('update-available', (info) => { if (!settled()) updateState = { ...updateState, state: 'available', availableVersion: info.version }; });
+  autoUpdater.on('update-not-available', () => { if (!settled()) updateState = { ...updateState, state: 'current' }; });
   autoUpdater.on('error', (error) => {
+    if (settled()) { log(`Update check error after installation: ${error.message}`); return; }
     updateState = { ...updateState, state: 'error', error: error.message };
     log(`Update error: ${error.message}`); window?.setProgressBar(-1); updateItem('Update failed — click to retry');
     if (probeDir) { probeReport = { ok: false, error: error.message }; void shutdown(false, true); }
   });
   autoUpdater.on('download-progress', ({ percent }) => {
+    if (settled()) return;
     updateState = { ...updateState, state: 'downloading', percent };
     updateItem(`Downloading update: ${Math.round(percent)}%`);
     window?.setProgressBar(percent / 100);
   });
   autoUpdater.on('update-downloaded', (info) => {
     downloadedUpdate = { file: info.downloadedFile, sha512: info.files?.find(file => /\.exe(?:$|\?)/i.test(file.url))?.sha512 };
-    updateState = { ...updateState, state: 'ready', percent: 100 };
-    updateReady = true; updateItem('Update ready'); window?.setProgressBar(-1);
-    if (probeDir) { void shutdown(true); return; }
-    void dialog.showMessageBox(window, { message: 'A NexusAI update is ready.', detail: 'Restart when your current work is finished.',
-      buttons: ['Later', 'Restart to update'], defaultId: 0, cancelId: 0,
-    }).then(({ response }) => { if (response === 1) void shutdown(true); });
+    window?.setProgressBar(-1);
+    if (installHome) void installBeside(info.version);
+    else markReady(info.version);
   });
+  if (installHome && !smokeDir) {
+    // Old version folders go once nothing holds their files; a locked folder only waits for the next pass.
+    setTimeout(() => void cleanUpInstallation(), probeDir ? 1000 : 60000).unref();
+    setInterval(() => void cleanUpInstallation(), 15 * 60 * 1000).unref();
+    setInterval(noticeLocalUpdate, probeDir ? 2000 : 60000).unref();
+  }
   if (config.updateBaseUrl && !smokeDir && !probeDir) {
-    setTimeout(() => void autoUpdater.checkForUpdates().catch(() => {}), 15000).unref();
-    setInterval(() => void autoUpdater.checkForUpdates().catch(() => {}), 4 * 60 * 60 * 1000).unref();
+    setTimeout(() => { if (!updateReady) void autoUpdater.checkForUpdates().catch(() => {}); }, 15000).unref();
+    setInterval(() => { if (!updateReady) void autoUpdater.checkForUpdates().catch(() => {}); }, 4 * 60 * 60 * 1000).unref();
+  }
+}
+
+// Starts the active version once this process has exited, through the launcher in the installation folder.
+function relaunch() {
+  if (!installHome) { app.relaunch(); return Promise.resolve(); }
+  return new Promise((resolve, reject) => {
+    const starter = spawn(path.join(installHome, exeName), [`--wait-pid=${process.pid}`], { detached: true, stdio: 'ignore', windowsHide: true });
+    starter.once('error', reject);
+    starter.once('spawn', () => { starter.unref(); resolve(); });
+  });
+}
+
+function markReady(version) {
+  if (updateReady) return;
+  updateState = { ...updateState, state: 'ready', availableVersion: version || updateState.availableVersion, percent: 100, error: null };
+  updateReady = true; updateItem('Restart to update'); window?.setProgressBar(-1);
+  log(`Update ${version} is ready; it starts on the next restart.`);
+  if (probeDir) { void shutdown(true); return; }
+  void dialog.showMessageBox(window, { message: 'A NexusAI update is ready.', detail: 'Restart when your current work is finished.',
+    buttons: ['Later', 'Restart to update'], defaultId: 0, cancelId: 0,
+  }).then(({ response }) => { if (response === 1) void shutdown(true); });
+}
+
+// The installer adds the new version beside this one while NexusAI keeps running; nothing in use is touched.
+let installingBeside = false;
+async function installBeside(version) {
+  if (installingBeside || updateReady) return;
+  installingBeside = true;
+  updateState = { ...updateState, state: 'installing', percent: 100, error: null };
+  updateItem('Installing update…');
+  try {
+    const code = await runInstaller(downloadedUpdate);
+    log(`Update installer for ${version} exited with ${code}.`);
+    const pending = layout.pendingVersion(installHome, app.getVersion(), exeName);
+    if (code === 0 && pending) markReady(pending);
+    else throw new Error(code === 0 ? 'The installer finished but did not activate the new version. (Error NX-34)' : layout.installerError(code));
+  } catch (error) {
+    log(`Update installation failed: ${error.message}`);
+    updateState = { ...updateState, state: 'error', error: error.message };
+    updateItem('Update failed — click to retry');
+    if (probeDir) { probeReport = { ok: false, error: error.message }; void shutdown(false, true); }
+  } finally { installingBeside = false; }
+}
+
+// A Setup.exe run by hand while NexusAI is open adds and activates a newer version the same way.
+function noticeLocalUpdate() {
+  if (!installHome || updateReady || installingBeside) return;
+  const pending = layout.pendingVersion(installHome, app.getVersion(), exeName);
+  if (pending) markReady(pending);
+}
+
+let housekeeping = null;
+function cleanUpInstallation() {
+  if (housekeeping) return housekeeping;
+  if (!installHome || shuttingDown) return Promise.resolve({});
+  housekeeping = layout.cleanup(installHome, app.getVersion(), log)
+    .catch(error => { log(`Cleanup error: ${error.stack || error.message}`); return {}; })
+    .finally(() => { housekeeping = null; });
+  return housekeeping;
+}
+
+async function cleanUpUntil(done, timeout) {
+  const deadline = Date.now() + timeout;
+  for (;;) {
+    await cleanUpInstallation();
+    if (done() || Date.now() >= deadline) return done();
+    await new Promise(resolve => setTimeout(resolve, 2000));
   }
 }
 
@@ -259,6 +344,11 @@ async function runUpdateProbe() {
     autoUpdater.disableDifferentialDownload = true;
     if (plan.mode === 'manual') fs.writeFileSync(path.join(probeDir, 'manual-ready.json'), JSON.stringify({ version: app.getVersion(), nonce: plan.nonce }));
     else await autoUpdater.checkForUpdates();
+  } else if (app.getVersion() === plan.to && plan.mode === 'legacy') {
+    // The one-time conversion of an old single-folder installation: its leftovers go once nothing holds them.
+    const removed = await cleanUpUntil(() => !fs.existsSync(path.join(installHome, '.legacy-files')), 90000);
+    probeReport = { ok: removed, mode: 'legacy', to: app.getVersion(), legacyRemoved: removed, ...(removed ? {} : { error: 'Old single-folder files were not removed.' }) };
+    await shutdown();
   } else if (app.getVersion() === plan.to) {
     const settings = await api('/api/queries/settings.get');
     const browserMarker = await window.webContents.executeJavaScript("localStorage.getItem('nexusai.updateProbe')");
@@ -267,7 +357,11 @@ async function runUpdateProbe() {
       throw new Error('The installed update did not preserve its database/browser/app-data fixtures.');
     }
     fs.writeFileSync(path.join(probeDir, 'after.png'), (await window.capturePage()).toPNG());
-    probeReport = { ok: true, mode: plan.mode || 'automatic', from: plan.from, to: app.getVersion(), settingsPreserved: true, browserStoragePreserved: true, appDataPreserved: true, homeReady: true };
+    // The test may hold a file of the old version open: the update must still work, and the folder stays until it is free.
+    const oldFolder = path.join(installHome, `app-${plan.from}`);
+    const removed = await cleanUpUntil(() => !fs.existsSync(oldFolder), plan.oldLocked ? 0 : 60000);
+    probeReport = { ok: removed !== Boolean(plan.oldLocked), mode: plan.mode || 'automatic', from: plan.from, to: app.getVersion(), settingsPreserved: true,
+      browserStoragePreserved: true, appDataPreserved: true, homeReady: true, oldVersion: removed ? 'removed' : 'kept' };
     await shutdown();
   } else throw new Error(`Unexpected installed version in CI: ${app.getVersion()}`);
 }
@@ -285,6 +379,11 @@ async function start() {
       else void shutdown();
     }
   });
+  if (installHome) {
+    // A taskbar pin must start the launcher, never a version folder that is removed after an update.
+    const launcher = path.join(installHome, exeName);
+    window.setAppDetails({ appId: config.appId, appIconPath: launcher, appIconIndex: 0, relaunchCommand: `"${launcher}"`, relaunchDisplayName: path.basename(exeName, '.exe') });
+  }
   await window.loadFile(path.join(__dirname, 'loading.html'));
   await startupStage('Preparing your local services…');
   const frontendPort = await persistentFrontendPort(dataDir);

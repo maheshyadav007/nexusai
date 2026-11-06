@@ -27,6 +27,6 @@ export function DesktopUpdates() {
     {status.availableVersion ? <p className="text-sm">{t("desktop.available", { version: status.availableVersion })}</p> : null}
     {status.state === "downloading" ? <Progress label={t("desktop.downloading")} value={status.percent} /> : null}
     {status.error || error ? <p role="alert" className="text-sm text-status-danger">{status.error || error}</p> : null}
-    <div><Button disabled={!status.configured || status.state === "checking" || status.state === "downloading"} onClick={() => act(status.state === "ready" ? "install" : status.state === "available" ? "download" : "check")}>{t(status.state === "ready" ? "desktop.install" : status.state === "available" ? "desktop.download" : "desktop.check")}</Button></div>
+    <div><Button disabled={!status.configured || status.state === "checking" || status.state === "downloading" || status.state === "installing"} onClick={() => act(status.state === "ready" ? "install" : status.state === "available" ? "download" : "check")}>{t(status.state === "ready" ? "desktop.install" : status.state === "available" ? "desktop.download" : "desktop.check")}</Button></div>
   </section>;
 }

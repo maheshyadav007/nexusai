@@ -10,11 +10,19 @@ Scheduling uses `tzlocal` to discover the OS IANA timezone, including Windows re
 
 Latest validation: [Beta Windows run 41853092074](https://github.com/maheshyadav007/nexusai/actions/runs/41853092074) passed at source commit `129833b` in India Standard Time: **121 backend checks**, frontend checks/builds, installed A-to-B update with preserved database/browser/app data, and separate Beta 0.1.0 startup/shutdown smoke. This includes the corrected timezone and mail-reliability checks. Earlier failed runs and test synchronization corrections are recorded in [Known Problems](KNOWN_PROBLEMS.md#windows-email-reliability-validation). Organization-device and internal-feed acceptance remain separate.
 
-The installer/update reliability changes require a fresh Windows validation run. Hosted acceptance now exercises both an automatic downloaded update and a manually launched installer while the previous Beta is running, checking database, browser storage and app-data preservation. It also tests downgrade rejection and a leftover bundled Python process without terminating unrelated processes. A-to-B acceptance changes the version on the same source; it does not establish compatibility with every historical release or schema.
+Windows installs and updates use a **side-by-side layout** on the electron-builder NSIS installer; see [SIDE_BY_SIDE_UPDATES.md](SIDE_BY_SIDE_UPDATES.md) for the design, edge cases and error codes. The user still chooses the installation folder once; updates always stay in it. Each version is added as `app-<version>` beside the previous one, and a small launcher at the top of the folder starts the active one. An update never replaces or deletes files that are in use, so security scanning can no longer make it fail. Old versions are removed later by the app, whenever their files are free.
 
-Manual installers request the app’s normal shutdown and wait up to 120 seconds for processes under the installation directory. Busy work, lingering services or a failed safety check stop replacement. Interactive installs offer Retry/Cancel; silent installs fail instead of forcing closure. Diagnostics are in `%TEMP%\nexusai-installer-<pid>.log` and the app-data `desktop.log`. Older apps may require normal manual closure because they lack the new shutdown request. The legacy uninstaller can still fail on file locks or permissions; its actual exit code is now shown.
+The app installs a downloaded update silently while it keeps running, then offers **Restart to update**. The restart drains local services exactly as before (no force-kill of Python) and starts the new version through the launcher. Installer failures return a code (`NX-10` … `NX-35`) that the app shows with a plain explanation. Logs are in `%TEMP%\nexusai-setup.log`, `%TEMP%\nexusai-uninstall.log` and `<install folder>\logs\launcher.log`. Uninstall keeps all data unless **Also delete my NexusAI data** is ticked. Newer database migration IDs are still rejected by older code.
 
-Automatic shutdown failures keep a visible recovery window with retry, reopen and logs controls. An installer is handed off only after clean service exits, a leftover-service check and a fresh checksum check. Installer cancellation or failure after handoff still requires reviewing installer logs; a successful process launch alone does not certify installation. Newer database migration IDs are rejected by this version to protect a newer workspace from an older executable.
+Hosted acceptance covers:
+- an automatic update while a file of the running version is held open;
+- a manual `Setup.exe` while the previous version runs;
+- downgrade rejection and launcher recovery from a damaged pointer;
+- a leftover bundled Python process;
+- uninstall with and without data removal;
+- conversion of the published single-folder Beta 0.1.0.
+
+A-to-B acceptance changes the version on the same source; it does not establish compatibility with every historical release or schema.
 
 ## Beta acceptance builds
 
@@ -23,10 +31,10 @@ The app remains **NexusAI**. Unsigned testers see **NexusAI Beta** in the instal
 From a clean committed checkout, run:
 
 ```sh
-./desktop.sh beta-trigger --version 0.1.0
+./desktop.sh beta-trigger --version 0.2.0
 ```
 
-This pushes a versioned `desktop-beta/<version>/<timestamp>` tag. Windows CI runs in India Standard Time, runs backend correctness/TLS checks, installs the real Beta identity in a guarded disposable account and tests automatic and manual A-to-B upgrades with preserved data, then builds and smoke-tests a separate generic Beta. Backend checks run once within that immutable-source build process. The publication job verifies the artifact manifest, smoke result and installer checksum, then publishes the `.exe` and checksum under GitHub **Releases → Assets** as a prerelease. A failed gate prevents publication. Use a new version for the next iteration.
+This pushes a versioned `desktop-beta/<version>/<timestamp>` tag. Windows CI runs in India Standard Time, runs backend correctness/TLS checks, installs the real Beta identity in a guarded disposable account and tests automatic and manual A-to-B upgrades with preserved data, then builds and smoke-tests a separate generic Beta. Backend checks run once within that immutable-source build process. The publication job verifies the artifact manifest, smoke result and installer checksum, then publishes the `.exe` and checksum under GitHub **Releases → Assets** as a prerelease. A failed gate prevents publication. Use a new version for the next iteration. Side-by-side Betas start at 0.2.0; 0.1.0 is the last single-folder Beta and the starting point of the conversion test.
 
 The generic Beta has **no update URL**, company profile or credentials. It deliberately does not inherit the CI app's temporary loopback feed. About & Updates states that newer Betas must be installed manually until a real internal feed is configured. For an internally customized Beta with automatic updates, follow the deployment-profile and hosting sections below. This separation makes the public tester installer usable after the runner has shut down.
 
@@ -63,9 +71,11 @@ The job is designed to:
 1. Bootstrap pinned Node, uv and Python, using committed dependency lockfiles.
 2. Build generic unsigned version A, install its actual NSIS installer, render the app and verify clean shutdown.
 3. Build version B and smoke-test its packaged executable without replacing the installed A.
-4. Start a loopback-only update feed, launch A, write synthetic database/browser/app-data fixtures, download B through `electron-updater`, install it and relaunch.
-5. Confirm B's version and preserved database settings, browser storage, app-data marker and open Home, then exit cleanly.
-6. Upload the generic B installer, screenshots, logs and JSON results as short-lived Actions artifacts.
+4. Start a loopback-only update feed and launch A. Hold one of A's files open as a scanner would, write synthetic database/browser/app-data fixtures, and download B through `electron-updater`. B must install beside the running A and start on restart, with preserved data, while A's folder stays until the file is released.
+5. Check that an older installer is refused, that the launcher recovers from a damaged version pointer, and that a leftover bundled Python blocks a restart.
+6. Uninstall (data kept), reinstall A, and run B's installer by hand while A is open: A offers the restart and its unused folder is removed.
+7. Uninstall with data deletion: exactly NexusAI's data and Home folders are removed. In hosted acceptance, also convert the published single-folder Beta 0.1.0 in its own folder.
+8. Upload the generic B installer, screenshots, logs and JSON results as short-lived Actions artifacts.
 
 Hosted CI tests **NexusAI Beta** with the existing `com.nexusai.pilot` application ID and `NexusAI Pilot` data directory. It refuses accounts containing an existing Beta installation or data. Local `desktop.cmd ci` uses the separate **NexusAI CI** identity. Its installer embeds an ephemeral loopback update URL and is a validation artifact, not a distribution release. It never uses a deployment profile or contacts an internal mail/model server. This update probe exercises a full installer download; it does not certify differential downloads, code signing, real-mail behavior or an internal HTTPS feed. Hosted Windows images already contain development tools and system libraries, so this is not a substitute for a normal target-device test.
 
@@ -149,7 +159,8 @@ A customization has this precedence: bundled deployment defaults, then the user'
 
 The automated smoke test verifies startup readiness, the authenticated frontend proxy, a nonempty page, renderer/HTTP asset errors, screenshots and clean service exit. Reports live under `.release/smoke/`, with `smoke.json` beside the installer. Review the screenshot.
 
-- `build-test` and `install-test` install the actual NSIS output in `%LOCALAPPDATA%/NexusAI-Pipeline-Pilot` or `NexusAI-Pipeline-Signed`.
+- `build-test` and `install-test` install the actual NSIS output in `%LOCALAPPDATA%/NexusAI-Pipeline-Pilot` or `NexusAI-Pipeline-Signed`, and smoke-test its `app-<version>` folder.
+- `npm run check:installer` (in `desktop/`) compiles the launcher, installer and uninstaller from a stand-in app on any OS. Run it after changing anything under `desktop/installer/`.
 - `test` and `release` smoke-test `win-unpacked` without replacing the older installed version, preserving it for an A-to-B update check.
 - Installer tests update Windows app registration even with a custom install path. Signed installer tests belong in a disposable account/VM; the command refuses a signed install test if the normal app-data directory already points to a Home.
 

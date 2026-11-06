@@ -8,7 +8,7 @@ const lib = require('../release-lib.cjs');
 const example = require('../release.example.json');
 const { freePort, persistentFrontendPort, waitReady } = require('../runtime.cjs');
 const http = require('node:http');
-const { patchUninstallMessage, withInstallerTemplates } = require('../installer-templates.cjs');
+const { patchInstallSection, patchInstallUtil, withInstallerTemplates } = require('../installer-templates.cjs');
 
 test('configuration rejects stored passwords, unsafe URLs and invalid server paths', () => {
   assert.equal(lib.validateConfig(structuredClone(example)).version, '0.1.0');
@@ -79,19 +79,50 @@ test('the frontend origin remains stable across launches and a collision is acti
   }
 });
 
-test('installer error-message patch is scoped and restored even if compilation fails', async () => {
-  const template = require('node:fs').readFileSync(path.join(__dirname, '../node_modules/app-builder-lib/templates/nsis/include/installUtil.nsh'), 'utf8');
-  const patched = patchUninstallMessage(template);
-  assert.match(patched, /uninstaller exit code \$R0/);
-  assert.throws(() => patchUninstallMessage('unknown template'), /template changed/);
+test('the pinned NSIS templates are patched for side-by-side installation and restored afterwards', async () => {
+  const templates = path.join(__dirname, '../node_modules/app-builder-lib/templates/nsis');
+  const section = require('node:fs').readFileSync(path.join(templates, 'installSection.nsh'), 'utf8');
+  const util = require('node:fs').readFileSync(path.join(templates, 'include/installUtil.nsh'), 'utf8');
+  const patched = patchInstallSection(section);
+  assert.doesNotMatch(patched, /!insertmacro (uninstallOldVersion|handleUninstallResult)/);
+  assert.match(patched, /!insertmacro nxPrepareInstall\n/);
+  assert.match(patched, /!insertmacro installApplicationFiles\n!insertmacro nxActivateInstall\n/);
+  assert.match(patchInstallUtil(util), /!ifdef NX_RUN_PREVIOUS_UNINSTALLER\nFunction uninstallOldVersion/);
+  assert.throws(() => patchInstallSection('unknown template'), /changed/);
+  assert.throws(() => patchInstallUtil('unknown template'), /changed/);
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'nexusai-nsis-'));
-  const file = path.join(directory, 'template.nsh');
   try {
-    await fs.writeFile(file, template);
-    await assert.rejects(withInstallerTemplates(file, async () => {
-      assert.equal(await fs.readFile(file, 'utf8'), patched);
+    await fs.mkdir(path.join(directory, 'include'));
+    await fs.writeFile(path.join(directory, 'installSection.nsh'), section);
+    await fs.writeFile(path.join(directory, 'include/installUtil.nsh'), util);
+    await assert.rejects(withInstallerTemplates(directory, async () => {
+      assert.equal(await fs.readFile(path.join(directory, 'installSection.nsh'), 'utf8'), patched);
       throw new Error('compiler failed');
     }), /compiler failed/);
-    assert.equal(await fs.readFile(file, 'utf8'), template);
+    assert.equal(await fs.readFile(path.join(directory, 'installSection.nsh'), 'utf8'), section);
+    assert.equal(await fs.readFile(path.join(directory, 'include/installUtil.nsh'), 'utf8'), util);
   } finally { await fs.rm(directory, { recursive: true, force: true }); }
+});
+
+test('unused Python parts are removed but package code and the stdlib stay', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexusai-python-'));
+  const files = ['python.exe', 'Lib/os.py', 'Lib/test/test_os.py', 'Lib/tkinter/__init__.py', 'tcl/tk8.6/ttk/treeview.tcl', 'DLLs/_tkinter.pyd', 'DLLs/_ssl.pyd',
+    'Lib/site-packages/referencing/tests/test_core.py', 'Lib/site-packages/referencing/core.py', 'Lib/site-packages/tests/top_level_package.py'];
+  try {
+    for (const file of files) { await fs.mkdir(path.dirname(path.join(root, file)), { recursive: true }); await fs.writeFile(path.join(root, file), ''); }
+    assert.equal(await lib.trimPython(root), 5);
+    for (const kept of ['python.exe', 'Lib/os.py', 'DLLs/_ssl.pyd', 'Lib/site-packages/referencing/core.py', 'Lib/site-packages/tests/top_level_package.py']) {
+      await fs.access(path.join(root, kept));
+    }
+    await assert.rejects(fs.access(path.join(root, 'Lib/site-packages/referencing/tests')));
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
+});
+
+test('the launcher ships inside each version folder and the installer keeps the folder choice', () => {
+  const config = lib.windowsBuilderConfig({ appId: 'com.nexusai.pilot', productName: 'NexusAI Beta', packageName: 'nexusai-pilot', version: '0.2.0',
+    output: '/out', launcher: '/work/nexusai-launcher.exe', signed: false, signing: {}, updateBaseUrl: '', setupName: 'NexusAI-Beta-Setup-0.2.0.exe' });
+  assert.deepEqual(config.extraFiles, [{ from: '/work/nexusai-launcher.exe', to: 'nexusai-launcher.exe' }]);
+  assert.equal(config.nsis.allowToChangeInstallationDirectory, true);
+  assert.equal(config.nsis.deleteAppDataOnUninstall, false);
+  assert.ok(config.files.includes('layout.cjs'));
 });
