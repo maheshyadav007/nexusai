@@ -34,14 +34,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           # 0.1.0 is the last Beta installed as a single folder; later Betas install versions side by side.
-          $tag = gh release list --repo $env:GITHUB_REPOSITORY --limit 50 --json tagName --jq '[.[] | select(.tagName | startswith("desktop-beta/0.1.0/"))][0].tagName'
+          # Filter in PowerShell: Windows PowerShell strips inner double quotes from native arguments such as --jq.
+          $releases = gh release list --repo $env:GITHUB_REPOSITORY --limit 50 --json tagName | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $tag = @($releases | Where-Object { $_.tagName -like 'desktop-beta/0.1.0/*' } | Select-Object -First 1).tagName
           if (-not $tag) { throw 'No published single-folder Beta 0.1.0 release to convert.' }
+          Write-Output "Converting from $tag"
           $folder = Join-Path $env:RUNNER_TEMP 'legacy-beta'
           gh release download $tag --repo $env:GITHUB_REPOSITORY --pattern '*.exe' --dir $folder
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $installer = @(Get-ChildItem $folder -Filter '*.exe')
           if ($installer.Count -ne 1) { throw "Expected one installer in $tag." }
-          "NEXUSAI_LEGACY_INSTALLER=$($installer[0].FullName)" >> $env:GITHUB_ENV
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "NEXUSAI_LEGACY_INSTALLER=$($installer[0].FullName)" -Encoding utf8
       - name: Build and verify automatic and manual Beta upgrades
         shell: powershell
         run: |
