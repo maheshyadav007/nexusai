@@ -914,6 +914,10 @@ def allowed_for(agent: str, origin: str, has_email: bool) -> frozenset[str] | No
     if has_email:
         return TRIAGE_TOOLS
     allowed = MAIL_AGENT_TOOLS | {"ask_user"} if origin == "person" else MAIL_AGENT_TOOLS
+    # A task from another agent may be filing mail. Every change still asks the person first,
+    # because this agent reads mail anyone can send.
+    if origin == team.TASK_ORIGIN:
+        allowed |= {"update_mail"}
     # Only the run that wraps up reading past mail can rewrite what it learned.
     if origin == LEARNING_ORIGIN:
         allowed |= {"save_what_i_learned"}

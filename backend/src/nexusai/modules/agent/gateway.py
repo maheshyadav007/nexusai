@@ -123,6 +123,8 @@ TextListener = Callable[[str], None]
 ProviderResolver = Callable[[Context], tuple[ModelProvider, str]]
 # Tests swap this for a fake, so no test can reach a real model.
 resolve_provider: ProviderResolver = active_provider
+# Set only by evals, to run every call at one reasoning effort. The app leaves it to the model.
+EFFORT_OVERRIDE: str | None = None
 
 
 def _today() -> str:
@@ -268,6 +270,7 @@ def stream_model(
     messages: list[Message],
     tools: list[ToolSpec] | None = None,
     model_override: str | None = None,
+    effort: str | None = None,
 ) -> Iterator[Chunk]:
     """Every prompt layer, message and tool description is masked before it leaves.
 
@@ -295,6 +298,7 @@ def stream_model(
 
     provider, default_model = resolve_provider(ctx)
     model = model_override or default_model
+    effort = effort or EFFORT_OVERRIDE
     masked_layers = [Layer(layer.name, guard.mask(layer.text)) for layer in layers]
     masked_messages = [_mask_message(guard, message) for message in messages]
     masked_tools = [_mask_tool(guard, tool) for tool in tools or []]
@@ -303,6 +307,7 @@ def stream_model(
         instructions="\n\n".join(layer.text for layer in masked_layers),
         messages=masked_messages,
         tools=masked_tools,
+        effort=effort,
     )
     views = [
         {"name": layer.name, "real": layer.text, "masked": masked.text}
@@ -401,6 +406,7 @@ def call_model(
     tools: list[ToolSpec] | None = None,
     on_text: TextListener | None = None,
     model_override: str | None = None,
+    effort: str | None = None,
 ) -> GatewayResult:
     """The whole reply at once, for work with no one watching it arrive."""
     result = GatewayResult()
@@ -413,6 +419,7 @@ def call_model(
         messages=messages,
         tools=tools,
         model_override=model_override,
+        effort=effort,
     ):
         if isinstance(chunk, TextChunk):
             parts.append(chunk.text)

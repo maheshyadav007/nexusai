@@ -224,6 +224,7 @@ class ChatGptClient:
                 if response.status_code != 200:
                     response.read()
                 _raise_for_status(response)
+                _note_plan_usage(response.headers)
                 for line in response.iter_lines():
                     if not line.startswith("data:"):
                         continue
@@ -237,6 +238,23 @@ class ChatGptClient:
                     yield event
         except httpx.HTTPError as error:
             raise ChatGptError("The connection to ChatGPT dropped. Try again.") from error
+
+
+# What ChatGPT last said about the plan's limits, from its reply headers, such as how much of the
+# 5-hour window and the week is used. Kept as sent, so evals can report the share they used.
+PLAN_USAGE: dict[str, str] = {}
+PLAN_HEADERS = ("codex", "ratelimit", "rate-limit", "usage")
+
+
+def _note_plan_usage(headers: httpx.Headers) -> None:
+    found = {
+        name.lower(): value
+        for name, value in headers.items()
+        if any(word in name.lower() for word in PLAN_HEADERS)
+    }
+    if found:
+        PLAN_USAGE.clear()
+        PLAN_USAGE.update(found)
 
 
 def _raise_for_status(response: httpx.Response) -> None:

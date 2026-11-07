@@ -684,3 +684,11 @@ def test_renaming_your_agent_renames_its_schedule(client: TestClient) -> None:
     assert "Weekly wrap" in titles and "Friday status" not in titles
     refused = client.post("/api/commands/agent.resetName", json={"id": card["id"]})
     assert refused.status_code == 409
+
+
+def test_a_task_lets_the_mail_agent_file_mail_through_approval() -> None:
+    from nexusai.modules.agent import tools
+
+    assert "update_mail" in (tools.allowed_for("mail", "task", False) or set())
+    assert "update_mail" not in (tools.allowed_for("mail", "person", False) or set())
+    assert "send_mail" not in (tools.allowed_for("mail", "task", False) or set())

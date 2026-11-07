@@ -118,6 +118,8 @@ class ModelRequest:
     instructions: str
     messages: list[Message]
     tools: list[ToolSpec] = field(default_factory=list)
+    # "low", "medium" or "high". None leaves it to the model's own default.
+    effort: str | None = None
 
 
 @dataclass
@@ -190,6 +192,8 @@ class ChatGptProvider:
             "store": False,
             "stream": True,
         }
+        if request.effort:
+            body["reasoning"] = {"effort": request.effort}
         if request.tools:
             body["tools"] = [
                 {
@@ -459,6 +463,9 @@ class OpenAiCompatibleProvider:
             "stream": True,
             "stream_options": {"include_usage": True},
         }
+        # Only when asked: servers that don't know it may refuse the whole request.
+        if request.effort:
+            body["reasoning_effort"] = request.effort
         if request.tools and self.supports_tools:
             body["tools"] = [
                 {
