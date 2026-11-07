@@ -1,3 +1,4 @@
+import type { AgentMap, GetAgentMap, GetRunTree, ListRuns, RunList, RunSpan, SeeAlerts } from "./contracts.generated";
 import type { AddSkill, DecideSkill, ListSkills, SkillList, SkillName } from "./contracts.generated";
 import type { CancelTeamTask, CardList, GetTeamTask, ListCards, ListTeamTasks, NoteOnTeamTask, RenameAgent, ResetAgentName, RetryTeamTask, SetMascot, TeamTaskList, TeamTaskView } from "./contracts.generated";
 import type { MarkFolderRead } from "./contracts.generated";
@@ -341,6 +342,7 @@ interface Commands {
   "skills.decide": [DecideSkill, SkillList];
   "skills.reapprove": [SkillName, SkillList];
   "skills.remove": [SkillName, SkillList];
+  "monitor.seen": [SeeAlerts, AgentDone];
   "tasks.save": [SaveTask, PlannerDone];
   "tasks.remove": [TaskAction, PlannerDone];
   "reminders.save": [SaveReminder, PlannerDone];
@@ -462,6 +464,9 @@ interface Queries {
   "team.tasks": [ListTeamTasks, TeamTaskList];
   "team.task": [GetTeamTask, TeamTaskView];
   "skills.list": [ListSkills, SkillList];
+  "agents.map": [GetAgentMap, AgentMap];
+  "runs.list": [ListRuns, RunList];
+  "run.tree": [GetRunTree, RunSpan];
   "tasks.list": [ListTasks, TaskList];
   "reminders.list": [ListReminders, ReminderList];
   "schedules.list": [ListSchedules, ScheduleList];

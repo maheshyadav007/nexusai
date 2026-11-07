@@ -756,6 +756,9 @@ class SessionRuntime:
                 task,
                 on_compacted=lambda before, after: self._auto_compacted(session, before, after),
                 notes=lambda: team.take_notes(self.ctx, session),
+                log_tool=lambda call, tool, args, result, ms: tools.record_call(
+                    self.ctx, session, call, tool, args, result, ms
+                ),
             ),
             checkpointer=self.saver,
         )

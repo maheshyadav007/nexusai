@@ -92,6 +92,13 @@ export const useNoteOnTask = () => useCommand(["team-task", "team-tasks"], (inpu
 export const useCancelTask = () => useCommand(["team-task", "team-tasks", "agent-cards"], (input: { id: number }) => command("team.cancel", input));
 export const useRetryTask = () => useCommand(["team-task", "team-tasks", "agent-cards"], (input: { id: number }) => command("team.retry", input));
 
+export const useAgentMap = () => useReady(["agent-map"], () => query("agents.map", {}));
+export const useRuns = () => useReady(["runs"], () => query("runs.list", { limit: 30 }));
+export const useRunTree = (turn: number | null) => {
+  const ready = useHomeReady();
+  return useQuery({ queryKey: ["run-tree", turn], queryFn: () => query("run.tree", { turn: turn ?? 0 }), enabled: ready && turn !== null });
+};
+export const useSeeAlerts = () => useCommand(["agent-map"], () => command("monitor.seen", {}));
 export const useSkills = () => useReady(["skills"], () => query("skills.list", {}));
 export const useAddSkill = () => useCommand(["skills"], (input: { url?: string; text?: string }) => command("skills.add", input));
 export const useDecideSkill = () => useCommand(["skills", "agent-cards"], (input: { id: number; approve: boolean }) => command("skills.decide", input));

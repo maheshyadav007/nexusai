@@ -261,6 +261,11 @@ def _assign(
             f"Not assigned: tasks can be handed on {team.delegation_depth} times at most. "
             "Do this part yourself."
         )
+    if _pair_is_busy(ctx, me.id, target.id):
+        return (
+            f"Not assigned: you and {target.name} have exchanged "
+            f"{team.messages_per_pair_per_hour} messages in the last hour, the most allowed."
+        )
     edges = waiting_edges(db)
     if _reaches(edges, target.id, me.id):
         return (
@@ -318,6 +323,17 @@ def _message(
     )
 
 
+def _pair_is_busy(ctx: Context, one: str, other: str) -> bool:
+    """Two agents talking too much in an hour are stuck, whatever task they talk about."""
+    since = _iso(_now() - timedelta(hours=1))
+    rows = ctx.bus.db.fetch_all(
+        "SELECT COUNT(*) AS n FROM agent_channel WHERE time >= ? AND ((sender_agent = ? AND"
+        " recipient_agent = ?) OR (sender_agent = ? AND recipient_agent = ?))",
+        (since, one, other, other, one),
+    )
+    return int(rows[0]["n"]) >= ctx.config.team.messages_per_pair_per_hour
+
+
 def _ping_pong(db: Database, task: int, limit: int) -> bool:
     rows = db.fetch_all(
         "SELECT COUNT(*) AS n FROM agent_channel WHERE task = ? AND kind IN ('ask','answer')",
@@ -349,6 +365,11 @@ def _message_on(ctx: Context, *, session: str, sender: str, task: int, kind: str
     )
     is_owner = row["owner_session"] == session
     is_assigner = row["assigner_session"] == session
+    if _pair_is_busy(ctx, sender, row["assigner"] if is_owner else row["owner"]):
+        return (
+            f"Not sent: you've exchanged {ctx.config.team.messages_per_pair_per_hour} messages "
+            "with them in the last hour, the most allowed. Report what you have instead."
+        )
     if kind == "ask":
         if not is_owner:
             return "Only the agent doing the task can ask about it. Use team_assign to ask someone else."
@@ -708,9 +729,11 @@ def listing(ctx: Context, running: Any) -> list[AgentCard]:
             "SELECT COUNT(*) AS n FROM agent_channel WHERE sender_agent = ? AND time >= ?",
             (card.id, today),
         )[0]["n"]
+        before_today = int(usage["week"]) - int(usage["today"])
         contract.usage = AgentUsage(
             tokens_today=int(usage["today"]),
             tokens_week=int(usage["week"]),
+            tokens_usual_day=before_today // 7,
             messages_today=int(sent),
             tasks_verified=counts.get("verified", 0),
             tasks_rejected=counts.get("rejected", 0),

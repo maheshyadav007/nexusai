@@ -104,6 +104,11 @@ class TeamConfig:
     sends_per_hour: int
     refusals_in_a_row: int
     refusals_per_run: int
+    agent_tokens_per_day: int
+    messages_per_pair_per_hour: int
+    spike_factor: float
+    spike_min_tokens: int
+    silence_minutes: int
 
 
 @dataclass(frozen=True)

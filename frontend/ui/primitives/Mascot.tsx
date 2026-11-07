@@ -72,12 +72,13 @@ function Topper({ kind, className }: { kind: number; className: string }) {
   return null;
 }
 
-export function Mascot({ seed, shape, name, size = "md" }: { seed: string; shape: string; name: string; size?: keyof typeof SIZE }) {
+/** `place` draws it inside a larger SVG, at a spot and size in that drawing's own units. */
+export function Mascot({ seed, shape, name, size = "md", place }: { seed: string; shape: string; name: string; size?: keyof typeof SIZE; place?: { x: number; y: number; size: number } }) {
   const value = hash(seed);
   const body = BODY[pick(value, 0, BODY.length)] as string;
   const topper = BODY[pick(value, 11, BODY.length)] as string;
   return (
-    <svg role="img" aria-label={name} viewBox="0 0 64 64" className={`${SIZE[size]} shrink-0`}>
+    <svg role="img" aria-label={name} viewBox="0 0 64 64" {...(place ? { x: place.x, y: place.y, width: place.size, height: place.size } : { className: `${SIZE[size]} shrink-0` })}>
       <Body shape={shape} className={body} />
       <Topper kind={pick(value, 8, 3)} className={topper} />
       <Eyes kind={pick(value, 3, 3)} />

@@ -1062,6 +1062,8 @@ class AgentNow(BaseModel):
 class AgentUsage(BaseModel):
     tokens_today: int = 0
     tokens_week: int = 0
+    # Its average day over the last week, so today's number has something to be read against.
+    tokens_usual_day: int = 0
     messages_today: int = 0
     tasks_verified: int = 0
     tasks_rejected: int = 0
@@ -1567,3 +1569,74 @@ class SkillName(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=64)
+
+
+# Monitoring and the agent map
+
+
+class MonitorAlert(BaseModel):
+    id: int
+    kind: str
+    agent: str | None = None
+    task_id: int | None = None
+    detail: str
+    time: str
+    seen: bool = False
+
+
+class MapEdge(BaseModel):
+    """One open task between two agents: who gave it, who has it, and how it's going."""
+
+    task_id: int
+    source: str
+    target: str
+    state: str
+    objective: str
+    messages: int
+    waiting: str
+    trouble: str | None = None
+
+
+class GetAgentMap(BaseModel):
+    pass
+
+
+class AgentMap(BaseModel):
+    cards: list[AgentCard]
+    edges: list[MapEdge]
+    cycles: list[list[str]]
+    alerts: list[MonitorAlert]
+
+
+class RunSpan(BaseModel):
+    """One step of a run: the run itself, a model call, a tool call, a skill load or a message."""
+
+    kind: Literal["run", "model", "tool", "skill", "message"]
+    id: str
+    name: str
+    agent: str | None = None
+    time: str
+    status: str | None = None
+    detail: str | None = None
+    tokens: int = 0
+    children: list["RunSpan"] = Field(default_factory=list)
+
+
+class ListRuns(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    limit: int = Field(default=30, ge=1, le=200)
+
+
+class RunList(BaseModel):
+    runs: list[RunSpan]
+
+
+class GetRunTree(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    turn: int
+
+
+class SeeAlerts(BaseModel):
+    pass

@@ -1,6 +1,7 @@
 """What the model gets to see of a conversation. The chat itself always shows everything."""
 
 import json
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -219,6 +220,28 @@ class TaskNotes(AgentMiddleware):
         return {"messages": [HumanMessage(content=notes)]} if notes else None
 
 
+class ToolLog(AgentMiddleware):
+    """Records every tool call the approval path didn't already, so the run's record is whole."""
+
+    def __init__(self, record: Callable[[str, str, dict[str, Any], str, int], None]) -> None:
+        super().__init__()
+        self.record = record
+
+    def wrap_tool_call(self, request: Any, handler: Callable[[Any], Any]) -> Any:
+        started = time.monotonic()
+        result = handler(request)
+        call = request.tool_call
+        text = getattr(result, "content", "")
+        self.record(
+            str(call.get("id") or ""),
+            str(call.get("name") or ""),
+            dict(call.get("args") or {}),
+            text if isinstance(text, str) else json.dumps(text, default=str),
+            int((time.monotonic() - started) * 1000),
+        )
+        return result
+
+
 def summarizer(
     model: Any,
     settings: ContextSettings,
@@ -245,8 +268,11 @@ def middleware(
     task: str,
     on_compacted: Callable[[int, int], None] | None = None,
     notes: Callable[[], str] | None = None,
+    log_tool: Callable[[str, str, dict[str, Any], str, int], None] | None = None,
 ) -> list[Any]:
     chain: list[Any] = []
+    if log_tool is not None:
+        chain.append(ToolLog(log_tool))
     if profile.mode == "auto_compact":
         trigger = ("tokens", settings.compact.trigger_tokens)
         chain.append(summarizer(model, settings, trigger=trigger, on_compacted=on_compacted))

@@ -13,6 +13,7 @@ from nexusai.contracts.agent import (
     AgentChannelList,
     AgentDone,
     AgentKnowledge,
+    AgentMap,
     AgentQueue,
     AgentQueueItem,
     AgentRegistry,
@@ -43,6 +44,7 @@ from nexusai.contracts.agent import (
     ExpireLearnedNote,
     GenerationState,
     GetAgentKnowledge,
+    GetAgentMap,
     GetAgentQueue,
     GetCockpit,
     GetCockpitEvents,
@@ -54,6 +56,7 @@ from nexusai.contracts.agent import (
     GetPermissions,
     GetPreferences,
     GetQuietHours,
+    GetRunTree,
     GetTeamTask,
     GetThreadRuns,
     GetToday,
@@ -77,6 +80,7 @@ from nexusai.contracts.agent import (
     ListMemory,
     ListPipelines,
     ListPrompts,
+    ListRuns,
     ListSchedules,
     ListSessions,
     ListSkills,
@@ -122,15 +126,18 @@ from nexusai.contracts.agent import (
     RestorePreference,
     RestorePrompt,
     RetryTeamTask,
+    RunList,
     RunMailAgent,
     RunPipeline,
     RunSchedule,
+    RunSpan,
     SaveMemory,
     SavePreference,
     SavePrompt,
     SaveTrigger,
     Schedule,
     ScheduleList,
+    SeeAlerts,
     SessionAction,
     SessionContext,
     SessionList,
@@ -184,6 +191,7 @@ from nexusai.modules.agent import (
     knowledge,
     mail_agent,
     memory,
+    monitor,
     personalization,
     pipelines,
     policy,
@@ -198,6 +206,7 @@ from nexusai.modules.agent import (
     summaries,
     team,
     tools,
+    trace,
     triggers,
 )
 from nexusai.modules.connectors import module as connectors
@@ -261,6 +270,7 @@ agent_module = Module(
         cards.MIGRATION,
         cards.YOURS_MIGRATION,
         skills.MIGRATION,
+        monitor.MIGRATION,
         team.MIGRATION,
         runtime.LINEAGE_MIGRATION,
         Migration(
@@ -360,6 +370,30 @@ def set_agent_mascot(command: SetMascot, ctx: Context) -> CardList:
 def _cards_changed(ctx: Context) -> None:
     with ctx.bus.unit_of_work() as work:
         work.emit("agents.changed", {}, source="person", trace_id=ctx.trace_id)
+
+
+@agent_module.query("agents.map")
+def get_agent_map(query: GetAgentMap, ctx: Context) -> AgentMap:
+    runtime = current()
+    return trace.agent_map(ctx, lambda session: runtime.active_turn(session) is not None)
+
+
+@agent_module.query("runs.list")
+def list_runs(query: ListRuns, ctx: Context) -> RunList:
+    return RunList(runs=trace.recent_runs(ctx, query.limit))
+
+
+@agent_module.query("run.tree")
+def get_run_tree(query: GetRunTree, ctx: Context) -> RunSpan:
+    return trace.run_tree(ctx, query.turn)
+
+
+@agent_module.command("monitor.seen")
+def see_alerts(command: SeeAlerts, ctx: Context) -> AgentDone:
+    with ctx.bus.unit_of_work() as work:
+        work.tx.execute("UPDATE monitor_alerts SET seen = 1 WHERE seen = 0")
+        work.emit("monitor.alerted", {}, source="person", trace_id=ctx.trace_id)
+    return AgentDone()
 
 
 @agent_module.query("skills.list")

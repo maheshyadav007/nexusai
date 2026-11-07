@@ -84,7 +84,7 @@ function ProfileCard({ card }: { card: AgentCard }) {
   const assistant = useAssistant();
   const mascot = useSetMascot();
   const relative = useRelativeTime();
-  const usage = { tokens_today: 0, tokens_week: 0, messages_today: 0, tasks_verified: 0, tasks_rejected: 0, tasks_blocked: 0, ...card.usage };
+  const usage = { tokens_today: 0, tokens_week: 0, tokens_usual_day: 0, messages_today: 0, tasks_verified: 0, tasks_rejected: 0, tasks_blocked: 0, ...card.usage };
   const now = card.now ?? { state: "idle" as const };
   const gives = card.may_assign_to.map((id) => name(id)).filter(Boolean);
   const talkable = card.accepts.includes("person");
@@ -116,6 +116,7 @@ function ProfileCard({ card }: { card: AgentCard }) {
           <div key={label} className="flex flex-col gap-px">
             <dt className="text-sm text-ink-muted">{t(label)}</dt>
             <dd className="text-lg tabular-nums text-ink-primary">{value.toLocaleString()}</dd>
+            {label === "team.usage.today" && usage.tokens_usual_day ? <dd className="text-sm tabular-nums text-ink-muted">{t("team.usage.usual", { count: usage.tokens_usual_day.toLocaleString() })}</dd> : null}
           </div>
         ))}
       </dl>

@@ -12,6 +12,7 @@ import { Skeleton } from "@/ui/primitives/Skeleton";
 import { StatusDot } from "@/ui/primitives/StatusDot";
 import { Tabs } from "@/ui/primitives/Tabs";
 import { SessionLink } from "@/ui/features/assistant/SessionLink";
+import { RunsScreen, TeamMap } from "@/ui/features/agent/MapScreens";
 import { SkillsScreen } from "@/ui/features/agent/SkillsScreen";
 import { TeamCards, TeamTasks } from "@/ui/features/agent/TeamScreens";
 import { t, type StringKey } from "@/ui/strings";
@@ -95,7 +96,9 @@ export function AgentChannelScreen() {
         label={t("nav.channel")}
         tabs={[
           { value: "team", label: t("team.title"), content: <TeamCards /> },
+          { value: "map", label: t("map.title"), content: <TeamMap /> },
           { value: "tasks", label: t("team.tasks.title"), content: <TeamTasks /> },
+          { value: "runs", label: t("trace.title"), content: <RunsScreen /> },
           { value: "skills", label: t("skills.title"), content: <SkillsScreen /> },
           { value: "agents", label: t("team.runs"), content: <AgentList /> },
           { value: "messages", label: t("agents.messages"), content: <ChannelMessages /> },

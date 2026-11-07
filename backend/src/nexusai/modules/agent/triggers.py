@@ -22,6 +22,7 @@ from nexusai.modules.agent import (
     gateway,
     mail_agent,
     memory,
+    monitor,
     providers,
     scheduler,
     team,
@@ -216,12 +217,9 @@ class Triggers:
     def _loop(self) -> None:
         while not self.stopping.is_set():
             # Open tasks have leases and due times, so they need a look now and then.
+            # The monitor and open tasks need a look at least once a minute.
             timeout = (
-                self.config.triage_retry_seconds
-                if self.waiting_for_model
-                else TASK_CHECK_SECONDS
-                if self._has_open_tasks()
-                else None
+                self.config.triage_retry_seconds if self.waiting_for_model else TASK_CHECK_SECONDS
             )
             self.wake.wait(timeout)
             self.wake.clear()
@@ -565,6 +563,7 @@ class Triggers:
 
     def _start_tasks(self) -> None:
         self._check_tasks()
+        monitor.check(self.ctx, self.runtime)
         for row in self.ctx.bus.db.fetch_all(
             "SELECT * FROM team_tasks WHERE wake IS NOT NULL ORDER BY id"
         ):

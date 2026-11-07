@@ -146,6 +146,15 @@ sends_per_hour = 10
 # A run that keeps being refused stops and tells the person: this many in a row, or in all.
 refusals_in_a_row = 3
 refusals_per_run = 20
+# Background tokens one agent may use in a day. 0 means no cap of its own; the daily cap still holds.
+agent_tokens_per_day = 0
+# Messages two agents may send each other in an hour.
+messages_per_pair_per_hour = 30
+# An hour this many times an agent's usual hour, and at least this many tokens, raises an alert.
+spike_factor = 3
+spike_min_tokens = 50000
+# A working task with no new step for this long is stopped and blocked.
+silence_minutes = 20
 
 # Typed messages. The chat shows everything, and this is only what the model is sent.
 [context.chat]

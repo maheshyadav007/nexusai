@@ -353,6 +353,18 @@ def _log_call(
         _after_refusal(ctx, session)
 
 
+def record_call(
+    ctx: Context, session: str, call_id: str, tool: str, args: dict[str, Any], result: str, ms: int
+) -> None:
+    """For tools that don't go through approval. Those that do are already recorded."""
+    if not call_id or ctx.bus.db.fetch_all(
+        "SELECT 1 FROM tool_calls WHERE session = ? AND tool_call_id = ?", (session, call_id)
+    ):
+        return
+    shown = json.dumps(args, default=str)[:2000]
+    _log_call(ctx, session, call_id, tool, shown, result[:2000], "done", None, ms)
+
+
 REFUSED = frozenset({"refused", "denied"})
 # Each live run's stop handle, so a run that keeps being refused can be stopped from its tools.
 RUN_CONTROLS: dict[str, "RunControl"] = {}

@@ -281,6 +281,16 @@ def stream_model(
         raise DailyCapReached(
             "Today's model limit is used up. Raise it in Settings, or wait until tomorrow."
         )
+    # Off by default, and then it costs nothing: no lookups on every call.
+    if session and ctx.config.team.agent_tokens_per_day:
+        from nexusai.modules.agent import monitor
+
+        turns = db.fetch_all(
+            "SELECT origin FROM agent_turns WHERE session = ? ORDER BY id DESC LIMIT 1", (session,)
+        )
+        over = monitor.over_daily_cap(ctx, agent, turns[0]["origin"] if turns else "person")
+        if over:
+            raise DailyCapReached(over)
     _check_run_limit(db, session)
 
     provider, default_model = resolve_provider(ctx)
