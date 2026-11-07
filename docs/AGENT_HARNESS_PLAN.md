@@ -489,7 +489,7 @@ App chat ─┘                        └─ replies, approvals and notices go 
 
 ## Where things stand
 
-Updated 2026-11-07. Everything below is on branch `agent-harness`, tested with a scripted model, and not yet tried on the real Gmail account and model.
+Updated 2026-11-07. Everything below is merged into `main`, tested with a scripted model, and run on the real model through the [evals](EVALS.md). It isn't yet tried by the person on their real Gmail account. To try it without touching their Home, `make test-start` runs a separate test instance on http://127.0.0.1:4001, and `make test-reset` wipes it to start fresh.
 
 | Part | State |
 |---|---|

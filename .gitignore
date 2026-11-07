@@ -17,6 +17,7 @@ __pycache__/
 .env.*
 !.env.example
 .dev-home/
+.test-instance/
 *.db
 *.db-wal
 *.db-shm

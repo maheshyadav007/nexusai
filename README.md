@@ -29,6 +29,21 @@ make dev      # for working on the code. Pages compile as they're opened, so cli
 make check    # lint, types, boundaries, no-hardcoding, tests
 ```
 
+### A test instance beside your own
+
+To try things without touching your Home, run a second NexusAI with its own Home, data, sign-ins and secrets, all kept in `.test-instance/`:
+
+```sh
+make test-start   # then open http://127.0.0.1:4001 and go through setup
+make test-reset   # wipe it; stop it first, then make test-start begins fresh
+```
+
+It runs on ports 4001 and 4101, so it can run at the same time as yours on 4000 and 4100. Its sign-ins are stored in `.test-instance/secrets.json`, not your Keychain, so it can't use your ChatGPT account until you connect it there. Because that file isn't encrypted, keep it to test accounts if your company requires.
+
+### Evals
+
+See [docs/EVALS.md](docs/EVALS.md). They run on the real model and use your ChatGPT allowance.
+
 On Windows, which usually has no `make`, install [uv](https://docs.astral.sh/uv/) and Node, keep the clone at a short path such as `C:\\dev\\nexusai`, and use:
 
 ```sh

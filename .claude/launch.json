@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "nexusai-backend",
+      "runtimeExecutable": "make",
+      "runtimeArgs": ["backend"],
+      "port": 4100
+    },
+    {
+      "name": "nexusai",
+      "runtimeExecutable": "make",
+      "runtimeArgs": ["serve"],
+      "port": 4000
+    },
+    {
+      "name": "nexusai-test-backend",
+      "runtimeExecutable": "make",
+      "runtimeArgs": ["test-backend"],
+      "port": 4101
+    },
+    {
+      "name": "nexusai-test",
+      "runtimeExecutable": "make",
+      "runtimeArgs": ["test-serve"],
+      "port": 4001
+    }
+  ]
+}
