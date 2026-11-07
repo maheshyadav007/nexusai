@@ -499,11 +499,11 @@ Updated 2026-11-07. Everything below is on branch `agent-harness`, tested with a
 | Safety: Rule of Two, untrusted mark travels, send checks and hourly cap, stop after refusals | Done |
 | The person's own agents as cards | Done |
 | Skills: format, loading, proposals with review, pinning, four shipped skills, Skills tab | Done |
-| Skill trigger evals | Runner and 12 cases done (`make eval-skills`), proven with a scripted model. A real-model run waits for the eval budget |
+| Skill trigger evals | Runner and 12 cases done (`make eval-skills`), proven with a scripted model, not yet run on the real model |
 | Monitoring: spikes, silence, per-agent daily cap, per-pair message cap, alerts | Done |
 | Map, run trees, usage against the usual day | Done |
-| Step 0: the full eval baseline (routing, delegation, verification, injection, no-tool-calling) | Not built. Needs the eval budget talk first |
-| Trying it all on the real Gmail account and model | Not done. Needs the person's go-ahead |
+| Evals on the real model | Built and run on 2026-11-07: corporate mail judging on 6 models and 2 efforts, and the whole team on 6.1 Sol, 6.1 Terra and 6 Luna. See [EVALS.md](EVALS.md). Not yet: repeated tries for pass^k, the no-tool-calling mode, an answer-quality judge |
+| Trying it all on the real Gmail account | Not done. Needs the person's go-ahead |
 | Telegram, WhatsApp, phone approvals, other messengers, A2A, tool search | Later, as decided |
 
 ## Order of work

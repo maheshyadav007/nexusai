@@ -1,0 +1,255 @@
+{
+ "cases_file": "mail_cases_corp.json",
+ "stopped": null,
+ "runs": [
+  {
+   "model": "GPT-6.1-Sol",
+   "model_id": "gpt-6.1-sol",
+   "effort": "medium",
+   "cases": 10,
+   "passed": 10,
+   "tokens": {
+    "calls": 10,
+    "input": 36048,
+    "output": 1650
+   },
+   "seconds": 109.1,
+   "plan_before": {
+    "x-codex-primary-used-percent": 0.0,
+    "x-codex-secondary-used-percent": 49.0,
+    "x-codex-primary-window-minutes": 300.0,
+    "x-codex-primary-over-secondary-limit-percent": 0.0,
+    "x-codex-secondary-window-minutes": 10080.0,
+    "x-codex-primary-reset-after-seconds": 18000.0,
+    "x-codex-secondary-reset-after-seconds": 478921.0,
+    "x-codex-primary-reset-at": 1794047853.0,
+    "x-codex-secondary-reset-at": 1794508773.0,
+    "x-codex-credits-balance": 0.0
+   },
+   "plan_after": {
+    "x-codex-primary-used-percent": 0.0,
+    "x-codex-secondary-used-percent": 49.0,
+    "x-codex-primary-window-minutes": 300.0,
+    "x-codex-primary-over-secondary-limit-percent": 0.0,
+    "x-codex-secondary-window-minutes": 10080.0,
+    "x-codex-primary-reset-after-seconds": 17903.0,
+    "x-codex-secondary-reset-after-seconds": 478817.0,
+    "x-codex-primary-reset-at": 1794047859.0,
+    "x-codex-secondary-reset-at": 1794508773.0,
+    "x-codex-credits-balance": 0.0
+   },
+   "plan_used": {
+    "x-codex-primary-used-percent": 0.0,
+    "x-codex-secondary-used-percent": 0.0,
+    "x-codex-primary-over-secondary-limit-percent": 0.0
+   },
+   "results": [
+    {
+     "case": "hr-broadcast-hidden-deadline",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "high",
+      "notify": false,
+      "category": null,
+      "tasks": [
+       {
+        "title": "Complete annual Information Security & Code of Conduct e-learning",
+        "due": "2026-11-20"
+       }
+      ],
+      "follow_up_on": null,
+      "reason": "Your preference makes dated mandatory HR actions high importance, and this requirement applies to every employee despite appearing in a general digest.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 6.1
+    },
+    {
+     "case": "celebration-broadcast",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "none",
+      "importance": "low",
+      "notify": false,
+      "category": null,
+      "tasks": null,
+      "follow_up_on": null,
+      "reason": "Celebration invitations are explicitly low priority for you and require no action.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 3.4
+    },
+    {
+     "case": "manager-ask-by-eod",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "reply",
+      "importance": "high",
+      "notify": true,
+      "category": null,
+      "tasks": [
+       {
+        "title": "Send Meera 3–4 lines on the RRC reestablishment fix and November maintenance release readiness",
+        "due": "2026-11-07"
+       }
+      ],
+      "follow_up_on": null,
+      "reason": "Your manager directly requests a release-status update today for tomorrow's steering review.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 64.6
+    },
+    {
+     "case": "colleague-asks-for-help",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "normal",
+      "notify": false,
+      "category": null,
+      "tasks": [
+       {
+        "title": "Review Sneha's RRC handover failure log in the shared folder",
+        "due": null
+       }
+      ],
+      "follow_up_on": null,
+      "reason": "This is a colleague's nonurgent request for help with RRC logs, which you rate normal importance.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 4.8
+    },
+    {
+     "case": "customer-escalation",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "high",
+      "notify": true,
+      "category": "PLM",
+      "tasks": [
+       {
+        "title": "Review PLM logs and share first RRC RCA with Karthik by 10 AM",
+        "due": "2026-11-08"
+       }
+      ],
+      "follow_up_on": null,
+      "reason": "This customer escalation explicitly assigns you the RRC investigation with a deadline tomorrow morning, matching your high-priority criteria.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 6.2
+    },
+    {
+     "case": "plm-build-automated",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "none",
+      "importance": "low",
+      "notify": false,
+      "category": "PLM",
+      "tasks": null,
+      "follow_up_on": null,
+      "reason": "This automated successful-build notice reports no release blocker and asks nothing of you.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 3.6
+    },
+    {
+     "case": "phishing-lookalike",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "read",
+      "importance": "normal",
+      "notify": false,
+      "category": "IT",
+      "tasks": [],
+      "follow_up_on": null,
+      "reason": "The sender differs from your real IT helpdesk, it-helpdesk@corp.example, and the first-time domain requests your password under a 24-hour threat.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.3
+    },
+    {
+     "case": "managers-only-action",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "none",
+      "importance": "low",
+      "notify": false,
+      "category": "HR",
+      "tasks": [],
+      "follow_up_on": null,
+      "reason": "You are not a people manager, and the request explicitly excludes individual contributors.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 3.7
+    },
+    {
+     "case": "it-ticket-in-progress",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_others",
+      "next_action": "none",
+      "importance": "normal",
+      "notify": false,
+      "category": "IT",
+      "tasks": null,
+      "follow_up_on": "2026-11-10",
+      "reason": "The helpdesk is working on the VPN problem you reported and explicitly says no action is needed from you.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 6.0
+    },
+    {
+     "case": "it-password-expiry",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "high",
+      "notify": false,
+      "category": "IT",
+      "tasks": [
+       {
+        "title": "Change domain password through the IT self-service portal",
+        "due": "2026-11-10"
+       }
+      ],
+      "follow_up_on": null,
+      "reason": "You explicitly prioritize IT requirements with a personal deadline, and this notice requires a password change to preserve access.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.3
+    }
+   ]
+  }
+ ]
+}
