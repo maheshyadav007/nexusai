@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal, cast
 
+import httpx
 import psutil
 import structlog
 from langchain_core.tools import InjectedToolCallId, StructuredTool
@@ -36,6 +37,7 @@ from nexusai.modules.agent import (
     policy,
     prompts_builder,
     signals,
+    skills,
     suggestions,
     team,
     work_tools,
@@ -608,6 +610,31 @@ class _TeamMessage(BaseModel):
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
+class _LoadSkill(BaseModel):
+    name: str = Field(description="A skill named in your prompt, such as drafting-replies.")
+    tool_call_id: Annotated[str, InjectedToolCallId]
+
+
+class _ReadSkillFile(BaseModel):
+    name: str = Field(description="The skill.")
+    path: str = Field(description="One of the files load_skill listed, such as examples.md.")
+    tool_call_id: Annotated[str, InjectedToolCallId]
+
+
+class _ProposeSkill(BaseModel):
+    url: str | None = Field(
+        default=None,
+        description="An https link the person gave: a SKILL.md, a GitHub folder, or a zip.",
+    )
+    text: str | None = Field(
+        default=None,
+        max_length=200_000,
+        description="The whole SKILL.md, when the person pasted one or asked you to write one. "
+        "Start with --- then name, description and agents lines, then ---, then the steps.",
+    )
+    tool_call_id: Annotated[str, InjectedToolCallId]
+
+
 class _TeamClose(BaseModel):
     task: int = Field(description="The task id.")
     action: Literal["report", "verify", "reject", "cancel"] = Field(
@@ -803,6 +830,8 @@ MAIL_AGENT_TOOLS = frozenset(
         "team_inbox",
         "team_message",
         "team_close",
+        "load_skill",
+        "read_skill_file",
         "read_feedback",
         "propose_preference",
         "list_categories",
@@ -1381,6 +1410,51 @@ def build_tools(
             _mark_untrusted(ctx, session)
         return _untrusted(text) if flagged else text
 
+    def load_skill(name: str, tool_call_id: str) -> str:
+        return skills.load(ctx, session, _speaker(), name)
+
+    def read_skill_file(name: str, path: str, tool_call_id: str) -> str:
+        return skills.read_file(ctx, _speaker(), name, path)
+
+    def propose_skill(tool_call_id: str, url: str | None = None, text: str | None = None) -> str:
+        def made(files: dict[str, str], source: str) -> str:
+            try:
+                found = skills.propose(ctx, files, source, _speaker())
+            except CommandError as error:
+                return f"Not proposed: {error.message}"
+            warned = f" It has {len(found.flags)} things to check." if found.flags else ""
+            return (
+                f"Proposed skill {found.name}.{warned} It does nothing until the person reads it "
+                "and approves it on the Agent channel page, under Skills. Tell them so."
+            )
+
+        if text and not url:
+            return made({skills.ENTRY: text}, "written in chat")
+        if not url:
+            return "Give the link the person shared, or the whole SKILL.md as text."
+
+        def work() -> str:
+            try:
+                files = skills.fetch(url)
+            except CommandError as error:
+                return f"Not fetched: {error.message}"
+            except httpx.HTTPError as error:
+                return f"Not fetched: {type(error).__name__}. Check the link and the network."
+            return made(files, url)
+
+        return _guarded(
+            ctx,
+            session,
+            tool_call_id,
+            "propose_skill",
+            "send",
+            None,
+            f"Fetch a skill from {url}",
+            f"{url}\n\nWhat comes back is only a proposal. You review it before it's used.",
+            False,
+            work,
+        )
+
     def team_roster(tool_call_id: str) -> str:
         return team.roster(ctx, lambda _session: True)
 
@@ -1690,6 +1764,23 @@ def build_tools(
             _BoardWrite,
             "Record a deadline, task or status for other agents to use later. The person doesn't "
             "see this directly, so use create_tasks for something they should do.",
+        ),
+        (
+            load_skill,
+            _LoadSkill,
+            "Load a skill from the list in your prompt when it fits the work, and follow it. "
+            "Load it once per conversation.",
+        ),
+        (
+            read_skill_file,
+            _ReadSkillFile,
+            "Read one more file from a loaded skill, when a step of it says to.",
+        ),
+        (
+            propose_skill,
+            _ProposeSkill,
+            "Propose a new skill from a link or text the person gave, or one they asked you to "
+            "write. It's only used after they read and approve it.",
         ),
         (
             team_roster,

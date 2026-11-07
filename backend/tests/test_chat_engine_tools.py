@@ -407,6 +407,8 @@ def test_every_powerful_tool_has_a_row_in_settings(client: TestClient) -> None:
         "team_assign",
         "team_message",
         "team_close",
+        "load_skill",
+        "read_skill_file",
         "read_feedback",
         "propose_preference",
         "propose_memory",

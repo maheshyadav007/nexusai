@@ -529,6 +529,19 @@ Built:
 
 Phase 1 is done.
 
+**2026-11-07, phase 2: skills.**
+
+- `skills.py` loads skills in the open `SKILL.md` format: shipped ones from `modules/agent/shipped_skills/`, and the person's own from `skills/` in their Home. Fields of our own: `agents` (card ids, or `all`) and `needs_tools`.
+- Each agent's stable "Who you are" block lists the skills it may load, one line each. `load_skill` returns the body with agent names filled in from cards, and records the load. `read_skill_file` reads one more file of the skill, and refuses paths outside it.
+- The person's skills are proposed, by the person on the Skills tab or by the lead with `propose_skill`, from a link (a `SKILL.md`, a GitHub folder or file, or a zip), pasted text, or text the lead wrote. Only https is fetched, text files only, at most 1 MB and 50 files, and fetching always asks the person first. The review shows the whole skill, who may load it, the tools it needs, and warnings: instructions to ignore rules, sending to addresses, keys and passwords, downloading or encoding, hidden HTML comments, invisible characters, links and scripts.
+- An approved skill is pinned to the hash of its files. Any change on disk turns it off until the person approves it again. A shipped skill's name can't be taken. Agents can read the skills folder but never write to it.
+- Four shipped skills that add know-how without taking anything out of today's prompts: `working-with-the-team`, `drafting-replies`, `meeting-prep` and `chasing-follow-ups`.
+
+Still to do in phase 2, after the eval discussion:
+
+- Move `filing-mail` and `writing-the-brief` out of `mail.md` and `daily-prep.md`. Mail is the product, so this waits for real-model evals showing the move doesn't make judging worse.
+- Should-load and should-not-load trigger evals for each skill, on the real model.
+
 ### Later
 
 | Item | Notes |

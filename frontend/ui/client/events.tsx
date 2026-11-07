@@ -51,6 +51,7 @@ const INVALIDATES: Record<string, readonly string[]> = {
   "preferences.changed": ["preferences", "preference-history", "knowledge", "today"],
   "brief.ready": ["today"],
   "agentChannel.posted": ["agent-channel"],
+  "skills.changed": ["skills"],
   "team.changed": ["team-tasks", "team-task", "agent-cards", "agent-channel"],
   "agents.changed": ["agent-cards", "sessions", "session", "agents", "schedules", "triggers", "prompts", "home"],
   "summary.ready": ["summary"],

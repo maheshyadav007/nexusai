@@ -14,7 +14,7 @@ from nexusai.contracts.home import FolderListing, HomeCheck
 from nexusai.kernel.files import remove_tree, replace_file
 
 FORMAT_VERSION = 1
-SUBFOLDERS = ("system", "prompts", "memory", "documents", "artifacts", "scratch")
+SUBFOLDERS = ("system", "prompts", "memory", "documents", "artifacts", "scratch", "skills")
 NETWORK_FILESYSTEMS = {"nfs", "nfs4", "smbfs", "smb", "cifs", "afpfs", "webdav", "fuse.sshfs"}
 CLOUD_MARKERS = (
     "Mobile Documents",
@@ -28,7 +28,8 @@ CLOUD_MARKERS = (
 OFTEN_SYNCED = ("Desktop", "Documents")
 # The agent's file tools reach only these. system/ goes through app tools alone.
 AGENT_WRITABLE = ("scratch", "memory", "documents", "artifacts")
-AGENT_READABLE = (*AGENT_WRITABLE, "prompts")
+# Skills are read by agents and changed only by the person approving them.
+AGENT_READABLE = (*AGENT_WRITABLE, "prompts", "skills")
 
 
 class HomeError(Exception):

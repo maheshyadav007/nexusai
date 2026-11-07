@@ -1500,3 +1500,70 @@ class PreferenceDecision(BaseModel):
 
 class PreferenceSimulation(BaseModel):
     decisions: list[PreferenceDecision]
+
+
+# Skills: know-how an agent loads when it needs it.
+
+
+class SkillFile(BaseModel):
+    path: str
+    text: str
+
+
+class Skill(BaseModel):
+    name: str
+    description: str
+    origin: Literal["built_in", "yours"]
+    active: bool
+    problem: str | None = None
+    agents: list[str]
+    needs_tools: list[str]
+    files: list[str]
+    body: str
+    loads: int = 0
+    last_loaded: str | None = None
+
+
+class SkillProposal(BaseModel):
+    id: int
+    name: str
+    description: str
+    agents: list[str]
+    needs_tools: list[str]
+    source: str
+    files: list[SkillFile]
+    flags: list[str]
+    status: Literal["waiting", "approved", "rejected"]
+    proposed_by: str
+    created: str
+
+
+class ListSkills(BaseModel):
+    pass
+
+
+class SkillList(BaseModel):
+    skills: list[Skill]
+    proposals: list[SkillProposal]
+
+
+class AddSkill(BaseModel):
+    """From a link, or the text of a SKILL.md. Either way it's a proposal to review first."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    url: str | None = Field(default=None, max_length=2000)
+    text: str | None = Field(default=None, max_length=200_000)
+
+
+class DecideSkill(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    approve: bool
+
+
+class SkillName(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=64)

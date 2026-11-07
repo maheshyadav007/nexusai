@@ -15,6 +15,7 @@ from nexusai.modules.agent import (
     personalization,
     prompts_builder,
     signals,
+    skills,
 )
 from nexusai.modules.agent import guard as guards
 from nexusai.modules.agent.gateway import Layer
@@ -124,6 +125,7 @@ def layers_for(
         brief_wishes=feedback.brief_layer(ctx.bus.db) if agent == "daily-prep" else "",
         mailbox=signals.mailbox_layer(ctx, account) if is_mail else "",
         db=ctx.bus.db,
+        skills=skills.index(ctx, agent),
         **values,
     )
 

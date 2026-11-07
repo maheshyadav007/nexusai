@@ -1,3 +1,4 @@
+import type { AddSkill, DecideSkill, ListSkills, SkillList, SkillName } from "./contracts.generated";
 import type { CancelTeamTask, CardList, GetTeamTask, ListCards, ListTeamTasks, NoteOnTeamTask, RenameAgent, ResetAgentName, RetryTeamTask, SetMascot, TeamTaskList, TeamTaskView } from "./contracts.generated";
 import type { MarkFolderRead } from "./contracts.generated";
 import type { MailOrganization, FinishMailLearning, MergeCategories, SortCategory, CategorySortEstimate } from "./contracts.generated";
@@ -336,6 +337,10 @@ interface Commands {
   "team.note": [NoteOnTeamTask, TeamTaskView];
   "team.cancel": [CancelTeamTask, TeamTaskView];
   "team.retry": [RetryTeamTask, TeamTaskView];
+  "skills.add": [AddSkill, SkillList];
+  "skills.decide": [DecideSkill, SkillList];
+  "skills.reapprove": [SkillName, SkillList];
+  "skills.remove": [SkillName, SkillList];
   "tasks.save": [SaveTask, PlannerDone];
   "tasks.remove": [TaskAction, PlannerDone];
   "reminders.save": [SaveReminder, PlannerDone];
@@ -456,6 +461,7 @@ interface Queries {
   "agents.cards": [ListCards, CardList];
   "team.tasks": [ListTeamTasks, TeamTaskList];
   "team.task": [GetTeamTask, TeamTaskView];
+  "skills.list": [ListSkills, SkillList];
   "tasks.list": [ListTasks, TaskList];
   "reminders.list": [ListReminders, ReminderList];
   "schedules.list": [ListSchedules, ScheduleList];

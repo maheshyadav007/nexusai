@@ -75,6 +75,7 @@ def build_layers(
     mailbox: str = "",
     brief_wishes: str = "",
     db: Database | None = None,
+    skills: list[str] | None = None,
     **values: str,
 ) -> list[Layer]:
     home = config.home
@@ -96,7 +97,7 @@ def build_layers(
         )
     ]
     # Second, and stable: it changes only when a card does, so the model server can cache it.
-    team = cards.who_you_are(db, agent) if db is not None else ""
+    team = cards.who_you_are(db, agent, skills) if db is not None else ""
     if team:
         layers.append(Layer("Who you are", team))
     layers.append(Layer("Agent prompt", text))

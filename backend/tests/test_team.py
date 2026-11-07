@@ -184,7 +184,12 @@ def test_no_agent_name_is_written_outside_the_cards() -> None:
                 for name in names:
                     if re.search(rf"\b{re.escape(name)}\b", node.value):
                         found.append(f"{path.relative_to(SOURCE)}:{node.lineno} says {name!r}")
-    for path in (SOURCE / "modules" / "agent" / "prompts").rglob("*.md"):
+    agent_folder = SOURCE / "modules" / "agent"
+    texts = [
+        *(agent_folder / "prompts").rglob("*.md"),
+        *(agent_folder / "shipped_skills").rglob("*.md"),
+    ]
+    for path in texts:
         for name in names:
             if re.search(rf"\b{re.escape(name)}\b", path.read_text()):
                 found.append(f"{path.relative_to(SOURCE)} says {name!r}")

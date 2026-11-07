@@ -92,6 +92,12 @@ export const useNoteOnTask = () => useCommand(["team-task", "team-tasks"], (inpu
 export const useCancelTask = () => useCommand(["team-task", "team-tasks", "agent-cards"], (input: { id: number }) => command("team.cancel", input));
 export const useRetryTask = () => useCommand(["team-task", "team-tasks", "agent-cards"], (input: { id: number }) => command("team.retry", input));
 
+export const useSkills = () => useReady(["skills"], () => query("skills.list", {}));
+export const useAddSkill = () => useCommand(["skills"], (input: { url?: string; text?: string }) => command("skills.add", input));
+export const useDecideSkill = () => useCommand(["skills", "agent-cards"], (input: { id: number; approve: boolean }) => command("skills.decide", input));
+export const useReapproveSkill = () => useCommand(["skills"], (input: { name: string }) => command("skills.reapprove", input));
+export const useRemoveSkill = () => useCommand(["skills"], (input: { name: string }) => command("skills.remove", input));
+
 /** A name for an agent id, from its card. Ids are never shown, so a missing card shows nothing. */
 export function useAgentName(): (id: string | null | undefined) => string {
   const cards = useAgentCards();

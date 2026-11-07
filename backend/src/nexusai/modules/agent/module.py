@@ -4,9 +4,12 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any, cast
 
+import httpx
+
 from nexusai.contracts.agent import (
     ActivityList,
     ActivityRow,
+    AddSkill,
     AgentChannelList,
     AgentDone,
     AgentKnowledge,
@@ -32,6 +35,7 @@ from nexusai.contracts.agent import (
     DecideApprovals,
     DecideMailSuggestion,
     DecideMemoryProposal,
+    DecideSkill,
     DismissChannel,
     DraftedReply,
     DraftThreadReply,
@@ -75,6 +79,7 @@ from nexusai.contracts.agent import (
     ListPrompts,
     ListSchedules,
     ListSessions,
+    ListSkills,
     ListTeamTasks,
     MailAgentRun,
     MailAgentSettings,
@@ -139,6 +144,8 @@ from nexusai.contracts.agent import (
     SetTopicMuted,
     SimulatePreference,
     SinceLastLook,
+    SkillList,
+    SkillName,
     SummarizeThread,
     TeamTaskList,
     TeamTaskView,
@@ -186,6 +193,7 @@ from nexusai.modules.agent import (
     runtime,
     scheduler,
     signals,
+    skills,
     suggestions,
     summaries,
     team,
@@ -252,6 +260,7 @@ agent_module = Module(
         summaries.MIGRATION,
         cards.MIGRATION,
         cards.YOURS_MIGRATION,
+        skills.MIGRATION,
         team.MIGRATION,
         runtime.LINEAGE_MIGRATION,
         Migration(
@@ -351,6 +360,47 @@ def set_agent_mascot(command: SetMascot, ctx: Context) -> CardList:
 def _cards_changed(ctx: Context) -> None:
     with ctx.bus.unit_of_work() as work:
         work.emit("agents.changed", {}, source="person", trace_id=ctx.trace_id)
+
+
+@agent_module.query("skills.list")
+def list_skills(query: ListSkills, ctx: Context) -> SkillList:
+    return skills.listing(ctx)
+
+
+@agent_module.command("skills.add")
+def add_skill(command: AddSkill, ctx: Context) -> SkillList:
+    """The person adds one from a link or text. It still waits for their review."""
+    if command.url:
+        try:
+            files = skills.fetch(command.url)
+        except httpx.HTTPError as error:
+            raise CommandError(
+                "skill.fetch", "That link couldn't be fetched. Check it and the network.", 422
+            ) from error
+        skills.propose(ctx, files, command.url, cards.PERSON)
+    elif command.text:
+        skills.propose(ctx, {skills.ENTRY: command.text}, "pasted", cards.PERSON)
+    else:
+        raise CommandError("skill.empty", "Give a link or the text of a SKILL.md.", 422)
+    return skills.listing(ctx)
+
+
+@agent_module.command("skills.decide")
+def decide_skill(command: DecideSkill, ctx: Context) -> SkillList:
+    skills.decide(ctx, command.id, command.approve)
+    return skills.listing(ctx)
+
+
+@agent_module.command("skills.reapprove")
+def reapprove_skill(command: SkillName, ctx: Context) -> SkillList:
+    skills.approve_current(ctx, command.name)
+    return skills.listing(ctx)
+
+
+@agent_module.command("skills.remove")
+def remove_skill(command: SkillName, ctx: Context) -> SkillList:
+    skills.remove(ctx, command.name)
+    return skills.listing(ctx)
 
 
 @agent_module.query("team.tasks")

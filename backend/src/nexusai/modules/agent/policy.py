@@ -67,6 +67,8 @@ def _scope(path: Path, home: Path, folders: list[str]) -> str:
             return "scratch"
         if any(_inside(path, root / name) for name in AGENT_WRITABLE):
             return "home"
+        if _inside(path, root / "skills"):
+            return "skills"
         if any(_inside(path, root / name) for name in AGENT_READABLE):
             return "prompts"
         return "system"
@@ -182,6 +184,13 @@ TOOL_ENTRIES = (
         "update_agent", AGENTS, "Change agents", "Edit, pause or resume an agent.", "data", ASK
     ),
     ToolEntry("run_agent", AGENTS, "Run agents", "Start an agent now.", "data"),
+    ToolEntry(
+        "propose_skill",
+        AGENTS,
+        "Fetch skills",
+        "Get a skill from a link for you to review. It always asks first.",
+        "send",
+    ),
     ToolEntry("remove_agents", AGENTS, "Remove agents", "Delete scheduled agents.", "data", ASK),
     ToolEntry(
         "save_personal_prompt",
@@ -274,6 +283,10 @@ def decide(
         return Decision("deny", "The agent can't touch NexusAI's system folder.")
     if action == "write" and scope == "prompts":
         return Decision("deny", "Prompts change only through the prompt editor.")
+    if action == "write" and scope == "skills":
+        return Decision(
+            "deny", "Skills change only when the person approves them. Use propose_skill instead."
+        )
     if action == "write" and untrusted and scope != "scratch":
         return Decision(
             "ask", "This session has read mail or documents, so writes outside scratch always ask."
@@ -283,7 +296,10 @@ def decide(
     if setting == "ask":
         return Decision("ask", "This asks first, by your settings.")
     if action == "read":
-        if scope in {"scratch", "home", "prompts", "added"} or permissions.full_computer_access:
+        if (
+            scope in {"scratch", "home", "prompts", "skills", "added"}
+            or permissions.full_computer_access
+        ):
             return Decision("allow", "Allowed by your settings.")
         return Decision("ask", "This file is outside your NexusAI Home.")
     if scope in {"scratch", "home"} or permissions.full_computer_access:

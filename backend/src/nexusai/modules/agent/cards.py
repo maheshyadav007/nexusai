@@ -268,7 +268,8 @@ def who_you_are(db: Database, agent: str, skills: list[str] | None = None) -> st
             f"{default_card.name} ({default_card.at}) tells them what matters."
         )
     if skills:
-        lines.append("Skills you can load: " + ", ".join(skills))
+        lines.append("Skills you can load with load_skill when one fits the work:")
+        lines += [f"- {line}" for line in skills]
     return "\n".join(lines)
 
 
