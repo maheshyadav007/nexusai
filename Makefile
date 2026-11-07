@@ -1,4 +1,4 @@
-.PHONY: setup dev start serve backend frontend check speed eval-mail
+.PHONY: setup dev start serve backend frontend check speed eval-mail eval-skills
 
 setup:
 	cd backend && uv sync
@@ -33,3 +33,8 @@ speed:
 # Judges made-up emails with the connected model, to check the Mail agent's prompts. Uses its tokens.
 eval-mail:
 	cd backend && uv run python evals/mail_eval.py
+
+# Checks agents load skills when the work calls for it, and only then. Uses the model's tokens, so
+# run it only once the spend is agreed. Add --budget to cap it.
+eval-skills:
+	cd backend && uv run python evals/skill_eval.py

@@ -1,0 +1,16 @@
+{
+  "cases": [
+    {"id": "prep-meeting", "agent": "session", "message": "I have a call with Priya about the Atlas launch at 3, can you get me ready?", "expect": "meeting-prep"},
+    {"id": "prep-one-on-one", "agent": "session", "message": "Prepare me for my 1:1 with Dana tomorrow.", "expect": "meeting-prep"},
+    {"id": "draft-reply", "agent": "session", "message": "Draft a reply to Ravi's last email saying I'll send the numbers Friday.", "expect": "drafting-replies"},
+    {"id": "answer-email", "agent": "mail", "message": "Write a short answer to the recruiter thread for me to check.", "expect": "drafting-replies"},
+    {"id": "whats-pending", "agent": "session", "message": "What am I still waiting on from people, and what do I owe?", "expect": "chasing-follow-ups"},
+    {"id": "overdue", "agent": "session", "message": "Anything overdue I should nudge someone about?", "expect": "chasing-follow-ups"},
+    {"id": "hand-off-filing", "agent": "session", "message": "Have the mail agent file all of last week's PLM build mail.", "expect": "working-with-the-team"},
+    {"id": "no-skill-time", "agent": "session", "message": "What time is it in Seoul right now?", "expect": null},
+    {"id": "no-skill-search", "agent": "session", "message": "Find the email with the Q3 budget spreadsheet.", "expect": null},
+    {"id": "no-skill-reminder", "agent": "session", "message": "Remind me to call the bank at 5.", "expect": null},
+    {"id": "no-skill-thanks", "agent": "session", "message": "Thanks, that's all.", "expect": null},
+    {"id": "no-skill-category", "agent": "mail", "message": "Why is this thread in Finance?", "expect": null}
+  ]
+}

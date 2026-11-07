@@ -1,6 +1,6 @@
 # Agent harness plan
 
-How the NexusAI agents become one team, led by one agent the person talks to wherever they are, with skills, a live view of who is doing what, and limits that hold even when a model is fooled. Researched against frontier practice and reviewed on 2026-11-07. Nothing here is built yet.
+How the NexusAI agents become one team, led by one agent the person talks to wherever they are, with skills, a live view of who is doing what, and limits that hold even when a model is fooled. Researched against frontier practice and reviewed on 2026-11-07. Steps 1 to 3 are built; see [Where things stand](#where-things-stand).
 
 The lead agent is called **Posty** in this document. That name lives only in its card (section 1), so it can change without touching code.
 
@@ -9,10 +9,10 @@ The lead agent is called **Posty** in this document. That name lives only in its
 1. [Goal](#goal)
 2. [Decisions](#decisions)
 3. [Principles](#principles)
-4. [What exists today](#what-exists-today)
+4. [What existed before this work](#what-existed-before-this-work)
 5. [Design](#design): cards and names · gateways and the router · tasks and the team channel · safety · skills · context and tools · event log, monitoring and the agent map · evals · changing prompts and the harness safely · outside channels
 6. [Problems others hit, and where we guard against each](#problems-others-hit-and-where-we-guard-against-each)
-7. [Order of work](#order-of-work)
+7. [Where things stand](#where-things-stand) and [order of work](#order-of-work)
 8. [To discuss](#to-discuss)
 9. [Sources](#sources)
 
@@ -51,7 +51,9 @@ These come from the research and decide the hard cases.
 7. **Every change is measured.** A prompt, card, skill or default change is checked by evals before it ships, and every run records which versions it used.
 8. **Keep it small and removable.** Few tools, short prompts, and each harness component can be switched off, so we can see what it's worth on a given model.
 
-## What exists today
+## What existed before this work
+
+As found on 2026-11-07, before steps 1 to 3. Kept for the record; see [Where things stand](#where-things-stand) for now.
 
 | Piece | Where | State |
 |---|---|---|
@@ -312,7 +314,7 @@ Steps, examples, what good output looks like...
 - A skill loaded once in a chat isn't loaded again. On compaction its body is dropped and a "loaded" note kept.
 - Each skill has should-load and should-not-load eval cases, and its description is written with the care of a tool's.
 
-**First skills,** moved out of today's prompts: `drafting-replies`, `meeting-prep`, `chasing-follow-ups`, `filing-mail`, `writing-the-brief`, `working-with-the-team` (how to assign, ask and report well, and when not to).
+**Shipped skills:** `working-with-the-team`, `drafting-replies`, `meeting-prep` and `chasing-follow-ups`, all know-how an agent needs sometimes. Guidance needed on every run of an agent, such as how the Mail agent files mail, stays in its prompt.
 
 ### 6. Context and tools
 
@@ -485,6 +487,25 @@ App chat ─┘                        └─ replies, approvals and notices go 
 | 16 | Approvals clicked through | About 93% of Claude Code prompts were approved | Hard limits in code, approvals scoped to the actual action (§4) |
 | 17 | A rename breaking links | Long-lived systems | Records point to ids (§1) |
 
+## Where things stand
+
+Updated 2026-11-07. Everything below is on branch `agent-harness`, tested with a scripted model, and not yet tried on the real Gmail account and model.
+
+| Part | State |
+|---|---|
+| Agent cards, names in one place, mascots, rename | Done |
+| The router: `@handle` to an agent, anything else to the lead | Done, in the app's chat |
+| Tasks between agents: contract, limits, leases, due times, verification, notes mid-run | Done |
+| Safety: Rule of Two, untrusted mark travels, send checks and hourly cap, stop after refusals | Done |
+| The person's own agents as cards | Done |
+| Skills: format, loading, proposals with review, pinning, four shipped skills, Skills tab | Done |
+| Skill trigger evals | Runner and 12 cases done (`make eval-skills`), proven with a scripted model. A real-model run waits for the eval budget |
+| Monitoring: spikes, silence, per-agent daily cap, per-pair message cap, alerts | Done |
+| Map, run trees, usage against the usual day | Done |
+| Step 0: the full eval baseline (routing, delegation, verification, injection, no-tool-calling) | Not built. Needs the eval budget talk first |
+| Trying it all on the real Gmail account and model | Not done. Needs the person's go-ahead |
+| Telegram, WhatsApp, phone approvals, other messengers, A2A, tool search | Later, as decided |
+
 ## Order of work
 
 Each phase ends usable on its own, and is checked on the real Gmail account. Model evals run only with the person's go-ahead.
@@ -493,12 +514,12 @@ Each phase ends usable on its own, and is checked on the real Gmail account. Mod
 |---|---|---|
 | **0. Baseline** | Layer 1 harness tests (most fail today, and become the to-do list). The model eval runner, its suites, invented mailbox, graders, budget, resume and `--fast`. Version stamps on runs | Fake-model tests run in `make check`. The runner works end to end against the fake model. After the person's go-ahead, today's numbers are recorded |
 | **1. Identity, router, tasks, safety** | Cards with names in one place, placeholders in prompts and UI text, the names check, cards with mascots on the Agents page. The router with `@` and the default card, the app gateway. The lead taking over the Chat agent. Who-you-are block split for caching. Five team tools, the contract, a session per task, leases and dead letters, steering. Safety S1 to S7. `parent_run`, `cause`, failure types | The lead, asked "file last week's PLM mail", assigns it to the Mail agent, which reports. The lead verifies the mail moved and tells the person, and the log shows the whole chain. The injection suite shows no unauthorised send or rule change |
-| **2. Skills** | Loader, `load_skill`, `read_skill_file`, `propose_skill` from a URL, paste or description, review with hash pinning, the six first skills moved out of prompts, trigger evals | Prompts are shorter, evals at least as good as the baseline, loads show on the run, and a skill added from a URL works after approval |
+| **2. Skills** | Loader, `load_skill`, `read_skill_file`, `propose_skill` from a URL, paste or description, review with hash pinning, shipped skills, trigger evals | Loads show on the run, a skill added from a URL works after approval, and the trigger evals pass |
 | **3. Map and monitoring** | The one log as the source for views, waiting graph, the checks (caps, ping-pong, spike, silence, spend), the Map, Run tree and Task views, usage on cards | A forced cycle is refused, a stuck wait shows red with Cancel, a forced loop is paused, and a new-mail run can be followed from cause to outcome |
 
 ### Progress log
 
-**2026-11-07, phase 1 (first slice), not yet committed.**
+**2026-11-07, phase 1 (first slice).**
 
 Built:
 
@@ -510,7 +531,7 @@ Built:
 - The untrusted mark travels: a task from an untrusted run, and a report from one, mark whoever reads them.
 - Every turn records its agent, cause, parent turn, versions (model, prompt hash, card, harness) and failure type.
 - Agents page: Team tab with player cards (mascot, live state, usage, record, rename, new face, talk to), Tasks tab with each task's contract, thread, budget, and Retry, Cancel and notes. `@` in the chat box suggests handles.
-- Tests: `tests/test_team.py`, 19 cases with a scripted model, no real model.
+- Tests: `tests/test_team.py`, with a scripted model, no real model. 28 cases by the end of phase 1.
 
 **2026-11-07, phase 1 (second slice): safety.**
 
@@ -537,10 +558,24 @@ Phase 1 is done.
 - An approved skill is pinned to the hash of its files. Any change on disk turns it off until the person approves it again. A shipped skill's name can't be taken. Agents can read the skills folder but never write to it.
 - Four shipped skills that add know-how without taking anything out of today's prompts: `working-with-the-team`, `drafting-replies`, `meeting-prep` and `chasing-follow-ups`.
 
-Still to do in phase 2, after the eval discussion:
+- Trigger evals: `evals/skill_eval.py` gives each agent its real prompt and skills index, offers `load_skill` and a plain reply, and grades the first choice over 12 cases, 7 that should load a skill and 5 that shouldn't, with pass^k over repeats, a token budget and a results file. `tests/test_skill_eval.py` proves it with a scripted model. Run it with `make eval-skills` once the spend is agreed.
+- **Decided not to move** filing guidance out of `mail.md` or the brief's guidance out of `daily-prep.md`. Each is needed on every run of its agent, and mail-judging runs deliberately get a small tool set without `load_skill`. Skills are for know-how needed sometimes; making always-needed instructions lazy would only add a step that can be missed. This replaces the earlier plan to move six skills out of prompts.
 
-- Move `filing-mail` and `writing-the-brief` out of `mail.md` and `daily-prep.md`. Mail is the product, so this waits for real-model evals showing the move doesn't make judging worse.
-- Should-load and should-not-load trigger evals for each skill, on the real model.
+Phase 2 is done, apart from running the trigger evals on the real model.
+
+**2026-11-07, phase 3: the map and monitoring.**
+
+- No new store: `trace.py` builds the map and run trees from runs, model calls, tool calls, skill loads and tasks. A LangChain `wrap_tool_call` middleware (`ToolLog`) now records every tool call that doesn't go through approval, such as the team tools and `load_skill`, so every run's record is whole.
+- `monitor.py` runs from the trigger loop at least once a minute, whether or not anyone is looking:
+  - **Spike:** an agent's hour over `spike_factor` times its usual hour across the last week, and over `spike_min_tokens`, raises an alert.
+  - **Silence:** a working task with no new model or tool call for `silence_minutes` is stopped and blocked.
+  - **Per-agent daily cap:** `agent_tokens_per_day`, off by default. Past it, that agent's background runs wait for tomorrow, and the person's own messages still go. Enforced in the gateway.
+  - **Per-pair cap:** two agents may exchange `messages_per_pair_per_hour` messages; past it, assigning and asking between them are refused.
+  - Each alert is raised once, kept, and sent as a notice.
+- Agent channel tabs: **Team** (cards, now with tokens today against the usual day), **Map** (agents in a ring, open tasks as arrows coloured by state, red when stuck, any waiting cycle, alerts with Mark all seen), **Tasks**, **Runs** (each run something started, opening into a tree of every model call, tool, skill, task and the runs they led to), **Skills**, **Schedules**, **Messages**.
+- Tests: `tests/test_monitor.py`, 7 cases.
+
+**A mistake made while checking the screens.** A throwaway Home used for UI checks signed in with the person's real ChatGPT account, because secrets live in the macOS Keychain whatever app-data folder is used. Its daily brief ran once, about 12,700 tokens. Scratch servers must set `NEXUSAI_SECRETS_TEST_FILE` from now on.
 
 ### Later
 
@@ -554,7 +589,7 @@ Still to do in phase 2, after the eval discussion:
 
 ## To discuss
 
-1. **Eval budget and timing:** which plan the account is on (Plus or Pro), how many tokens a full run may use, and when it runs.
+1. **Eval budget and timing:** which plan the account is on (Plus or Pro), how many tokens a full run may use, and when it runs. Ready to run once agreed: `make eval-mail` and `make eval-skills` (about 4,000 tokens a case, 12 cases).
 2. **A daily cap in the app** for evals and background work. It is off by default today.
 3. **Rating answers:** the person rates about 20 sample answers, so the quality grader can be checked against their judgement.
 
