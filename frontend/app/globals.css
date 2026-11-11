@@ -292,6 +292,11 @@ nav, button, [role="tab"], h1, h2, h3 { font-family: var(--font-space-grotesk), 
 /* Native Windows caption buttons occupy the right side of this single app header. */
 .desktop-caption { @apply fixed inset-x-0 top-0 z-50 flex items-center gap-2 border-b border-line-subtle bg-surface-page text-sm text-ink-primary; height: 44px; padding: 0 150px 0 12px; app-region: drag; }
 html[data-desktop] body { padding-top: 44px; }
+/* The quick-ask window is see-through around its box. */
+html[data-quick], html[data-quick] body { background: transparent; overflow: hidden; padding-top: 0; }
+/* It glides to the height of what's in it. */
+.quick-box { transition: height var(--motion-normal) var(--motion-easing); }
+@media (prefers-reduced-motion: reduce) { .quick-box { transition: none; } }
 html[data-desktop] .h-screen { height: calc(100dvh - 44px); }
 html[data-desktop] .min-h-screen { min-height: calc(100dvh - 44px); }
 .category-scroll { scrollbar-width: thin; }

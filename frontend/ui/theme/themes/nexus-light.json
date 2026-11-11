@@ -113,7 +113,9 @@
     "dock": "480px",
     "dockHeight": "720px",
     "reading": "760px",
-    "mailList": "380px"
+    "mailList": "380px",
+    "quick": "720px",
+    "quickHeight": "460px"
   },
   "scale": {
     "density": {

@@ -34,7 +34,7 @@ function fixture(options = {}) {
   const fakeLayout = { ...layout, installRoot: () => options.sideBySide ? '/install' : null, pendingVersion: () => seen.pending || null };
   const context = vm.createContext({
     require: id => id === 'electron' ? electron : id === 'electron-updater' ? { autoUpdater: updater } : id === 'node:fs' ? fakeFs
-      : id === 'node:child_process' ? { spawn: spawnFake } : id === './layout.cjs' ? fakeLayout
+      : id === 'node:child_process' ? { spawn: spawnFake } : id === './layout.cjs' ? fakeLayout : id === './quick-ask.cjs' ? require('../quick-ask.cjs')
       : id.endsWith('runtime.json') ? { appId: 'com.nexusai.pilot', dataDirectory: 'NexusAI Pilot', signed: false, updateBaseUrl: '' }
       : id === './runtime.cjs' ? { ...runtime, waitExit: (child, _, name) => runtime.waitExit(child, 20, name), waitInstalledServices: async () => { if (options.orphan) throw new Error('Owned Python is still running'); }, launchInstaller: async () => { seen.installs++; if (options.installError) throw new Error('Installer launch denied'); },
         runInstaller: async () => { seen.silentInstalls++; if (options.installCode === 0 || options.installCode === undefined) seen.pending = options.activates === false ? null : '0.2.0'; return options.installCode ?? 0; } } : require(id),

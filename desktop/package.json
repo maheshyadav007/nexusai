@@ -6,7 +6,7 @@
   "author": "NexusAI",
   "main": "main.cjs",
   "scripts": {
-    "test": "node --test tests/release.test.cjs tests/profiles.test.cjs tests/shutdown.test.cjs tests/layout.test.cjs",
+    "test": "node --test tests/release.test.cjs tests/profiles.test.cjs tests/shutdown.test.cjs tests/layout.test.cjs tests/quick-ask.test.cjs",
     "check:installer": "node installer/compile-check.cjs"
   },
   "dependencies": {

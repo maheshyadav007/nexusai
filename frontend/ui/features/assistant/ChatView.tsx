@@ -31,7 +31,7 @@ import { Composer } from "./Composer";
 import { Markdown } from "./Markdown";
 import { useAgentCards } from "@/ui/client/work";
 import { Mascot } from "@/ui/primitives/Mascot";
-import { factsOf, failureOf, followUpsOf, sourcesOf, isFinished, mergeResults, showsItsWork, textOf, timeOf, toBlocks, toolName, type ToolPart, type Versions } from "./parts";
+import { factsOf, failureOf, followUpsOf, sourcesOf, isFinished, mergeResults, showsItsWork, splitQuote, textOf, timeOf, toBlocks, toolName, type ToolPart, type Versions } from "./parts";
 import { ThinkingTrace } from "./ThinkingTrace";
 
 const COPIED_MS = 1500;
@@ -86,11 +86,15 @@ function MessageTime({ value }: { value: string | null }) {
 
 function UserMessage({ message, onEdit }: { message: UIMessage; onEdit?: (text: string) => void }) {
   const text = textOf(message);
+  const { quote, rest } = splitQuote(text);
   const { origin } = factsOf(message);
   const source = origin ? ORIGIN_LABEL[origin] : undefined;
   return (
     <Rise as="article" data-testid="user-message" className="group flex flex-col items-end gap-1">
-      <div className="max-w-full whitespace-pre-wrap break-words rounded-lg bg-surface-sunken px-3 py-2 text-md text-ink-primary">{text}</div>
+      <div className="max-w-full whitespace-pre-wrap break-words rounded-lg bg-surface-sunken px-3 py-2 text-md text-ink-primary">
+        {quote ? <blockquote className={`border-l-2 border-line-strong pl-3 text-ink-secondary ${rest ? "mb-2" : ""}`}>{quote}</blockquote> : null}
+        {rest}
+      </div>
       {source ? <p data-testid="message-origin" className="text-sm text-ink-muted">{t(source)}</p> : null}
       <div className="flex items-center gap-1 opacity-0 transition-opacity duration-fast focus-within:opacity-100 group-hover:opacity-100">
         <MessageTime value={timeOf(message)} />

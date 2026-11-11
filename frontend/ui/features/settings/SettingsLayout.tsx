@@ -17,6 +17,7 @@ import { AppearanceSettings } from "./AppearanceSettings";
 import { LocalModelSettings } from "./LocalModelSettings";
 import { ModelSettings } from "./ModelSettings";
 import { PreferencesSettings } from "./PreferencesSettings";
+import { QuickAskSettings } from "./QuickAskSettings";
 import { ProfileForm } from "./ProfileForm";
 import { RulesSettings } from "./RulesSettings";
 import { AboutSettings, HomeSettings, NetworkSettings, ResetSettings } from "./SystemSettings";
@@ -33,7 +34,7 @@ const SECTIONS: readonly { id: string; group: StringKey; label: StringKey; agent
       </Card>
     ),
   },
-  { id: "preferences", group: "settings.group.you", label: "settings.section.preferences", content: () => <PreferencesSettings /> },
+  { id: "preferences", group: "settings.group.you", label: "settings.section.preferences", content: () => <div className="flex flex-col gap-4"><PreferencesSettings /><QuickAskSettings /></div> },
   { id: "connectors", group: "settings.group.mail", label: "nav.connectors", content: () => <ConnectorsContent /> },
   { id: "categories", group: "settings.group.mail", label: "nav.categories", content: () => <CategorySettings /> },
   { id: "rules", group: "settings.group.mail", label: "settings.section.rules", content: () => <RulesSettings /> },

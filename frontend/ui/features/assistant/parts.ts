@@ -130,3 +130,12 @@ export const timeOf = (message: UIMessage): string | null => {
   const metadata = message.metadata as { time?: string | null } | undefined;
   return metadata?.time ?? null;
 };
+
+/** A message that opens with quoted lines ("> …"), as one asked about selected text: the quote, then the rest. */
+export function splitQuote(text: string): { quote: string | null; rest: string } {
+  const lines = text.split("\n");
+  let end = 0;
+  while (end < lines.length && /^>( |$)/.test(lines[end] ?? "")) end++;
+  if (!end) return { quote: null, rest: text };
+  return { quote: lines.slice(0, end).map((line) => line.replace(/^> ?/, "")).join("\n"), rest: lines.slice(end).join("\n").trim() };
+}

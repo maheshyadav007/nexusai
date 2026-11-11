@@ -117,7 +117,7 @@ function windowsBuilderConfig({ appId, productName, packageName, version, output
   return {
     appId, productName, asar: true,
     directories: { output, buildResources: 'build-resources' },
-    files: ['main.cjs', 'runtime.cjs', 'layout.cjs', 'loading.html', 'shutdown.html', 'preload.cjs', 'build-resources/icon.png', 'build-resources/LICENSE.lucide', 'package.json'],
+    files: ['main.cjs', 'runtime.cjs', 'layout.cjs', 'quick-ask.cjs', 'loading.html', 'shutdown.html', 'preload.cjs', 'build-resources/icon.png', 'build-resources/LICENSE.lucide', 'package.json'],
     extraResources: [{ from: 'resources', to: '.', filter: ['**/*'] },
       { from: 'frontend-server.cjs', to: 'frontend-server.cjs' },
       { from: 'installer/check-install.ps1', to: 'check-install.ps1' }],

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, dialog, shell, ipcMain, Notification } = require('electron');
+const { app, BrowserWindow, Menu, dialog, shell, ipcMain, Notification, Tray, nativeImage, globalShortcut, screen, clipboard, systemPreferences } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { spawn } = require('node:child_process');
 const { randomBytes } = require('node:crypto');
@@ -7,6 +7,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { freePort, persistentFrontendPort, waitReady, waitExit, isAlive, launchInstaller, runInstaller, waitInstalledServices } = require('./runtime.cjs');
 const layout = require('./layout.cjs');
+const { createQuickAsk } = require('./quick-ask.cjs');
 
 const resources = app.isPackaged ? process.resourcesPath : path.join(__dirname, 'resources');
 const config = require(path.join(resources, 'runtime.json'));
@@ -16,13 +17,16 @@ const installHome = process.platform === 'win32' && app.isPackaged ? layout.inst
 const smokeAt = process.argv.indexOf('--smoke-dir');
 const smokeDir = smokeAt >= 0 ? process.argv[smokeAt + 1] : null;
 if (smokeAt >= 0 && !smokeDir) throw new Error('--smoke-dir needs a directory');
+// Development only: the shell around an app already running, such as make test-start's.
+const attachAt = app.isPackaged ? -1 : process.argv.indexOf('--attach');
+const attachUrl = attachAt >= 0 ? new URL(process.argv[attachAt + 1]).origin : null;
 const normalDataDir = path.join(app.getPath('appData'), config.dataDirectory);
 let probeDir = null;
 if ((config.ciProbe || config.acceptanceProbe) && !smokeDir) {
   const probeFile = path.join(normalDataDir, 'update-probe.json');
   if (fs.existsSync(probeFile)) probeDir = JSON.parse(fs.readFileSync(probeFile, 'utf8')).directory;
 }
-const dataDir = smokeDir ? path.resolve(smokeDir) : probeDir ? path.join(probeDir, 'app-data') : normalDataDir;
+const dataDir = smokeDir ? path.resolve(smokeDir) : probeDir ? path.join(probeDir, 'app-data') : attachUrl ? `${normalDataDir} Attached` : normalDataDir;
 fs.mkdirSync(dataDir, { recursive: true });
 app.setPath('userData', path.join(dataDir, 'browser'));
 app.setAppUserModelId(config.appId);
@@ -30,7 +34,7 @@ const logPath = path.join(dataDir, 'desktop.log');
 const log = (message) => fs.appendFileSync(logPath, `${new Date().toISOString()} ${message}\n`);
 let window, backend, frontend, backendUrl, origin, shuttingDown = false, canQuit = false;
 let updateReady = false, installing = false, menu, restartRequested = false;
-let exitPrepared = false, lifecycleMode = false, shutdownRequest = false, downloadedUpdate = null;
+let exitPrepared = false, lifecycleMode = false, shutdownRequest = false, downloadedUpdate = null, tray = null;
 const shutdownPage = path.join(__dirname, 'shutdown.html');
 let updateState = { state: 'idle', version: app.getVersion(), availableVersion: null, percent: 0, error: null, configured: Boolean(config.updateBaseUrl) };
 const startedAt = Date.now();
@@ -79,6 +83,39 @@ ipcMain.handle('nexus:notify', (event, notice) => {
   alert.on('click', () => { window?.show(); window?.focus(); if (typeof notice.link === 'string' && /^\/(?!\/)/.test(notice.link)) void window.loadURL(origin + notice.link); });
   alert.show(); return true;
 });
+const quickAsk = createQuickAsk({ BrowserWindow, globalShortcut, screen, clipboard, systemPreferences, platform: process.platform,
+  file: path.join(dataDir, 'quick-ask.json'), preload: path.join(__dirname, 'preload.cjs'), origin: () => origin, main: () => window, log,
+  allowed: () => startupComplete && !lifecycleMode && !shuttingDown });
+ipcMain.handle('nexus:quick', (event, request) => {
+  const fromBox = quickAsk.isWindow(event.sender) && event.senderFrame === event.sender.mainFrame && event.senderFrame.url.startsWith(`${origin}/`);
+  if (!fromBox && !trustedSender(event)) throw new Error('Untrusted window');
+  const { action, value } = request || {};
+  if (action === 'status') return quickAsk.status();
+  if (action === 'update') return quickAsk.update(value || {});
+  if (action === 'allow-selection') return quickAsk.requestSelectionAccess();
+  if (action === 'open') { void quickAsk.open(); return quickAsk.status(); }
+  if (!fromBox) throw new Error('Unknown quick ask action');
+  if (action === 'resize') quickAsk.resize(Number(value));
+  else if (action === 'take') return quickAsk.take();
+  else if (action === 'hide') quickAsk.hide();
+  else if (action === 'open-in-app') quickAsk.openInApp(value);
+  else throw new Error('Unknown quick ask action');
+  return null;
+});
+
+/** Closing the window leaves NexusAI running beside the clock, where the shortcut can reach it. */
+function setupTray() {
+  const icon = nativeImage.createFromPath(path.join(__dirname, 'build-resources', 'icon.png')).resize({ width: 16, height: 16 });
+  tray = new Tray(icon);
+  tray.setToolTip(app.getName());
+  const show = () => { window.show(); window.focus(); };
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Open NexusAI', click: show },
+    { label: 'Quick ask', click: () => void quickAsk.open() },
+    { type: 'separator' }, { label: 'Quit NexusAI', click: () => void shutdown() },
+  ]));
+  if (process.platform !== 'darwin') tray.on('click', show);
+}
 let startupComplete = false;
 let probeReport = null, probeExitAttempts = 0;
 const controlToken = randomBytes(32).toString('hex');
@@ -375,6 +412,14 @@ async function start() {
     if (!canQuit) {
       event.preventDefault();
       if (shuttingDown) return;
+      if (tray && startupComplete && !lifecycleMode) {
+        window.hide();
+        quickAsk.noticeHidden((shortcut) => {
+          if (!Notification.isSupported()) return;
+          new Notification({ title: 'NexusAI is still running', body: shortcut ? `Press ${shortcut} to ask from any app. Quit from the NexusAI icon by the clock.` : 'Quit from the NexusAI icon by the clock.', silent: true }).show();
+        });
+        return;
+      }
       if (lifecycleMode && !isAlive(backend) && !isAlive(frontend)) { canQuit = true; app.exit(0); }
       else void shutdown();
     }
@@ -385,36 +430,41 @@ async function start() {
     window.setAppDetails({ appId: config.appId, appIconPath: launcher, appIconIndex: 0, relaunchCommand: `"${launcher}"`, relaunchDisplayName: path.basename(exeName, '.exe') });
   }
   await window.loadFile(path.join(__dirname, 'loading.html'));
-  await startupStage('Preparing your local services…');
-  const frontendPort = await persistentFrontendPort(dataDir);
-  let backendPort = await freePort();
-  while (frontendPort === backendPort) backendPort = await freePort();
-  backendUrl = `http://127.0.0.1:${backendPort}`;
-  origin = `http://127.0.0.1:${frontendPort}`;
-  const env = { ...process.env, NEXUSAI_APP_DATA: dataDir, NEXUSAI_HOST: '127.0.0.1',
-    TZ: process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone,
-    NEXUSAI_PORT: String(backendPort), NEXUSAI_ALLOWED_ORIGINS: `${origin},${backendUrl}`,
-    NEXUSAI_ENV_FILE: path.join(dataDir, 'company.env'), PYTHONUTF8: '1', PYTHONNOUSERSITE: '1',
-    NEXUSAI_ENV_DEFAULTS_FILE: path.join(resources, 'deployment.env'),
-  };
-  if (smokeDir) { delete env.NEXUSAI_HOME; delete env.NEXUSAI_SECRETS_TEST_FILE; }
-  if (probeDir) {
-    env.NEXUSAI_HOME = path.join(probeDir, 'Home');
-    env.NEXUSAI_LEARN_EMAILS = '0';
+  if (attachUrl) {
+    origin = attachUrl;
+    log(`Attached to ${origin}`);
+  } else {
+    await startupStage('Preparing your local services…');
+    const frontendPort = await persistentFrontendPort(dataDir);
+    let backendPort = await freePort();
+    while (frontendPort === backendPort) backendPort = await freePort();
+    backendUrl = `http://127.0.0.1:${backendPort}`;
+    origin = `http://127.0.0.1:${frontendPort}`;
+    const env = { ...process.env, NEXUSAI_APP_DATA: dataDir, NEXUSAI_HOST: '127.0.0.1',
+      TZ: process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone,
+      NEXUSAI_PORT: String(backendPort), NEXUSAI_ALLOWED_ORIGINS: `${origin},${backendUrl}`,
+      NEXUSAI_ENV_FILE: path.join(dataDir, 'company.env'), PYTHONUTF8: '1', PYTHONNOUSERSITE: '1',
+      NEXUSAI_ENV_DEFAULTS_FILE: path.join(resources, 'deployment.env'),
+    };
+    if (smokeDir) { delete env.NEXUSAI_HOME; delete env.NEXUSAI_SECRETS_TEST_FILE; }
+    if (probeDir) {
+      env.NEXUSAI_HOME = path.join(probeDir, 'Home');
+      env.NEXUSAI_LEARN_EMAILS = '0';
+    }
+    log(`Starting NexusAI ${app.getVersion()} (${config.signed ? 'signed' : 'unsigned pilot'})`);
+    backend = child(path.join(resources, 'python', process.platform === 'win32' ? 'python.exe' : 'bin/python3'),
+      ['-m', 'nexusai.api.desktop'], { env: { ...env, NEXUSAI_DESKTOP_CONTROL_TOKEN: controlToken }, cwd: dataDir });
+    const site = path.join(resources, 'frontend');
+    frontend = child(path.join(resources, 'node', process.platform === 'win32' ? 'node.exe' : 'node'),
+      [path.join(resources, 'frontend-server.cjs'), path.join(site, 'server.js')], { cwd: site, env: { ...env, PORT: String(frontendPort), HOSTNAME: '127.0.0.1',
+        NEXUSAI_DESKTOP_BACKEND_URL: backendUrl } });
+    await startupStage('Opening your encrypted workspace and starting the interface…');
+    await Promise.all([waitReady(`${backendUrl}/api/health`, backend), waitReady(`http://127.0.0.1:${frontendPort}`, frontend)]);
+    await startupStage('Connecting your workspace…');
+    await waitReady(`${origin}/api/health`, frontend);
+    const proxyStatus = await fetch(`${origin}/api/home/status`, { method: 'POST', signal: AbortSignal.timeout(10000) });
+    if (!proxyStatus.ok) throw new Error(`Frontend authentication/proxy check failed (${proxyStatus.status}).`);
   }
-  log(`Starting NexusAI ${app.getVersion()} (${config.signed ? 'signed' : 'unsigned pilot'})`);
-  backend = child(path.join(resources, 'python', process.platform === 'win32' ? 'python.exe' : 'bin/python3'),
-    ['-m', 'nexusai.api.desktop'], { env: { ...env, NEXUSAI_DESKTOP_CONTROL_TOKEN: controlToken }, cwd: dataDir });
-  const site = path.join(resources, 'frontend');
-  frontend = child(path.join(resources, 'node', process.platform === 'win32' ? 'node.exe' : 'node'),
-    [path.join(resources, 'frontend-server.cjs'), path.join(site, 'server.js')], { cwd: site, env: { ...env, PORT: String(frontendPort), HOSTNAME: '127.0.0.1',
-      NEXUSAI_DESKTOP_BACKEND_URL: backendUrl } });
-  await startupStage('Opening your encrypted workspace and starting the interface…');
-  await Promise.all([waitReady(`${backendUrl}/api/health`, backend), waitReady(`http://127.0.0.1:${frontendPort}`, frontend)]);
-  await startupStage('Connecting your workspace…');
-  await waitReady(`${origin}/api/health`, frontend);
-  const proxyStatus = await fetch(`${origin}/api/home/status`, { method: 'POST', signal: AbortSignal.timeout(10000) });
-  if (!proxyStatus.ok) throw new Error(`Frontend authentication/proxy check failed (${proxyStatus.status}).`);
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//.test(url)) void shell.openExternal(url);
     return { action: 'deny' };
@@ -435,6 +485,7 @@ async function start() {
   startupComplete = true;
   window.show();
   setupUpdates();
+  if (!smokeDir && !probeDir) { setupTray(); quickAsk.register(); }
   if (probeDir) await runUpdateProbe();
   if (smokeDir) {
     await new Promise((resolve) => setTimeout(resolve, 5000));
@@ -445,6 +496,8 @@ async function start() {
   }
 }
 
+app.on('will-quit', () => quickAsk.dispose());
+app.on('activate', () => { if (startupComplete && window && !lifecycleMode) { window.show(); window.focus(); } });
 app.on('before-quit', (event) => {
   if (!canQuit) {
     if (shuttingDown) { event.preventDefault(); return; }

@@ -159,6 +159,12 @@ function PreviewPanel({ target, position, total, onMove, onClose }: { target: Pr
   );
 }
 
+/** Where there's no room to read, such as the quick-ask box: documents and mail open in the app. */
+export function PreviewInApp({ open, children }: { open: (link: string) => void; children: ReactNode }) {
+  const value = useMemo(() => ({ show: (target: PreviewTarget) => open(fullPage(target)), showThread: (id: number) => open(`/mail/thread/${id}`) }), [open]);
+  return <PreviewContext value={value}>{children}</PreviewContext>;
+}
+
 /** A document opens straight away in one large frosted preview, from wherever it was clicked. */
 export function DocumentPreviewProvider({ children }: { children: ReactNode }) {
   const { setNeedsRoom } = useAssistant();
