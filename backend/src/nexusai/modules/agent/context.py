@@ -1,6 +1,7 @@
 """What the model gets to see of a conversation. The chat itself always shows everything."""
 
 import json
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -14,7 +15,13 @@ from langchain.agents.middleware import (
     SummarizationMiddleware,
 )
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
-from langchain_core.messages import HumanMessage, RemoveMessage, trim_messages
+from langchain_core.messages import (
+    AIMessage,
+    HumanMessage,
+    RemoveMessage,
+    ToolMessage,
+    trim_messages,
+)
 from langchain_core.messages.utils import count_tokens_approximately  # noqa: E402
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 
@@ -29,7 +36,7 @@ SETTINGS_KEY = "context_settings"
 COMPACT_AS_NODE = "model"
 PERSON = "person"
 # Their result is the outcome of the run, so clearing it would lose what was decided.
-KEEP_RESULTS_OF = ("record_triage",)
+KEEP_RESULTS_OF = ("record_triage", "find_tools")
 
 
 @dataclass(frozen=True)
@@ -178,6 +185,56 @@ class AutoCompact(SummarizationMiddleware):
             return {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), *kept]}
 
 
+FIND_TOOLS = "find_tools"
+FOUND_LINE = re.compile(r"^- ([^\s:]+):", re.MULTILINE)
+
+
+def _tool_name(tool: Any) -> str:
+    return str(tool.get("name", "") if isinstance(tool, dict) else getattr(tool, "name", ""))
+
+
+class ToolSearch(AgentMiddleware):
+    """Shows the model the tools it uses most, and any it found with find_tools or already used.
+
+    Every allowed tool stays registered, so what's hidden only costs a search, never permission.
+    Read from the whole conversation, before it's trimmed, so a found tool stays found.
+    """
+
+    def __init__(self, shown: frozenset[str] | None, always_prefix: str = "") -> None:
+        super().__init__()
+        self.shown = shown
+        # The person's own connectors are few, and theirs, so they're always shown.
+        self.always_prefix = always_prefix
+
+    def _starts_shown(self, name: str) -> bool:
+        return (
+            name in (self.shown or ())
+            or name == FIND_TOOLS
+            or (bool(self.always_prefix) and name.startswith(self.always_prefix))
+        )
+
+    def wrap_model_call(
+        self, request: ModelRequest, handler: Callable[[ModelRequest], ModelResponse]
+    ) -> ModelResponse:
+        tools = list(request.tools)
+        if self.shown is None:
+            return handler(
+                request.override(tools=[t for t in tools if _tool_name(t) != FIND_TOOLS])
+            )
+        names = {_tool_name(tool) for tool in tools}
+        found: list[str] = []
+        for message in request.messages:
+            if isinstance(message, ToolMessage) and message.name == FIND_TOOLS:
+                found += FOUND_LINE.findall(str(message.content))
+            elif isinstance(message, AIMessage):
+                found += [str(call["name"]) for call in message.tool_calls]
+        later = [n for n in dict.fromkeys(found) if n in names and not self._starts_shown(n)]
+        by_name = {_tool_name(tool): tool for tool in tools}
+        # Found tools go last, in the order found, so the start of the request stays the same.
+        kept = [t for t in tools if self._starts_shown(_tool_name(t))]
+        return handler(request.override(tools=kept + [by_name[name] for name in later]))
+
+
 class TaskContent(AgentMiddleware):
     """Puts this run's data beside its message, for the model only.
 
@@ -269,8 +326,10 @@ def middleware(
     on_compacted: Callable[[int, int], None] | None = None,
     notes: Callable[[], str] | None = None,
     log_tool: Callable[[str, str, dict[str, Any], str, int], None] | None = None,
+    shown_tools: frozenset[str] | None = None,
+    always_shown_prefix: str = "",
 ) -> list[Any]:
-    chain: list[Any] = []
+    chain: list[Any] = [ToolSearch(shown_tools, always_shown_prefix)]
     if log_tool is not None:
         chain.append(ToolLog(log_tool))
     if profile.mode == "auto_compact":

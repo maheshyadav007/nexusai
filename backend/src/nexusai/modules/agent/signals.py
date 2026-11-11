@@ -1,6 +1,7 @@
 """What the mailbox itself shows, counted by the app. No model and no one's say-so goes into it."""
 
 import json
+import re
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -170,12 +171,37 @@ def _position(row: Any, own: set[str]) -> str:
     return "not named, so it reached them through a list or Bcc"
 
 
+def first_name(ctx: Context, own: set[str]) -> str | None:
+    """What they sign their own mail as, so a message that names them can be told apart."""
+    if not own:
+        return None
+    rows = ctx.bus.db.fetch_all(
+        f"SELECT from_name FROM messages WHERE LOWER(from_addr) IN ({_placeholders(own)})"  # noqa: S608
+        " AND from_name != '' GROUP BY from_name ORDER BY COUNT(*) DESC LIMIT 1",
+        tuple(own),
+    )
+    words = re.findall(r"[^\W\d_]{2,}", str(rows[0]["from_name"])) if rows else []
+    return words[0] if words else None
+
+
+def _addressed(row: Any, own: set[str], name: str | None) -> list[str]:
+    """Mail for them personally, rather than for a list they're on."""
+    to, cc = addresses(row["to_json"]), addresses(row["cc_json"])
+    others = len({*to, *cc} - own)
+    lines = []
+    if own & set(to) and others == 0:
+        lines.append("- The latest incoming message is addressed to the person alone")
+    if name and re.search(rf"(?<![\w]){re.escape(name)}(?![\w])", row["clean_text"] or "", re.I):
+        lines.append(f"- The latest incoming message names the person (“{name}”) in its text")
+    return lines
+
+
 def about_thread(ctx: Context, thread: int) -> str:
     """The facts the model can't see in the text: who it's addressed to, and how they've behaved."""
     db = ctx.bus.db
     own = own_addresses(ctx)
     rows = db.fetch_all(
-        "SELECT from_addr, to_json, cc_json, date FROM messages WHERE thread_id = ?"
+        "SELECT from_addr, to_json, cc_json, date, clean_text FROM messages WHERE thread_id = ?"
         " GROUP BY message_id ORDER BY date",
         (thread,),
     )
@@ -191,6 +217,7 @@ def about_thread(ctx: Context, thread: int) -> str:
     if theirs:
         last_in = theirs[-1]
         lines.insert(0, f"- The person is {_position(last_in, own)} on the latest incoming message")
+        lines[1:1] = _addressed(last_in, own, first_name(ctx, own))
         account = db.fetch_all("SELECT account FROM threads WHERE id=?", (thread,))[0]["account"]
         lines.append(_sender_line(ctx, last_in["from_addr"].lower(), own, account))
         corrected = feedback.for_sender(db, last_in["from_addr"].lower(), account)

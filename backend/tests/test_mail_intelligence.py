@@ -551,6 +551,32 @@ def crowd(count: int) -> str:
     return ", ".join(f"person{n}@{domain}" for n, domain in enumerate(domains))
 
 
+def test_mail_for_them_alone_or_naming_them_is_pointed_out(
+    client: TestClient, fake: FakeMail, script: Script
+) -> None:
+    connect(client, fake)
+    fake.state.deliver(
+        make_mail(subject="Hi", sender=f"Tess Ter <{USER}>", to="a@x.example", message_id="<n0@x>"),
+        box="Sent",
+    )
+    fake.state.deliver(make_mail(subject="Just you", message_id="<n1@x>"))
+    judged(client, "Just you")
+    sent = told(script.requests[-1])
+    assert "addressed to the person alone" in sent and "names the person" not in sent
+
+    fake.state.deliver(
+        make_mail(
+            subject="Team update",
+            to=f"{crowd(30)}, {USER}",
+            body="Thanks all. Tess, can you confirm the dates by Friday?",
+            message_id="<n2@x>",
+        )
+    )
+    judged(client, "Team update")
+    sent = told(script.requests[-1])
+    assert "names the person (“Tess”)" in sent and "addressed to the person alone" not in sent
+
+
 def test_a_broadcast_is_a_count_and_not_a_list_and_the_list_can_still_be_searched(
     client: TestClient, fake: FakeMail, script: Script
 ) -> None:

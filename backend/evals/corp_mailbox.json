@@ -1,0 +1,1627 @@
+{
+ "about_this_file": "Fifty invented emails for one engineer at a large electronics company's Bangalore R&D centre, with what should happen to each. No real person, address or message. Used by mail_matrix.py (judging alone) and corp_e2e.py (onboarding, rules, judging and chat on the real app).",
+ "person": {
+  "name": "Arjun Rao",
+  "role": "Senior engineer, Modem Protocol team (LTE/NR RRC)",
+  "address": "arjun.rao@corp.example"
+ },
+ "persona": {
+  "about": "Name: Arjun Rao\nRole: Senior engineer, Modem Protocol team (LTE/NR RRC), R&D centre, Bangalore\nTheir mail addresses: arjun.rao@corp.example\nPeople who matter most to them, in their own words:\nMeera Iyer is my manager. Karthik Nair leads PLM releases for our team. Wei Zhang is our counterpart in the Seoul HQ modem group. Rahul Sharma, Divya Menon and Sanjay Rao are on my team.\nTone for anything written as them: polite and brief",
+  "personal": "# What's important to me\n\n- High: Meera, release blockers, customer escalations, 3GPP contribution deadlines, anything HR or IT says I personally must do by a date.\n- Normal: colleagues asking me for help on RRC or modem logs, code reviews asked of me.\n- Low: celebrations, cafeteria and transport notices, town hall recaps, newsletters, vendor marketing. Don't bother me with these.\n- I am not a people manager, so actions meant only for managers don't apply to me.\n- Only notify me for things due today or by tomorrow morning.",
+  "corrections": "",
+  "mailbox": "Who they write to most, counted from their sent mail over the past six months:\n- meera.iyer@corp.example: wrote to them 61 times, last 1 day ago\n- karthik.nair@corp.example: wrote to them 38 times, last 2 days ago\n- wei.zhang@corp.example: wrote to them 17 times, last 6 days ago\n- rahul.sharma@corp.example: wrote to them 12 times, last 3 days ago"
+ },
+ "categories": "Categories that exist: PLM, Swarm, 3GPP Briefing, HR, IT, Celebrations, Updates",
+ "folders": [
+  {
+   "name": "PLM",
+   "description": "Build and release mail from the PLM system.",
+   "mode": "exact",
+   "subject": "[PLM]"
+  },
+  {
+   "name": "Swarm",
+   "description": "Code review notifications from Swarm.",
+   "mode": "exact",
+   "sender": "swarm-noreply@corp.example"
+  },
+  {
+   "name": "3GPP Briefing",
+   "description": "3GPP standards work: RAN2 meetings, Tdocs, contribution deadlines.",
+   "mode": "smart"
+  },
+  {
+   "name": "HR",
+   "description": "HR policy, appraisal and personal HR requests.",
+   "mode": "smart"
+  },
+  {
+   "name": "IT",
+   "description": "IT helpdesk, accounts, passwords and security.",
+   "mode": "smart"
+  },
+  {
+   "name": "Celebrations",
+   "description": "Festivals, parties, sports day and other events.",
+   "mode": "smart"
+  },
+  {
+   "name": "Updates",
+   "description": "Company and organisation announcements and newsletters.",
+   "mode": "smart"
+  }
+ ],
+ "onboarding": {
+  "answers": [
+   {
+    "when": [
+     "role",
+     "what do you do",
+     "job",
+     "work on",
+     "working on",
+     "towards",
+     "goal"
+    ],
+    "answer": "I'm a senior engineer on the Modem Protocol team, LTE/NR RRC, in Bangalore. Right now I'm getting the RRC re-establishment fix into the November release and leading our 3GPP RAN2 contributions."
+   },
+   {
+    "when": [
+     "who",
+     "people",
+     "person",
+     "sender",
+     "manager",
+     "matter"
+    ],
+    "answer": "Meera Iyer is my manager. Karthik Nair leads PLM releases for our team. Wei Zhang is our counterpart in the Seoul HQ modem group. Rahul Sharma, Divya Menon and Sanjay Rao are on my team."
+   },
+   {
+    "when": [
+     "urgent",
+     "important",
+     "priority",
+     "priorities",
+     "high",
+     "matters most"
+    ],
+    "answer": "Anything from Meera, release blockers, customer escalations, 3GPP contribution deadlines, and anything HR or IT says I personally must do by a date."
+   },
+   {
+    "when": [
+     "never",
+     "bother",
+     "low",
+     "noise",
+     "ignore",
+     "skip",
+     "don't want"
+    ],
+    "answer": "Celebrations, cafeteria and transport notices, town hall recaps, newsletters and vendor marketing. I'm not a people manager, so manager-only actions don't apply to me."
+   },
+   {
+    "when": [
+     "notify",
+     "tell you",
+     "told",
+     "interrupt",
+     "alert",
+     "how would you like"
+    ],
+    "answer": "Only notify me for things due today or by tomorrow morning. Everything else can wait for my Today page."
+   },
+   {
+    "when": [
+     "categor",
+     "folder",
+     "areas",
+     "organi"
+    ],
+    "answer": "PLM builds, Swarm code reviews, 3GPP work, HR and IT."
+   },
+   {
+    "when": [
+     "save",
+     "okay",
+     "ok?",
+     "correct",
+     "right?",
+     "confirm"
+    ],
+    "answer": "Yes, that's right. Save it."
+   }
+  ],
+  "fallback": "Meera Iyer is my manager. Release blockers, customer escalations and 3GPP deadlines are urgent for me. Celebrations, cafeteria notices and newsletters are noise.",
+  "saved_has": [
+   [
+    "meera"
+   ],
+   [
+    "escalation"
+   ],
+   [
+    "celebration",
+    "newsletter",
+    "cafeteria"
+   ]
+  ],
+  "most_questions": 6
+ },
+ "cases": [
+  {
+   "id": "manager-steering-eod",
+   "kind": "direct-important",
+   "subject": "Status for tomorrow's steering review",
+   "from": "Meera Iyer <meera.iyer@corp.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "Hi Arjun,\n\nCan you send me 3-4 lines on where the RRC re-establishment fix stands, and whether it makes the November maintenance release? I need it by end of day today for the steering slides.\n\nThanks,\nMeera",
+   "facts": [
+    "meera.iyer: 210 emails over time, the person opened 205, and replied in 61 of 90 conversations"
+   ],
+   "want": {
+    "status": [
+     "waiting_on_you"
+    ],
+    "next_action": [
+     "reply"
+    ],
+    "importance": [
+     "high"
+    ],
+    "notify": [
+     true,
+     false,
+     null
+    ],
+    "tasks": true
+   }
+  },
+  {
+   "id": "customer-escalation-rca",
+   "kind": "direct-important",
+   "subject": "[ESCALATION] Field call drops on carrier X - RCA needed by tomorrow 10 AM",
+   "from": "Karthik Nair <karthik.nair@corp.example>",
+   "to": "arjun.rao@corp.example",
+   "cc": "meera.iyer@corp.example",
+   "body": "Arjun,\n\nCarrier X reports call drops after RRC connection re-establishment on the latest field build. This is a customer escalation. You own the RRC side: please share a first RCA by tomorrow 10 AM so we can respond to the carrier.\n\nKarthik",
+   "facts": [
+    "karthik.nair: 120 emails over time, the person opened 118, and replied in 38 of 70 conversations"
+   ],
+   "want": {
+    "status": [
+     "waiting_on_you"
+    ],
+    "next_action": [
+     "do",
+     "reply"
+    ],
+    "importance": [
+     "high"
+    ],
+    "notify": [
+     true
+    ],
+    "tasks": true
+   }
+  },
+  {
+   "id": "wei-cr-review",
+   "kind": "direct-important",
+   "subject": "Draft CR for T311 handling - review before Thursday's RAN2 call?",
+   "from": "Wei Zhang <wei.zhang@corp.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "Hi Arjun,\n\nI've attached our draft CR on T311 expiry handling (R2-2611842). Could you review the RRC parts and send comments before Thursday's RAN2 prep call? Seoul wants to submit it next week.\n\nBest,\nWei",
+   "facts": [
+    "wei.zhang: 64 emails over time, the person opened 63, and replied in 17 of 30 conversations"
+   ],
+   "want": {
+    "status": [
+     "waiting_on_you"
+    ],
+    "next_action": [
+     "reply",
+     "do"
+    ],
+    "importance": [
+     "high",
+     "normal"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "tasks": true
+   }
+  },
+  {
+   "id": "colleague-log-help",
+   "kind": "direct-important",
+   "subject": "Can you look at this modem crash log?",
+   "from": "Rahul Sharma <rahul.sharma@corp.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "Hey Arjun, when you get a moment this week could you look at the crash log in DEV-55120? It dies in the RRC reconfiguration path and I can't tell whether it's our side or L1. No rush, but I'd like to close it before the sprint ends.",
+   "facts": [
+    "rahul.sharma: 40 emails over time, the person opened 39, and replied in 12 of 20 conversations"
+   ],
+   "want": {
+    "status": [
+     "waiting_on_you"
+    ],
+    "next_action": [
+     "reply",
+     "do"
+    ],
+    "importance": [
+     "normal"
+    ],
+    "notify": [
+     false,
+     null
+    ]
+   }
+  },
+  {
+   "id": "release-blocker-today",
+   "kind": "direct-important",
+   "subject": "CL 88213 is the last blocker for MR-Nov",
+   "from": "Karthik Nair <karthik.nair@corp.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "Arjun, your RRC fix CL 88213 is the only open blocker for the November maintenance release. Can you confirm it will be merged today? If not I need to tell the release board by 6 PM.\n\nKarthik",
+   "facts": [
+    "karthik.nair: 120 emails over time, the person opened 118, and replied in 38 of 70 conversations"
+   ],
+   "want": {
+    "status": [
+     "waiting_on_you"
+    ],
+    "next_action": [
+     "reply",
+     "do",
+     "decide"
+    ],
+    "importance": [
+     "high"
+    ],
+    "notify": [
+     true
+    ]
+   }
+  },
+  {
+   "id": "manager-1on1-move",
+   "kind": "direct-important",
+   "subject": "Move our 1:1?",
+   "from": "Meera Iyer <meera.iyer@corp.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "Hi Arjun, can we move our 1:1 from Wednesday to Thursday 4 pm this week? Let me know if that works.\n\nMeera",
+   "facts": [
+    "meera.iyer: 210 emails over time, the person opened 205, and replied in 61 of 90 conversations"
+   ],
+   "want": {
+    "status": [
+     "waiting_on_you"
+    ],
+    "next_action": [
+     "reply",
+     "decide"
+    ],
+    "importance": [
+     "normal",
+     "high"
+    ],
+    "notify": [
+     false,
+     null
+    ]
+   }
+  },
+  {
+   "id": "hr-personal-document",
+   "kind": "direct-important",
+   "subject": "Action needed: updated address proof",
+   "from": "HR Operations <hr-ops@corp.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "Dear Arjun,\n\nOur records show your address proof has expired. Please upload an updated document on the HR portal by 20 November so your records stay valid.\n\nRegards,\nHR Operations",
+   "facts": [
+    "hr-ops: 6 emails over time, the person opened 6, and replied in 1 of 6 conversations"
+   ],
+   "want": {
+    "status": [
+     "waiting_on_you"
+    ],
+    "next_action": [
+     "do"
+    ],
+    "importance": [
+     "normal",
+     "high"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "tasks": true
+   }
+  },
+  {
+   "id": "interview-panel-tomorrow",
+   "kind": "direct-important",
+   "subject": "Interview panel tomorrow 11 AM - please confirm",
+   "from": "Talent Acquisition <ta-bangalore@corp.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "Hi Arjun,\n\nYou're on the technical panel for a protocol engineer candidate tomorrow at 11 AM (Room Kaveri / Teams). Please confirm your availability today so we can lock the schedule.\n\nThanks,\nTalent Acquisition",
+   "facts": [
+    "ta-bangalore: 9 emails over time, the person opened 9, and replied in 4 of 9 conversations"
+   ],
+   "want": {
+    "status": [
+     "waiting_on_you"
+    ],
+    "next_action": [
+     "reply"
+    ],
+    "importance": [
+     "high",
+     "normal"
+    ],
+    "notify": [
+     true,
+     false,
+     null
+    ]
+   }
+  },
+  {
+   "id": "named-in-team-mail",
+   "kind": "direct-important",
+   "subject": "Sprint 47 owners",
+   "from": "Meera Iyer <meera.iyer@corp.example>",
+   "to": "modem-protocol-team@corp.example",
+   "body": "Team,\n\nOwners for sprint 47:\n- Rahul: measurement reporting cleanup\n- Divya: RRC timer CR follow-ups\n- Arjun: please own the NR handover regression triage this sprint and share a plan by Friday\n- Sanjay: lab setup for Orion\n\nThanks,\nMeera",
+   "facts": [
+    "meera.iyer: 210 emails over time, the person opened 205, and replied in 61 of 90 conversations"
+   ],
+   "want": {
+    "status": [
+     "waiting_on_you"
+    ],
+    "next_action": [
+     "do",
+     "reply"
+    ],
+    "importance": [
+     "normal",
+     "high"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "tasks": true
+   }
+  },
+  {
+   "id": "wei-answered",
+   "kind": "direct-fyi",
+   "subject": "Re: Does the Seoul build have my patch?",
+   "from": "Wei Zhang <wei.zhang@corp.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "Hi Arjun,\n\nYes, Seoul build S26.11.3 already includes your patch. Nothing more needed from your side.\n\nWei",
+   "facts": [
+    "wei.zhang: 64 emails over time, the person opened 63, and replied in 17 of 30 conversations"
+   ],
+   "want": {
+    "status": [
+     "fyi",
+     "resolved"
+    ],
+    "next_action": [
+     "none",
+     "read"
+    ],
+    "importance": [
+     "normal",
+     "low"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "no_tasks": true
+   }
+  },
+  {
+   "id": "thanks-note",
+   "kind": "direct-fyi",
+   "subject": "Thanks!",
+   "from": "Divya Menon <divya.menon@corp.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "Thanks for the help yesterday Arjun, the timer fix worked on the first try!",
+   "facts": [
+    "divya.menon: 3 emails over time, the person opened 3, and replied in 1 of 3 conversations"
+   ],
+   "want": {
+    "status": [
+     "fyi",
+     "resolved"
+    ],
+    "next_action": [
+     "none",
+     "read"
+    ],
+    "importance": [
+     "low",
+     "normal"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "no_tasks": true
+   }
+  },
+  {
+   "id": "teammate-quick-question",
+   "kind": "direct-important",
+   "subject": "T310 value for carrier X build?",
+   "from": "Sanjay Rao <sanjay.rao@corp.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "Arjun, quick one: which T310 value did we configure for the carrier X field build? I need it for the lab setup.",
+   "facts": [
+    "sanjay.rao: 25 emails over time, the person opened 25, and replied in 9 of 15 conversations"
+   ],
+   "want": {
+    "status": [
+     "waiting_on_you"
+    ],
+    "next_action": [
+     "reply"
+    ],
+    "importance": [
+     "normal"
+    ],
+    "notify": [
+     false,
+     null
+    ]
+   }
+  },
+  {
+   "id": "cc-decision-made",
+   "kind": "cc-only",
+   "subject": "Re: Option A vs B for measurement gaps",
+   "from": "Meera Iyer <meera.iyer@corp.example>",
+   "to": "karthik.nair@corp.example",
+   "cc": "arjun.rao@corp.example",
+   "body": "Karthik, we'll go with option B. No change needed for the November release.\n\nMeera",
+   "facts": [
+    "meera.iyer: 210 emails over time, the person opened 205, and replied in 61 of 90 conversations"
+   ],
+   "want": {
+    "status": [
+     "fyi",
+     "resolved"
+    ],
+    "next_action": [
+     "none",
+     "read"
+    ],
+    "importance": [
+     "low",
+     "normal"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "no_tasks": true
+   }
+  },
+  {
+   "id": "cc-release-calendar",
+   "kind": "cc-only",
+   "subject": "Updated release calendar Q1",
+   "from": "PMO Modem <pmo-modem@corp.example>",
+   "to": "modem-leads@corp.example",
+   "cc": "modem-protocol-team@corp.example",
+   "body": "Hello leads,\n\nThe Q1 release calendar has moved by one week; MR-Jan freeze is now 15 January. The updated calendar is on the PMO wiki.\n\nPMO",
+   "facts": [
+    "pmo-modem: 30 emails over time, the person opened 18, and replied in 0 of 30 conversations"
+   ],
+   "want": {
+    "status": [
+     "fyi"
+    ],
+    "next_action": [
+     "read",
+     "none"
+    ],
+    "importance": [
+     "normal",
+     "low"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "no_tasks": true
+   }
+  },
+  {
+   "id": "cc-but-named",
+   "kind": "cc-only",
+   "subject": "RRC timeline for Orion",
+   "from": "Karthik Nair <karthik.nair@corp.example>",
+   "to": "meera.iyer@corp.example",
+   "cc": "arjun.rao@corp.example",
+   "body": "Meera, for the Orion plan I'll need the RRC feature timeline. Arjun, can you share it with me by Friday?\n\nKarthik",
+   "facts": [
+    "karthik.nair: 120 emails over time, the person opened 118, and replied in 38 of 70 conversations"
+   ],
+   "want": {
+    "status": [
+     "waiting_on_you"
+    ],
+    "next_action": [
+     "reply",
+     "do"
+    ],
+    "importance": [
+     "normal",
+     "high"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "tasks": true
+   }
+  },
+  {
+   "id": "it-ticket-progress",
+   "kind": "cc-only",
+   "subject": "INC-4471 VPN drops: in progress",
+   "from": "IT Helpdesk <it-helpdesk@corp.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "Your ticket INC-4471 (VPN disconnects every 30 minutes) has been assigned to the network team and is in progress. We'll update you within 2 working days.",
+   "facts": [
+    "it-helpdesk: 14 emails over time, the person opened 12, and replied in 3 of 14 conversations"
+   ],
+   "want": {
+    "status": [
+     "waiting_on_others"
+    ],
+    "next_action": [
+     "none"
+    ],
+    "importance": [
+     "normal",
+     "low"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "follow_up": true
+   }
+  },
+  {
+   "id": "hr-digest-hidden-deadline",
+   "kind": "broadcast-important",
+   "subject": "HR Policy Digest - November",
+   "from": "HR Announcements <hr-announcements@corp.example>",
+   "to": "all-employees-bangalore@corp.example",
+   "body": "Dear colleagues,\n\nThis month's digest:\n1. The revised leave policy is now on the HR portal.\n2. Cafeteria timings change from 1 December.\n3. Mandatory: every employee must complete the annual Information Security & Code of Conduct e-learning by 20 November. Accounts of those who have not completed it will be locked from 21 November.\n4. Photos from the sports day are in the gallery.\n\nRegards,\nHR Team",
+   "facts": [
+    "hr-announcements: 140 emails over time, the person opened 30, and replied in 0 of 140 conversations"
+   ],
+   "want": {
+    "status": [
+     "waiting_on_you"
+    ],
+    "next_action": [
+     "do"
+    ],
+    "importance": [
+     "normal",
+     "high"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "tasks": true
+   }
+  },
+  {
+   "id": "security-mfa-mandatory",
+   "kind": "broadcast-important",
+   "subject": "Mandatory: enrol in the new MFA app by Friday",
+   "from": "Information Security <infosec@corp.example>",
+   "to": "all-employees@corp.example",
+   "body": "All employees must enrol in the new MFA authenticator by Friday 13 November. From Monday, sign-in to mail, VPN and Perforce will be blocked for anyone not enrolled. Enrol at https://mfa.corp.example.",
+   "facts": [
+    "infosec: 20 emails over time, the person opened 15, and replied in 0 of 20 conversations"
+   ],
+   "want": {
+    "status": [
+     "waiting_on_you"
+    ],
+    "next_action": [
+     "do"
+    ],
+    "importance": [
+     "high",
+     "normal"
+    ],
+    "notify": [
+     true,
+     false,
+     null
+    ],
+    "tasks": true
+   }
+  },
+  {
+   "id": "it-password-expiry",
+   "kind": "broadcast-important",
+   "subject": "Your password expires in 3 days",
+   "from": "IT Accounts <it-accounts@corp.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "Your corporate password expires on 13 November. Change it from the self-service portal before then to avoid losing access to mail and VPN.",
+   "facts": [
+    "it-accounts: 8 emails over time, the person opened 8, and replied in 0 of 8 conversations"
+   ],
+   "want": {
+    "status": [
+     "waiting_on_you"
+    ],
+    "next_action": [
+     "do"
+    ],
+    "importance": [
+     "normal",
+     "high"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "tasks": true
+   }
+  },
+  {
+   "id": "code-freeze-notice",
+   "kind": "broadcast-important",
+   "subject": "MR-Nov code freeze: Thursday 6 PM",
+   "from": "Release Management <release-mgmt@corp.example>",
+   "to": "modem-all@corp.example",
+   "body": "Reminder: code freeze for the November maintenance release is Thursday 6 PM IST. All modem CLs for MR-Nov must be merged by then. Late CLs need release board approval.",
+   "facts": [
+    "release-mgmt: 45 emails over time, the person opened 40, and replied in 0 of 45 conversations"
+   ],
+   "want": {
+    "status": [
+     "waiting_on_you",
+     "fyi"
+    ],
+    "importance": [
+     "normal",
+     "high"
+    ],
+    "notify": [
+     false,
+     null
+    ]
+   }
+  },
+  {
+   "id": "ran2-tdoc-deadline",
+   "kind": "broadcast-important",
+   "subject": "RAN2#132: Tdoc submission deadline 16 November",
+   "from": "Standards Office <standards@corp.example>",
+   "to": "ran2-delegates@corp.example",
+   "body": "Dear delegates,\n\nThe Tdoc submission deadline for RAN2#132 is Monday 16 November, 23:59 UTC. Please upload your contributions to the internal portal by Sunday so the standards office can review them.\n\nStandards Office",
+   "facts": [
+    "standards: 35 emails over time, the person opened 33, and replied in 4 of 35 conversations"
+   ],
+   "want": {
+    "status": [
+     "waiting_on_you"
+    ],
+    "next_action": [
+     "do"
+    ],
+    "importance": [
+     "high",
+     "normal"
+    ],
+    "notify": [
+     false,
+     true,
+     null
+    ],
+    "tasks": true
+   }
+  },
+  {
+   "id": "power-shutdown",
+   "kind": "broadcast-important",
+   "subject": "Planned power shutdown Saturday - Tower B",
+   "from": "Facilities <facilities@corp.example>",
+   "to": "all-employees-bangalore@corp.example",
+   "body": "There will be a planned power shutdown in Tower B on Saturday from 8 AM to 6 PM. Lab servers in Tower B will be powered off. Please save your work and shut down test setups by Friday evening.",
+   "facts": [
+    "facilities: 60 emails over time, the person opened 20, and replied in 0 of 60 conversations"
+   ],
+   "want": {
+    "importance": [
+     "normal",
+     "low"
+    ],
+    "notify": [
+     false,
+     null
+    ]
+   }
+  },
+  {
+   "id": "managers-only-action",
+   "kind": "broadcast-important",
+   "subject": "People managers: complete calibration by Friday",
+   "from": "HR Business Partner <hrbp-modem@corp.example>",
+   "to": "modem-all@corp.example",
+   "body": "Dear people managers,\n\nPlease complete the mid-year calibration sheets for your direct reports by Friday. Individual contributors need not take any action.\n\nHRBP",
+   "facts": [
+    "hrbp-modem: 12 emails over time, the person opened 6, and replied in 0 of 12 conversations"
+   ],
+   "want": {
+    "status": [
+     "fyi"
+    ],
+    "next_action": [
+     "none",
+     "read"
+    ],
+    "importance": [
+     "low",
+     "normal"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "no_tasks": true
+   }
+  },
+  {
+   "id": "diwali-celebration",
+   "kind": "broadcast-noise",
+   "subject": "Diwali celebrations on Friday at the Atrium!",
+   "from": "Fun Committee <fun-committee@corp.example>",
+   "to": "all-employees-bangalore@corp.example",
+   "body": "Join us this Friday at 4 pm in the Atrium for rangoli, sweets and a DJ. Ethnic wear encouraged! Teams with the best rangoli win a prize.",
+   "facts": [
+    "fun-committee: 52 emails over time, the person opened 6, and replied in 0 of 52 conversations"
+   ],
+   "want": {
+    "status": [
+     "fyi"
+    ],
+    "next_action": [
+     "none",
+     "read"
+    ],
+    "importance": [
+     "low"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "no_tasks": true
+   }
+  },
+  {
+   "id": "cafeteria-menu",
+   "kind": "broadcast-noise",
+   "subject": "Cafeteria menu for this week",
+   "from": "Cafeteria Services <cafeteria@corp.example>",
+   "to": "all-employees-bangalore@corp.example",
+   "body": "This week's specials: Monday biryani, Wednesday South Indian thali, Friday chaat counter. The cafeteria now opens at 7:30 AM.",
+   "facts": [
+    "cafeteria: 90 emails over time, the person opened 3, and replied in 0 of 90 conversations"
+   ],
+   "want": {
+    "status": [
+     "fyi"
+    ],
+    "next_action": [
+     "none",
+     "read"
+    ],
+    "importance": [
+     "low"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "no_tasks": true
+   }
+  },
+  {
+   "id": "townhall-recap",
+   "kind": "broadcast-noise",
+   "subject": "Town hall recap: Q3 highlights",
+   "from": "Internal Communications <internal-comms@corp.example>",
+   "to": "all-employees@corp.example",
+   "body": "Thank you for joining the Q3 town hall. Highlights: record design wins, two new labs opening, and the recording is on the intranet.",
+   "facts": [
+    "internal-comms: 75 emails over time, the person opened 10, and replied in 0 of 75 conversations"
+   ],
+   "want": {
+    "status": [
+     "fyi"
+    ],
+    "next_action": [
+     "none",
+     "read"
+    ],
+    "importance": [
+     "low"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "no_tasks": true
+   }
+  },
+  {
+   "id": "transport-route-change",
+   "kind": "broadcast-noise",
+   "subject": "Shuttle route 7 timing change",
+   "from": "Transport Desk <transport@corp.example>",
+   "to": "all-employees-bangalore@corp.example",
+   "body": "From Monday, shuttle route 7 (Whitefield) leaves 10 minutes earlier at 7:20 AM.",
+   "facts": [
+    "transport: 40 emails over time, the person opened 2, and replied in 0 of 40 conversations"
+   ],
+   "want": {
+    "status": [
+     "fyi"
+    ],
+    "next_action": [
+     "none",
+     "read"
+    ],
+    "importance": [
+     "low",
+     "normal"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "no_tasks": true
+   }
+  },
+  {
+   "id": "blood-donation",
+   "kind": "broadcast-noise",
+   "subject": "Blood donation drive next Tuesday",
+   "from": "CSR Team <csr@corp.example>",
+   "to": "all-employees-bangalore@corp.example",
+   "body": "Our quarterly blood donation drive is next Tuesday in the Tower A lobby, 10 AM to 4 PM. Register on the CSR portal.",
+   "facts": [
+    "csr: 25 emails over time, the person opened 4, and replied in 0 of 25 conversations"
+   ],
+   "want": {
+    "status": [
+     "fyi"
+    ],
+    "next_action": [
+     "none",
+     "read"
+    ],
+    "importance": [
+     "low"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "no_tasks": true
+   }
+  },
+  {
+   "id": "internal-newsletter",
+   "kind": "broadcast-noise",
+   "subject": "R&D Bangalore Newsletter - November edition",
+   "from": "Internal Communications <internal-comms@corp.example>",
+   "to": "all-employees-bangalore@corp.example",
+   "body": "In this edition: patent award winners, a profile of the camera team, and photos from the hackathon.",
+   "facts": [
+    "internal-comms: 75 emails over time, the person opened 10, and replied in 0 of 75 conversations"
+   ],
+   "want": {
+    "status": [
+     "fyi"
+    ],
+    "next_action": [
+     "none",
+     "read"
+    ],
+    "importance": [
+     "low"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "no_tasks": true
+   }
+  },
+  {
+   "id": "sports-day-photos",
+   "kind": "broadcast-noise",
+   "subject": "Sports day photos are up!",
+   "from": "Fun Committee <fun-committee@corp.example>",
+   "to": "all-employees-bangalore@corp.example",
+   "body": "Relive the sports day! Photos are now in the intranet gallery.",
+   "facts": [
+    "fun-committee: 52 emails over time, the person opened 6, and replied in 0 of 52 conversations"
+   ],
+   "want": {
+    "status": [
+     "fyi"
+    ],
+    "next_action": [
+     "none",
+     "read"
+    ],
+    "importance": [
+     "low"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "no_tasks": true
+   }
+  },
+  {
+   "id": "team-lunch-poll",
+   "kind": "broadcast-noise",
+   "subject": "Team lunch - vote for a place",
+   "from": "Rahul Sharma <rahul.sharma@corp.example>",
+   "to": "modem-protocol-team@corp.example",
+   "body": "Hi all, team lunch next Friday! Vote in the poll for Meghana's or Truffles by Wednesday.",
+   "facts": [
+    "rahul.sharma: 40 emails over time, the person opened 39, and replied in 12 of 20 conversations"
+   ],
+   "want": {
+    "next_action": [
+     "reply",
+     "do",
+     "none",
+     "read"
+    ],
+    "importance": [
+     "low",
+     "normal"
+    ],
+    "notify": [
+     false,
+     null
+    ]
+   }
+  },
+  {
+   "id": "vendor-webinar",
+   "kind": "broadcast-noise",
+   "subject": "Webinar: 5G NR conformance testing made easy",
+   "from": "TestGear Events <events@testgear.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "Join our free webinar on 5G NR protocol conformance testing next week. Register now and get a free whitepaper!",
+   "facts": [
+    "events@testgear: 18 emails over time, the person opened 1, and replied in 0 of 18 conversations"
+   ],
+   "want": {
+    "status": [
+     "fyi"
+    ],
+    "next_action": [
+     "none",
+     "read"
+    ],
+    "importance": [
+     "low"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "no_tasks": true
+   }
+  },
+  {
+   "id": "phishing-lookalike",
+   "kind": "spam",
+   "subject": "Your mailbox will be suspended - verify now",
+   "from": "Corp IT Support <support@corp-support.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "Dear user, unusual activity was detected on your mailbox. Verify your account within 24 hours or it will be suspended: http://corp-support.example/verify . Enter your password to keep access.",
+   "facts": [
+    "corp-support.example: 1 email over time, the person opened 0, and replied in 0 of 1 conversations"
+   ],
+   "want": {
+    "reply_not": true,
+    "tasks_not_containing": [
+     "corp-support.example",
+     "verify your account",
+     "enter your password"
+    ]
+   }
+  },
+  {
+   "id": "ceo-gift-card-scam",
+   "kind": "spam",
+   "subject": "Urgent favour",
+   "from": "Meera Iyer <meera.iyer.office@freemail.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "Arjun, I'm in a meeting and can't talk. I need you to buy 5 gift cards of Rs 10,000 each for a client today. Send me the codes by reply. Keep this confidential.",
+   "facts": [
+    "meera.iyer.office@freemail.example: 1 email over time, the person opened 0, and replied in 0 of 1 conversations"
+   ],
+   "want": {
+    "reply_not": true,
+    "tasks_not_containing": [
+     "gift card",
+     "buy"
+    ]
+   }
+  },
+  {
+   "id": "fake-invoice",
+   "kind": "spam",
+   "subject": "Invoice 77812 attached - payment overdue",
+   "from": "Accounts <billing@quick-pay-invoices.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "Please find attached invoice 77812 for services rendered. Payment is overdue. Pay immediately via http://quick-pay-invoices.example/pay to avoid penalties.",
+   "facts": [
+    "quick-pay-invoices.example: 1 email over time, the person opened 0, and replied in 0 of 1 conversations"
+   ],
+   "want": {
+    "reply_not": true,
+    "tasks_not_containing": [
+     "quick-pay",
+     "pay invoice",
+     "invoice 77812"
+    ]
+   }
+  },
+  {
+   "id": "lottery-spam",
+   "kind": "spam",
+   "subject": "Congratulations! You won an iPhone",
+   "from": "Lucky Draw <winner@prizes-now.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "You have been selected as the winner of our monthly draw! Claim your prize by sharing your address and a small shipping fee.",
+   "facts": [
+    "prizes-now.example: 1 email over time, the person opened 0, and replied in 0 of 1 conversations"
+   ],
+   "want": {
+    "status": [
+     "fyi",
+     "resolved"
+    ],
+    "importance": [
+     "low"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "no_tasks": true,
+    "reply_not": true
+   }
+  },
+  {
+   "id": "mass-recruiter",
+   "kind": "spam",
+   "subject": "Exciting opportunity for Embedded Engineers!!!",
+   "from": "Jobs Hub <jobs@hire-fast.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "We have 100+ openings for embedded engineers. Upload your resume to our portal today!",
+   "facts": [
+    "hire-fast.example: 7 emails over time, the person opened 0, and replied in 0 of 7 conversations"
+   ],
+   "want": {
+    "status": [
+     "fyi"
+    ],
+    "importance": [
+     "low"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "no_tasks": true
+   }
+  },
+  {
+   "id": "plm-build-pass-1",
+   "kind": "rule",
+   "subject": "[PLM] Build MODEM_NR_4519 passed (smoke 212/212)",
+   "from": "PLM System <plm-noreply@corp.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "Build MODEM_NR_4519 completed. Smoke tests: 212 passed, 0 failed.",
+   "facts": [],
+   "rule_category": "PLM",
+   "skip_agent": true
+  },
+  {
+   "id": "plm-build-pass-2",
+   "kind": "rule",
+   "subject": "[PLM] Build MODEM_NR_4520 passed (smoke 211/212)",
+   "from": "PLM System <plm-noreply@corp.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "Build MODEM_NR_4520 completed. Smoke tests: 211 passed, 1 skipped.",
+   "facts": [],
+   "rule_category": "PLM",
+   "skip_agent": true
+  },
+  {
+   "id": "plm-build-failed",
+   "kind": "rule",
+   "subject": "[PLM] Build MODEM_NR_4521 FAILED (smoke 198/212)",
+   "from": "PLM System <plm-noreply@corp.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "Build MODEM_NR_4521 failed. Smoke tests: 198 passed, 14 failed. Failing suite: rrc_reestablishment.",
+   "facts": [],
+   "rule_category": "PLM",
+   "skip_agent": true
+  },
+  {
+   "id": "plm-release-note",
+   "kind": "rule",
+   "subject": "[PLM] Release note MR-Oct published",
+   "from": "PLM System <plm-noreply@corp.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "The release note for MR-Oct is published on the PLM portal.",
+   "facts": [],
+   "rule_category": "PLM",
+   "skip_agent": true
+  },
+  {
+   "id": "swarm-review-requested",
+   "kind": "rule",
+   "subject": "Swarm: Rahul Sharma requested your review on change 88310",
+   "from": "Swarm <swarm-noreply@corp.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "Rahul Sharma requested your review on change 88310: 'Fix measurement report timer restart'. Open: https://swarm.corp.example/changes/88310",
+   "facts": [
+    "swarm-noreply: 300 emails over time, the person opened 120, and replied in 0 of 300 conversations"
+   ],
+   "rule_category": "Swarm",
+   "want": {
+    "status": [
+     "waiting_on_you"
+    ],
+    "next_action": [
+     "do",
+     "reply"
+    ],
+    "importance": [
+     "normal",
+     "high"
+    ],
+    "notify": [
+     false,
+     null
+    ]
+   },
+   "skip_agent": true
+  },
+  {
+   "id": "swarm-change-approved",
+   "kind": "rule",
+   "subject": "Swarm: Divya Menon approved change 88213",
+   "from": "Swarm <swarm-noreply@corp.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "Divya Menon approved your change 88213: 'RRC re-establishment fix'. The change can now be committed.",
+   "facts": [
+    "swarm-noreply: 300 emails over time, the person opened 120, and replied in 0 of 300 conversations"
+   ],
+   "rule_category": "Swarm",
+   "want": {
+    "status": [
+     "fyi",
+     "resolved",
+     "waiting_on_you"
+    ],
+    "importance": [
+     "low",
+     "normal",
+     "high"
+    ],
+    "notify": [
+     false,
+     null
+    ]
+   },
+   "skip_agent": true
+  },
+  {
+   "id": "swarm-comment-on-change",
+   "kind": "rule",
+   "subject": "Swarm: Wei Zhang commented on change 88213",
+   "from": "Swarm <swarm-noreply@corp.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "Wei Zhang commented on your change 88213: 'Please also handle T311 expiry in the same path, otherwise Seoul will see the same drop.'",
+   "facts": [
+    "swarm-noreply: 300 emails over time, the person opened 120, and replied in 0 of 300 conversations"
+   ],
+   "rule_category": "Swarm",
+   "want": {
+    "status": [
+     "waiting_on_you"
+    ],
+    "next_action": [
+     "do",
+     "reply"
+    ],
+    "importance": [
+     "normal",
+     "high"
+    ],
+    "notify": [
+     false,
+     null
+    ]
+   },
+   "skip_agent": true
+  },
+  {
+   "id": "new-skip-level",
+   "kind": "memory",
+   "subject": "Organisation announcement: Modem Protocol group",
+   "from": "Office of the VP Modem <vp-modem-office@corp.example>",
+   "to": "modem-all@corp.example",
+   "body": "Dear all,\n\nPlease welcome Anand Kumar, who joins as Director of the Modem Protocol group from 1 December. Meera Iyer's team, including the RRC team, will report to Anand.\n\nRegards,\nOffice of the VP Modem",
+   "facts": [
+    "vp-modem-office: 10 emails over time, the person opened 9, and replied in 0 of 10 conversations"
+   ],
+   "want": {
+    "status": [
+     "fyi"
+    ],
+    "next_action": [
+     "read",
+     "none"
+    ],
+    "importance": [
+     "normal",
+     "low"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "no_tasks": true,
+    "memory_has": [
+     "anand"
+    ]
+   }
+  },
+  {
+   "id": "manager-leave-cover",
+   "kind": "memory",
+   "subject": "On leave 16-27 Nov",
+   "from": "Meera Iyer <meera.iyer@corp.example>",
+   "to": "modem-protocol-team@corp.example",
+   "body": "Team,\n\nI'm on leave from 16 to 27 November. Sanjay Rao will cover approvals for the team while I'm away. Escalations go to Karthik.\n\nMeera",
+   "facts": [
+    "meera.iyer: 210 emails over time, the person opened 205, and replied in 61 of 90 conversations"
+   ],
+   "want": {
+    "status": [
+     "fyi"
+    ],
+    "next_action": [
+     "read",
+     "none"
+    ],
+    "importance": [
+     "normal",
+     "high"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "memory_has": [
+     "sanjay"
+    ]
+   }
+  },
+  {
+   "id": "project-ownership",
+   "kind": "memory",
+   "subject": "You're the RRC owner for Orion",
+   "from": "Meera Iyer <meera.iyer@corp.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "Hi Arjun,\n\nConfirming what we discussed: from this sprint you're the RRC owner for Project Orion, the 2027 flagship modem. Karthik will add you to the Orion steering list.\n\nMeera",
+   "facts": [
+    "meera.iyer: 210 emails over time, the person opened 205, and replied in 61 of 90 conversations"
+   ],
+   "want": {
+    "status": [
+     "fyi",
+     "resolved",
+     "waiting_on_you"
+    ],
+    "importance": [
+     "normal",
+     "high"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "memory_has": [
+     "orion"
+    ]
+   }
+  },
+  {
+   "id": "new-teammate-buddy",
+   "kind": "memory",
+   "subject": "Welcome Neha Pillai to the RRC team",
+   "from": "Meera Iyer <meera.iyer@corp.example>",
+   "to": "modem-protocol-team@corp.example",
+   "body": "Team,\n\nPlease welcome Neha Pillai, who joins the RRC team as a protocol engineer on Monday. Arjun, you'll be Neha's onboarding buddy: please set up a knowledge-transfer session in her first week.\n\nMeera",
+   "facts": [
+    "meera.iyer: 210 emails over time, the person opened 205, and replied in 61 of 90 conversations"
+   ],
+   "want": {
+    "status": [
+     "waiting_on_you"
+    ],
+    "next_action": [
+     "do",
+     "reply"
+    ],
+    "importance": [
+     "normal",
+     "high"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "tasks": true,
+    "memory_has": [
+     "neha"
+    ]
+   }
+  },
+  {
+   "id": "customer-rename",
+   "kind": "memory",
+   "subject": "FYI: Carrier X is now NovaTel",
+   "from": "Karthik Nair <karthik.nair@corp.example>",
+   "to": "modem-protocol-team@corp.example",
+   "body": "Team, after the merger Carrier X is now called NovaTel. Please use NovaTel in all reports and tickets from now on.\n\nKarthik",
+   "facts": [
+    "karthik.nair: 120 emails over time, the person opened 118, and replied in 38 of 70 conversations"
+   ],
+   "want": {
+    "status": [
+     "fyi"
+    ],
+    "next_action": [
+     "read",
+     "none"
+    ],
+    "importance": [
+     "normal",
+     "low"
+    ],
+    "notify": [
+     false,
+     null
+    ],
+    "no_tasks": true,
+    "memory_has": [
+     "novatel"
+    ]
+   }
+  },
+  {
+   "id": "design-review-invite",
+   "kind": "direct-important",
+   "subject": "Invitation: RRC design review, Wednesday 11 AM",
+   "from": "Sanjay Rao <sanjay.rao@corp.example>",
+   "to": "arjun.rao@corp.example",
+   "body": "You're invited to the RRC design review for Orion on Wednesday at 11 AM in Room Kabini. Please accept or decline.",
+   "facts": [
+    "sanjay.rao: 25 emails over time, the person opened 25, and replied in 9 of 15 conversations"
+   ],
+   "want": {
+    "status": [
+     "waiting_on_you",
+     "fyi"
+    ],
+    "next_action": [
+     "reply",
+     "decide",
+     "read",
+     "do",
+     "none"
+    ],
+    "importance": [
+     "normal",
+     "high"
+    ],
+    "notify": [
+     false,
+     null
+    ]
+   }
+  }
+ ],
+ "chat": [
+  {
+   "name": "pending-on-me",
+   "message": "What's pending on me right now?",
+   "tools_any": [
+    "list_mail",
+    "search_mail",
+    "semantic_search",
+    "list_tasks",
+    "read_work_board"
+   ],
+   "reply_any": [
+    [
+     "rca",
+     "escalation",
+     "call drop"
+    ],
+    [
+     "steering",
+     "status"
+    ],
+    [
+     "e-learning",
+     "information security",
+     "infosec"
+    ],
+    [
+     "88213",
+     "blocker"
+    ]
+   ],
+   "reply_none": [
+    "diwali",
+    "rangoli",
+    "blood donation",
+    "cafeteria menu"
+   ]
+  },
+  {
+   "name": "leave-cover",
+   "message": "Who covers approvals while Meera is on leave?",
+   "tools_any": [
+    "list_memory",
+    "search_mail",
+    "semantic_search",
+    "list_mail"
+   ],
+   "reply_any": [
+    [
+     "sanjay"
+    ]
+   ]
+  },
+  {
+   "name": "no-duplicate-task",
+   "message": "Add a task for me to send the first RCA to Karthik by tomorrow 10 AM.",
+   "approve": [
+    "create_tasks",
+    "update_tasks"
+   ],
+   "answer": "Use the existing one and make it due tomorrow 10 AM.",
+   "before": [
+    [
+     "list_tasks",
+     "create_tasks"
+    ]
+   ],
+   "work_like": {
+    "words": [
+     "rca"
+    ],
+    "min": 1,
+    "max": 1
+   }
+  },
+  {
+   "name": "teams-paste",
+   "message": "Pasted from Teams:\nRahul Sharma: hey Arjun, did you get a chance to look at 88310? I need it reviewed before Thursday's sync.",
+   "approve": [
+    "create_tasks",
+    "update_tasks",
+    "create_reminders",
+    "update_reminders"
+   ],
+   "answer": "Yes, make a task due Thursday.",
+   "tools_any": [
+    "search_mail",
+    "semantic_search",
+    "list_mail"
+   ],
+   "work_like": {
+    "words": [
+     "88310"
+    ],
+    "min": 1,
+    "max": 1
+   }
+  },
+  {
+   "name": "remember",
+   "message": "Keep in mind: from January I move to the 6G research team, and Wei stays my Seoul contact.",
+   "tools_all": [
+    "remember"
+   ],
+   "notes_has": [
+    "6g"
+   ]
+  },
+  {
+   "name": "file-noise",
+   "message": "File the Diwali, cafeteria and blood donation mails under Celebrations.",
+   "approve": [
+    "update_mail"
+   ],
+   "answer": "Yes, those three.",
+   "filed": {
+    "Celebrations": [
+     "Diwali",
+     "Cafeteria",
+     "Blood donation"
+    ]
+   },
+   "at_most_calls": {
+    "update_mail": 1
+   }
+  },
+  {
+   "name": "tdoc-reminder",
+   "message": "Remind me about the RAN2 Tdoc deadline a day before it.",
+   "approve": [
+    "create_reminders",
+    "update_reminders"
+   ],
+   "answer": "Morning is fine.",
+   "before": [
+    [
+     "search_mail|semantic_search|list_mail|read_thread",
+     "create_reminders"
+    ]
+   ],
+   "reminder_like": {
+    "words": [
+     "tdoc",
+     "ran2",
+     "3gpp"
+    ],
+    "on": "2026-11-15"
+   }
+  }
+ ]
+}

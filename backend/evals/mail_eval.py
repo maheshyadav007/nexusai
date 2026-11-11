@@ -91,6 +91,10 @@ def _missed(want: dict[str, Any], got: dict[str, Any]) -> list[str]:
         missed.append(f"learned {got['learned']}")
     if want.get("memory_empty") and got.get("memory"):
         missed.append(f"memory {got['memory']}")
+    if want.get("memory_has"):
+        noted = json.dumps([got.get("memory"), got.get("learned")]).lower()
+        if not any(word in noted for word in want["memory_has"]):
+            missed.append(f"didn't note {want['memory_has']}: memory={got.get('memory')}")
     if "category_is" in want and got.get("category") not in want["category_is"]:
         missed.append(f"category={got.get('category')} wanted {want['category_is']}")
     if got.get("category") in want.get("category_not", []):

@@ -1,0 +1,1078 @@
+{
+ "cases_file": "corp_mailbox.json",
+ "stopped": null,
+ "runs": [
+  {
+   "model": "GPT-6-Luna",
+   "model_id": "gpt-6-luna",
+   "effort": "medium",
+   "cases": 46,
+   "passed": 40,
+   "tokens": {
+    "calls": 46,
+    "input": 176941,
+    "output": 7528
+   },
+   "seconds": 245.7,
+   "plan_before": {
+    "x-codex-primary-used-percent": 15.0,
+    "x-codex-secondary-used-percent": 68.0,
+    "x-codex-primary-window-minutes": 300.0,
+    "x-codex-primary-over-secondary-limit-percent": 0.0,
+    "x-codex-secondary-window-minutes": 10080.0,
+    "x-codex-primary-reset-after-seconds": 820.0,
+    "x-codex-secondary-reset-after-seconds": 203673.0,
+    "x-codex-primary-reset-at": 1794305920.0,
+    "x-codex-secondary-reset-at": 1794508773.0,
+    "x-codex-credits-balance": 0.0
+   },
+   "plan_after": {
+    "x-codex-primary-used-percent": 16.0,
+    "x-codex-secondary-used-percent": 68.0,
+    "x-codex-primary-window-minutes": 300.0,
+    "x-codex-primary-over-secondary-limit-percent": 0.0,
+    "x-codex-secondary-window-minutes": 10080.0,
+    "x-codex-primary-reset-after-seconds": 580.0,
+    "x-codex-secondary-reset-after-seconds": 203433.0,
+    "x-codex-primary-reset-at": 1794305920.0,
+    "x-codex-secondary-reset-at": 1794508773.0,
+    "x-codex-credits-balance": 0.0
+   },
+   "plan_used": {
+    "x-codex-primary-used-percent": 1.0,
+    "x-codex-secondary-used-percent": 0.0,
+    "x-codex-primary-over-secondary-limit-percent": 0.0
+   },
+   "results": [
+    {
+     "case": "manager-steering-eod",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "reply",
+      "importance": "high",
+      "notify": true,
+      "category": null,
+      "tasks": [
+       {
+        "title": "Send Meera 3–4 lines on RRC re-establishment fix status and November release inclusion",
+        "due": "2026-11-10"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Your manager directly asked for the update by end of day today, and you usually reply to her.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 7.2
+    },
+    {
+     "case": "customer-escalation-rca",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "high",
+      "notify": true,
+      "category": "PLM",
+      "tasks": [
+       {
+        "title": "Prepare and share first RRC RCA for Carrier X call-drop escalation by 10 AM",
+        "due": "2026-11-11"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Karthik leads PLM releases, is a frequent correspondent, and the customer escalation has a firm tomorrow-morning deadline.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.7
+    },
+    {
+     "case": "wei-cr-review",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "normal",
+      "notify": false,
+      "category": "3GPP Briefing",
+      "tasks": [
+       {
+        "title": "Review RRC parts of draft CR R2-2611842 and send comments to Wei",
+        "due": "2026-11-12"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Wei is a frequent, trusted counterpart and requests technical review ahead of Thursday, but no immediate today-or-tomorrow deadline is stated.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 7.6
+    },
+    {
+     "case": "colleague-log-help",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "normal",
+      "notify": false,
+      "category": null,
+      "tasks": [
+       {
+        "title": "Review DEV-55120 crash log and determine whether issue is in RRC or L1",
+        "due": null
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Rahul is a frequent colleague who asks for technical help, with no rush stated and a sprint-end goal but no exact date.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 9.3
+    },
+    {
+     "case": "release-blocker-today",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "reply",
+      "importance": "high",
+      "notify": true,
+      "category": "PLM",
+      "tasks": [
+       {
+        "title": "Reply to Karthik with whether CL 88213 will merge today",
+        "due": "2026-11-10"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Karthik is a frequent correspondent and release lead, and asks for confirmation today before informing the release board by 6 PM.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 6.9
+    },
+    {
+     "case": "manager-1on1-move",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "reply",
+      "importance": "normal",
+      "notify": false,
+      "category": null,
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Meera is your manager and asks you directly to confirm whether the proposed time works.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 4.2
+    },
+    {
+     "case": "hr-personal-document",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "normal",
+      "notify": false,
+      "category": "HR",
+      "tasks": [
+       {
+        "title": "Upload updated address proof on the HR portal",
+        "due": "2026-11-20"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "HR Operations addressed you directly and sets a document-upload deadline ten days away.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 4.7
+    },
+    {
+     "case": "interview-panel-tomorrow",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "reply",
+      "importance": "normal",
+      "notify": true,
+      "category": null,
+      "tasks": [
+       {
+        "title": "Confirm availability for the technical interview panel"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "You are directly asked to confirm availability today, and the interview is scheduled for tomorrow morning.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 7.9
+    },
+    {
+     "case": "named-in-team-mail",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "normal",
+      "notify": false,
+      "category": null,
+      "tasks": [
+       {
+        "title": "Prepare and share NR handover regression triage plan",
+        "due": "2026-11-13"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Meera is your manager and explicitly assigned you ownership and a plan deadline this week.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.5
+    },
+    {
+     "case": "wei-answered",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "resolved",
+      "next_action": "none",
+      "importance": "normal",
+      "notify": false,
+      "category": null,
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Wei directly answered your question and confirmed the patch is included, closing the thread.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.0
+    },
+    {
+     "case": "thanks-note",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "resolved",
+      "next_action": "none",
+      "importance": "low",
+      "notify": false,
+      "category": "Celebrations",
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "This is a completed thank-you with no request or follow-up needed.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 4.6
+    },
+    {
+     "case": "teammate-quick-question",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "reply",
+      "importance": "normal",
+      "notify": false,
+      "category": null,
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "A teammate directly asks you for a configuration value needed for the lab setup.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 3.9
+    },
+    {
+     "case": "cc-decision-made",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "read",
+      "importance": "normal",
+      "notify": false,
+      "category": "PLM",
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "This is a decision update on release measurement gaps, but it explicitly requires no change and asks nothing of you.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 3.4
+    },
+    {
+     "case": "cc-release-calendar",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "read",
+      "importance": "normal",
+      "notify": false,
+      "category": "Updates",
+      "tasks": [],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "This is a general note to leads, with no personal ask; you have opened many PMO messages but never replied.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 25.0
+    },
+    {
+     "case": "cc-but-named",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "reply",
+      "importance": "normal",
+      "notify": false,
+      "category": "PLM",
+      "tasks": [
+       {
+        "title": "Share the RRC feature timeline with Karthik",
+        "due": "2026-11-13"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Karthik addresses you directly, and the requested timeline is due Friday; he is a frequent correspondent.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 4.7
+    },
+    {
+     "case": "it-ticket-progress",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_others",
+      "next_action": "none",
+      "importance": "normal",
+      "notify": false,
+      "category": "IT",
+      "tasks": null,
+      "follow_up_on": "2026-11-12",
+      "memory": null,
+      "learned": null,
+      "reason": "The helpdesk confirms the reported VPN problem is being investigated and gives a two-working-day update window; no action is requested from you now.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 4.6
+    },
+    {
+     "case": "hr-digest-hidden-deadline",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "normal",
+      "notify": false,
+      "category": "HR",
+      "tasks": [
+       {
+        "title": "Complete annual Information Security & Code of Conduct e-learning",
+        "due": "2026-11-20"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "HR says the annual e-learning is mandatory and accounts of anyone who misses the deadline will be locked from 21 November.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.3
+    },
+    {
+     "case": "security-mfa-mandatory",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "high",
+      "notify": false,
+      "category": "IT",
+      "tasks": [
+       {
+        "title": "Enroll in the new MFA authenticator",
+        "due": "2026-11-13"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "This is an organization-wide security requirement with a firm deadline and access consequences if you do not enroll.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.4
+    },
+    {
+     "case": "it-password-expiry",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "normal",
+      "notify": false,
+      "category": "IT",
+      "tasks": [
+       {
+        "title": "Change corporate password in the self-service portal",
+        "due": "2026-11-13"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "IT Accounts sent a direct account-expiry notice with a specific deadline and potential loss of access.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.1
+    },
+    {
+     "case": "code-freeze-notice",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "read",
+      "importance": "normal",
+      "notify": false,
+      "category": "PLM",
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "This is a recurring release-management reminder sent to the team; it states the freeze and approval requirement but does not identify a specific action or CL for you.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 4.4
+    },
+    {
+     "case": "ran2-tdoc-deadline",
+     "passed": false,
+     "missed": [
+      "status=fyi wanted ['waiting_on_you']",
+      "next_action=read wanted ['do']",
+      "no task"
+     ],
+     "got": {
+      "status": "fyi",
+      "next_action": "read",
+      "importance": "normal",
+      "notify": false,
+      "category": "3GPP Briefing",
+      "tasks": [],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "This is a general notice to delegates; it does not name Arjun or indicate a personal assignment or contribution commitment.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.5
+    },
+    {
+     "case": "power-shutdown",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "normal",
+      "notify": false,
+      "category": "Updates",
+      "tasks": [
+       {
+        "title": "Save work and shut down Tower B test setups",
+        "due": "2026-11-13"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Facilities says the shutdown affects lab servers and asks recipients to save work and shut down test setups by Friday evening.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.3
+    },
+    {
+     "case": "managers-only-action",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "none",
+      "importance": "low",
+      "notify": false,
+      "category": "HR",
+      "tasks": [],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "The message explicitly excludes individual contributors, and your stated role is senior engineer rather than people manager.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 4.5
+    },
+    {
+     "case": "diwali-celebration",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "none",
+      "importance": "low",
+      "notify": false,
+      "category": "Celebrations",
+      "tasks": [],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "This is an optional celebration notice, and you rarely open or reply to this sender's emails.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 3.8
+    },
+    {
+     "case": "cafeteria-menu",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "none",
+      "importance": "low",
+      "notify": false,
+      "category": null,
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "You’ve opened only 3 of 90 cafeteria emails and never replied, and your preferences mark cafeteria notices low priority.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.3
+    },
+    {
+     "case": "townhall-recap",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "read",
+      "importance": "low",
+      "notify": false,
+      "category": "Updates",
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "This is a general town hall recap with no personal ask, and town hall recaps are low priority for you.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 3.9
+    },
+    {
+     "case": "transport-route-change",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "none",
+      "importance": "low",
+      "notify": false,
+      "category": "Updates",
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "This is a transport notice, which you marked low priority, and you rarely open transport emails.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 3.4
+    },
+    {
+     "case": "blood-donation",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "none",
+      "importance": "low",
+      "notify": false,
+      "category": null,
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "This is a general CSR announcement, and your past history shows you rarely open this sender's mail and have never replied.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 4.9
+    },
+    {
+     "case": "internal-newsletter",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "none",
+      "importance": "low",
+      "notify": false,
+      "category": "Updates",
+      "tasks": [],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": [],
+      "reason": "It is a general internal newsletter, and your stated preference is to keep newsletters low priority.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 3.5
+    },
+    {
+     "case": "sports-day-photos",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "none",
+      "importance": "low",
+      "notify": false,
+      "category": "Celebrations",
+      "tasks": [],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "This is a general Fun Committee announcement, and you rarely open their mail and have never replied.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 4.0
+    },
+    {
+     "case": "team-lunch-poll",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "low",
+      "notify": false,
+      "category": "Celebrations",
+      "tasks": [
+       {
+        "title": "Vote for a team lunch venue",
+        "due": "2026-11-11"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Rahul is a teammate and asks recipients to cast a poll vote by Wednesday; this is a social team-lunch choice, which you classify as low importance.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.0
+    },
+    {
+     "case": "vendor-webinar",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "none",
+      "importance": "low",
+      "notify": false,
+      "category": null,
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "This is recurring event marketing; you opened 1 of 18 messages from this sender and have never replied.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 3.3
+    },
+    {
+     "case": "phishing-lookalike",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "high",
+      "notify": true,
+      "category": "IT",
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "The message requests credentials through an unfamiliar link and threatens account suspension, which is consistent with a phishing attempt rather than a safe verification process.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 4.7
+    },
+    {
+     "case": "ceo-gift-card-scam",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "high",
+      "notify": true,
+      "category": "IT",
+      "tasks": [
+       {
+        "title": "Verify the gift-card request with Meera through a known channel; do not purchase or share codes until confirmed",
+        "due": "2026-11-10"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "The unusual gift-card purchase and request to share codes, combined with an unverified sender address, are strong signs of a possible impersonation scam; verify through a known channel before acting.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.5
+    },
+    {
+     "case": "fake-invoice",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "none",
+      "importance": "low",
+      "notify": false,
+      "category": null,
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "The sender has no prior interaction history, and the message provides no context to verify the alleged service or invoice.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.4
+    },
+    {
+     "case": "lottery-spam",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "none",
+      "importance": "low",
+      "notify": false,
+      "category": null,
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "This is a one-off unsolicited prize claim from a sender you have never replied to, and it asks for personal information and payment.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 3.9
+    },
+    {
+     "case": "mass-recruiter",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "none",
+      "importance": "low",
+      "notify": false,
+      "category": null,
+      "tasks": [],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "You have opened none and replied to none of the seven previous messages from this sender, and this message offers no specific role or personal request.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 3.9
+    },
+    {
+     "case": "swarm-review-requested",
+     "passed": false,
+     "missed": [
+      "next_action=read wanted ['do', 'reply']"
+     ],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "read",
+      "importance": "normal",
+      "notify": false,
+      "category": "Swarm",
+      "tasks": [
+       {
+        "title": "Review Swarm change 88310: Fix measurement report timer restart",
+        "due": null
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "This is a review request from a teammate on an RRC-related change, matching your normal-priority engineering work.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 4.1
+    },
+    {
+     "case": "swarm-change-approved",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "none",
+      "importance": "normal",
+      "notify": false,
+      "category": "Swarm",
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "The automated Swarm notice confirms approval and commit readiness, with no request for action in the message.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 3.7
+    },
+    {
+     "case": "swarm-comment-on-change",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "normal",
+      "notify": false,
+      "category": "Swarm",
+      "tasks": [
+       {
+        "title": "Handle T311 expiry in the same path in change 88213"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Wei, your Seoul counterpart, identified a specific code change needed to prevent the same drop in Seoul.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 3.9
+    },
+    {
+     "case": "new-skip-level",
+     "passed": false,
+     "missed": [
+      "didn't note ['anand']: memory=None"
+     ],
+     "got": {
+      "status": "fyi",
+      "next_action": "read",
+      "importance": "normal",
+      "notify": false,
+      "category": "Updates",
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "This is a broad organizational announcement relevant to your team, with no request or action for you.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 4.0
+    },
+    {
+     "case": "manager-leave-cover",
+     "passed": false,
+     "missed": [
+      "didn't note ['sanjay']: memory=None"
+     ],
+     "got": {
+      "status": "fyi",
+      "next_action": "read",
+      "importance": "normal",
+      "notify": false,
+      "category": "Updates",
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "This is a team coverage announcement from your manager; it assigns no action to you.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 3.9
+    },
+    {
+     "case": "project-ownership",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "read",
+      "importance": "normal",
+      "notify": false,
+      "category": null,
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": "RRC owner for Project Orion, the 2027 flagship modem, starting November 2026.",
+      "learned": [
+       "Owning RRC for Project Orion, the 2027 flagship modem"
+      ],
+      "reason": "Meera is your manager and the note confirms a significant new project responsibility, but it asks for no action now.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 4.8
+    },
+    {
+     "case": "new-teammate-buddy",
+     "passed": false,
+     "missed": [
+      "didn't note ['neha']: memory=None"
+     ],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "normal",
+      "notify": false,
+      "category": "Celebrations",
+      "tasks": [
+       {
+        "title": "Set up a knowledge-transfer session with Neha during her first week"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Meera directly names you and gives you an onboarding task, but the session is due next week rather than today or tomorrow.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.3
+    },
+    {
+     "case": "customer-rename",
+     "passed": false,
+     "missed": [
+      "didn't note ['novatel']: memory=None"
+     ],
+     "got": {
+      "status": "fyi",
+      "next_action": "read",
+      "importance": "normal",
+      "notify": false,
+      "category": "PLM",
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "This is a team-wide naming update from a frequent correspondent, with no request for a personal response or immediate action stated.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 4.4
+    },
+    {
+     "case": "design-review-invite",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "reply",
+      "importance": "normal",
+      "notify": false,
+      "category": null,
+      "tasks": [
+       {
+        "title": "RSVP to Sanjay for the Orion RRC design review",
+        "due": "2026-11-11"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Sanjay is a teammate whose emails you regularly open and reply to, and this invitation requests an RSVP for tomorrow.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.3
+    }
+   ]
+  }
+ ]
+}

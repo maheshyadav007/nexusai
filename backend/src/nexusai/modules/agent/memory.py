@@ -182,6 +182,13 @@ def relevant(
                 for line in file.content.splitlines()
                 if line.strip()
             )
+        elif file.path == NOTES_PATH:
+            # What the agents noted about the person bears on most work, a line at a time.
+            scored.extend(
+                (1 << 29, file.name, line.strip())
+                for line in file.content.splitlines()
+                if line.strip()
+            )
         elif file.path == LEARNED_PATH:
             if not include_learned:
                 continue
@@ -200,6 +207,47 @@ def relevant(
         chosen.append(block)
         used += len(block)
     return "\n\n".join(chosen)
+
+
+# Where facts the agents note down go, one per line, so they stay in one place the person can read.
+NOTES_PATH = "user/notes.md"
+
+
+def _plain(text: str) -> str:
+    """The words alone, so case and punctuation don't make the same fact look new."""
+    return " ".join(re.findall(r"\w+", text.lower()))
+
+
+def remember(
+    home: Path, db: Database, agent: str, facts: list[str], untrusted: bool, source: str | None
+) -> tuple[int, int]:
+    """Notes down facts not already known, as notes, or only as proposals after untrusted input.
+    Returns how many were new and how many were already known."""
+    known = {
+        _plain(line.lstrip("- "))
+        for file in list_files(home)
+        for line in file.content.splitlines()
+        if line.strip()
+    } | {_plain(row["text"]) for row in db.fetch_all(
+        "SELECT text FROM memory_proposals WHERE status = 'pending'"
+    )}  # fmt: skip
+    new = []
+    for fact in (fact.strip() for fact in facts):
+        if fact and _plain(fact) and _plain(fact) not in known:
+            known.add(_plain(fact))
+            new.append(fact)
+    if untrusted:
+        for fact in new:
+            propose(db, agent, fact, source)
+    elif new:
+        target = _safe(home, NOTES_PATH)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        before = target.read_text("utf-8") if target.exists() else ""
+        lines = "".join(f"- {fact}\n" for fact in new)
+        target.write_text(
+            before + ("" if not before or before.endswith("\n") else "\n") + lines, "utf-8"
+        )
+    return len(new), len(facts) - len(new)
 
 
 def propose(db: Database, agent: str, text: str, source: str | None) -> None:

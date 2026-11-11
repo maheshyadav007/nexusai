@@ -88,3 +88,34 @@ def test_a_lead_that_asks_the_person_counts_as_done_and_honest(
     case = next(c for c in team_eval.CASES if c.name == "verify")
     row = team_eval.run_case(case)
     assert not row["timed_out"] and row["passed"], row["missed"]
+
+
+def test_the_corporate_week_runs_end_to_end(
+    team_eval: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    e2e = load("corp_e2e")
+    script = TeamScript()
+    monkeypatch.setattr(gateway, "resolve_provider", lambda ctx: (script, "script-model"))
+    notes = "Meera Iyer is my manager. Customer escalations are urgent. Celebrations are noise."
+    script.say(
+        "First meeting",
+        [ToolCall("q", "ask_user", {"question": "Who matters most in your mail?"})],
+        [ToolCall("p", "save_personal_prompt", {"name": "importance", "content": notes})],
+        [TextChunk("Saved what you told me.")],
+    )
+    judged = [c for c in e2e.json.loads(e2e.DATA.read_text())["cases"] if not c.get("skip_agent")]
+    fyi = {"status": "fyi", "importance": "low", "summary": "Noted.", "reason": "Scripted."}
+    script.say("Mail agent", *[[ToolCall(f"t{i}", "record_triage", fyi)] for i in judged])
+    data = e2e.json.loads(e2e.DATA.read_text())
+    report = e2e.run({**data, "chat": data["chat"][:1]}, skip_chat=False)
+    onboarding, mail = report["onboarding"], report["mail"]
+    assert onboarding["passed"], onboarding["missed"]
+    assert onboarding["questions"][0]["answer"].startswith("Meera Iyer is my manager")
+    assert mail["cases"] == 50 and not mail["timed_out"]
+    by_case = {row["case"]: row for row in mail["results"]}
+    # The rule files PLM mail without the agent; the scripted fyi fits noise and misses the rest.
+    assert by_case["plm-build-failed"]["passed"], by_case["plm-build-failed"]
+    assert by_case["diwali-celebration"]["passed"], by_case["diwali-celebration"]
+    assert not by_case["customer-escalation-rca"]["passed"]
+    assert by_case["swarm-review-requested"]["category"] == "Swarm"
+    assert len(report["chat"]) == 1 and report["chat"][0]["case"] == "pending-on-me"

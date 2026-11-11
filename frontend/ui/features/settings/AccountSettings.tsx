@@ -223,6 +223,7 @@ export function AccountSettings({ brief = false }: { brief?: boolean }) {
             {probe.isError ? <ErrorState title={t("accounts.server.invalid")} /> : null}
             {test.isError ? <ErrorState title={t("accounts.testFailed")} description={messageOf(test.error)} /> : null}
             {save.isError ? <ErrorState title={t("accounts.saveFailed")} description={messageOf(save.error)} /> : null}
+            {reached && canStart ? <p role="status" className="text-md text-ink-primary">{t("accounts.confirmStart", { address: address || addressFor(login, server) })}</p> : null}
             <div className="flex flex-wrap gap-2">
               <Button type="submit" variant="primary" loading={save.isPending || test.isPending || probe.isPending} disabled={!ready || (reached && !canStart)}>{t(reached ? "accounts.start" : "accounts.connect")}</Button>
               {active ? <Button variant="quiet" onClick={() => setEditing(false)}>{t("home.picker.cancel")}</Button> : null}

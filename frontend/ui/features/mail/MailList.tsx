@@ -1,10 +1,11 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useMailStatus } from "@/ui/client/mail";
+import { Button } from "@/ui/primitives/Button";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { OfflineNotice } from "@/ui/primitives/OfflineNotice";
 import { StatusDot } from "@/ui/primitives/StatusDot";
-import { TextLink } from "@/ui/primitives/TextLink";
 import { t } from "@/ui/strings";
 
 export function SyncNotice() {
@@ -25,5 +26,6 @@ export function SyncNotice() {
 }
 
 export function NoAccount() {
-  return <EmptyState icon="inbox" title={t("mail.noAccount.title")} description={t("mail.noAccount.description")} action={<TextLink href="/connectors">{t("mail.noAccount.action")}</TextLink>} />;
+  const router = useRouter();
+  return <EmptyState icon="inbox" title={t("mail.noAccount.title")} description={t("mail.noAccount.description")} action={<Button variant="primary" onClick={() => router.push("/connectors")}>{t("mail.noAccount.action")}</Button>} />;
 }

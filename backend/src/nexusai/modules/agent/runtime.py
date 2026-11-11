@@ -739,15 +739,12 @@ class SessionRuntime:
         settings = context.load_settings(self.db, config)
         own = json.loads(turn["context"]) if turn and turn["context"] else None
         profile: ContextProfile = context.profile_for(settings, origin, own)
+        engine = cards.engine(self.db, agent)
+        has_email = bool(turn and turn["target"])
         return create_agent(
             model,
             tools.build_tools(
-                self.ctx,
-                session,
-                control,
-                tools.allowed_for(
-                    cards.engine(self.db, agent), origin, bool(turn and turn["target"])
-                ),
+                self.ctx, session, control, tools.allowed_for(engine, origin, has_email)
             ),
             middleware=context.middleware(
                 model,
@@ -759,6 +756,8 @@ class SessionRuntime:
                 log_tool=lambda call, tool, args, result, ms: tools.record_call(
                     self.ctx, session, call, tool, args, result, ms
                 ),
+                shown_tools=tools.shown_for(engine, has_email),
+                always_shown_prefix=tools.CONNECTOR_PREFIX,
             ),
             checkpointer=self.saver,
         )

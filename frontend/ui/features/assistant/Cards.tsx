@@ -14,6 +14,8 @@ import { Rise } from "@/ui/primitives/Motion";
 import { BareInput, Pressable } from "@/ui/primitives/Pressable";
 import { t, tn } from "@/ui/strings";
 import { ApprovalPreviewView } from "@/ui/shell/ApprovalPreviewView";
+import { useAgentCards } from "@/ui/client/work";
+import { Mascot } from "@/ui/primitives/Mascot";
 import { isFinished, toolName, type ToolPart } from "./parts";
 
 function Shell({ children, testid }: { children: ReactNode; testid?: string }) {
@@ -254,6 +256,29 @@ export function TriageCard({ part, thread }: { part: ToolPart; thread: number | 
           {t("chat.result.openMail")}
         </Link>
       ) : null}
+    </Shell>
+  );
+}
+
+/** Work handed to another agent, shown in the conversation with who it went to and what came back. */
+export function HandoffCard({ part }: { part: ToolPart }) {
+  const input = part.input ?? {};
+  const to = String(input.to ?? "").replace(/^@/, "");
+  const card = (useAgentCards().data?.cards ?? []).find((item) => item.handle === to || item.id === to);
+  const output = typeof part.output === "string" ? part.output : null;
+  const refused = part.state === "output-denied" || part.state === "output-error" || Boolean(output?.startsWith("Not "));
+  return (
+    <Shell testid="handoff-card">
+      <p className="flex flex-wrap items-center gap-2 text-md font-medium text-ink-primary">
+        {card ? <Mascot seed={card.mascot.seed} shape={card.mascot.style} name={card.name} size="sm" /> : <Icon name="agent" className="h-4 w-4 text-ink-muted" />}
+        {t("chat.handoff.title", { agent: card?.name ?? to })}
+      </p>
+      {input.objective ? <p className="break-words text-md text-ink-primary">{String(input.objective)}</p> : null}
+      {!isFinished(part) ? <p className="text-sm text-ink-muted">{t("chat.result.working")}</p> : null}
+      {output ? <p className={`break-words text-sm ${refused ? "text-status-danger" : "text-ink-muted"}`}>{output}</p> : part.errorText ? <p className="break-words text-sm text-status-danger">{part.errorText}</p> : null}
+      <Link href="/agent/channel" className="focus-ring self-start rounded-sm text-sm text-ink-secondary underline underline-offset-2 transition-colors duration-fast hover:text-ink-primary">
+        {t("chat.handoff.open")}
+      </Link>
     </Shell>
   );
 }

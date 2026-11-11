@@ -4,6 +4,7 @@ import contextlib
 import difflib
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -30,6 +31,7 @@ from nexusai.kernel.home import scratch_folder
 from nexusai.kernel.module import CommandError, Context
 from nexusai.modules.agent import (
     bulk_learning,
+    cards,
     channel,
     citations,
     mail_agent,
@@ -583,6 +585,11 @@ class _Nothing(BaseModel):
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
+class _FindTools(BaseModel):
+    query: str = Field(description='A few words for what you need to do, like "save a mail rule".')
+    tool_call_id: Annotated[str, InjectedToolCallId]
+
+
 class _TeamAssign(BaseModel):
     to: str = Field(description="Who does it: an @handle from the team, such as @mail.")
     objective: str = Field(
@@ -675,8 +682,11 @@ class _PreferenceProposal(BaseModel):
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
-class _Memory(BaseModel):
-    text: str = Field(description="A lasting fact worth remembering.")
+class _Remember(BaseModel):
+    facts: list[str] = Field(
+        description="Lasting facts about the person, one short line each, such as "
+        '"Manager is Priya Nair" or "Wants PLM mail filed, never in the inbox".'
+    )
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
@@ -842,6 +852,7 @@ MAIL_AGENT_TOOLS = frozenset(
         "team_inbox",
         "team_message",
         "team_close",
+        "find_tools",
         "load_skill",
         "read_skill_file",
         "read_feedback",
@@ -852,7 +863,7 @@ MAIL_AGENT_TOOLS = frozenset(
         "list_memory",
         "propose_task",
         "propose_reminder",
-        "propose_memory",
+        "remember",
         "draft_reply",
         "suggest",
         "tell",
@@ -893,6 +904,8 @@ INTERVIEW_TOOLS = frozenset(
         "ask_user",
         "save_personal_prompt",
         "apply_mail_learning_answers",
+        "remember",
+        "list_memory",
         "read_work_board",
         "read_thread",
         "read_recipients",
@@ -902,6 +915,63 @@ INTERVIEW_TOOLS = frozenset(
         "read_feedback",
     }
 )
+
+
+# Tool search. Each tool's description is sent with every model call, so an agent is shown the
+# ones it uses most and finds the rest with find_tools. Memory is always at hand for every agent.
+ALWAYS_SHOWN = frozenset({"ask_user", "remember", "list_memory", "load_skill"})
+LEAD_SHOWN = ALWAYS_SHOWN | {
+    "search_mail", "semantic_search", "read_thread", "list_mail", "update_mail", "draft_reply",
+    "list_tasks", "create_tasks", "list_reminders", "create_reminders", "list_categories",
+    "team_assign", "team_inbox", "team_message", "team_close",
+}  # fmt: skip
+BRIEF_SHOWN = ALWAYS_SHOWN | {
+    "read_thread", "search_mail", "semantic_search", "list_tasks", "list_reminders",
+    "read_work_board", "draft_reply",
+}  # fmt: skip
+MAIL_SHOWN = ALWAYS_SHOWN | {
+    "search_mail", "semantic_search", "read_thread", "read_recipients", "list_mail",
+    "read_work_board", "update_mail", "draft_reply", "propose_task", "propose_reminder",
+    "team_inbox", "team_message", "team_close", "tell",
+}  # fmt: skip
+FOUND_SHOWN = 5
+CONNECTOR_PREFIX = connectors.PREFIX
+
+
+def shown_for(agent: str, has_email: bool) -> frozenset[str] | None:
+    """The tools a run starts with. None shows every allowed tool: small sets, or when it's off."""
+    if os.environ.get("NEXUSAI_TOOL_SEARCH") == "off" or agent == "interview":
+        return None
+    if agent == "mail":
+        return None if has_email else MAIL_SHOWN
+    return BRIEF_SHOWN if agent == "daily-prep" else LEAD_SHOWN
+
+
+def find(catalog: list[StructuredTool], query: str, shown: int = FOUND_SHOWN) -> str:
+    """Tools by the words they share with the query, name words counting most."""
+    words = set(re.findall(r"[a-z]{3,}", query.lower()))
+    scored = []
+    for tool in catalog:
+        if tool.name == "find_tools":
+            continue
+        name = set(re.findall(r"[a-z]{3,}", tool.name.replace("_", " ").lower()))
+        text = set(re.findall(r"[a-z]{3,}", tool.description.lower()))
+        # "reminders" should find create_reminders when someone writes "reminder".
+        stems = {w.rstrip("s") for w in words}
+        score = 3 * len(stems & {w.rstrip("s") for w in name}) + len(
+            stems & {w.rstrip("s") for w in text}
+        )
+        if score:
+            scored.append((score, tool))
+    scored.sort(key=lambda item: -item[0])
+    lines = [
+        f"- {tool.name}: {tool.description.split('. ')[0].rstrip('.')}."
+        for _, tool in scored[:shown]
+    ]
+    names = ", ".join(sorted(tool.name for tool in catalog if tool.name != "find_tools"))
+    if not lines:
+        return f"No tool matches that. Every tool you have: {names}. Search again with its words."
+    return "You can use these from your next step:\n" + "\n".join(lines)
 
 
 def allowed_for(agent: str, origin: str, has_email: bool) -> frozenset[str] | None:
@@ -1420,6 +1490,10 @@ def build_tools(
         )
         return str(rows[0]["turn_agent"] or rows[0]["agent"]) if rows else ""
 
+    def _speaker_name() -> str:
+        found = cards.card(ctx.bus.db, _speaker())
+        return found.name if found else "Session"
+
     def _reads_task(text: str, flagged: bool) -> str:
         # A task built from mail is data. Reading it makes this run untrusted too.
         if flagged:
@@ -1573,14 +1647,20 @@ def build_tools(
         item = personalization.save(ctx, proposal, proposed=True)
         return f"Proposed preference {item.id}. It will affect prompts only after the person approves it."
 
-    def propose_memory(text: str, tool_call_id: str) -> str:
-        if _is_untrusted(ctx, session):
-            memory.propose(ctx.bus.db, "Session", text, f"/agent/sessions/{session}")
-            return "Proposed. The person reviews it in Prompts and memory."
-        memory.save_file(
-            ctx.config.home, None, f"session-{uuid.uuid4().hex[:8]}", "user", None, f"{text}\n"
-        )
-        return "Saved."
+    def remember(facts: list[str], tool_call_id: str) -> str:
+        untrusted = _is_untrusted(ctx, session)
+        new, known = memory.remember(
+            ctx.config.home, ctx.bus.db, _speaker_name(), facts, untrusted,
+            f"/agent/sessions/{session}",
+        )  # fmt: skip
+        with ctx.bus.unit_of_work() as run:
+            run.emit("memory.changed", {}, source="agent", trace_id=ctx.trace_id)
+        said = f" {known} already known." if known else ""
+        if not new:
+            return f"Nothing new: all {known} already known."
+        if untrusted:
+            return f"Proposed {new}.{said} The person reviews them in Prompts and memory, because this conversation read mail or other outside text."
+        return f"Saved {new} to {memory.NOTES_PATH}.{said}"
 
     def propose_task(
         title: str, tool_call_id: str, due: str | None = None, thread_id: int | None = None
@@ -1712,7 +1792,18 @@ def build_tools(
             marks_untrusted=True,
         )
 
+    catalog: list[StructuredTool] = []
+
+    def find_tools(query: str, tool_call_id: str) -> str:
+        return find(catalog, query)
+
     specs: list[tuple[Callable[..., str], type[BaseModel], str]] = [
+        (
+            find_tools,
+            _FindTools,
+            "Find a tool you need that isn't in your list, by a few words for the job. What it "
+            "finds is yours from your next step.",
+        ),
         (
             apply_mail_learning_answers,
             _LearningAnswers,
@@ -1836,10 +1927,11 @@ def build_tools(
             "Propose a scoped instruction from genuine feedback. The person edits and approves before any prompt changes.",
         ),
         (
-            propose_memory,
-            _Memory,
-            "Suggest a lasting fact about the person's work for them to keep. Not for details of "
-            "one email or task.",
+            remember,
+            _Remember,
+            "Note down lasting facts about the person as you learn them, several at once: who "
+            "they are, the people who matter and why, their work, and how they like things done. "
+            "Facts already known are skipped. Not for details of one email or task.",
         ),
         (
             propose_task,
@@ -1961,4 +2053,5 @@ def build_tools(
         if (allowed is None and func.__name__ not in MAIL_AGENT_ONLY)
         or (allowed is not None and func.__name__ in allowed)
     ]
-    return own if allowed is not None else [*own, *_connector_tools(ctx, session)]
+    catalog.extend(own if allowed is not None else [*own, *_connector_tools(ctx, session)])
+    return catalog

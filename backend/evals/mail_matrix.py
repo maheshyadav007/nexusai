@@ -95,6 +95,8 @@ def run_one(
                         "category",
                         "tasks",
                         "follow_up_on",
+                        "memory",
+                        "learned",
                         "reason",
                         "error",
                         "no_call",
@@ -170,7 +172,9 @@ def main() -> None:
             raise SystemExit("Agents run at light or medium. High is only for the judge.")
         runs.append((model.strip(), effort))
     data = json.loads(options.cases.read_text(encoding="utf-8"))
-    cases = data["cases"][: options.limit] if options.limit else data["cases"]
+    # Mail a rule files without the agent has nothing to judge.
+    judged = [case for case in data["cases"] if "want" in case]
+    cases = judged[: options.limit] if options.limit else judged
     report: list[dict[str, Any]] = []
     stopped = None
     with scratch.scratch_home() as (ctx, home):

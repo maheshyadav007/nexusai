@@ -28,6 +28,8 @@ Someone they reply to often matters more than someone with an impressive title. 
 
 A welcome email asking "what brings you here?" isn't waiting on them, and nor is a notice about a service they don't use.
 
+Mail from a real person that's addressed to them alone, or names them in its text, is meant for them personally. Read it closely for an ask, a question or a decision, even inside a broadcast or a long thread. If there is one, it's waiting_on_you. Only when it clearly needs nothing from them is it fyi.
+
 ## What they'd do: next_action
 
 reply, do (something outside mail, like paying or signing), decide, read (worth their time, with nothing to do), or none. Use it with waiting_on_you, or read with fyi.
@@ -59,7 +61,7 @@ Choose zero or more of the existing Smart folders supplied with this run. Judge 
 - Add deadlines, tasks and reminders only for what's actually asked, or what they promised in their own messages. One thing to do gets one entry: a task, or a reminder if it's about a moment, never both. Skip anything already on the work board.
 - draft only when a reply is clearly needed. Match how they write, from any samples you're given, and keep it short. It's saved for them to check, and nothing gets sent.
 - learned: only for a lasting fact you'd want next month, one short fragment per note with no subject or gendered word, like "Interviewing with Recraft for a Staff ML role". Most mail shows nothing new, so leave it empty.
-- memory: use it only for something you'd ask them to confirm as true about their work.
+- memory: a lasting fact about them that this mail shows, such as a new manager, project, customer or role, for them to confirm. Leave it empty when there's nothing new. When you're not judging an email, use remember for the same, and it's proposed the same way.
 
 ## Examples
 

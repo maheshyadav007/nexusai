@@ -1,0 +1,86 @@
+{
+ "runs": [
+  {
+   "model": "GPT-6-Luna",
+   "model_id": "gpt-6-luna",
+   "effort": "medium",
+   "passed": 1,
+   "cases": 1,
+   "tokens": 12309,
+   "plan_before": {},
+   "plan_after": {
+    "x-codex-primary-used-percent": 15.0,
+    "x-codex-secondary-used-percent": 67.0,
+    "x-codex-primary-window-minutes": 300.0,
+    "x-codex-primary-over-secondary-limit-percent": 0.0,
+    "x-codex-secondary-window-minutes": 10080.0,
+    "x-codex-primary-reset-after-seconds": 2502.0,
+    "x-codex-secondary-reset-after-seconds": 205355.0,
+    "x-codex-primary-reset-at": 1794305920.0,
+    "x-codex-secondary-reset-at": 1794508773.0,
+    "x-codex-credits-balance": 0.0
+   },
+   "plan_used": {
+    "x-codex-primary-used-percent": 0.0,
+    "x-codex-secondary-used-percent": 0.0,
+    "x-codex-primary-over-secondary-limit-percent": 0.0
+   },
+   "results": [
+    {
+     "case": "look-first",
+     "approvals": [],
+     "sync_seconds": 0.5,
+     "thread_count": 7,
+     "reply_seconds": 2.0,
+     "timed_out": false,
+     "answered_by": "session",
+     "reply": "",
+     "missed": [],
+     "passed": true,
+     "tokens": {
+      "calls": 3,
+      "input": 12112,
+      "output": 197
+     },
+     "seconds": 13.1,
+     "tasks": [],
+     "transcript": {
+      "runs": [
+       {
+        "id": 1,
+        "session": "2e3db00b67a44979a4b2b0eff7ad0224",
+        "agent": null,
+        "chat_agent": "session",
+        "origin": "person",
+        "cause": "gateway:app",
+        "parent_turn": null,
+        "failure": null,
+        "text": "Make a category for my PLM build emails."
+       }
+      ],
+      "messages": [],
+      "tools": [
+       {
+        "session": "2e3db00b67a44979a4b2b0eff7ad0224",
+        "tool": "list_categories",
+        "status": "done",
+        "input": "Read your categories",
+        "result": "3GPP Briefing: 0 conversations, made by rule, mode: exact, description: , exact sender: any; literal subject prefix: [3GPP Briefing]\nBroadcast: 0 conversations, made by rule, mode: smart, description: Mail to many people that no Exact rule caught\nForums: 0 conversations, made by rule, mode: exact, description: Forums\nPLM: 3 conversations, made by rule, mode: smart, description: PLM\nPromotions: 0 c"
+       },
+       {
+        "session": "2e3db00b67a44979a4b2b0eff7ad0224",
+        "tool": "search_mail",
+        "status": "done",
+        "input": "Search mail: PLM build",
+        "result": "<untrusted>\n[thread 1] 2026-11-10 | [PLM] Build MODEM_NR_4519 passed (smoke 212/212) | plm-noreply@corp.example, tester@example.com | PLM | Build MODEM_NR_4519 completed. Smoke tests: 212 passed, 0 failed.\n[thread 2] 2026-11-10 | [PLM] Build MODEM_NR_4520 passed (smoke 211/212) | plm-noreply@corp.example, tester@example.com | PLM | Build MODEM_NR_4520 completed. Smoke tests: 211 passed, 1 skipped."
+       }
+      ],
+      "replies": {
+       "2e3db00b67a44979a4b2b0eff7ad0224": []
+      }
+     }
+    }
+   ]
+  }
+ ]
+}
