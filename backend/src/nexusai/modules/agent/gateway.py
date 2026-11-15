@@ -180,6 +180,15 @@ def set_run_limit(db: Database, session: str, token_limit: int) -> None:
         )
 
 
+def instructions_text(layers: list[Layer]) -> str:
+    """The prompt as the model reads it. Every section after the rules has its name as a heading,
+    because the prompts point to sections by name, such as "About the person"."""
+    return "\n\n".join(
+        layer.text if index == 0 else f"# {layer.name}\n{layer.text}"
+        for index, layer in enumerate(layers)
+    )
+
+
 def _check_run_limit(db: Database, session: str | None) -> None:
     """Checked before each call, so a run can pass its limit by at most the call in progress."""
     if not session:
@@ -304,7 +313,7 @@ def stream_model(
     masked_tools = [_mask_tool(guard, tool) for tool in tools or []]
     request = ModelRequest(
         model=model,
-        instructions="\n\n".join(layer.text for layer in masked_layers),
+        instructions=instructions_text(masked_layers),
         messages=masked_messages,
         tools=masked_tools,
         effort=effort,

@@ -1,0 +1,1381 @@
+{
+ "summary": {
+  "model": "GPT-6-Luna",
+  "model_id": "gpt-6-luna",
+  "effort": "medium",
+  "onboarding": "missed",
+  "mail": "43/50",
+  "chat": "6/7",
+  "tokens": 569365,
+  "plan_used": {
+   "x-codex-primary-used-percent": 0.0,
+   "x-codex-secondary-used-percent": 0.0,
+   "x-codex-primary-over-secondary-limit-percent": 0.0
+  }
+ },
+ "onboarding": {
+  "passed": false,
+  "missed": [
+   "asked 8 questions, at most 6"
+  ],
+  "questions": [
+   {
+    "session": "2dd72cc3593a41fa83edb1fdf0cdeb02",
+    "question": "As a Senior Engineer on the Modem Protocol team (LTE/NR RRC), what are you mainly working toward right now?",
+    "answer": "Meera Iyer is my manager. Release blockers, customer escalations and 3GPP deadlines are urgent for me. Celebrations, cafeteria notices and newsletters are noise."
+   },
+   {
+    "session": "2dd72cc3593a41fa83edb1fdf0cdeb02",
+    "question": "Who matters most in your mail, and what should I know about how to treat their messages?",
+    "answer": "Meera Iyer is my manager. Karthik Nair leads PLM releases for our team. Wei Zhang is our counterpart in the Seoul HQ modem group. Rahul Sharma, Divya Menon and Sanjay Rao are on my team. Anything from Meera, release blockers, customer escalations, 3GPP contribution deadlines, and anything HR or IT says I personally must do by a date."
+   },
+   {
+    "session": "2dd72cc3593a41fa83edb1fdf0cdeb02",
+    "question": "What are you working toward right now in the Modem Protocol team?",
+    "answer": "Meera Iyer is my manager. Release blockers, customer escalations and 3GPP deadlines are urgent for me. Celebrations, cafeteria notices and newsletters are noise."
+   },
+   {
+    "session": "2dd72cc3593a41fa83edb1fdf0cdeb02",
+    "question": "How should I handle mail from HR or IT that asks you to do something by a date?",
+    "answer": "Meera Iyer is my manager. Release blockers, customer escalations and 3GPP deadlines are urgent for me. Celebrations, cafeteria notices and newsletters are noise."
+   },
+   {
+    "session": "2dd72cc3593a41fa83edb1fdf0cdeb02",
+    "question": "How would you like important or urgent mail surfaced to you?",
+    "answer": "Anything from Meera, release blockers, customer escalations, 3GPP contribution deadlines, and anything HR or IT says I personally must do by a date. Only notify me for things due today or by tomorrow morning. Everything else can wait for my Today page."
+   },
+   {
+    "session": "2dd72cc3593a41fa83edb1fdf0cdeb02",
+    "question": "What’s the main goal or project you’re working toward in LTE/NR RRC right now?",
+    "answer": "I'm a senior engineer on the Modem Protocol team, LTE/NR RRC, in Bangalore. Right now I'm getting the RRC re-establishment fix into the November release and leading our 3GPP RAN2 contributions."
+   },
+   {
+    "session": "2dd72cc3593a41fa83edb1fdf0cdeb02",
+    "question": "For those priority areas, should they be treated as important regardless of sender, or are there particular people whose mail matters most?",
+    "answer": "Meera Iyer is my manager. Karthik Nair leads PLM releases for our team. Wei Zhang is our counterpart in the Seoul HQ modem group. Rahul Sharma, Divya Menon and Sanjay Rao are on my team. Anything from Meera, release blockers, customer escalations, 3GPP contribution deadlines, and anything HR or IT says I personally must do by a date. PLM builds, Swarm code reviews, 3GPP work, HR and IT."
+   },
+   {
+    "session": "2dd72cc3593a41fa83edb1fdf0cdeb02",
+    "question": "Which mail topics should be low priority or filtered out as noise?",
+    "answer": "Anything from Meera, release blockers, customer escalations, 3GPP contribution deadlines, and anything HR or IT says I personally must do by a date. Celebrations, cafeteria and transport notices, town hall recaps, newsletters and vendor marketing. I'm not a people manager, so manager-only actions don't apply to me."
+   }
+  ],
+  "saved": "I’m a senior engineer on the Modem Protocol team, LTE/NR RRC, in Bangalore. I’m getting the RRC re-establishment fix into the November release and leading our 3GPP RAN2 contributions.\nPLM builds, Swarm code reviews, 3GPP work, HR and IT.\nAnything from Meera Iyer, release blockers, customer escalations, 3GPP contribution deadlines, and anything HR or IT says I personally must do by a date is important. Only notify me for things due today or by tomorrow morning; everything else can wait for my Today page. Celebrations, cafeteria and transport notices, town hall recaps, newsletters and vendor marketing are noise. I’m not a people manager, so manager-only actions don’t apply to me.\nMeera Iyer is my manager. Karthik Nair leads PLM releases for our team. Wei Zhang is our counterpart in the Seoul HQ modem group. Rahul Sharma, Divya Menon and Sanjay Rao are on my team. Anything from Meera is important.",
+  "reply": "I saved your role and current goals, importance and notification preferences, key contacts, and mail categories. You can review or change them on the Memory page.",
+  "tools": [
+   "read_work_board",
+   "read_feedback",
+   "list_memory",
+   "ask_user",
+   "ask_user",
+   "ask_user",
+   "ask_user",
+   "ask_user",
+   "ask_user",
+   "ask_user",
+   "ask_user",
+   "save_personal_prompt",
+   "save_personal_prompt",
+   "save_personal_prompt",
+   "save_personal_prompt",
+   "remember"
+  ],
+  "tokens": 51248,
+  "seconds": 50.7
+ },
+ "mail": {
+  "passed": 43,
+  "cases": 50,
+  "timed_out": false,
+  "by_kind": {
+   "direct-important": "11/11",
+   "direct-fyi": "2/2",
+   "cc-only": "4/4",
+   "broadcast-important": "5/7",
+   "broadcast-noise": "9/9",
+   "spam": "4/5",
+   "rule": "7/7",
+   "memory": "1/5"
+  },
+  "memory_proposals": [
+   "Meera Iyer is Arjun Rao's manager.",
+   "Karthik Nair leads PLM releases for Arjun's team.",
+   "Wei Zhang is the counterpart in the Seoul HQ modem group.",
+   "Rahul Sharma, Divya Menon and Sanjay Rao are on Arjun's team.",
+   "Arjun is a senior engineer on the Modem Protocol team, LTE/NR RRC, in Bangalore.",
+   "Arjun is getting the RRC re-establishment fix into the November release and leading 3GPP RAN2 contributions.",
+   "Arjun is not a people manager; manager-only actions do not apply to him.",
+   "Arjun wants notifications only for important items due today or by tomorrow morning; other important mail can wait for the Today page.",
+   "RRC owner for Project Orion, the 2027 flagship modem, starting November 2026."
+  ],
+  "results": [
+   {
+    "case": "manager-steering-eod",
+    "kind": "direct-important",
+    "passed": true,
+    "missed": [],
+    "category": null,
+    "judged": true,
+    "got": {
+     "status": "waiting_on_you",
+     "next_action": "reply",
+     "importance": "high",
+     "notify": true,
+     "tasks": [
+      {
+       "title": "Send Meera 3–4 lines on RRC re-establishment fix status and November release readiness",
+       "due": "2026-11-16"
+      }
+     ],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [],
+     "question": null,
+     "reason": "Meera is your manager, and she needs the status by end of day today; your release work is personally important."
+    }
+   },
+   {
+    "case": "customer-escalation-rca",
+    "kind": "direct-important",
+    "passed": true,
+    "missed": [],
+    "category": null,
+    "judged": true,
+    "got": {
+     "status": "waiting_on_you",
+     "next_action": "do",
+     "importance": "high",
+     "notify": true,
+     "tasks": [
+      {
+       "title": "Investigate Carrier X call drops and send Karthik a first RCA",
+       "due": "2026-11-17"
+      }
+     ],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [],
+     "question": null,
+     "reason": "This is a customer escalation assigned to you on the RRC side, with a deadline tomorrow morning."
+    }
+   },
+   {
+    "case": "wei-cr-review",
+    "kind": "direct-important",
+    "passed": true,
+    "missed": [],
+    "category": "3GPP Briefing",
+    "judged": true,
+    "got": {
+     "status": "waiting_on_you",
+     "next_action": "do",
+     "importance": "normal",
+     "notify": false,
+     "tasks": [
+      {
+       "title": "Review CR R2-2611842 T311 expiry handling RRC parts and send Wei comments",
+       "due": "2026-11-19"
+      }
+     ],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [
+      "3GPP Briefing"
+     ],
+     "question": null,
+     "reason": "You're addressed directly for a technical review tied to your RAN2 contribution work, but the deadline is later this week."
+    }
+   },
+   {
+    "case": "colleague-log-help",
+    "kind": "direct-important",
+    "passed": true,
+    "missed": [],
+    "category": null,
+    "judged": true,
+    "got": {
+     "status": "waiting_on_you",
+     "next_action": "do",
+     "importance": "normal",
+     "notify": false,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [],
+     "question": null,
+     "reason": "Rahul addresses you directly with a technical request this week, but explicitly says there is no rush and gives no exact deadline."
+    }
+   },
+   {
+    "case": "release-blocker-today",
+    "kind": "direct-important",
+    "passed": true,
+    "missed": [],
+    "category": null,
+    "judged": true,
+    "got": {
+     "status": "waiting_on_you",
+     "next_action": "reply",
+     "importance": "high",
+     "notify": true,
+     "tasks": [
+      {
+       "title": "Reply to Karthik with CL 88213 merge confirmation or status",
+       "due": "2026-11-16"
+      }
+     ],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [],
+     "question": null,
+     "reason": "Karthik leads PLM releases, and this is a release-blocking request with a same-day decision deadline."
+    }
+   },
+   {
+    "case": "manager-1on1-move",
+    "kind": "direct-important",
+    "passed": true,
+    "missed": [],
+    "category": null,
+    "judged": true,
+    "got": {
+     "status": "waiting_on_you",
+     "next_action": "reply",
+     "importance": "high",
+     "notify": false,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [],
+     "question": null,
+     "reason": "Meera is your manager and asks you directly to confirm whether the proposed time works; it is a scheduling request without an immediate deadline."
+    }
+   },
+   {
+    "case": "hr-personal-document",
+    "kind": "direct-important",
+    "passed": true,
+    "missed": [],
+    "category": "HR",
+    "judged": true,
+    "got": {
+     "status": "waiting_on_you",
+     "next_action": "do",
+     "importance": "normal",
+     "notify": false,
+     "tasks": [
+      {
+       "title": "Upload updated address proof to HR portal",
+       "due": "2026-11-20"
+      }
+     ],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [
+      "HR"
+     ],
+     "question": null,
+     "reason": "This is an individual HR request with a specific deadline, matching your preference for personally required HR actions to be important."
+    }
+   },
+   {
+    "case": "interview-panel-tomorrow",
+    "kind": "direct-important",
+    "passed": true,
+    "missed": [],
+    "category": null,
+    "judged": true,
+    "got": {
+     "status": "waiting_on_you",
+     "next_action": "reply",
+     "importance": "normal",
+     "notify": true,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [],
+     "question": null,
+     "reason": "This is a direct request addressed only to you, and confirmation is needed today to finalize tomorrow's interview schedule."
+    }
+   },
+   {
+    "case": "named-in-team-mail",
+    "kind": "direct-important",
+    "passed": true,
+    "missed": [],
+    "category": "Broadcast",
+    "judged": true,
+    "got": {
+     "status": "waiting_on_you",
+     "next_action": "do",
+     "importance": "normal",
+     "notify": false,
+     "tasks": [
+      {
+       "title": "Prepare and share NR handover regression triage plan",
+       "due": "2026-11-20"
+      }
+     ],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [
+      "Broadcast"
+     ],
+     "question": null,
+     "reason": "Although sent to a team list, Meera names you directly and gives you a specific deliverable due this week."
+    }
+   },
+   {
+    "case": "wei-answered",
+    "kind": "direct-fyi",
+    "passed": true,
+    "missed": [],
+    "category": null,
+    "judged": true,
+    "got": {
+     "status": "resolved",
+     "next_action": "none",
+     "importance": "low",
+     "notify": false,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [],
+     "question": null,
+     "reason": "This is a direct confirmation that the build contains your patch, with no remaining action for you."
+    }
+   },
+   {
+    "case": "thanks-note",
+    "kind": "direct-fyi",
+    "passed": true,
+    "missed": [],
+    "category": null,
+    "judged": true,
+    "got": {
+     "status": "fyi",
+     "next_action": "read",
+     "importance": "low",
+     "notify": false,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [],
+     "question": null,
+     "reason": "This is a personal note of thanks and contains no request or follow-up action."
+    }
+   },
+   {
+    "case": "teammate-quick-question",
+    "kind": "direct-important",
+    "passed": true,
+    "missed": [],
+    "category": null,
+    "judged": true,
+    "got": {
+     "status": "waiting_on_you",
+     "next_action": "reply",
+     "importance": "normal",
+     "notify": false,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [],
+     "question": "Should I look for the T310 setting in project/build records, or do you already know the value?",
+     "reason": "Sanjay addresses you directly with a specific technical question, but the value is not in this message or the related searchable mail."
+    }
+   },
+   {
+    "case": "cc-decision-made",
+    "kind": "cc-only",
+    "passed": true,
+    "missed": [],
+    "category": null,
+    "judged": true,
+    "got": {
+     "status": "fyi",
+     "next_action": "read",
+     "importance": "normal",
+     "notify": false,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [],
+     "question": null,
+     "reason": "You are only copied, and Meera's decision is informational with no request directed to you."
+    }
+   },
+   {
+    "case": "cc-release-calendar",
+    "kind": "cc-only",
+    "passed": true,
+    "missed": [],
+    "category": "Updates",
+    "judged": true,
+    "got": {
+     "status": "fyi",
+     "next_action": "read",
+     "importance": "normal",
+     "notify": false,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [
+      "Updates",
+      "Broadcast"
+     ],
+     "question": null,
+     "reason": "This is a general announcement addressed to leads, not a personal request, and no action is assigned to you."
+    }
+   },
+   {
+    "case": "cc-but-named",
+    "kind": "cc-only",
+    "passed": true,
+    "missed": [],
+    "category": null,
+    "judged": true,
+    "got": {
+     "status": "waiting_on_you",
+     "next_action": "do",
+     "importance": "normal",
+     "notify": false,
+     "tasks": [
+      {
+       "title": "Share the RRC feature timeline with Karthik for the Orion plan",
+       "due": "2026-11-20"
+      }
+     ],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [],
+     "question": null,
+     "reason": "Karthik addresses you by name and requests a deliverable by Friday, though the deadline is not today or tomorrow."
+    }
+   },
+   {
+    "case": "it-ticket-progress",
+    "kind": "cc-only",
+    "passed": true,
+    "missed": [],
+    "category": "IT",
+    "judged": true,
+    "got": {
+     "status": "waiting_on_others",
+     "next_action": "none",
+     "importance": "normal",
+     "notify": false,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [
+      "IT"
+     ],
+     "question": null,
+     "reason": "The helpdesk is handling the reported VPN drops and has committed to follow up; no action is requested from you now."
+    }
+   },
+   {
+    "case": "hr-digest-hidden-deadline",
+    "kind": "broadcast-important",
+    "passed": true,
+    "missed": [],
+    "category": "HR",
+    "judged": true,
+    "got": {
+     "status": "waiting_on_you",
+     "next_action": "do",
+     "importance": "normal",
+     "notify": false,
+     "tasks": [
+      {
+       "title": "Complete annual Information Security & Code of Conduct e-learning",
+       "due": "2026-11-20"
+      }
+     ],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [
+      "HR",
+      "IT",
+      "Broadcast"
+     ],
+     "question": null,
+     "reason": "The digest explicitly makes training mandatory for every employee, sets a deadline, and warns of account lockout; your preference flags personal HR deadlines as important, but this is not due today or tomorrow."
+    }
+   },
+   {
+    "case": "security-mfa-mandatory",
+    "kind": "broadcast-important",
+    "passed": true,
+    "missed": [],
+    "category": "IT",
+    "judged": true,
+    "got": {
+     "status": "waiting_on_you",
+     "next_action": "do",
+     "importance": "normal",
+     "notify": false,
+     "tasks": [
+      {
+       "title": "Check/enroll in the new MFA authenticator to restore or retain access",
+       "due": null
+      }
+     ],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [
+      "IT",
+      "HR",
+      "Broadcast"
+     ],
+     "question": null,
+     "reason": "The broad mandatory security notice warns that access to mail, VPN, and Perforce is blocked from Monday for anyone unenrolled; the stated deadline is in the past, but current access status is unclear."
+    }
+   },
+   {
+    "case": "it-password-expiry",
+    "kind": "broadcast-important",
+    "passed": false,
+    "missed": [
+     "no task"
+    ],
+    "category": "IT",
+    "judged": true,
+    "got": {
+     "status": "waiting_on_you",
+     "next_action": "do",
+     "importance": "normal",
+     "notify": false,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [
+      "IT"
+     ],
+     "question": null,
+     "reason": "The password-change deadline stated in the message has passed, so check whether the password is already expired and update it if necessary; access loss is consequential, but no current access status is given."
+    }
+   },
+   {
+    "case": "code-freeze-notice",
+    "kind": "broadcast-important",
+    "passed": true,
+    "missed": [],
+    "category": "Broadcast",
+    "judged": true,
+    "got": {
+     "status": "fyi",
+     "next_action": "read",
+     "importance": "normal",
+     "notify": false,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [
+      "Broadcast",
+      "Updates"
+     ],
+     "question": null,
+     "reason": "This is a general list reminder rather than a personal request, but it is relevant to the November release; a previous board entry already tracks your CL 88213 merge timing for today."
+    }
+   },
+   {
+    "case": "ran2-tdoc-deadline",
+    "kind": "broadcast-important",
+    "passed": false,
+    "missed": [
+     "no task"
+    ],
+    "category": "3GPP Briefing",
+    "judged": true,
+    "got": {
+     "status": "waiting_on_you",
+     "next_action": "do",
+     "importance": "high",
+     "notify": true,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [
+      "3GPP Briefing",
+      "Broadcast"
+     ],
+     "question": null,
+     "reason": "You lead 3GPP RAN2 contributions, and this relevant submission deadline falls today; the broadcast does not confirm whether you have a contribution to submit."
+    }
+   },
+   {
+    "case": "power-shutdown",
+    "kind": "broadcast-important",
+    "passed": true,
+    "missed": [],
+    "category": "Broadcast",
+    "judged": true,
+    "got": {
+     "status": "waiting_on_you",
+     "next_action": "do",
+     "importance": "normal",
+     "notify": false,
+     "tasks": [
+      {
+       "title": "Save work and shut down test setups before Tower B power shutdown",
+       "due": "2026-11-20"
+      }
+     ],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [
+      "Broadcast",
+      "Updates"
+     ],
+     "question": null,
+     "reason": "The shutdown affects lab servers and requires preparation by Friday evening, though it is a general notice and not urgent today."
+    }
+   },
+   {
+    "case": "managers-only-action",
+    "kind": "broadcast-important",
+    "passed": true,
+    "missed": [],
+    "category": "HR",
+    "judged": true,
+    "got": {
+     "status": "fyi",
+     "next_action": "none",
+     "importance": "low",
+     "notify": false,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [
+      "HR",
+      "Broadcast"
+     ],
+     "question": null,
+     "reason": "You are a senior engineer, not a people manager, and the message expressly excludes individual contributors."
+    }
+   },
+   {
+    "case": "diwali-celebration",
+    "kind": "broadcast-noise",
+    "passed": true,
+    "missed": [],
+    "category": "Celebrations",
+    "judged": true,
+    "got": {
+     "status": "fyi",
+     "next_action": "none",
+     "importance": "low",
+     "notify": false,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [
+      "Celebrations",
+      "Broadcast"
+     ],
+     "question": null,
+     "reason": "This is an optional celebration notice, which you have identified as noise."
+    }
+   },
+   {
+    "case": "cafeteria-menu",
+    "kind": "broadcast-noise",
+    "passed": true,
+    "missed": [],
+    "category": "Broadcast",
+    "judged": true,
+    "got": {
+     "status": "fyi",
+     "next_action": "none",
+     "importance": "low",
+     "notify": false,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [
+      "Broadcast",
+      "Updates"
+     ],
+     "question": null,
+     "reason": "This is a general cafeteria update, which you have identified as noise."
+    }
+   },
+   {
+    "case": "townhall-recap",
+    "kind": "broadcast-noise",
+    "passed": true,
+    "missed": [],
+    "category": "Broadcast",
+    "judged": true,
+    "got": {
+     "status": "fyi",
+     "next_action": "none",
+     "importance": "low",
+     "notify": false,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [
+      "Broadcast",
+      "Updates"
+     ],
+     "question": null,
+     "reason": "This is a general town hall recap with no request or action, and town hall recaps are noise for you."
+    }
+   },
+   {
+    "case": "transport-route-change",
+    "kind": "broadcast-noise",
+    "passed": true,
+    "missed": [],
+    "category": "Broadcast",
+    "judged": true,
+    "got": {
+     "status": "fyi",
+     "next_action": "none",
+     "importance": "low",
+     "notify": false,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [
+      "Broadcast"
+     ],
+     "question": null,
+     "reason": "This is a general transport notice, which you have identified as noise, and it asks nothing of you."
+    }
+   },
+   {
+    "case": "blood-donation",
+    "kind": "broadcast-noise",
+    "passed": true,
+    "missed": [],
+    "category": "Broadcast",
+    "judged": true,
+    "got": {
+     "status": "fyi",
+     "next_action": "none",
+     "importance": "low",
+     "notify": false,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [
+      "Broadcast"
+     ],
+     "question": null,
+     "reason": "This is a general optional event announcement sent through a list, with no personal request."
+    }
+   },
+   {
+    "case": "internal-newsletter",
+    "kind": "broadcast-noise",
+    "passed": true,
+    "missed": [],
+    "category": "Broadcast",
+    "judged": true,
+    "got": {
+     "status": "fyi",
+     "next_action": "none",
+     "importance": "low",
+     "notify": false,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [
+      "Broadcast",
+      "Updates"
+     ],
+     "question": null,
+     "reason": "This is an unrequested company newsletter, and newsletters are noise for you."
+    }
+   },
+   {
+    "case": "sports-day-photos",
+    "kind": "broadcast-noise",
+    "passed": true,
+    "missed": [],
+    "category": "Broadcast",
+    "judged": true,
+    "got": {
+     "status": "fyi",
+     "next_action": "none",
+     "importance": "low",
+     "notify": false,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [
+      "Broadcast",
+      "Celebrations"
+     ],
+     "question": null,
+     "reason": "This is a general event-photo announcement with no personal request, and sports day content fits Celebrations."
+    }
+   },
+   {
+    "case": "team-lunch-poll",
+    "kind": "broadcast-noise",
+    "passed": true,
+    "missed": [],
+    "category": "Broadcast",
+    "judged": true,
+    "got": {
+     "status": "fyi",
+     "next_action": "none",
+     "importance": "low",
+     "notify": false,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [
+      "Broadcast"
+     ],
+     "question": null,
+     "reason": "This is a group invitation sent to a list, not a personal request, and it is optional social planning."
+    }
+   },
+   {
+    "case": "vendor-webinar",
+    "kind": "broadcast-noise",
+    "passed": true,
+    "missed": [],
+    "category": null,
+    "judged": true,
+    "got": {
+     "status": "fyi",
+     "next_action": "none",
+     "importance": "low",
+     "notify": false,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [],
+     "question": null,
+     "reason": "This is unsolicited vendor/event promotion, with no personal obligation or meaningful deadline."
+    }
+   },
+   {
+    "case": "phishing-lookalike",
+    "kind": "spam",
+    "passed": true,
+    "missed": [],
+    "category": "IT",
+    "judged": true,
+    "got": {
+     "status": "waiting_on_you",
+     "next_action": "do",
+     "importance": "high",
+     "notify": true,
+     "tasks": [
+      {
+       "title": "Verify the mailbox alert through a trusted IT channel and report it as phishing"
+      }
+     ],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [
+      "IT"
+     ],
+     "question": null,
+     "reason": "This unsolicited message asks you to enter your password at a link, a common phishing pattern; don't use the link, and verify the alert through a known company IT channel."
+    }
+   },
+   {
+    "case": "ceo-gift-card-scam",
+    "kind": "spam",
+    "passed": true,
+    "missed": [],
+    "category": null,
+    "judged": true,
+    "got": {
+     "status": "waiting_on_you",
+     "next_action": "do",
+     "importance": "high",
+     "notify": true,
+     "tasks": [
+      {
+       "title": "Verify the gift-card request with Meera through a known channel and report the email"
+      }
+     ],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [],
+     "question": null,
+     "reason": "The urgent, confidential gift-card request is a strong impersonation scam pattern, and the sender address is new; verify through a separate trusted channel and do not buy cards or share codes."
+    }
+   },
+   {
+    "case": "fake-invoice",
+    "kind": "spam",
+    "passed": false,
+    "missed": [
+     "a task follows the suspicious mail: invoice 77812"
+    ],
+    "category": null,
+    "judged": true,
+    "got": {
+     "status": "waiting_on_you",
+     "next_action": "do",
+     "importance": "normal",
+     "notify": false,
+     "tasks": [
+      {
+       "title": "Verify invoice 77812 and its payment details through a trusted channel"
+      }
+     ],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [],
+     "question": null,
+     "reason": "The message is addressed only to you and requests payment, but the sender is new and the payment link is unverified."
+    }
+   },
+   {
+    "case": "lottery-spam",
+    "kind": "spam",
+    "passed": true,
+    "missed": [],
+    "category": null,
+    "judged": true,
+    "got": {
+     "status": "fyi",
+     "next_action": "none",
+     "importance": "low",
+     "notify": null,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [],
+     "question": null,
+     "reason": "This unsolicited prize-and-fee message is likely a scam, with no credible obligation or reason to engage."
+    }
+   },
+   {
+    "case": "mass-recruiter",
+    "kind": "spam",
+    "passed": true,
+    "missed": [],
+    "category": null,
+    "judged": true,
+    "got": {
+     "status": "fyi",
+     "next_action": "none",
+     "importance": "low",
+     "notify": null,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [],
+     "question": null,
+     "reason": "This unsolicited job promotion is from a new sender and does not relate to an obligation in your current role."
+    }
+   },
+   {
+    "case": "plm-build-pass-1",
+    "kind": "rule",
+    "passed": true,
+    "missed": [],
+    "category": "PLM",
+    "judged": false,
+    "got": {
+     "status": null,
+     "next_action": null,
+     "importance": null,
+     "notify": null,
+     "tasks": null,
+     "memory": null,
+     "learned": null,
+     "smart_folders": null,
+     "question": null,
+     "reason": null
+    }
+   },
+   {
+    "case": "plm-build-pass-2",
+    "kind": "rule",
+    "passed": true,
+    "missed": [],
+    "category": "PLM",
+    "judged": false,
+    "got": {
+     "status": null,
+     "next_action": null,
+     "importance": null,
+     "notify": null,
+     "tasks": null,
+     "memory": null,
+     "learned": null,
+     "smart_folders": null,
+     "question": null,
+     "reason": null
+    }
+   },
+   {
+    "case": "plm-build-failed",
+    "kind": "rule",
+    "passed": true,
+    "missed": [],
+    "category": "PLM",
+    "judged": false,
+    "got": {
+     "status": null,
+     "next_action": null,
+     "importance": null,
+     "notify": null,
+     "tasks": null,
+     "memory": null,
+     "learned": null,
+     "smart_folders": null,
+     "question": null,
+     "reason": null
+    }
+   },
+   {
+    "case": "plm-release-note",
+    "kind": "rule",
+    "passed": true,
+    "missed": [],
+    "category": "PLM",
+    "judged": false,
+    "got": {
+     "status": null,
+     "next_action": null,
+     "importance": null,
+     "notify": null,
+     "tasks": null,
+     "memory": null,
+     "learned": null,
+     "smart_folders": null,
+     "question": null,
+     "reason": null
+    }
+   },
+   {
+    "case": "swarm-review-requested",
+    "kind": "rule",
+    "passed": true,
+    "missed": [],
+    "category": "Swarm",
+    "judged": false,
+    "got": {
+     "status": null,
+     "next_action": null,
+     "importance": null,
+     "notify": null,
+     "tasks": null,
+     "memory": null,
+     "learned": null,
+     "smart_folders": null,
+     "question": null,
+     "reason": null
+    }
+   },
+   {
+    "case": "swarm-change-approved",
+    "kind": "rule",
+    "passed": true,
+    "missed": [],
+    "category": "Swarm",
+    "judged": false,
+    "got": {
+     "status": null,
+     "next_action": null,
+     "importance": null,
+     "notify": null,
+     "tasks": null,
+     "memory": null,
+     "learned": null,
+     "smart_folders": null,
+     "question": null,
+     "reason": null
+    }
+   },
+   {
+    "case": "swarm-comment-on-change",
+    "kind": "rule",
+    "passed": true,
+    "missed": [],
+    "category": "Swarm",
+    "judged": false,
+    "got": {
+     "status": null,
+     "next_action": null,
+     "importance": null,
+     "notify": null,
+     "tasks": null,
+     "memory": null,
+     "learned": null,
+     "smart_folders": null,
+     "question": null,
+     "reason": null
+    }
+   },
+   {
+    "case": "new-skip-level",
+    "kind": "memory",
+    "passed": false,
+    "missed": [
+     "didn't note ['anand']: memory=None"
+    ],
+    "category": "Updates",
+    "judged": true,
+    "got": {
+     "status": "fyi",
+     "next_action": "read",
+     "importance": "normal",
+     "notify": null,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [
+      "Updates",
+      "Broadcast"
+     ],
+     "question": null,
+     "reason": "This broad organisation announcement affects your reporting structure but asks nothing of you."
+    }
+   },
+   {
+    "case": "manager-leave-cover",
+    "kind": "memory",
+    "passed": false,
+    "missed": [
+     "didn't note ['sanjay']: memory=None"
+    ],
+    "category": "Broadcast",
+    "judged": true,
+    "got": {
+     "status": "fyi",
+     "next_action": "read",
+     "importance": "normal",
+     "notify": null,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [
+      "Broadcast",
+      "Updates"
+     ],
+     "question": null,
+     "reason": "This team-wide coverage notice is relevant operational context but asks nothing of you."
+    }
+   },
+   {
+    "case": "project-ownership",
+    "kind": "memory",
+    "passed": true,
+    "missed": [],
+    "category": null,
+    "judged": true,
+    "got": {
+     "status": "fyi",
+     "next_action": "read",
+     "importance": "normal",
+     "notify": null,
+     "tasks": [],
+     "memory": "RRC owner for Project Orion, the 2027 flagship modem, starting November 2026.",
+     "learned": [],
+     "smart_folders": [],
+     "question": null,
+     "reason": "Meera’s direct assignment establishes a significant project responsibility, but this email itself requests no immediate action."
+    }
+   },
+   {
+    "case": "new-teammate-buddy",
+    "kind": "memory",
+    "passed": false,
+    "missed": [
+     "didn't note ['neha']: memory=None"
+    ],
+    "category": null,
+    "judged": true,
+    "got": {
+     "status": "waiting_on_you",
+     "next_action": "do",
+     "importance": "normal",
+     "notify": null,
+     "tasks": [
+      {
+       "title": "Set up a knowledge-transfer session with Neha during her first week",
+       "due": "2026-11-20"
+      }
+     ],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [],
+     "question": null,
+     "reason": "Meera directly named you and requested an onboarding action, due during Neha’s first week."
+    }
+   },
+   {
+    "case": "customer-rename",
+    "kind": "memory",
+    "passed": false,
+    "missed": [
+     "didn't note ['novatel']: memory=None"
+    ],
+    "category": "Broadcast",
+    "judged": true,
+    "got": {
+     "status": "fyi",
+     "next_action": "read",
+     "importance": "normal",
+     "notify": null,
+     "tasks": [],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [
+      "Broadcast",
+      "Updates"
+     ],
+     "question": null,
+     "reason": "This broad operational update changes terminology relevant to the Carrier X RCA, but asks nothing personally of you."
+    }
+   },
+   {
+    "case": "design-review-invite",
+    "kind": "direct-important",
+    "passed": true,
+    "missed": [],
+    "category": null,
+    "judged": true,
+    "got": {
+     "status": "waiting_on_you",
+     "next_action": "reply",
+     "importance": "normal",
+     "notify": null,
+     "tasks": [
+      {
+       "title": "Accept or decline Sanjay’s Orion RRC design review invitation",
+       "due": "2026-11-18"
+      }
+     ],
+     "memory": null,
+     "learned": [],
+     "smart_folders": [],
+     "question": null,
+     "reason": "The invitation is addressed to you alone and explicitly asks for an RSVP."
+    }
+   }
+  ],
+  "tokens": 327073,
+  "seconds": 226.9
+ },
+ "chat": [
+  {
+   "case": "pending-on-me",
+   "passed": true,
+   "missed": [],
+   "reply": "Here’s what’s pending, ordered by urgency:\n\n**Due today, Monday 16 Nov**\n- Send Meera 3–4 lines on the RRC re-establishment fix and November release readiness for her steering slides. [1](#cite-1)\n- Confirm to Karthik whether CL 88213 will merge today; it’s the last MR-Nov blocker, and he needs to update the release board by 6 PM. [2](#cite-2)\n- Confirm whether you’re available for the technical interview panel tomorrow at 11 AM. [3](#cite-3)\n- Submit your RAN2#132 Tdoc through the internal portal. The email says the deadline is 23:59 UTC today. [4](#cite-4)\n\n**Due tomorrow, Tuesday 17 Nov**\n- Send Karthik a first RCA on Carrier X call drops after RRC re-establishment by 10 AM. [5](#cite-5)\n\n**Coming up**\n- **18 Nov:** Accept or decline Sanjay’s Orion RRC design review invitation. \n- **19 Nov:** Review the RRC parts of draft CR R2-2611842 and send Wei your comments. [6](#cite-6)\n- **20 Nov:** Shut down lab test setups before the Tower B power shutdown; complete the annual security and code-of-conduct e-learning; upload updated address proof; share Karthik the Orion RRC feature timeline; and share your NR handover regression triage plan. [7](#cite-7) [8](#cite-8) [9](#cite-9) [10](#cite-10) [11](#cite-11)\n\n**Also in your task list:** verify an invoice, a gift-card request, and a mailbox suspension alert through trusted channels; and check/enroll in the new MFA authenticator. The mailbox alert asks you to enter your password at a link, so don’t use that link—verify/report it through IT using a trusted channel. I’d treat the other verification items similarly.  \n\nThe task list also has a knowledge-transfer session with Neha due 20 Nov. I found no matching mail in the results I checked, so its details aren’t verified here.\n\n",
+   "tools": [
+    "read_work_board",
+    "load_skill",
+    "team_inbox",
+    "list_tasks",
+    "search_mail",
+    "search_mail",
+    "read_thread",
+    "read_thread",
+    "read_thread",
+    "read_thread"
+   ],
+   "asked": [],
+   "tokens": 36399,
+   "seconds": 26.9
+  },
+  {
+   "case": "leave-cover",
+   "passed": true,
+   "missed": [],
+   "reply": "Sanjay Rao covers team approvals while Meera is on leave from 16–27 November. Escalations go to Karthik. [1](#cite-1)",
+   "tools": [
+    "read_work_board",
+    "search_mail",
+    "read_thread"
+   ],
+   "asked": [],
+   "tokens": 21372,
+   "seconds": 11.6
+  },
+  {
+   "case": "no-duplicate-task",
+   "passed": false,
+   "missed": [
+    "2 tasks or reminders about ['rca']: ['Investigate Carrier X call drops and send Karthik a first RCA ', 'Send Karthik the first RCA for Carrier X call drops after RRC re-establishment Due by 10:00 AM IST.']"
+   ],
+   "reply": "Added the task to send Karthik the first RCA for Carrier X call drops, due tomorrow, November 17, by 10:00 AM IST. It’s linked to the related email thread.",
+   "tools": [
+    "read_work_board",
+    "list_tasks",
+    "create_tasks"
+   ],
+   "asked": [],
+   "tokens": 21270,
+   "seconds": 14.2
+  },
+  {
+   "case": "teams-paste",
+   "passed": true,
+   "missed": [],
+   "reply": "I found Rahul’s review request for change 88310, “Fix measurement report timer restart,” and added a task to review it by Thursday’s sync. [1](#cite-1)",
+   "tools": [
+    "read_work_board",
+    "search_mail",
+    "read_thread",
+    "list_tasks",
+    "create_tasks"
+   ],
+   "asked": [],
+   "tokens": 32410,
+   "seconds": 12.6
+  },
+  {
+   "case": "remember",
+   "passed": true,
+   "missed": [],
+   "reply": "Got it—I’ll keep in mind that you move to the 6G research team in January and that Wei remains your Seoul contact.",
+   "tools": [
+    "remember"
+   ],
+   "asked": [],
+   "tokens": 9335,
+   "seconds": 7.6
+  },
+  {
+   "case": "file-noise",
+   "passed": true,
+   "missed": [],
+   "reply": "Filed the Diwali, cafeteria, and blood donation mails under Celebrations.",
+   "tools": [
+    "read_work_board",
+    "list_categories",
+    "search_mail",
+    "read_thread",
+    "read_thread",
+    "read_thread",
+    "update_mail"
+   ],
+   "asked": [],
+   "tokens": 44799,
+   "seconds": 16.2
+  },
+  {
+   "case": "tdoc-reminder",
+   "passed": true,
+   "missed": [],
+   "reply": "The RAN2#132 Tdoc deadline is **16 November at 23:59 UTC** [1](#cite-1). I set a reminder for **15 November at 9:00 AM**.",
+   "tools": [
+    "read_work_board",
+    "list_reminders",
+    "read_thread",
+    "create_reminders"
+   ],
+   "asked": [],
+   "tokens": 25459,
+   "seconds": 13.7
+  }
+ ]
+}

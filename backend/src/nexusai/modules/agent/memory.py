@@ -198,15 +198,16 @@ def relevant(
         elif overlap or not words:
             scored.append((overlap, file.name, file.content.strip()))
     scored.sort(key=lambda item: (-item[0], item[1]))
-    chosen: list[str] = []
+    # One heading per file, with its chosen lines under it, rather than a heading on every line.
+    chosen: dict[str, list[str]] = {}
     used = 0
     for _, name, content in scored:
-        block = f"[{name}]\n{content}"
-        if used + len(block) > limit:
+        cost = len(content) + 1 + (0 if name in chosen else len(name) + 4)
+        if used + cost > limit:
             continue
-        chosen.append(block)
-        used += len(block)
-    return "\n\n".join(chosen)
+        chosen.setdefault(name, []).append(content)
+        used += cost
+    return "\n\n".join(f"[{name}]\n" + "\n".join(lines) for name, lines in chosen.items())
 
 
 # Where facts the agents note down go, one per line, so they stay in one place the person can read.

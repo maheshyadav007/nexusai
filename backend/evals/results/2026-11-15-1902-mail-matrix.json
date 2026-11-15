@@ -1,0 +1,420 @@
+{
+ "cases_file": "mail_cases_corp.json",
+ "stopped": null,
+ "runs": [
+  {
+   "model": "GPT-6-Luna",
+   "model_id": "gpt-6-luna",
+   "effort": "medium",
+   "cases": 16,
+   "passed": 16,
+   "tokens": {
+    "calls": 16,
+    "input": 64004,
+    "output": 2882
+   },
+   "seconds": 76.4,
+   "plan_before": {
+    "x-codex-primary-used-percent": 0.0,
+    "x-codex-secondary-used-percent": 23.0,
+    "x-codex-primary-window-minutes": 300.0,
+    "x-codex-primary-over-secondary-limit-percent": 0.0,
+    "x-codex-secondary-window-minutes": 10080.0,
+    "x-codex-primary-reset-after-seconds": 17560.0,
+    "x-codex-secondary-reset-after-seconds": 389718.0,
+    "x-codex-primary-reset-at": 1794786830.0,
+    "x-codex-secondary-reset-at": 1795158988.0,
+    "x-codex-credits-balance": 0.0
+   },
+   "plan_after": {
+    "x-codex-primary-used-percent": 0.0,
+    "x-codex-secondary-used-percent": 23.0,
+    "x-codex-primary-window-minutes": 300.0,
+    "x-codex-primary-over-secondary-limit-percent": 0.0,
+    "x-codex-secondary-window-minutes": 10080.0,
+    "x-codex-primary-reset-after-seconds": 17488.0,
+    "x-codex-secondary-reset-after-seconds": 389646.0,
+    "x-codex-primary-reset-at": 1794786830.0,
+    "x-codex-secondary-reset-at": 1795158988.0,
+    "x-codex-credits-balance": 0.0
+   },
+   "plan_used": {
+    "x-codex-primary-used-percent": 0.0,
+    "x-codex-secondary-used-percent": 0.0,
+    "x-codex-primary-over-secondary-limit-percent": 0.0
+   },
+   "results": [
+    {
+     "case": "hr-broadcast-hidden-deadline",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "high",
+      "notify": false,
+      "category": "HR",
+      "tasks": [
+       {
+        "title": "Complete annual Information Security & Code of Conduct e-learning",
+        "due": "2026-11-20"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "The digest states a mandatory employee action with a 20 November deadline and account lockout as the consequence; your preference marks personally required HR deadlines as high importance.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.9
+    },
+    {
+     "case": "celebration-broadcast",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "read",
+      "importance": "low",
+      "notify": false,
+      "category": "Celebrations",
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "This is an optional event announcement, and you rarely open these messages and have never replied to this sender.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 3.1
+    },
+    {
+     "case": "manager-ask-by-eod",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "reply",
+      "importance": "high",
+      "notify": true,
+      "category": null,
+      "tasks": [
+       {
+        "title": "Send Meera a 3–4-line RRC reestablishment fix status and November release outlook",
+        "due": "2026-11-16"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Meera is your manager, addressed you directly, and needs the update by end of day today.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.3
+    },
+    {
+     "case": "colleague-asks-for-help",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "normal",
+      "notify": false,
+      "category": null,
+      "tasks": [
+       {
+        "title": "Review Sneha's S-series RRCReconfiguration failure log",
+        "due": null
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "You are addressed directly, and Sneha asks for a technical review with no urgent deadline.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.1
+    },
+    {
+     "case": "customer-escalation",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "high",
+      "notify": true,
+      "category": "PLM",
+      "tasks": [
+       {
+        "title": "Review the PLM ticket logs and share a first RCA for carrier X call drops",
+        "due": "2026-11-17"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "You are directly assigned the RRC-side RCA for a customer escalation, with a deadline tomorrow morning.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.6
+    },
+    {
+     "case": "plm-build-automated",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "read",
+      "importance": "normal",
+      "notify": false,
+      "category": "PLM",
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Automated build notification shows zero failures and requires no action.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 3.2
+    },
+    {
+     "case": "phishing-lookalike",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "high",
+      "notify": true,
+      "category": "IT",
+      "tasks": [
+       {
+        "title": "Verify the mailbox warning with the known IT helpdesk via a trusted channel",
+        "due": null
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "The sender domain is new and differs from the known IT helpdesk address, while the message requests a password through a link—strong signs of phishing; verify through the known IT channel instead.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 6.6
+    },
+    {
+     "case": "managers-only-action",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "none",
+      "importance": "low",
+      "notify": false,
+      "category": "HR",
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "The message explicitly excludes individual contributors, and your role is senior engineer rather than people manager.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 3.1
+    },
+    {
+     "case": "it-ticket-in-progress",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_others",
+      "next_action": "none",
+      "importance": "normal",
+      "notify": false,
+      "category": "IT",
+      "tasks": null,
+      "follow_up_on": "2026-11-18",
+      "memory": null,
+      "learned": null,
+      "reason": "You reported the recurring VPN issue, and IT says its network team is reviewing the gateway logs and will follow up.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 3.9
+    },
+    {
+     "case": "it-password-expiry",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "normal",
+      "notify": false,
+      "category": "IT",
+      "tasks": [
+       {
+        "title": "Change domain password in self-service portal",
+        "due": "2026-11-19"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "IT Security says the password expires in three days and lists email, VPN, and build server access as consequences of not changing it.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.0
+    },
+    {
+     "case": "3gpp-contribution-deadline",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "high",
+      "notify": true,
+      "category": "3GPP Briefing",
+      "tasks": [
+       {
+        "title": "Send Wei the final CR draft on RRC re-establishment timers for delegation review",
+        "due": "2026-11-16"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Wei addressed you directly, and the contribution deadline is today while the delegation needs the draft beforehand.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 7.8
+    },
+    {
+     "case": "cc-only-decision",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "read",
+      "importance": "normal",
+      "notify": false,
+      "category": "PLM",
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "You are only Cc'd, and the message confirms a vendor choice without asking you to act.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 3.4
+    },
+    {
+     "case": "security-mfa-mandatory",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "normal",
+      "notify": false,
+      "category": "IT",
+      "tasks": [
+       {
+        "title": "Re-enrol MFA through the official portal",
+        "due": "2026-11-17"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "This is a direct employee-wide requirement with a stated access consequence and deadline, but it is due tomorrow rather than today.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.3
+    },
+    {
+     "case": "townhall-recap",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "read",
+      "importance": "low",
+      "notify": false,
+      "category": "Updates",
+      "tasks": [],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "This is an internal communications recap with no personal request, and town hall recaps are low priority for you.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 4.1
+    },
+    {
+     "case": "hr-self-appraisal",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "high",
+      "notify": false,
+      "category": "HR",
+      "tasks": [
+       {
+        "title": "Submit mid-year self-assessment in the performance portal",
+        "due": "2026-11-22"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "The message is addressed to you and requires a personal HR submission by a stated deadline; your preferences mark dated personal HR actions as high importance.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 4.4
+    },
+    {
+     "case": "team-lunch-poll",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "low",
+      "notify": false,
+      "category": "Celebrations",
+      "tasks": [
+       {
+        "title": "Vote for the team lunch venue",
+        "due": "2026-11-16"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "The team poll asks for your vote by Monday, but this is a low-stakes celebration rather than release work.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 4.5
+    }
+   ]
+  }
+ ]
+}

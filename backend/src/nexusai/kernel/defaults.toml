@@ -156,11 +156,13 @@ spike_min_tokens = 50000
 # A working task with no new step for this long is stopped and blocked.
 silence_minutes = 20
 
-# Typed messages. The chat shows everything, and this is only what the model is sent.
+# Typed messages. The chat shows everything, and this is only what the model is sent. A chat the
+# person is having keeps all of it, the most a setting allows; old tool results are still cleared
+# (tool_results below), so a long chat can't overflow the model.
 [context.chat]
 # "trim" or "auto_compact".
 mode = "trim"
-keep_messages = 40
+keep_messages = 1000
 trim_saved_history = false
 
 # Events and schedules. Those chats grow forever, so what's saved is shortened too.

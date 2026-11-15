@@ -674,11 +674,21 @@ class _TeamClose(BaseModel):
 
 
 class _PreferenceProposal(BaseModel):
-    instruction: str = Field(min_length=1, max_length=4000)
-    purpose: Literal["all", "mail", "draft", "brief"] = "mail"
-    sender: str | None = None
-    topic: str | None = None
-    evidence: list[str] = Field(min_length=1, max_length=20)
+    instruction: str = Field(
+        min_length=1,
+        max_length=4000,
+        description='The lasting instruction, in their words, such as "File PLM mail, never in the inbox".',
+    )
+    purpose: Literal["all", "mail", "draft", "brief"] = Field(
+        "mail", description="What it guides: judging mail, writing drafts, the brief, or all."
+    )
+    sender: str | None = Field(None, description="Only for mail from this address or domain.")
+    topic: str | None = Field(None, description="Only for mail about this topic.")
+    evidence: list[str] = Field(
+        min_length=1,
+        max_length=20,
+        description="Where they said it: their words quoted, or ids like [mail:123].",
+    )
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
@@ -920,9 +930,13 @@ INTERVIEW_TOOLS = frozenset(
 # Tool search. Each tool's description is sent with every model call, so an agent is shown the
 # ones it uses most and finds the rest with find_tools. Memory is always at hand for every agent.
 ALWAYS_SHOWN = frozenset({"ask_user", "remember", "list_memory", "load_skill"})
+# What session.md has it reach for first is shown, so a smaller model needn't search for its steps:
+# the work board, documents, and every list it checks before making something.
 LEAD_SHOWN = ALWAYS_SHOWN | {
-    "search_mail", "semantic_search", "read_thread", "list_mail", "update_mail", "draft_reply",
+    "read_work_board", "search_mail", "semantic_search", "search_documents", "read_thread",
+    "list_mail", "update_mail", "draft_reply", "list_drafts",
     "list_tasks", "create_tasks", "list_reminders", "create_reminders", "list_categories",
+    "list_rules", "list_agents", "list_panels", "propose_preference",
     "team_assign", "team_inbox", "team_message", "team_close",
 }  # fmt: skip
 BRIEF_SHOWN = ALWAYS_SHOWN | {

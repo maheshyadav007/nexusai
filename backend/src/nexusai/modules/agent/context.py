@@ -3,6 +3,7 @@
 import json
 import re
 import time
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -37,6 +38,17 @@ COMPACT_AS_NODE = "model"
 PERSON = "person"
 # Their result is the outcome of the run, so clearing it would lose what was decided.
 KEEP_RESULTS_OF = ("record_triage", "find_tools")
+# Starts the id of a note that arrived during a run: part of that run, not the start of a new one.
+# An id rather than a name, because a name would be sent on to the model.
+TASK_NOTE = "task-note-"
+
+
+def _starts_run(message: Any) -> bool:
+    return (
+        isinstance(message, HumanMessage)
+        and not is_summary(message)
+        and not str(message.id or "").startswith(TASK_NOTE)
+    )
 
 
 @dataclass(frozen=True)
@@ -93,12 +105,10 @@ def profile_for(
 def recent(messages: list[Any], keep: int) -> list[Any]:
     """All of the current run, then up to `keep` before it, so tool calls stay with their results.
 
-    Starting on something the person said means a cut can't separate a call from its result.
+    Starting on something the person said means a cut can't separate a call from its result. A
+    note that arrived during the run doesn't start a new one, so the request it belongs to stays.
     """
-    start = max(
-        (i for i, m in enumerate(messages) if isinstance(m, HumanMessage) and not is_summary(m)),
-        default=0,
-    )
+    start = max((i for i, m in enumerate(messages) if _starts_run(m)), default=0)
     earlier = messages[:start]
     # A summary stands in for everything before it, so it outlasts the trimming.
     summary = earlier[:1] if earlier and is_summary(earlier[0]) else []
@@ -158,14 +168,7 @@ class AutoCompact(SummarizationMiddleware):
 
     def _determine_cutoff_index(self, messages: list[Any]) -> int:
         cutoff = super()._determine_cutoff_index(messages)
-        current = max(
-            (
-                i
-                for i, message in enumerate(messages)
-                if isinstance(message, HumanMessage) and not is_summary(message)
-            ),
-            default=0,
-        )
+        current = max((i for i, message in enumerate(messages) if _starts_run(message)), default=0)
         # The task and its tool results are one unit; compact only earlier turns.
         return min(cutoff, current)
 
@@ -252,7 +255,7 @@ class TaskContent(AgentMiddleware):
         messages = list(request.messages)
         for index in range(len(messages) - 1, -1, -1):
             message = messages[index]
-            if isinstance(message, HumanMessage) and not is_summary(message):
+            if _starts_run(message):
                 messages[index] = message.model_copy(
                     update={"content": f"{self.task}\n\n{message.text}"}
                 )
@@ -274,7 +277,9 @@ class TaskNotes(AgentMiddleware):
 
     def before_model(self, state: Any, runtime: Any) -> dict[str, Any] | None:
         notes = self.take()
-        return {"messages": [HumanMessage(content=notes)]} if notes else None
+        if not notes:
+            return None
+        return {"messages": [HumanMessage(content=notes, id=f"{TASK_NOTE}{uuid.uuid4().hex}")]}
 
 
 class ToolLog(AgentMiddleware):

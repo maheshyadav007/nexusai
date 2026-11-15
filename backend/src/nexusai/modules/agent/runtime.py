@@ -128,13 +128,13 @@ ORIGIN_NOTES = {
     "mail-learn": "You're reading past mail to learn about the person. Nobody is waiting in the chat.",
     "schedule": "A schedule came due, and this run started by itself. Nobody is waiting in the chat.",
     "event": "Something happened that the person asked to hear about, and this run started by itself. Nobody is waiting in the chat.",
-    "setup": "A mail-learning interview started to clarify new uncertainties. Ask only what is unresolved, at most three questions.",
+    "setup": "An interview to get to know the person started by itself. They'll answer in the chat when they open it.",
     "task": "Another agent gave you this task, and this run started by itself. Nobody is waiting in the chat. Work only on the task, then report it.",
     "task-report": "Work you handed out, or a question about it, needs you now. The person may not be looking, so check it and say what matters in your reply.",
 }
 RESUMABLE = {"queued", "running"}
 # Bumped when the harness changes how runs are put together, and recorded on every run.
-HARNESS_VERSION = "2026.11.1"
+HARNESS_VERSION = "2026.11.2"
 KEEPALIVE_SECONDS = 15
 TITLE_LENGTH = 60
 

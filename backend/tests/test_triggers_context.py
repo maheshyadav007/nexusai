@@ -288,6 +288,17 @@ def test_trimming_keeps_the_whole_current_run_however_long() -> None:
     assert context.recent([*older, *run], 0) == run
 
 
+def test_a_note_during_a_run_keeps_the_request_it_belongs_to() -> None:
+    request = human("file these threads")
+    run: list[Any] = [request]
+    for n in range(10):
+        run += [call(f"c{n}"), result(f"c{n}")]
+    note = HumanMessage(content="Also skip thread 7", id=f"{context.TASK_NOTE}1")
+    run += [note, call("c10"), result("c10")]
+    older = [human("before"), AIMessage(content="ok", id="a")]
+    assert context.recent([*older, *run], 0) == run
+
+
 def test_trimming_never_starts_inside_a_tool_call() -> None:
     older = [human("one"), call("c1"), result("c1"), AIMessage(content="ok", id="a1")]
     older += [human("two"), call("c2"), result("c2"), AIMessage(content="ok", id="a2")]
