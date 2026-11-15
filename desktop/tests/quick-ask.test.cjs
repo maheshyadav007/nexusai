@@ -73,6 +73,14 @@ test('a failed copy still gives the clipboard back, and an empty one stays empty
   assert.equal(clipboard.board.text, '');
 });
 
+test('nothing is written to the clipboard when the copy changes nothing, so clipboard history stays clean', async () => {
+  const clipboard = fakeClipboard({ text: 'old text' });
+  let writes = 0;
+  clipboard.writeText = () => { writes++; }; clipboard.write = () => { writes++; }; clipboard.clear = () => { writes++; };
+  assert.equal(await quick.captureSelection({ clipboard, copy: async () => true, wait, timeout: 40 }), '');
+  assert.equal(writes, 0);
+});
+
 test('a long selection is cut to a size a message can carry', async () => {
   const clipboard = fakeClipboard({});
   const copy = async () => { clipboard.board.text = 'x'.repeat(20000); return true; };
@@ -149,6 +157,16 @@ test('without Accessibility on a Mac the box opens without reading the selection
   assert.ok(!pressed);
   assert.equal(box.status().selectionAllowed, false);
   assert.equal(electron.shown[0].webContents.sent.at(-1)[1].selection, '');
+});
+
+test("Try it from Settings opens the box without pressing copy in NexusAI's own window", async () => {
+  const electron = fakes();
+  let pressed = false;
+  const box = quick.createQuickAsk({ ...electron, clipboard: fakeClipboard({}), platform: 'win32', file: tempFile(), preload: '', origin: () => '', main: () => null, copy: async () => { pressed = true; return true; } });
+  box.register();
+  await box.open({ fromApp: true });
+  assert.ok(!pressed);
+  assert.ok(electron.shown[0].visible);
 });
 
 test('the tray notice is shown once', () => {

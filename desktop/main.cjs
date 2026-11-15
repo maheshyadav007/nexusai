@@ -93,7 +93,7 @@ ipcMain.handle('nexus:quick', (event, request) => {
   if (action === 'status') return quickAsk.status();
   if (action === 'update') return quickAsk.update(value || {});
   if (action === 'allow-selection') return quickAsk.requestSelectionAccess();
-  if (action === 'open') { void quickAsk.open(); return quickAsk.status(); }
+  if (action === 'open') { void quickAsk.open({ fromApp: true }); return quickAsk.status(); }
   if (!fromBox) throw new Error('Unknown quick ask action');
   if (action === 'resize') quickAsk.resize(Number(value));
   else if (action === 'take') return quickAsk.take();
@@ -108,13 +108,19 @@ function setupTray() {
   const icon = nativeImage.createFromPath(path.join(__dirname, 'build-resources', 'icon.png')).resize({ width: 16, height: 16 });
   tray = new Tray(icon);
   tray.setToolTip(app.getName());
-  const show = () => { window.show(); window.focus(); };
+  updateTray();
+  if (process.platform !== 'darwin') tray.on('click', showWindow);
+}
+function showWindow() { window.show(); window.focus(); }
+// Rebuilt when an update is ready, so it can be started from here while the window is put away.
+function updateTray() {
+  if (!tray || tray.isDestroyed()) return;
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Open NexusAI', click: show },
-    { label: 'Quick ask', click: () => void quickAsk.open() },
+    { label: 'Open NexusAI', click: showWindow },
+    { label: 'Quick ask', click: () => void quickAsk.open({ fromApp: true }) },
+    ...(updateReady ? [{ label: 'Restart to update', click: () => void shutdown(true) }] : []),
     { type: 'separator' }, { label: 'Quit NexusAI', click: () => void shutdown() },
   ]));
-  if (process.platform !== 'darwin') tray.on('click', show);
 }
 let startupComplete = false;
 let probeReport = null, probeExitAttempts = 0;
@@ -142,7 +148,11 @@ function child(command, args, options) {
   return service;
 }
 
-function showMessage(message) { return dialog.showMessageBox(window, { message, type: 'info' }); }
+// A dialog on a window put away by the clock can't be seen, so the window comes forward first.
+function showMessage(message) {
+  if (window && !window.isDestroyed() && !window.isVisible()) window.show();
+  return dialog.showMessageBox(window, { message, type: 'info' });
+}
 
 async function lifecycleScreen(detail, retry = false) {
   lifecycleMode = true;
@@ -312,9 +322,15 @@ function markReady(version) {
   updateReady = true; updateItem('Restart to update'); window?.setProgressBar(-1);
   log(`Update ${version} is ready; it starts on the next restart.`);
   if (probeDir) { void shutdown(true); return; }
-  void dialog.showMessageBox(window, { message: 'A NexusAI update is ready.', detail: 'Restart when your current work is finished.',
+  updateTray();
+  const ask = () => void dialog.showMessageBox(window, { message: 'A NexusAI update is ready.', detail: 'Restart when your current work is finished.',
     buttons: ['Later', 'Restart to update'], defaultId: 0, cancelId: 0,
   }).then(({ response }) => { if (response === 1) void shutdown(true); });
+  // Put away by the clock, a dialog on the window would never be seen; a notification leads back to it.
+  if (window?.isVisible() || !Notification.isSupported()) { ask(); return; }
+  const notice = new Notification({ title: 'A NexusAI update is ready', body: 'Restart from the NexusAI icon by the clock when your work is finished.', silent: true });
+  notice.on('click', () => { showWindow(); ask(); });
+  notice.show();
 }
 
 // The installer adds the new version beside this one while NexusAI keeps running; nothing in use is touched.

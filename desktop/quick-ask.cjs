@@ -60,26 +60,29 @@ function grow(bounds, height, area) {
  * Copies the selection in the app in front and gives back its text, leaving the clipboard as it
  * was. Returns '' when nothing was selected. `copy` presses the platform's copy keys there.
  */
-async function captureSelection({ clipboard, copy, wait: pause = wait, timeout = 400 }) {
-  const saved = { text: clipboard.readText(), html: clipboard.readHTML(), rtf: clipboard.readRTF(), image: clipboard.readImage() };
-  // A marker shows whether the copy wrote anything: unchanged means nothing was selected.
-  const marker = `nexusai-selection-${process.hrtime.bigint()}`;
-  clipboard.writeText(marker);
+async function captureSelection({ clipboard, copy, wait: pause = wait, timeout = 300 }) {
+  // Nothing is written to the clipboard first: with Windows clipboard history every write is kept.
+  // So an unchanged clipboard means nothing was selected, or the same text as was last copied.
+  const before = clipboard.readText();
+  const saved = { text: before, html: clipboard.readHTML(), rtf: clipboard.readRTF(), image: clipboard.readImage() };
   let text = '';
   try {
     if (!(await copy())) return '';
     for (let waited = 0; waited <= timeout; waited += 20) {
       const now = clipboard.readText();
-      if (now !== marker) { text = now; break; }
+      if (now !== before) { text = now; break; }
       await pause(20);
     }
   } finally {
-    const restore = {};
-    if (saved.text) restore.text = saved.text;
-    if (saved.html) restore.html = saved.html;
-    if (saved.rtf) restore.rtf = saved.rtf;
-    if (saved.image && !saved.image.isEmpty()) restore.image = saved.image;
-    if (Object.keys(restore).length) clipboard.write(restore); else clipboard.clear();
+    // Only a clipboard the copy changed is written back.
+    if (clipboard.readText() !== before) {
+      const restore = {};
+      if (saved.text) restore.text = saved.text;
+      if (saved.html) restore.html = saved.html;
+      if (saved.rtf) restore.rtf = saved.rtf;
+      if (saved.image && !saved.image.isEmpty()) restore.image = saved.image;
+      if (Object.keys(restore).length) clipboard.write(restore); else clipboard.clear();
+    }
   }
   return text.trim().slice(0, SELECTION_LIMIT);
 }
@@ -121,19 +124,27 @@ function copier(platform, log = () => {}) {
     });
   }
   if (platform === 'win32') {
-    let helper = null, waiting = [];
+    // Off for good once PowerShell can't run it, as where IT allows only signed scripts.
+    let helper = null, waiting = [], unavailable = false;
     const answer = (ok) => { const pending = waiting; waiting = []; for (const done of pending) done(ok); };
     const start = () => {
       const script = Buffer.from(WINDOWS_COPY, 'utf16le').toString('base64');
-      const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', script], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+      const powershell = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+      let ready = false;
+      const child = spawn(powershell, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', script], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
       child.stdout.setEncoding('utf8');
-      child.stdout.on('data', (data) => { if (data.includes('done')) answer(true); });
+      child.stdout.on('data', (data) => { if (data.includes('ready')) ready = true; if (data.includes('done')) answer(true); });
       child.stderr.on('data', (data) => log(`Quick ask: ${String(data).trim()}`));
       child.on('error', (error) => { log(`Quick ask: ${error.message}`); });
-      child.on('exit', () => { if (helper === child) helper = null; answer(false); });
+      child.on('exit', (code) => {
+        if (helper === child) helper = null;
+        if (!ready) { unavailable = true; log(`Quick ask: selected text can't be read here (PowerShell exited with ${code})`); }
+        answer(false);
+      });
       return child;
     };
     const press = () => new Promise((resolve) => {
+      if (unavailable) { resolve(false); return; }
       if (!helper) helper = start();
       // The first press also waits for PowerShell to start and compile.
       const done = (ok) => { clearTimeout(timer); waiting = waiting.filter((item) => item !== done); resolve(ok); };
@@ -142,7 +153,7 @@ function copier(platform, log = () => {}) {
       try { helper.stdin.write('copy\n'); } catch { answer(false); }
     });
     // Started with the app, so the first shortcut press is as quick as the rest.
-    press.warm = () => { if (!helper) helper = start(); };
+    press.warm = () => { if (!helper && !unavailable) helper = start(); };
     press.stop = () => { const child = helper; helper = null; child?.kill(); };
     return press;
   }
@@ -176,7 +187,8 @@ function createQuickAsk({ BrowserWindow, globalShortcut, screen, clipboard, syst
     return win;
   }
 
-  async function open() {
+  /** Opens the box. From inside the app, as Settings' "Try it", there's no other app's selection. */
+  async function open({ fromApp = false } = {}) {
     if (!allowed() || opening) return;
     const box = window();
     if (box.isVisible() && box.isFocused()) { box.hide(); return; }
@@ -184,7 +196,7 @@ function createQuickAsk({ BrowserWindow, globalShortcut, screen, clipboard, syst
     try {
       // Read before the box takes focus, while the person's app is still the one in front.
       let selection = '';
-      if (settings.selection && !box.isFocused() && canReadSelection()) {
+      if (settings.selection && !fromApp && !box.isFocused() && canReadSelection()) {
         selection = await captureSelection({ clipboard, copy }).catch((error) => { log(`Quick ask: ${error.message}`); return ''; });
       }
       const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;

@@ -11,7 +11,7 @@ const runtime = require('../runtime.cjs');
 const layout = require('../layout.cjs');
 const source = fs.readFileSync(path.join(__dirname, '../main.cjs'), 'utf8');
 function fixture(options = {}) {
-  const seen = { installs: 0, exits: [], errors: [], notices: [], fetches: 0, relaunches: 0, screen: '', spawns: [], silentInstalls: 0 };
+  const seen = { installs: 0, exits: [], errors: [], notices: [], toasts: [], fetches: 0, relaunches: 0, screen: '', spawns: [], silentInstalls: 0 };
   const callbacks = new Map(), handlers = new Map(), updater = new EventEmitter();
   const app = { isPackaged: true, getPath: () => '/isolated', setPath() {}, setAppUserModelId() {},
     on: (event, fn) => callbacks.set(event, fn), requestSingleInstanceLock: () => true,
@@ -19,9 +19,10 @@ function fixture(options = {}) {
     exit: code => seen.exits.push(code), relaunch: () => seen.relaunches++, };
   const electron = { app, BrowserWindow: function () {}, Menu: { buildFromTemplate: () => ({ getMenuItemById: () => ({}) }), setApplicationMenu() {} },
     dialog: { showErrorBox: (...args) => seen.errors.push(args), showMessageBox: async (...args) => { seen.notices.push(args); return { response: 0 }; } },
-    shell: { openPath: async () => '' }, ipcMain: { handle: (name, fn) => handlers.set(name, fn) }, Notification: {} };
+    shell: { openPath: async () => '' }, ipcMain: { handle: (name, fn) => handlers.set(name, fn) },
+    Notification: class { static isSupported() { return true; } constructor(options) { this.options = options; } on() {} show() { seen.toasts.push(this.options.title); } } };
   const fakeFs = { mkdirSync() {}, existsSync: () => false, appendFileSync() {}, writeFileSync() {}, readFileSync() { throw new Error('absent'); } };
-  const window = { url: 'http://front/today', isDestroyed: () => false, show() {}, focus() {}, removeMenu() {}, setProgressBar() {},
+  const window = { url: 'http://front/today', isDestroyed: () => false, visible: !options.hidden, isVisible: () => window.visible, show() { window.visible = true; }, focus() {}, removeMenu() {}, setProgressBar() {},
     async loadFile(file) { window.url = require('node:url').pathToFileURL(file).href; window.webContents.mainFrame.url = window.url; },
     webContents: { mainFrame: { url: 'http://front/today' }, getURL: () => window.url, executeJavaScript: async script => { seen.screen = script; } } };
   // Side-by-side installations: the launcher relaunches; a silent installer adds the downloaded version.
@@ -157,6 +158,18 @@ for (const [options, pattern] of [[{ installCode: 22 }, /not enough free disk sp
 test('side by side: a version added by a manual Setup.exe offers a restart', async () => {
   const f = fixture({ sideBySide: true }); f.seen.pending = '0.3.0'; f.noticeLocalUpdate();
   assert.equal(f.status().state, 'ready'); assert.equal(f.status().availableVersion, '0.3.0');
+});
+test('an update ready while the window is put away by the clock is announced, not shown on the hidden window', async () => {
+  const f = fixture({ sideBySide: true, hidden: true }); f.seen.pending = '0.3.0'; f.noticeLocalUpdate();
+  assert.equal(f.status().state, 'ready');
+  assert.deepEqual(f.seen.toasts, ['A NexusAI update is ready']);
+  assert.equal(f.seen.notices.length, 0);
+});
+test('a message while the window is put away brings it forward first', async () => {
+  const f = fixture({ hidden: true, status: 409 });
+  await f.shutdown();
+  assert.equal(f.window.visible, true);
+  assert.equal(f.seen.notices.length, 1);
 });
 test('side by side: a launcher that cannot start keeps the recovery screen', async () => {
   const f = fixture({ sideBySide: true, relaunchError: true }); f.seen.pending = '0.2.0'; f.noticeLocalUpdate();

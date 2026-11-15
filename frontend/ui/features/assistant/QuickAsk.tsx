@@ -61,6 +61,8 @@ export function QuickAsk() {
   const box = useRef<HTMLElement>(null);
   const inner = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
+  // A close still fading out, which a quick press of the shortcut again must not finish.
+  const closing = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const desktop = desktopApi();
 
   const focus = useCallback(() => requestAnimationFrame(() => input.current?.focus()), []);
@@ -80,6 +82,7 @@ export function QuickAsk() {
     const api = desktopApi();
     const opened = (detail: { selection: string } | null) => {
       if (!detail) return;
+      clearTimeout(closing.current);
       fresh(detail.selection);
       play(box.current, "animate-dialog-in");
     };
@@ -120,7 +123,8 @@ export function QuickAsk() {
     const quick = desktopApi()?.quick;
     if (!quick) return;
     play(box.current, "animate-dialog-out");
-    setTimeout(() => void quick("hide"), motion("fast"));
+    clearTimeout(closing.current);
+    closing.current = setTimeout(() => void quick("hide"), motion("fast"));
   }, []);
 
   useEffect(() => {
