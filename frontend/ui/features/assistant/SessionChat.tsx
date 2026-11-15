@@ -15,6 +15,12 @@ export function SessionChat({ id, footer }: { id: string; footer?: ReactNode }) 
   // Reopening a minimized chat finds the copy cached before it closed, missing the steps and any
   // run still going since, so it starts from a fresh one.
   const fresh = session.isFetchedAfterMount;
+  // Nothing is ever stale here, so mounting alone wouldn't fetch it: a copy fetched just before,
+  // as when a new chat starts, would leave it waiting forever.
+  const { refetch } = session;
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
   useEffect(() => {
     if (session.data && fresh && !start) setStart({ messages: session.data.messages as unknown as UIMessage[], active: session.data.active });
   }, [session.data, fresh, start]);

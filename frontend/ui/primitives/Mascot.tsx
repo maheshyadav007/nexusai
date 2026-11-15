@@ -4,7 +4,7 @@
  */
 
 const BODY = ["fill-ai-one", "fill-ai-two", "fill-ai-three", "fill-ai-four"] as const;
-const SIZE = { sm: "h-5 w-5", md: "h-8 w-8", lg: "h-guide w-guide" } as const;
+const SIZE = { sm: "h-5 w-5", md: "h-6 w-6", lg: "h-guide w-guide" } as const;
 
 /** FNV-1a, so the same seed always gives the same picture on every computer. */
 function hash(seed: string): number {

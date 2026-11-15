@@ -10,11 +10,13 @@ const noViolations = async (page: Page) => {
   expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
 };
 
+// A new chat on its own page. The session itself starts with the first message.
 const newSession = async (page: Page) => {
-  await page.goto("/agent/sessions");
-  await page.getByRole("button", { name: "New session" }).click();
-  await expect(page).toHaveURL(/\/agent\/sessions\/[0-9a-f]{32}$/);
+  await page.goto("/agent/sessions/new?view=full");
+  await expect(page.getByRole("textbox", { name: "Message the agent" })).toBeVisible();
 };
+
+const SESSION_PAGE = /\/agent\/sessions\/[0-9a-f]{32}\?view=full$/;
 
 const say = async (page: Page, text: string) => {
   await page.getByRole("textbox", { name: "Message the agent" }).fill(text);
@@ -45,6 +47,7 @@ test("a reply streams in, and the session is kept", async ({ page }) => {
   await newSession(page);
   await noViolations(page);
   await say(page, "Hello there");
+  await expect(page).toHaveURL(SESSION_PAGE);
   const reply = page.getByTestId("agent-message");
   await expect(reply).toContainText("Hello from gpt-best");
   await expect(page.getByTestId("session-status")).toContainText("Done");
@@ -87,7 +90,7 @@ test("a command waits for approval in the session, then runs and finishes", asyn
   await expect(page.getByTestId("session-status")).toContainText("Waiting for you");
   await noViolations(page);
 
-  await approval.getByRole("button", { name: "Allow once" }).click();
+  await approval.getByRole("button", { name: "Approve once" }).click();
   await expect(page.getByTestId("agent-message").last()).toContainText("Tool said: from-the-agent");
   await page.getByTestId("thinking").getByRole("button").first().click();
   await expect(page.getByTestId("tool-call")).toContainText("Ran command");
@@ -128,8 +131,9 @@ test("reloading in the middle of a reply reconnects, and nothing is lost", async
 
 test("leaving and coming back while it works shows the live reply", async ({ page }) => {
   await newSession(page);
-  const url = page.url();
   await say(page, "another slow answer");
+  await expect(page).toHaveURL(SESSION_PAGE);
+  const url = page.url();
   await expect(page.getByTestId("agent-message")).toContainText("word1", { timeout: 10_000 });
   await page.goto("/today");
   await page.goto(url);
