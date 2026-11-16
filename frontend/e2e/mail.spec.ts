@@ -28,8 +28,9 @@ test.describe.configure({ mode: "serial" });
 test("a mail account can be tested, and a wrong password says so", async ({ page }) => {
   await page.goto("/mail/all");
   await expect(page.getByText("No mail account connected")).toBeVisible();
+  // Straight to the email form, not the list of connections.
   await page.getByRole("link", { name: "Connect your mail" }).click();
-  await expect(page).toHaveURL(/\/connectors$/);
+  await expect(page).toHaveURL(/\/connectors\?connector=email$/);
 
   // A known provider fills in its server, and its details are there to check.
   await page.getByRole("textbox", { name: "Username" }).fill("someone@gmail.com");
@@ -42,7 +43,7 @@ test("a mail account can be tested, and a wrong password says so", async ({ page
 
   await page.getByRole("textbox", { name: "Server name" }).fill("127.0.0.1");
   await page.getByRole("textbox", { name: "Username" }).fill(USER);
-  await page.getByLabel("Password").fill("wrong-password");
+  await page.getByLabel("Password", { exact: true }).fill("wrong-password");
   await page.getByRole("textbox", { name: "IMAP port" }).fill("8143");
   await page.getByRole("textbox", { name: "Sending server" }).fill("127.0.0.1");
   await page.getByRole("textbox", { name: "SMTP port" }).fill("8025");
@@ -55,7 +56,7 @@ test("a mail account can be tested, and a wrong password says so", async ({ page
 
   // Once it's in, it says how much is there and asks how much of that to download.
   for (const number of [1, 2, 3]) await deliver(page, { subject: `Waiting on the server ${number}` });
-  await page.getByLabel("Password").fill("test-password");
+  await page.getByLabel("Password", { exact: true }).fill("test-password");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.getByTestId("connection-results").getByText("Connected")).toHaveCount(2);
   const chooser = page.getByTestId("pull-chooser");
@@ -68,7 +69,7 @@ test("a mail account can be tested, and a wrong password says so", async ({ page
   await page.getByRole("button", { name: "Start download" }).click();
   await expect(page.getByTestId("mail-state")).toContainText("Up to date", { timeout: 20_000 });
   await expect(page.getByText(USER)).toBeVisible();
-  await expect(page.getByLabel("Password")).toHaveCount(0);
+  await expect(page.getByLabel("Password", { exact: true })).toHaveCount(0);
   const sync = page.getByTestId("pipeline").filter({ hasText: "Mail sync" });
   await expect(sync).toContainText("Finished");
   await expect(page.getByRole("switch", { name: "Never delete anything on the server" })).toBeChecked();
@@ -101,7 +102,7 @@ test("mail sync shows on the Schedules page and the Cockpit, and can be paused f
   await expect(page.getByTestId("health-mail")).toContainText("Paused");
   await noViolations(page);
 
-  await page.goto("/connectors");
+  await page.goto("/connectors?connector=email");
   await expect(page.getByTestId("mail-state")).toContainText("Paused");
   await page.getByRole("button", { name: "Resume" }).click();
   await expect(page.getByTestId("mail-state")).toContainText("Up to date", { timeout: 20_000 });
@@ -463,7 +464,9 @@ test("a document uploads, opens with its text, and can be filed, tagged and remo
 });
 
 test("PST imports show progress and can be paused and resumed", async ({ page }) => {
-  await page.goto("/connectors");
+  await page.goto("/connectors?connector=email");
+  // Archives sit under the email connection, folded away until opened.
+  await page.getByRole("button", { name: "Mail archives" }).click();
   await page.getByRole("textbox", { name: "PST file" }).fill("/no/such/file.pst");
   await page.getByRole("button", { name: "Import" }).click();
   await expect(page.getByText("That file doesn't exist")).toBeVisible();
@@ -490,7 +493,9 @@ test("PST imports show progress and can be paused and resumed", async ({ page })
 });
 
 test("a PST file can be sent up, and picks up again after a dropped connection", async ({ page }) => {
-  await page.goto("/connectors");
+  await page.goto("/connectors?connector=email");
+  // Archives sit under the email connection, folded away until opened.
+  await page.getByRole("button", { name: "Mail archives" }).click();
   let dropped = 0;
   await page.route("**/api/pst/upload/**", (route) => {
     // The second piece fails twice, as if the connection dropped.
@@ -511,7 +516,7 @@ test("a PST file can be sent up, and picks up again after a dropped connection",
 test("the Connectors page lists Email and takes an MCP server by its address", async ({ page }) => {
   await page.goto("/connectors");
   await expect(page.getByRole("heading", { level: 1, name: "Connectors" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Email" })).toBeVisible();
+  await page.getByTestId("connection-mcp").click();
   await page.getByRole("button", { name: "Add a server" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("textbox", { name: "Name" }).fill("Nothing there");

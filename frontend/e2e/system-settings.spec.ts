@@ -16,7 +16,7 @@ test("with system settings, a mail account only asks for a username and password
     sent.push(route.request().postDataJSON());
     return route.fulfill({ json: tested });
   });
-  await page.goto("/connectors");
+  await page.goto("/connectors?connector=email");
   await expect(page.getByRole("textbox", { name: "Username" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Password" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Server" })).toHaveCount(0);

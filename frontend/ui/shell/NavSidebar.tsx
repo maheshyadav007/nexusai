@@ -8,7 +8,7 @@ import { CategoryNavActions } from "./CategoryNav";
 import { CustomMailNav } from "./CustomMailNav";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useMailFolders } from "@/ui/client/mail";
 import appConfig from "@/app.config.json";
 import { Icon } from "@/ui/icons";
@@ -31,18 +31,27 @@ const FOLDERS_COME_BEFORE = new Set(["archive", "trash"]);
 function NavRow({ item, active, collapsed, count, attention }: { item: NavItem; active: boolean; collapsed: boolean; count: number | undefined; attention: boolean }) {
   const label = t(item.label);
   const home = item.id === "today";
+  // The link is named by its label alone ("Tasks", not "Tasks 1"); the number is described.
+  const countId = useId();
+  const counted = !collapsed && Boolean(count);
   const row = (
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
       {...(collapsed ? { "aria-label": label } : {})}
+      {...(counted ? { "aria-describedby": countId } : {})}
       className={`focus-ring press relative flex items-center gap-2 rounded-md px-2 transition-colors duration-fast ${home ? "border border-accent-default/20 bg-accent-default/5 py-2 text-lg font-medium text-ink-primary hover:bg-accent-default/10" : "py-px text-md"} ${collapsed ? "justify-center" : ""} ${active ? "text-ink-primary" : home ? "" : "text-ink-secondary hover:bg-surface-raised hover:text-ink-primary"}`}
     >
       {active ? <ActiveMark group={ACTIVE_ROW} {...(home ? { className: "absolute inset-0 rounded-md bg-accent-default/10" } : {})} /> : null}
       <span className="relative flex min-w-0 flex-1 items-center gap-2">
         <Icon name={item.icon} {...(home ? { className: "text-accent-default" } : {})} />
         {collapsed ? null : <span className="min-w-0 flex-1 truncate">{label}</span>}
-        {collapsed || !count ? null : attention ? <AttentionCount value={count} /> : <CountPop value={count} className="text-sm text-ink-muted" />}
+        {counted && count ? (
+          <>
+            <span aria-hidden>{attention ? <AttentionCount value={count} /> : <CountPop value={count} className="text-sm text-ink-muted" />}</span>
+            <span id={countId} className="sr-only">{t(attention ? "nav.count.attention" : "nav.count.quiet", { count })}</span>
+          </>
+        ) : null}
       </span>
     </Link>
   );

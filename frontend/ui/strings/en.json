@@ -34,6 +34,8 @@
   "common.notification": "Notification",
   "nav.label": "Main navigation",
   "nav.skip": "Skip to content",
+  "nav.count.attention": "{count} waiting for you",
+  "nav.count.quiet": "{count} new",
   "nav.collapse": "Collapse sidebar",
   "nav.expand": "Expand sidebar",
   "nav.today": "Today",

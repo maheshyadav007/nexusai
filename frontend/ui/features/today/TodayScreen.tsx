@@ -609,7 +609,7 @@ export function TodayScreen() {
       <MailOrganizationCard />
       {today.isError ? <ErrorState title={t("today.error")} onRetry={() => void today.refetch()} /> : null}
       {today.isPending ? <Skeleton className="h-6 w-full" /> : null}
-      {today.data && noMail ? <EmptyState icon="today" title={t("today.empty.title")} description={t("today.empty.description")} action={<TextLink href="/connectors">{t("mail.noAccount.action")}</TextLink>} /> : null}
+      {today.data && noMail ? <EmptyState icon="today" title={t("today.empty.title")} description={t("today.empty.description")} action={<TextLink href="/connectors?connector=email">{t("mail.noAccount.action")}</TextLink>} /> : null}
       <div className="today-columns grid items-start gap-6">
         <div className="flex min-w-0 flex-col gap-6">
           <WaitingOnYou />

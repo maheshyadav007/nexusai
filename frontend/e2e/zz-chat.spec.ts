@@ -15,7 +15,7 @@ const noViolations = async (page: Page) => {
 const openFresh = async (page: Page) => {
   await page.goto("/agent/sessions");
   await page.getByRole("button", { name: "New session" }).click();
-  await expect(page).toHaveURL(/\/agent\/sessions\/[0-9a-f]{32}$/);
+  await expect(page.getByTestId("assistant-dock")).toBeVisible();
 };
 
 const say = async (page: Page, text: string) => {

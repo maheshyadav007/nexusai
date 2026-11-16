@@ -224,8 +224,8 @@ test("profile saves from Settings, and preferences choose the first screen", asy
   await page.goto("/settings?section=preferences");
   const screen = page.getByRole("combobox", { name: "Open to" });
   await screen.click();
-  await page.getByRole("option", { name: "Priority inbox" }).click();
-  await expect(screen).toHaveText(/Priority inbox/);
+  await page.getByRole("option", { name: "Priority" }).click();
+  await expect(screen).toHaveText(/Priority/);
   await page.goto("/");
   await expect(page).toHaveURL(/\/mail\/priority$/);
   await page.goto("/settings?section=preferences");

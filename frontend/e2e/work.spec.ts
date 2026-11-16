@@ -166,7 +166,7 @@ test("a schedule is created and runs on demand", async ({ page }) => {
   await expect(row).toBeVisible();
   await noViolations(page);
   await row.getByRole("button", { name: "Run now" }).click();
-  await expect(row.getByRole("link", { name: "Last run" })).toBeVisible({ timeout: 20_000 });
+  await expect(row.getByRole("button", { name: "Last run" })).toBeVisible({ timeout: 20_000 });
 
   // Daily prep's time and its nightly limit are the person's to set.
   const prep = page.getByTestId("schedule").filter({ hasText: "Daily prep" });

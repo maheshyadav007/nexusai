@@ -61,7 +61,7 @@ function useSteps(): { steps: Step[]; loaded: boolean; failed: boolean } {
   const downloading = (mail.data?.total ?? 0) > (mail.data?.done ?? 0);
 
   const steps: Step[] = [];
-  if (!hasMail) steps.push({ id: "mail", title: "start.mail.title", detail: t("start.mail.detail", { name: lead }), tone: "waiting", action: { label: "start.connect", href: "/connectors" } });
+  if (!hasMail) steps.push({ id: "mail", title: "start.mail.title", detail: t("start.mail.detail", { name: lead }), tone: "waiting", action: { label: "start.connect", href: "/connectors?connector=email" } });
   if (!hasModel) steps.push({ id: "model", title: "start.model.title", detail: t("start.model.detail", { name: lead }), tone: "waiting", action: { label: "start.connect", href: "/settings?section=models" } });
 
   const reading: Step = { id: "reading", title: "start.reading.title", detail: t("start.reading.waiting"), tone: "idle", extra: <SearchProgress /> };
