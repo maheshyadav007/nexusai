@@ -2238,7 +2238,8 @@ def sort_category(command: SortCategory, ctx: Context) -> CategorySortEstimate:
         raise CommandError("category.not_found", "That folder no longer exists.", 404)
     folder = rows[0]
     candidates = ctx.bus.db.fetch_all(
-        "SELECT t.id,m.id AS message,t.decision_version FROM threads t JOIN messages m ON m.id=(SELECT id FROM messages WHERE thread_id=t.id ORDER BY date DESC,id DESC LIMIT 1) WHERE t.account=? AND t.in_trash=0 AND t.in_junk=0 AND COALESCE(t.category_source,'')!='user' ORDER BY t.last_date DESC,t.id DESC",
+        "SELECT t.id,m.id AS message,t.decision_version FROM threads t JOIN messages m ON m.id=(SELECT id FROM messages WHERE thread_id=t.id ORDER BY date DESC,id DESC LIMIT 1) WHERE t.account=? AND t.in_trash=0 AND t.in_junk=0 AND COALESCE(t.category_source,'')!='user'"
+        f" AND NOT {rules.FILED_BY_RULE} ORDER BY t.last_date DESC,t.id DESC",
         (accounts.current_account(ctx.config),),
     )
     tokens = (

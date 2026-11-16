@@ -38,7 +38,7 @@ from nexusai.modules.agent.prompt_data import untrusted
 from nexusai.modules.agent.providers import Message
 from nexusai.modules.mail import accounts
 from nexusai.modules.mail import module as mail
-from nexusai.modules.mail.rules import NO_REPLY
+from nexusai.modules.mail.rules import FILED_BY_RULE, NO_REPLY
 from nexusai.modules.planner import module as planner
 
 log = structlog.get_logger()
@@ -1055,10 +1055,12 @@ class Triage:
             # What the person chose stays, and so does what their rule filed.
             if not sent:
                 current = work.tx.execute(
-                    "SELECT category, category_source, extra_categories FROM threads WHERE id = ?",
+                    "SELECT category, category_source, extra_categories,"
+                    f" {FILED_BY_RULE} AS ruled FROM threads t WHERE id = ?",
                     (thread,),
                 ).fetchone()
-                if current and current["category_source"] != "user":
+                # A rule the person can see files it alone, with no folders added beside it.
+                if current and current["category_source"] != "user" and not current["ruled"]:
                     primary = (
                         current["category"] if current["category_source"] == "rule" else category
                     )

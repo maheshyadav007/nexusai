@@ -43,3 +43,7 @@ export interface DesktopApi {
 }
 declare global { interface Window { nexusDesktop?: DesktopApi } }
 export const desktopApi = () => typeof window === "undefined" ? undefined : window.nexusDesktop;
+
+/** Whether the person is looking at the app now. A notice shows inside the app when they are and
+ * from the system when they aren't, never both. */
+export const appInFront = (): boolean => typeof document !== "undefined" && document.visibilityState === "visible" && document.hasFocus();

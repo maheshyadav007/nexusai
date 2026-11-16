@@ -16,7 +16,7 @@ from nexusai.modules.agent import category_names, facts, memory, signals
 from nexusai.modules.agent.context import TurnRequest
 from nexusai.modules.agent.prompt_data import untrusted
 from nexusai.modules.mail import accounts
-from nexusai.modules.mail.rules import NO_REPLY, REPLY_PREFIX, WORTH_A_LOOK
+from nexusai.modules.mail.rules import FILED_BY_RULE, NO_REPLY, REPLY_PREFIX, WORTH_A_LOOK
 
 BATCH_SIZE = 30
 RECENT_LIMIT = 200
@@ -151,7 +151,8 @@ def queue(ctx: Context, *, retry_failed: bool = False, limit_groups: int | None 
     with ctx.bus.db.transaction() as tx:
         rows = tx.execute(
             "SELECT m.id, m.thread_id, m.from_addr, m.subject FROM messages m JOIN threads t ON t.id=m.thread_id"
-            " WHERE m.account=? AND m.rule IS NULL AND t.in_trash=0 AND t.in_junk=0"
+            # Replies and sent copies in a conversation a rule filed are the rule's too.
+            f" WHERE m.account=? AND m.rule IS NULL AND NOT {FILED_BY_RULE} AND t.in_trash=0 AND t.in_junk=0"
             " AND NOT EXISTS (SELECT 1 FROM mail_learning_members g WHERE g.message=m.id) ORDER BY m.date DESC,m.id DESC",
             (account,),
         ).fetchall()
@@ -541,7 +542,8 @@ def finalize(ctx: Context, importance: Mapping[str, str] | None = None) -> None:
             rows = tx.execute(
                 "SELECT t.*,m.id AS message,m.from_addr,m.to_json,m.subject AS latest_subject,SUBSTR(m.clean_text,1,12000) AS clean_text,"
                 " COALESCE(g.importance,CASE WHEN m.rule IS NULL THEN 'normal' ELSE 'low' END) AS usual,g.folder,"
-                " COALESCE(g.importance='low' AND (g.importance_confirmed=1 OR g.uncertain=0),0) AS settled_low"
+                " COALESCE(g.importance='low' AND (g.importance_confirmed=1 OR g.uncertain=0),0) AS settled_low,"
+                f" {FILED_BY_RULE} AS ruled"
                 " FROM threads t JOIN messages m ON m.id=(SELECT id FROM messages WHERE thread_id=t.id ORDER BY date DESC,id DESC LIMIT 1)"
                 " LEFT JOIN mail_learning_members member ON member.message=m.id LEFT JOIN mail_learning_groups g ON g.id=member.group_id"
                 " WHERE t.account=? AND t.id>? AND t.in_trash=0 AND t.in_junk=0 AND (g.learned=1 OR g.id IS NULL) ORDER BY t.id LIMIT 500",
@@ -584,7 +586,8 @@ def finalize(ctx: Context, importance: Mapping[str, str] | None = None) -> None:
                 folder = tx.execute(
                     "SELECT name FROM mail_categories WHERE name=? AND proposed=0", (row["folder"],)
                 ).fetchone()
-                if folder and row["category_source"] != "user":
+                # What the person chose stays, and so does what their rule filed.
+                if folder and row["category_source"] != "user" and not row["ruled"]:
                     if row["category_source"] == "rule":
                         extras = list(
                             dict.fromkeys([*json.loads(row["extra_categories"]), folder["name"]])

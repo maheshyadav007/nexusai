@@ -139,6 +139,8 @@ export function AssistantDock() {
   const sessions = useSessions("");
   const waiting = useWaitingCount();
   const running = sessions.data?.running ?? 0;
+  // A chat waiting on the person, such as the first meeting, is what the pill opens.
+  const waitingChat = (sessions.data?.sessions ?? []).find((row) => row.status === "waiting" && row.id !== MAIL_AGENT);
   // The session page already is this conversation, and two live views of one chat would fight.
   if (pathname.startsWith("/agent/sessions/")) return null;
   return (
@@ -146,7 +148,7 @@ export function AssistantDock() {
       {assistant.open ? (
         <Panel key="panel" />
       ) : (
-        <RiseButton key="pill" onClick={() => assistant.setOpen(true)} data-testid="assistant-pill" className="assistant-pill ai-glow focus-ring fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full px-4 py-2 text-md font-medium text-ink-primary shadow-overlay">
+        <RiseButton key="pill" onClick={() => (waitingChat ? assistant.openSession(waitingChat.id) : assistant.setOpen(true))} data-testid="assistant-pill" className="assistant-pill ai-glow focus-ring fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full px-4 py-2 text-md font-medium text-ink-primary shadow-overlay">
           <Icon name="chat" />
           {t("chat.pill", { agent: lead })}
           {waiting ? (

@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from fake_mail import USER, FakeMail, make_mail
 from nexusai.kernel.config import Config
-from nexusai.modules.agent import mail_agent, memory, scheduler, signals, tools
+from nexusai.modules.agent import bulk_learning, mail_agent, memory, scheduler, signals, tools
 from nexusai.modules.agent.providers import TextChunk, ToolCall
 from test_agent_work import (  # noqa: F401
     Script,
@@ -681,6 +681,38 @@ def test_exact_header_folder_keeps_primary_and_smart_filing_is_extra(
         "Smart filing as extra",
     )
     assert row(client, first["id"])["category"] == "Updates"
+
+
+def test_a_conversation_a_rule_filed_gets_no_ai_folders_and_is_not_learned(
+    client: TestClient, fake: FakeMail, script: Script
+) -> None:
+    connect(client, fake)
+    post(client, "categories.save", "commands", name="Briefing", subject="[Briefing]")
+    post(client, "categories.save", "commands", name="Job search", mode="smart")
+    fake.state.deliver(make_mail(subject="[Briefing] Week 46", sender=USER, message_id="<b1@x>"))
+    first = thread_named(client, "[Briefing] Week 46")
+    assert first["category"] == "Briefing"
+    # A reply the rule doesn't match still belongs to the conversation the rule filed.
+    script.default = triage_reply(smart_folders=["Job search"], status="waiting_on_you")
+    fake.state.deliver(
+        make_mail(
+            subject="Re: [Briefing] Week 46",
+            sender="colleague@x.com",
+            message_id="<b2@x>",
+            in_reply_to="<b1@x>",
+        )
+    )
+    wait(lambda: row(client, first["id"])["status"] == "waiting_on_you", "the reply judged")
+    after = row(client, first["id"])
+    assert after["category"] == "Briefing"
+    assert json.loads(after["extra_categories"]) == []
+    assert not client.app.state.bus.db.fetch_all(  # type: ignore[attr-defined]
+        "SELECT 1 FROM mail_learning_members WHERE thread=?", (first["id"],)
+    )
+    bulk_learning.queue(mail_context(client))
+    assert not client.app.state.bus.db.fetch_all(  # type: ignore[attr-defined]
+        "SELECT 1 FROM mail_learning_members WHERE thread=?", (first["id"],)
+    )
 
 
 def test_read_more_groups_incoming_and_sent_conversations(

@@ -124,7 +124,7 @@ learn_recent_days = 7
 command_timeout_seconds = 120
 max_tool_output_chars = 20000
 max_agent_messages_per_run = 20
-max_steps = 40
+max_steps = 200
 
 # How agents work together. Every limit is enforced by the harness, and no agent can raise its own.
 [team]

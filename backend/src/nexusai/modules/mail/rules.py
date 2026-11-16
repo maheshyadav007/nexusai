@@ -50,6 +50,14 @@ PUBLIC_MAIL_DOMAINS = frozenset(
 )
 
 
+# A conversation filed by a rule the person can see (a sender or subject prefix) belongs to that
+# rule: the AI neither files it elsewhere nor learns from it. Folders filed by headers alone, like
+# Updates, are guesses, and stay open to a closer look. Needs the threads table as `t`.
+FILED_BY_RULE = (
+    "(t.category_source='rule' AND EXISTS (SELECT 1 FROM mail_categories c WHERE c.name=t.category"
+    " AND (COALESCE(c.sender,'')!='' OR COALESCE(c.subject,'')!='')))"
+)
+
 # Automated mail goes unjudged, unless what it says could cost the person something.
 WORTH_A_LOOK = re.compile(
     r"\b(action required|escalat\w*|payment|overdue|past due|due (on|by|date|soon)"

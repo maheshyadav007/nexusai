@@ -272,17 +272,21 @@ def _guarded(
         reason = "This tool is turned off in Settings."
         _log_call(ctx, session, call_id, tool, detail or summary, reason, "refused", None, 0)
         return f"Not allowed: {reason}"
+    untrusted = _is_untrusted(ctx, session)
+    granted = policy.allowed_for_session(db, session, kind)
     decision = policy.decide(
         action,
         path=path,
         home=ctx.config.home,
         permissions=policy.for_tool(permissions, tool),
-        untrusted=_is_untrusted(ctx, session),
-        session_allowed=(
-            policy.allowed_for_session(db, session, kind)
-            and policy.can_remember(tool, _is_untrusted(ctx, session))
-        ),
+        untrusted=untrusted,
+        session_allowed=granted and policy.can_remember(tool, untrusted),
     )
+    if decision.verdict == "ask" and granted and untrusted and action != "send":
+        # Allowed for the session before it read mail; say why it asks again rather than seem broken.
+        decision = policy.Decision(
+            "ask", "Asking again: this chat has read mail or documents since you allowed it."
+        )
     approved_by = "settings"
     if decision.verdict == "deny":
         _log_call(

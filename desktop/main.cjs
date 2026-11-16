@@ -323,7 +323,7 @@ function markReady(version) {
   log(`Update ${version} is ready; it starts on the next restart.`);
   if (probeDir) { void shutdown(true); return; }
   updateTray();
-  const ask = () => void dialog.showMessageBox(window, { message: 'A NexusAI update is ready.', detail: 'Restart when your current work is finished.',
+  const ask = () => void dialog.showMessageBox(window, { message: 'A NexusAI update is ready.', detail: 'Until you restart you keep using this version. Restarting closes NexusAI and opens it again on the new version, with your mail, settings and chats as they were.',
     buttons: ['Later', 'Restart to update'], defaultId: 0, cancelId: 0,
   }).then(({ response }) => { if (response === 1) void shutdown(true); });
   // Put away by the clock, a dialog on the window would never be seen; a notification leads back to it.

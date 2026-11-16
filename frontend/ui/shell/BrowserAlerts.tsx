@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useEvents } from "@/ui/client/events";
 import { useSettings } from "@/ui/client/settings";
-import { desktopApi } from "@/ui/client/desktop";
+import { appInFront, desktopApi } from "@/ui/client/desktop";
 import { playChime } from "@/ui/client/sound";
 import { useQuietHours } from "@/ui/client/work";
 import { t } from "@/ui/strings";
@@ -51,6 +51,11 @@ export function BrowserAlerts() {
         const hushed = now.quiet?.enabled && isQuiet(now.quiet.start ?? "", now.quiet.end ?? "", new Date());
         const sound = Boolean(kind && !now.muted && !hushed && !now.off.includes(kind));
         const desktop = desktopApi();
+        // In front, the app shows it itself, so the system stays quiet.
+        if (event.type === "notification.requested" && appInFront()) {
+          if (sound) playChime();
+          return;
+        }
         if (desktop && event.type === "notification.requested") {
           void desktop.notify({ title: String(event.payload.title ?? t("app.name")), body: String(event.payload.detail ?? ""), link: String(event.payload.link ?? "/today"), silent: !sound }).catch(() => { if (sound) playChime(); });
           return;

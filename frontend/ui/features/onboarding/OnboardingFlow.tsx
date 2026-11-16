@@ -38,6 +38,9 @@ const STEPS: readonly Step[] = [
   { id: "permissions", label: "setup.agent.label", title: "setup.permissions.title", formTitle: "setup.permissions.formTitle", formNote: "setup.permissions.formNote" },
 ];
 
+// Every step's main button is as wide as the widest of these, so it stays put from step to step.
+const SETUP_LABELS = () => [t("setup.skip"), t("setup.next"), t("setup.enter")];
+
 const NEEDS_RECOVERY = new Set(["missing", "locked", "damaged"]);
 
 /** Nothing downloads until the person says so. Skipping just means search goes by keyword. */
@@ -70,14 +73,15 @@ function Frame({ step, index, actions, children }: { step: Step; index: number; 
           <p className="mt-6 text-sm text-ink-muted">{t(index === STEPS.length - 1 ? "setup.lastStep" : "setup.time")}</p>
           <span aria-hidden className="absolute right-0 top-1/2 hidden h-popover w-px -translate-y-1/2 bg-line-subtle lg:block" />
         </aside>
-        <section className="flex min-w-0 items-start px-6 py-6 lg:col-span-3 lg:h-full lg:items-center lg:overflow-y-auto lg:px-7 lg:py-7">
-          {/* At least the step's height, so buttons sit in one place; taller steps scroll. */}
+        <section className="flex min-w-0 items-start px-6 py-6 lg:col-span-3 lg:h-full lg:overflow-y-auto lg:px-7 lg:py-7">
+          {/* Top-aligned and at least the step's height, so what appears while a step works (a
+              connection, a download) never moves the buttons; taller steps scroll. */}
           <div className="mx-auto flex min-h-onboarding w-full max-w-onboarding flex-col">
             <p className="mb-2 text-sm font-medium tracking-wide text-ink-muted">{t(step.label, { name: lead })}</p>
             <h2 className="font-serif text-title text-ink-primary">{t(step.formTitle, { name: lead })}</h2>
             <p className="mb-8 mt-2 text-md leading-relaxed text-ink-muted">{t(step.formNote)}</p>
             <Steps step={step.id} forward={forward}>
-              <section className="onboarding-fields flex h-full flex-col gap-5">
+              <section className="onboarding-fields flex flex-1 flex-col gap-5">
                 {children}
                 {actions ? <footer className="mt-auto flex w-full items-center justify-between gap-3 pt-6">{actions}</footer> : null}
               </section>
@@ -158,7 +162,7 @@ export function OnboardingFlow() {
   if (step.id === "profile") {
     return (
       <Frame step={step} index={index}>
-        <ProfileForm compact onboarding actions={back} action={t("setup.next")} onSaved={goNext} />
+        <ProfileForm compact onboarding actions={back} action={t("setup.next")} sizedFor={SETUP_LABELS()} onSaved={goNext} />
       </Frame>
     );
   }
@@ -169,7 +173,7 @@ export function OnboardingFlow() {
       actions={
         <>
           {back ?? <span aria-hidden />}
-          <Button variant="primary" loading={setStep.isPending || finish.isPending} onClick={goNext}>
+          <Button variant="primary" loading={setStep.isPending || finish.isPending} onClick={goNext} sizedFor={SETUP_LABELS()}>
             {t(isLast ? "setup.enter" : (step.id === "mail" && !mail.data?.account) || (step.id === "search" && !semantic.data?.ready && !semantic.data?.models.some((row) => row.state === "downloading")) ? "setup.skip" : "setup.next")}
           </Button>
         </>

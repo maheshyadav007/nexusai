@@ -348,7 +348,7 @@ def test_bulk_marks_preserve_person_choices_and_smart_folders_require_acceptance
     assert thread(ctx, item.thread)["category"] == "Personal"
 
 
-def test_triage_only_files_into_existing_smart_folders_and_preserves_exact(ctx: Context) -> None:
+def test_triage_adds_no_folders_to_mail_a_visible_rule_filed(ctx: Context) -> None:
     mail.save_category(SaveCategory(name="Project", mode="smart", description="My project"), ctx)
     mail.save_category(
         SaveCategory(name="PLM", mode="exact", subject="[PLM]", in_priority=False), ctx
@@ -366,7 +366,8 @@ def test_triage_only_files_into_existing_smart_folders_and_preserves_exact(ctx: 
     )
     current = thread(ctx, item.thread)
     assert current["category"] == "PLM"
-    assert json.loads(current["extra_categories"]) == ["Project"]
+    # The [PLM] rule decides alone: no smart folder beside it, and nothing made up.
+    assert json.loads(current["extra_categories"]) == []
     assert ctx.bus.db.fetch_all("SELECT 1 FROM mail_categories WHERE name='Made up'") == []
     assert visible(ctx, item.thread)
 

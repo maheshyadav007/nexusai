@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { appInFront, desktopApi } from "@/ui/client/desktop";
 import { useEvents } from "@/ui/client/events";
 import { groupApprovals, useApprovals, useSessions } from "@/ui/client/sessions";
 import { useChannel } from "@/ui/client/work";
@@ -80,7 +81,8 @@ export function AgentToasts() {
   useEffect(
     () =>
       subscribe((event) => {
-        if (event.type !== "notification.requested" || event.payload.kind === "ask") return;
+        // Away from the desktop app, the system shows it instead. A browser tab keeps it for later.
+        if (event.type !== "notification.requested" || event.payload.kind === "ask" || (desktopApi() && !appInFront())) return;
         const { title, detail, link } = event.payload as { title?: string; detail?: string; link?: string };
         push({
           key: `note-${event.seq}`,

@@ -17,10 +17,12 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Kept for callers; model activity is shown in GenerationSurface, separately from request loading. */
   thinking?: boolean;
   children: ReactNode;
+  /** Other labels this button switches between, so it keeps the widest one's size and doesn't move. */
+  sizedFor?: readonly string[];
   ref?: Ref<HTMLButtonElement>;
 }
 
-export function Button({ variant = "secondary", loading = false, thinking: _thinking = false, disabled, className = "", children, ...props }: ButtonProps) {
+export function Button({ variant = "secondary", loading = false, thinking: _thinking = false, disabled, className = "", children, sizedFor, ...props }: ButtonProps) {
   return (
     <button
       type="button"
@@ -30,7 +32,12 @@ export function Button({ variant = "secondary", loading = false, thinking: _thin
       {...props}
     >
       {loading ? <Icon name="loading" className="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" /> : null}
-      {children}
+      {sizedFor?.length ? (
+        <span className="grid">
+          <span className="col-start-1 row-start-1">{children}</span>
+          {sizedFor.map((label) => <span key={label} aria-hidden className="invisible col-start-1 row-start-1">{label}</span>)}
+        </span>
+      ) : children}
     </button>
   );
 }

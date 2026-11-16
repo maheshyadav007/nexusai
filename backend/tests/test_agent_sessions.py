@@ -317,6 +317,28 @@ def test_allow_for_session_stops_asking_for_the_same_kind_only(
     client.post("/api/commands/session.stop", json={"id": other})
 
 
+def test_allowed_for_session_says_why_it_asks_again_after_reading_mail(
+    client: TestClient, script: Script, config: Config
+) -> None:
+    session = new_session(client)
+    script.replies = [
+        [ToolCall("c1", "run_command", {"command": "echo one"})],
+        [TextChunk("ok")],
+        [ToolCall("c2", "run_command", {"command": "echo two"})],
+        [TextChunk("ok")],
+    ]
+    start_turn(client, session, "First")
+    pending = wait(lambda: approvals(client), "approval")[0]
+    client.post("/api/commands/approvals.decide", json={"id": pending["id"], "choice": "session"})
+    wait(lambda: status(client, session) == "done", "done")
+    with client.app.state.bus.db.transaction() as tx:  # type: ignore[attr-defined]
+        tx.execute("UPDATE agent_sessions SET untrusted = 1 WHERE id = ?", (session,))
+    start_turn(client, session, "Second, after reading mail")
+    again = wait(lambda: approvals(client), "asks again")[0]
+    assert again["reason"].startswith("Asking again")
+    client.post("/api/commands/session.stop", json={"id": session})
+
+
 def test_several_tool_calls_in_one_step_each_get_decided(
     client: TestClient, script: Script, config: Config
 ) -> None:
