@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from nexusai.contracts.agent import MemoryFile, MemoryProposal
+from nexusai.kernel import textmatch
 from nexusai.kernel.database import Database, Migration
 from nexusai.kernel.module import CommandError
 from nexusai.modules.agent.prompt_data import untrusted
@@ -251,11 +252,20 @@ def remember(
     return len(new), len(facts) - len(new)
 
 
-def propose(db: Database, agent: str, text: str, source: str | None) -> None:
+def propose(
+    db: Database, agent: str, text: str, source: str | None, home: Path | None = None
+) -> None:
     """Runs that read untrusted content can only suggest a memory, so mail can't plant one."""
-    # The same mail can be judged again, and shouldn't ask twice.
-    if db.fetch_all(
-        "SELECT id FROM memory_proposals WHERE text = ? AND source IS ?", (text, source)
+    # Not again for the same fact, in any wording, from any email: waiting, already turned
+    # down, or already in memory. Only identical text from the same email used to count.
+    asked = db.fetch_all("SELECT text FROM memory_proposals WHERE status IN ('pending','declined')")
+    if any(row["text"] == text or textmatch.same(row["text"], text) for row in asked):
+        return
+    if home is not None and any(
+        textmatch.same(line.lstrip("-* "), text)
+        for file in list_files(home)
+        for line in file.content.splitlines()
+        if line.strip()
     ):
         return
     with db.transaction() as tx:

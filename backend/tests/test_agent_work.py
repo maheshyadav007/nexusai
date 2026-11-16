@@ -690,6 +690,32 @@ def test_trusted_interview_saves_prompts(
     assert (config.home / "prompts" / "personal" / "about-me.md").read_text() == "I run audit."
 
 
+def test_saving_a_prompt_adds_to_it_and_only_replace_removes(
+    client: TestClient, script: Script, config: Config
+) -> None:
+    """Regression: a save used to replace the whole prompt, so new rules wiped the old ones."""
+    target = config.home / "prompts" / "personal" / "importance.md"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        "# What's important\n- Meera Iyer is my manager.\n- Escalations are urgent.\n"
+    )
+
+    def save(arguments: dict[str, str]) -> str:
+        return run_tool(client, script, ToolCall("p", "save_personal_prompt", arguments))[1]
+
+    told = save({"name": "importance", "content": "- escalations are URGENT.\n- Payslips are low."})
+    assert "Adds 1 line" in told
+    text = target.read_text()
+    assert "Meera Iyer is my manager" in text and "Escalations are urgent" in text
+    assert text.count("scalations") == 1 and text.rstrip().endswith("- Payslips are low.")
+
+    assert "Nothing to save" in save({"name": "importance", "content": "- Payslips are low."})
+
+    told = save({"name": "importance", "content": "- Payslips are low.", "mode": "replace"})
+    assert "removing 3 lines" in told and "Meera Iyer is my manager." in told
+    assert target.read_text() == "- Payslips are low."
+
+
 def test_context_is_attached_as_data_can_be_removed_and_marks_untrusted(
     client: TestClient, script: Script, fake: FakeMail
 ) -> None:

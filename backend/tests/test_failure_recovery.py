@@ -495,3 +495,54 @@ def test_failed_group_learning_does_not_hold_the_first_meeting(
         assert review["interview"] and review["interview"] != first[0]["id"]
     finally:
         engine.close()
+
+
+def test_after_group_learning_the_first_review_and_brief_run_once(
+    ctx: Context, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: a learning review row stopped these, so a new account waited a day."""
+    engine = runtime.SessionRuntime(ctx)
+    try:
+        dispatcher = triggers.Triggers(ctx, engine)
+        with ctx.bus.db.transaction() as tx:
+            tx.execute(
+                "INSERT INTO mail_learning_reviews(account,state,updated) VALUES('test','asking',?)",
+                (mail_agent._now(),),
+            )
+        mail_agent.set_learning_state(ctx, "done")
+
+        def queued(kind: str) -> list[str]:
+            return [
+                row["event"]
+                for row in ctx.bus.db.fetch_all(
+                    "SELECT r.event FROM trigger_runs r JOIN schedules s ON s.id=r.schedule WHERE s.kind=?",
+                    (kind,),
+                )
+            ]
+
+        dispatcher._catch_up_once()
+        assert queued(scheduler.BRIEF_KIND) == []  # still asking about uncertain groups
+        with ctx.bus.db.transaction() as tx:
+            tx.execute("UPDATE mail_learning_reviews SET state='done'")
+        for _ in range(3):  # every tick calls it
+            dispatcher._catch_up_once()
+        assert [event.split("-2")[0] for event in queued(scheduler.REVIEW_KIND)] == ["first-review"]
+        assert [event.split("-2")[0] for event in queued(scheduler.BRIEF_KIND)] == ["first-brief"]
+    finally:
+        engine.close()
+
+
+def test_an_account_that_already_had_a_brief_gets_no_extra_one(ctx: Context) -> None:
+    engine = runtime.SessionRuntime(ctx)
+    try:
+        dispatcher = triggers.Triggers(ctx, engine)
+        brief = ctx.bus.db.fetch_all(
+            "SELECT id FROM schedules WHERE kind=?", (scheduler.BRIEF_KIND,)
+        )[0]["id"]
+        dispatcher.fire_schedule("morning-2026-11-15", brief)
+        mail_agent.set_learning_state(ctx, "done")
+        dispatcher._catch_up_once()
+        events = ctx.bus.db.fetch_all("SELECT event FROM trigger_runs WHERE schedule=?", (brief,))
+        assert [row["event"] for row in events] == ["morning-2026-11-15"]
+    finally:
+        engine.close()

@@ -218,3 +218,48 @@ def test_interview_uses_short_ids_and_maps_answers_back(ctx: Context) -> None:
     # Another interview's names don't leak in, and an older interview's real ids still work.
     legacy, none = bulk_learning.interview_answers(ctx, "older", {PHONE_SHAPED_HASH: "low"})
     assert legacy == {PHONE_SHAPED_HASH: "low"} and none == []
+
+
+# Posty is the one name the person meets
+
+
+@pytest.mark.parametrize("agent", ["session", "mail", "interview"])
+def test_every_agent_knows_it_is_posty_and_nexusai_is_the_app(ctx: Context, agent: str) -> None:
+    from nexusai.modules.agent import prompts_builder
+
+    layers = prompts_builder.build_layers(ctx.config, agent, db=ctx.bus.db)
+    text = "\n".join(layer.text for layer in layers)
+    system = layers[0].text
+    assert "You are NexusAI" not in text
+    assert "Posty, their chief of staff in NexusAI" in system
+    if agent == "session":
+        assert "You are Posty (@posty). Your chief of staff." in text
+    else:
+        assert "part of Posty's team" in system
+
+
+# The same suggestion isn't asked twice
+
+
+def test_reworded_tasks_and_memory_are_not_suggested_twice(ctx: Context) -> None:
+    from nexusai.modules.agent import memory
+    from nexusai.modules.planner import module as planner
+
+    planner.add_task(ctx, "Reply to Priya about the budget", None, 7, "agent", True)
+    assert planner.has_task(ctx.bus.db, "Respond to Priya re budget", 7)
+    assert not planner.has_task(ctx.bus.db, "Respond to Priya re budget", 8)
+    assert not planner.has_task(ctx.bus.db, "Book the Pune hotel", 7)
+
+    db, home = ctx.bus.db, ctx.config.home
+    memory.propose(db, "Mail agent", "Meera Iyer is my manager.", "/mail/thread/1", home)
+    memory.propose(db, "Mail agent", "meera iyer is MY manager", "/mail/thread/2", home)
+    assert [row.text for row in memory.proposals(db)] == ["Meera Iyer is my manager."]
+    proposal = memory.proposals(db)[0].id
+    memory.decide_proposal(db, home, proposal, False)
+    memory.propose(db, "Mail agent", "Meera Iyer is my manager", "/mail/thread/3", home)
+    assert memory.proposals(db) == []  # turned down, so not asked again
+    memory.remember(home, db, "Posty", ["Prefers short replies."], False, None)
+    memory.propose(db, "Mail agent", "prefers short replies", "/mail/thread/4", home)
+    assert memory.proposals(db) == []  # already known
+    memory.propose(db, "Mail agent", "Works on the RRC launch.", "/mail/thread/5", home)
+    assert len(memory.proposals(db)) == 1

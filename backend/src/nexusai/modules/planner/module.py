@@ -18,6 +18,7 @@ from nexusai.contracts.planner import (
     TaskAction,
     TaskList,
 )
+from nexusai.kernel import textmatch
 from nexusai.kernel.database import Database, Migration
 from nexusai.kernel.module import CommandError, Context, Module
 
@@ -146,10 +147,18 @@ def remove_reminders(ctx: Context, identifiers: list[int]) -> None:
 
 
 def has_task(db: Database, title: str, thread: int | None) -> bool:
-    """Whether this conversation already led to this task, including one that's finished."""
-    return bool(
-        db.fetch_all("SELECT id FROM tasks WHERE title = ? AND thread IS ?", (title, thread))
-    )
+    """Whether this conversation already led to this task, including one that's finished, in
+    any wording. Only exact titles used to count, so a re-judged email added "Respond to Priya
+    re budget" beside "Reply to Priya about the budget"."""
+    if thread is None:
+        # Without a conversation, only open suggestions are compared, not the whole task list.
+        rows = db.fetch_all(
+            "SELECT title FROM tasks WHERE thread IS NULL AND (proposed = 1 OR title = ?)",
+            (title,),
+        )
+    else:
+        rows = db.fetch_all("SELECT title FROM tasks WHERE thread = ?", (thread,))
+    return any(row["title"] == title or textmatch.same(row["title"], title) for row in rows)
 
 
 def has_reminder(db: Database, title: str, thread: int | None) -> bool:

@@ -129,6 +129,11 @@ LEARNING_TURN = "mail_learning_turn"
 LEARNING_TOTAL = "mail_learning_total"
 LEARN_COUNT = "mail_learn_emails"
 LEARNING_ORIGIN = "mail-learn"
+# Header-rule folders the agent may also use, for mail whose headers didn't say what it is.
+FALLBACK_DESCRIPTIONS = {
+    "Promotions": "Marketing, offers, sales and newsletters, including ones the header rules missed",
+    "Updates": "Automated notices: receipts, statements, alerts and account or order updates",
+}
 NOT_FROM_RULES = (
     "m.account = ? AND m.folder_role = 'inbox' AND m.rule IS NULL AND NOT EXISTS"
     " (SELECT 1 FROM triage_runs r WHERE r.message = m.id)"
@@ -395,16 +400,28 @@ def task_for(
     if board:
         lines = "\n".join(f"- {r['kind']}: {r['title']} (due {r['due']})" for r in board)
         task += "\n\nAlready on the work board for this conversation:\n" + untrusted(lines)
-    known = db.fetch_all(
-        "SELECT name, description, in_priority FROM mail_categories WHERE proposed = 0 AND mode = 'smart' ORDER BY position, name"
-    )
+    known = [
+        dict(row)
+        for row in db.fetch_all(
+            "SELECT name, description, in_priority FROM mail_categories WHERE proposed = 0 AND mode = 'smart' ORDER BY position, name"
+        )
+    ]
+    # Header rules only catch marketing and automated mail that says so in its headers. What they
+    # miss reaches the agent, which could not file it there and so sent it to Broadcast or left
+    # it in the inbox.
+    known += [
+        {"name": row["name"], "description": FALLBACK_DESCRIPTIONS[row["name"]], "in_priority": 0}
+        for row in db.fetch_all(
+            "SELECT name FROM mail_categories WHERE proposed = 0 AND name IN ('Promotions','Updates') ORDER BY name"
+        )
+    ]
     if known:
-        descriptions = json.dumps([dict(row) for row in known], ensure_ascii=False)
+        descriptions = json.dumps(known, ensure_ascii=False)
         task += "\n\nSmart folders (use only these names, zero or more):\n" + untrusted(
             descriptions
         )
     exact = db.fetch_all(
-        "SELECT name, description, sender, subject, in_priority FROM mail_categories WHERE proposed = 0 AND mode = 'exact' ORDER BY position, name"
+        "SELECT name, description, sender, subject, in_priority FROM mail_categories WHERE proposed = 0 AND mode = 'exact' AND name NOT IN ('Promotions','Updates') ORDER BY position, name"
     )
     if exact:
         task += (
@@ -936,7 +953,7 @@ class Triage:
         allowed = {
             row["name"].casefold(): row["name"]
             for row in ctx.bus.db.fetch_all(
-                "SELECT name FROM mail_categories WHERE mode = 'smart' AND proposed = 0"
+                "SELECT name FROM mail_categories WHERE proposed = 0 AND (mode = 'smart' OR name IN ('Promotions','Updates'))"
             )
         }
         requested = parsed.get("smart_folders")
@@ -963,8 +980,10 @@ class Triage:
                 )
             )
             > signals.MOST_NAMED_RECIPIENTS
+            # Only when nothing better fits: Broadcast used to go first even over Promotions.
+            and not smart
         ):
-            smart = list(dict.fromkeys([allowed["broadcast"], *smart]))
+            smart = [allowed["broadcast"]]
         category = smart[0] if smart else None
         next_action = parsed.get("next_action")
         next_action = next_action if next_action in NEXT_ACTIONS else None
@@ -1226,6 +1245,7 @@ class Triage:
                 cards.name(ctx.bus.db, AGENT),
                 str(parsed["memory"])[:2000],
                 f"/mail/thread/{thread}",
+                ctx.config.home,
             )
 
     def _draft(self, thread: int, body: str, subject: str) -> None:

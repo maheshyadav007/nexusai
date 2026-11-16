@@ -722,8 +722,47 @@ class _DraftReply(BaseModel):
 
 class _SavePrompt(BaseModel):
     name: str = Field(description="about-me, importance, categories, senders or topics.")
-    content: str = Field(description="The prompt's whole content, in markdown.")
+    content: str = Field(
+        description="With mode add: only the new lines, in markdown. With mode replace: the "
+        "prompt's whole new content."
+    )
+    mode: Literal["add", "replace"] = Field(
+        default="add",
+        description="add (default) keeps everything already there and adds new lines. replace "
+        "rewrites the whole prompt: use it only when the person changed or removed something.",
+    )
     tool_call_id: Annotated[str, InjectedToolCallId]
+
+
+def _prompt_line(line: str) -> str:
+    """Two lines say the same thing when they differ only in bullets, case and spacing."""
+    return " ".join(line.strip().lstrip("-*• ").split()).casefold()
+
+
+def merge_prompt(existing: str, added: str) -> tuple[str, int]:
+    """Existing text stays as it is; only lines it doesn't already say are added, in order."""
+    if not existing.strip():
+        return added, sum(1 for line in added.splitlines() if line.strip())
+    known = {_prompt_line(line) for line in existing.splitlines() if line.strip()}
+    new = []
+    for line in added.splitlines():
+        key = _prompt_line(line)
+        if key and key not in known:
+            known.add(key)
+            new.append(line.rstrip())
+    if not new:
+        return existing, 0
+    base = existing.rstrip("\n")
+    return (f"{base}\n" if base else "") + "\n".join(new) + "\n", len(new)
+
+
+def removed_lines(existing: str, replacement: str) -> list[str]:
+    kept = {_prompt_line(line) for line in replacement.splitlines() if line.strip()}
+    return [
+        line.strip()
+        for line in existing.splitlines()
+        if line.strip() and _prompt_line(line) not in kept
+    ]
 
 
 class _SearchDocuments(BaseModel):
@@ -1686,6 +1725,8 @@ def build_tools(
     def propose_task(
         title: str, tool_call_id: str, due: str | None = None, thread_id: int | None = None
     ) -> str:
+        if planner.has_task(ctx.bus.db, title, thread_id):
+            return "Not proposed: a task about this already exists. Check list_tasks."
         planner.add_task(ctx, title, due, thread_id, "agent", True)
         return "Proposed. The person accepts it in Tasks."
 
@@ -1721,24 +1762,49 @@ def build_tools(
             work.emit("drafts.changed", {}, source="agent", trace_id=ctx.trace_id)
         return "Saved as a draft. Nothing was sent. The person reviews it in Drafts."
 
-    def save_personal_prompt(name: str, content: str, tool_call_id: str) -> str:
+    def save_personal_prompt(name: str, content: str, tool_call_id: str, mode: str = "add") -> str:
         if not name.replace("-", "").isalnum():
             return "Not saved: that isn't a valid name."
+        folder = ctx.config.home / "prompts" / "personal"
+        path = folder / f"{name}.md"
+        existing = path.read_text("utf-8") if path.exists() else ""
+        # Adding is the default: a save used to replace the whole prompt, so a few new rules
+        # silently wiped everything the person had before.
+        if mode == "replace":
+            result, added = content, 0
+            removed = removed_lines(existing, content)
+        else:
+            result, added = merge_prompt(existing, content)
+            removed = []
+        if result == existing:
+            return f"Nothing to save: {name} already says all of that."
+        if mode == "replace":
+            change = f"Replaces {name}" + (
+                f", removing {len(removed)} line{'s' if len(removed) != 1 else ''}: "
+                + "; ".join(removed[:10])
+                if removed
+                else ""
+            )
+        else:
+            change = f"Adds {added} line{'s' if added != 1 else ''} to {name}"
 
         def save() -> str:
-            folder = ctx.config.home / "prompts" / "personal"
             folder.mkdir(parents=True, exist_ok=True)
             from nexusai.modules.agent import personalization
 
-            path = folder / f"{name}.md"
-            personalization.save_prompt_version(
-                ctx, "personal", name, path.read_text("utf-8") if path.exists() else ""
-            )
-            path.write_text(content, "utf-8")
-            personalization.save_prompt_version(ctx, "personal", name, content)
+            # An approval can come later, after the person edited the prompt: add to what's
+            # there then. A replace writes exactly the words they approved.
+            now = path.read_text("utf-8") if path.exists() else ""
+            final = result if mode == "replace" else merge_prompt(now, content)[0]
+            personalization.save_prompt_version(ctx, "personal", name, now)
+            path.write_text(final, "utf-8")
+            personalization.save_prompt_version(ctx, "personal", name, final)
             with ctx.bus.unit_of_work() as work:
                 work.emit("prompts.changed", {"name": name}, source="agent", trace_id=ctx.trace_id)
-            return f"Saved {name}. The person can edit it in Prompts and memory."
+            return (
+                f"Saved {name}. {change}. The person can edit it, or restore an earlier "
+                f"version, in Prompts and memory. It now reads:\n{final[:2000]}"
+            )
 
         if not _is_untrusted(ctx, session):
             return save()
@@ -1750,8 +1816,9 @@ def build_tools(
             "save_personal_prompt",
             "data",
             None,
-            f"Save your {name} prompt",
-            content,
+            # The words agreed to are the prompt as it will read; the title says what changes.
+            f"Save your {name} prompt: {change[0].lower()}{change[1:]}",
+            result,
             False,
             save,
         )
@@ -1976,7 +2043,8 @@ def build_tools(
             save_personal_prompt,
             _SavePrompt,
             "Save what you learned about the person as a personalized prompt, which every agent "
-            "reads from then on. Only with what they told you directly.",
+            "reads from then on. Only with what they told you directly. It adds to what the "
+            "prompt already says; use mode replace only to change or remove something.",
         ),
         (
             search_documents,

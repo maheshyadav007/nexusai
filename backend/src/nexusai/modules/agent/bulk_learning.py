@@ -485,10 +485,15 @@ def finish_or_ask(ctx: Context) -> None:
         finalize(ctx)
 
 
+# Bare "by" or "before" a date matched nearly every offer ("valid by 30 Nov"), so only words that
+# mean a real deadline count.
 DEADLINE = re.compile(
-    r"\b(deadline|last date|due|by|before)\b.{0,50}\b(?:\d{1,4}[/-]\d{1,2}|\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d{1,2})\b",
+    r"\b(deadline|last date|due (?:on|by|date)|(?:submit|respond|reply|register|apply) (?:by|before))\b.{0,50}\b(?:\d{1,4}[/-]\d{1,2}|\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d{1,2})\b",
     re.I | re.S,
 )
+
+
+BULK_RULES = frozenset({"Marketing or bulk mail", "From a social network", "Mailing list"})
 
 
 def finalize(ctx: Context, importance: Mapping[str, str] | None = None) -> None:
@@ -535,7 +540,8 @@ def finalize(ctx: Context, importance: Mapping[str, str] | None = None) -> None:
         with ctx.bus.db.transaction() as tx:
             rows = tx.execute(
                 "SELECT t.*,m.id AS message,m.from_addr,m.to_json,m.subject AS latest_subject,SUBSTR(m.clean_text,1,12000) AS clean_text,"
-                " COALESCE(g.importance,CASE WHEN m.rule IS NULL THEN 'normal' ELSE 'low' END) AS usual,g.folder"
+                " COALESCE(g.importance,CASE WHEN m.rule IS NULL THEN 'normal' ELSE 'low' END) AS usual,g.folder,"
+                " COALESCE(g.importance='low' AND (g.importance_confirmed=1 OR g.uncertain=0),0) AS settled_low"
                 " FROM threads t JOIN messages m ON m.id=(SELECT id FROM messages WHERE thread_id=t.id ORDER BY date DESC,id DESC LIMIT 1)"
                 " LEFT JOIN mail_learning_members member ON member.message=m.id LEFT JOIN mail_learning_groups g ON g.id=member.group_id"
                 " WHERE t.account=? AND t.id>? AND t.in_trash=0 AND t.in_junk=0 AND (g.learned=1 OR g.id IS NULL) ORDER BY t.id LIMIT 500",
@@ -546,15 +552,30 @@ def finalize(ctx: Context, importance: Mapping[str, str] | None = None) -> None:
             for row in rows:
                 to_person = bool(own & set(signals.addresses(row["to_json"])))
                 incoming = row["from_addr"].casefold() not in own
-                raised = incoming and (
-                    (
-                        to_person
-                        and row["latest_rule"] is None
-                        and not NO_REPLY.search(row["from_addr"])
+                # Promotions, social and mailing lists are never raised by a guess: their
+                # subjects say "expires", "renewal" or "payment" all the time.
+                bulk = row["latest_rule"] in BULK_RULES
+                # A group the person confirmed as low, or the model was sure was low, stays low
+                # unless the subject says act. An unsure guess doesn't hold back real mail.
+                usually_low = bool(row["settled_low"])
+                raised = (
+                    incoming
+                    and not bulk
+                    and (
+                        bool(WORTH_A_LOOK.search(row["latest_subject"]))
+                        or (
+                            not usually_low
+                            and (
+                                (
+                                    to_person
+                                    and row["latest_rule"] is None
+                                    and not NO_REPLY.search(row["from_addr"])
+                                )
+                                or bool(DEADLINE.search(row["clean_text"]))
+                                or (to_person and row["from_addr"].casefold() in frequent)
+                            )
+                        )
                     )
-                    or bool(WORTH_A_LOOK.search(row["latest_subject"]))
-                    or bool(DEADLINE.search(row["clean_text"]))
-                    or (to_person and row["from_addr"].casefold() in frequent)
                 )
                 tx.execute(
                     "UPDATE threads SET importance=? WHERE id=? AND importance_user_message IS NULL",

@@ -88,12 +88,14 @@ def build_layers(
         text = text.replace(f"{{{name}}}", value)
     if db is not None:
         text = cards.fill(db, text, agent)
+    system = packaged("system.md")
+    if db is not None:
+        # Names come from the cards, so renaming the lead renames it here too.
+        system = cards.fill(db, system, agent)
     layers = [
         Layer(
             "System prompt",
-            packaged("system.md")
-            .format(system_context=system_context(config), capabilities=capabilities)
-            .strip(),
+            system.format(system_context=system_context(config), capabilities=capabilities).strip(),
         )
     ]
     # Second, and stable: it changes only when a card does, so the model server can cache it.

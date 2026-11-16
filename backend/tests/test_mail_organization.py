@@ -281,7 +281,7 @@ def test_interview_precedes_marks_and_only_recent_mail_can_create_work(ctx: Cont
     assert bulk_learning.overview(ctx)["state"] == "asking"
     assert thread(ctx, old.thread)["importance"] == "normal"
     assert thread(ctx, recent.thread)["importance"] == "normal"
-    bulk_learning.finalize(ctx, {key: "low" for key in keys})
+    bulk_learning.finalize(ctx, {key: "normal" for key in keys})
     assert thread(ctx, old.thread)["importance"] == "high"
     live = ctx.bus.db.fetch_all("SELECT * FROM trigger_runs WHERE event LIKE 'bulk-recent-%'")
     assert [row["message"] for row in live] == [recent.message]
@@ -290,6 +290,45 @@ def test_interview_precedes_marks_and_only_recent_mail_can_create_work(ctx: Cont
     assert bulk_learning.overview(ctx)["missed"] == [
         {"id": old.thread, "subject": "Old obligation"}
     ]
+
+
+def test_promotions_and_confirmed_low_mail_are_not_raised_by_guesses(ctx: Context) -> None:
+    """Regression: "valid by 30 Nov" or "expires" used to raise promotions to high."""
+    sale = add(
+        ctx,
+        "Your offer expires tonight",
+        sender="deals@shop.example",
+        days=3,
+        match=rules.RuleMatch(
+            "Marketing or bulk mail", rules.RuleActions(category="Promotions", skip_agent=True)
+        ),
+    )
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "UPDATE messages SET clean_text='Offer valid by 30 Nov. Hurry!' WHERE id=?",
+            (sale.message,),
+        )
+    vendor = add(ctx, "Weekly digest", sender="news@vendor.example", days=3)
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "UPDATE messages SET clean_text='Register by 30 Nov for the webinar' WHERE id=?",
+            (vendor.message,),
+        )
+    alert = add(ctx, "Security alert: new sign-in", sender="alerts@bank.example", days=3)
+    bulk_learning.queue(ctx)
+    keys = learn_all(ctx, uncertain=True)
+    groups = {
+        row["sender"]: row["id"]
+        for row in ctx.bus.db.fetch_all("SELECT id,sender FROM mail_learning_groups")
+    }
+    vendor_group, alert_group = groups["news@vendor.example"], groups["alerts@bank.example"]
+    bulk_learning.finalize(ctx, {vendor_group: "low", alert_group: "low"})
+    assert vendor_group in keys and alert_group in keys
+    assert thread(ctx, sale.thread)["importance"] != "high"
+    # The person said low, so a deadline in the body doesn't overrule them...
+    assert thread(ctx, vendor.thread)["importance"] == "low"
+    # ...but a subject that says act still surfaces.
+    assert thread(ctx, alert.thread)["importance"] == "high"
 
 
 def test_bulk_marks_preserve_person_choices_and_smart_folders_require_acceptance(
@@ -330,6 +369,30 @@ def test_triage_only_files_into_existing_smart_folders_and_preserves_exact(ctx: 
     assert json.loads(current["extra_categories"]) == ["Project"]
     assert ctx.bus.db.fetch_all("SELECT 1 FROM mail_categories WHERE name='Made up'") == []
     assert visible(ctx, item.thread)
+
+
+def test_agent_files_missed_promotions_and_broadcast_only_fills_a_gap(ctx: Context) -> None:
+    """Regression: marketing without unsubscribe headers could only land in Broadcast."""
+    mail.save_category(SaveCategory(name="Broadcast", mode="smart", in_priority=False), ctx)
+    with ctx.bus.db.transaction() as tx:
+        for name in ("Promotions", "Updates"):
+            tx.execute(
+                "INSERT OR IGNORE INTO mail_categories(name,source,mode,description,created) VALUES(?,'rule','exact',?,?)",
+                (name, name, "2026-01-01"),
+            )
+    many = ", ".join(f"person{index}@example.com" for index in range(12))
+    task = mail_agent.task_for(ctx, add(ctx, "Big sale", to=many).thread)[2]
+    assert '"name": "Promotions"' in task and '"name": "Updates"' in task
+    for chosen, expected in ((["Promotions"], "Promotions"), ([], "Broadcast")):
+        item = add(ctx, f"Mass mail {expected}", to=many)
+        mail_agent.Triage(ctx)._apply(
+            item.thread,
+            [{"message": item.message, "answer": None}],
+            "Mass mail",
+            {"smart_folders": chosen, "importance": "low"},
+            1,
+        )
+        assert thread(ctx, item.thread)["category"] == expected
 
 
 def test_proposed_folders_and_counts_are_not_created_or_filed_until_accepted(ctx: Context) -> None:

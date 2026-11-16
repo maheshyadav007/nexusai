@@ -61,6 +61,8 @@ REVIEW_KIND = scheduler.REVIEW_KIND
 BRIEF_KIND = scheduler.BRIEF_KIND
 REVIEWED = "mail_reviewed"
 LOOPS_CHECKED = "mail_loops_checked"
+FIRST_REVIEW = "mail_first_review_queued"
+FIRST_BRIEF = "mail_first_brief_queued"
 CATEGORIES_TIDIED = "mail_categories_tidied"
 PRIORITY_ASKED = "mail_priority_asked"
 SUGGESTIONS_WORTH_A_REVIEW = 3
@@ -109,17 +111,34 @@ class Triggers:
         self.runtime.on_hold = None
 
     def _catch_up_once(self) -> None:
-        """A Home from before these existed, or one that finished reading while this was off."""
+        """Once past mail is learned: open loops, the first review and a first brief.
+
+        Grouped learning always leaves a review row, and this used to stop at any row, so new
+        accounts never got these and waited until the next morning for a brief."""
         ctx = self.ctx
         if mail_agent.learning_state(ctx) != "done" or ctx.bus.db.fetch_all(
-            "SELECT 1 FROM mail_learning_reviews LIMIT 1"
+            "SELECT 1 FROM mail_learning_reviews WHERE state != 'done' LIMIT 1"
         ):
             return
         if not mail_agent._setting(ctx, LOOPS_CHECKED):
             mail_agent._set(ctx, LOOPS_CHECKED, mail_agent._now())
             mail_agent.look_for_open_loops(ctx)
-        if not mail_agent._setting(ctx, REVIEWED):
+        # Called on every tick, so each is queued once and not again while it waits to run.
+        if not mail_agent._setting(ctx, REVIEWED) and not mail_agent._setting(ctx, FIRST_REVIEW):
+            mail_agent._set(ctx, FIRST_REVIEW, mail_agent._now())
             self.review_now(f"first-review-{mail_agent._now()}")
+        if not mail_agent._setting(ctx, FIRST_BRIEF):
+            mail_agent._set(ctx, FIRST_BRIEF, mail_agent._now())
+            brief = ctx.bus.db.fetch_all(
+                "SELECT id FROM schedules WHERE kind = ? AND enabled = 1 LIMIT 1", (BRIEF_KIND,)
+            )
+            ran = ctx.bus.db.fetch_all(
+                "SELECT 1 FROM trigger_runs r JOIN schedules s ON s.id = r.schedule WHERE s.kind = ? LIMIT 1",
+                (BRIEF_KIND,),
+            )
+            # A new account gets today's brief now, rather than waiting for tomorrow's.
+            if brief and not ran:
+                self.fire_schedule(f"first-brief-{mail_agent._now()}", brief[0]["id"])
 
     def _tidy_categories_once(self) -> None:
         ctx = self.ctx
@@ -260,6 +279,7 @@ class Triggers:
                 start()
             self._start_wrap_up()
             self._start_interview()
+            self._catch_up_once()
 
     def consider_learning(self, history_finished: bool = False) -> None:
         """Starts reading past mail once there's enough, or once no more is coming."""
