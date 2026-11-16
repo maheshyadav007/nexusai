@@ -1,5 +1,6 @@
 "use client";
 
+import { useLeadName } from "@/ui/client/home";
 import { useEffect, useState } from "react";
 import { ApiRequestError } from "@/ui/client/api";
 import type { GuardRule, Permissions, QuietHours, SendCheckSettings } from "@/ui/client/contracts.generated";
@@ -48,13 +49,14 @@ const presetOf = (value: Permissions): Preset | undefined =>
 
 /** Most people want to pick a sentence, not set fifty switches. */
 export function AgentPresets() {
+  const lead = useLeadName();
   const permissions = usePermissions();
   const save = useSavePermissions();
   if (permissions.isPending) return <Skeleton className="h-6 w-full" />;
   if (permissions.isError) return <ErrorState title={t("permissions.error")} onRetry={() => void permissions.refetch()} />;
   return (
     <ChoiceCards
-      label={t("presets.label")}
+      label={t("presets.label", { name: lead })}
       value={presetOf(permissions.data)}
       onChange={(name) => save.mutate({ ...permissions.data, ...PRESETS[name], tools: {} })}
       choices={[
@@ -67,6 +69,7 @@ export function AgentPresets() {
 }
 
 export function PermissionsSettings() {
+  const lead = useLeadName();
   const permissions = usePermissions();
   const catalog = useToolCatalog();
   const save = useSavePermissions();
@@ -79,7 +82,7 @@ export function PermissionsSettings() {
   const groups = [...new Set(catalog.data.tools.map((tool) => tool.group))];
   return (
     <div className="flex flex-col gap-5">
-      <Card title={t("presets.label")} description={t("presets.note")}>
+      <Card title={t("presets.label", { name: lead })} description={t("presets.note")}>
         <AgentPresets />
       </Card>
       <Card title={t("permissions.title")} description={t("permissions.description")}>

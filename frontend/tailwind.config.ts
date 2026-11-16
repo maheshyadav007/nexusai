@@ -36,6 +36,7 @@ const config: Config = {
       inset: layout,
       width: layout,
       height: layout,
+      minHeight: layout,
       maxHeight: layout,
       keyframes: {
         fade: { from: { opacity: "0" } },

@@ -146,7 +146,7 @@ export function AccountSettings({ brief = false }: { brief?: boolean }) {
   if (accounts.isError) return <Card bare={brief} title={t("accounts.title")}><ErrorState title={t("accounts.error")} onRetry={() => void accounts.refetch()} /></Card>;
 
   return (
-    <Card bare={brief} title={t("accounts.title")} description={brief ? undefined : t(managed ? "accounts.description.system" : "accounts.description")}>
+    <Card bare={brief} hideTitle={brief} title={t("accounts.title")} description={brief ? undefined : t(managed ? "accounts.description.system" : "accounts.description")}>
       <div className="flex flex-col gap-4">
         {active && !editing ? (
           <div className="flex flex-col items-start gap-3">
@@ -156,12 +156,13 @@ export function AccountSettings({ brief = false }: { brief?: boolean }) {
               {status.data?.message ?? (state ? t(state.label) : "")}
             </p>
             <MailDownload />
-            <p className="text-sm tabular-nums text-ink-muted">{t("accounts.count", { count: status.data?.messages ?? 0 })}</p>
-            <MailSyncControls />
+            {/* During setup only what matters now: the sync details live in Settings. */}
+            {brief ? null : <p className="text-sm tabular-nums text-ink-muted">{t("accounts.count", { count: status.data?.messages ?? 0 })}</p>}
+            {brief ? null : <MailSyncControls />}
             {!active.has_password ? <p className="text-md text-status-warning">{t("accounts.noPassword")}</p> : null}
             <div className="flex gap-2">
-              <Button onClick={() => setEditing(true)}>{t("accounts.change")}</Button>
-              <Button variant="danger" loading={remove.isPending} onClick={() => remove.mutate(active.name)}>{t("accounts.remove")}</Button>
+              <Button variant={brief ? "quiet" : undefined} onClick={() => setEditing(true)}>{t("accounts.change")}</Button>
+              {brief ? null : <Button variant="danger" loading={remove.isPending} onClick={() => remove.mutate(active.name)}>{t("accounts.remove")}</Button>}
             </div>
           </div>
         ) : (
@@ -176,7 +177,8 @@ export function AccountSettings({ brief = false }: { brief?: boolean }) {
               void settled().then((found) => save.mutate({ name: nameFor(login), profile: profileWith(found), password, pull_limit: onServer && wanted < onServer ? wanted : null }, { onSuccess: () => setEditing(false) }));
             }}
           >
-            {managed || brief ? null : <Field label={t("accounts.server")} hint={t("accounts.server.hint")}>{({ invalid, ...control }) => <Input autoComplete="off" spellCheck={false} placeholder={t("accounts.server.placeholder")} invalid={invalid} value={servers.imapHost} onChange={(event) => setServers({ ...servers, imapHost: event.target.value })} {...control} />}</Field>}
+            {/* Setup hides the server when it's known; a domain nobody configured has to say it. */}
+            {managed || (brief && !(login.trim() && !preset)) ? null : <Field label={t("accounts.server")} hint={t("accounts.server.hint")}>{({ invalid, ...control }) => <Input autoComplete="off" spellCheck={false} placeholder={t("accounts.server.placeholder")} invalid={invalid} value={servers.imapHost} onChange={(event) => setServers({ ...servers, imapHost: event.target.value })} {...control} />}</Field>}
             <div className="grid gap-3 md:grid-cols-2">
               <Field label={t("accounts.username")} hint={t("accounts.username.hint")}>{({ invalid, ...control }) => <Input autoComplete="off" spellCheck={false} invalid={invalid} value={login} onChange={(event) => setLogin(event.target.value)} {...control} />}</Field>
               <Field label={t("accounts.password")} hint={preset?.password_hint ?? t("accounts.password.hint")}>{({ invalid, ...control }) => <Input type="password" autoComplete="off" invalid={invalid} value={password} onChange={(event) => setPassword(event.target.value)} {...control} />}</Field>
@@ -195,7 +197,6 @@ export function AccountSettings({ brief = false }: { brief?: boolean }) {
                 <Switch label={t("accounts.secure")} checked={servers.secure} onChange={(secure) => setServers({ ...servers, secure })} />
               </div>
             ) : null}
-            {brief && login.trim() && !preset ? <p role="alert" className="text-sm text-status-warning">{t("accounts.server.unconfigured")}</p> : null}
             {test.data ? (
               <ul data-testid="connection-results" className="flex flex-col gap-1">
                 {test.data.results.map((result) => (

@@ -39,7 +39,15 @@ test("a new person goes from landing through setup into the app, and setup resum
 
   await expect(page.getByRole("heading", { name: "Connect your mail" })).toBeVisible();
   await noViolations(page);
+  // Skipping mail is confirmed, and going back to connect it stays on the step.
   await page.getByRole("button", { name: "Skip for now" }).click();
+  await expect(page.getByRole("dialog", { name: "Skip connecting mail?" })).toBeVisible();
+  await noViolations(page);
+  await page.getByRole("button", { name: "Connect mail" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Connect your mail" })).toBeVisible();
+  await page.getByRole("button", { name: "Skip for now" }).click();
+  await page.getByRole("button", { name: "Skip anyway" }).click();
 
   // Closing midway resumes at the same step.
   await expect(page.getByRole("heading", { name: "Find things by what they're about" })).toBeVisible();
@@ -55,6 +63,7 @@ test("a new person goes from landing through setup into the app, and setup resum
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("heading", { name: "Connect your mail" })).toBeVisible();
   await page.getByRole("button", { name: "Skip for now" }).click();
+  await page.getByRole("button", { name: "Skip anyway" }).click();
 
   // Nothing downloads until asked. Downloads are blocked in this test environment, so this also
   // shows what a blocked corporate network sees, and skipping still moves on.
@@ -65,18 +74,25 @@ test("a new person goes from landing through setup into the app, and setup resum
   await expect(page.getByLabel("Download from your company's mirror")).toBeVisible();
   await noViolations(page);
   await page.getByRole("button", { name: "Skip for now" }).click();
-  await expect(page.getByRole("heading", { name: "What may the agent do?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "How much can Posty do without asking?" })).toBeVisible();
   await expect(page.getByRole("radio", { name: /Balanced/ })).toBeChecked();
   await noViolations(page);
   await page.getByRole("button", { name: "Enter NexusAI" }).click();
   await expect(page).toHaveURL(/\/today$/);
   await expect(page.getByTestId("assistant-guide")).toHaveCount(0);
 
-  // What setup skipped waits here, and goes away when asked.
-  const checklist = page.getByTestId("finish-setup");
-  await expect(checklist.getByText("Let the agent get to know you")).toBeVisible();
-  await expect(checklist.getByText("Bring in old mail")).toBeVisible();
+  // The first visit says what happens next, once; the same list then waits on Today.
+  const welcome = page.getByRole("dialog", { name: "Hi, I'm Posty" });
+  await expect(welcome.getByText("Connect your mail")).toBeVisible();
+  await expect(welcome.getByText("Your first brief")).toBeVisible();
   await noViolations(page);
+  await welcome.getByRole("button", { name: "Got it" }).click();
+  const checklist = page.getByTestId("finish-setup");
+  await expect(checklist.getByText("Answer a few questions")).toBeVisible();
+  await expect(checklist.getByText("Bring in old mail")).toHaveCount(0);
+  await noViolations(page);
+  await page.reload();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 
   // Returning people go straight in.
   await page.goto("/");

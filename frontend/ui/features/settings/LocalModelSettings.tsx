@@ -124,19 +124,8 @@ export function LocalModelSettings({ brief = false, bare = false }: { brief?: bo
             </Button>
           )}
         </div>
-        {model.state === "downloading" ? (
-          <div className="flex flex-col gap-1">
-            <Progress label={t("semantic.downloading")} value={percent(model.downloaded_bytes ?? 0, model.size_bytes)} />
-            <p className="text-sm tabular-nums text-ink-muted">{t("semantic.progress", { done: megabytes(model.downloaded_bytes ?? 0), total: megabytes(model.size_bytes) })}</p>
-          </div>
-        ) : null}
+        <SearchProgress />
         {model.state === "failed" && model.error ? <p role="alert" className="text-sm text-status-danger">{model.error}</p> : null}
-        {model.state === "ready" && (status.total ?? 0) > 0 ? (
-          <div className="flex flex-col gap-1">
-            <Progress label={t("semantic.indexing")} value={percent(status.indexed ?? 0, status.total ?? 0)} />
-            <p className="text-sm tabular-nums text-ink-muted">{t("semantic.indexed", { done: status.indexed ?? 0, total: status.total ?? 0 })}</p>
-          </div>
-        ) : null}
         {brief ? null : <IndexVersions />}
         {brief && model.state !== "failed" ? null : (
           <ExpandRow label={t("semantic.more")} title={t("semantic.more")} defaultOpen={model.state === "failed"}>
@@ -184,17 +173,48 @@ export function LocalModelSettings({ brief = false, bare = false }: { brief?: bo
   );
 }
 
+/** Downloading the model, then preparing mail and documents with it: one thing with two stages,
+ * so nobody thinks search is ready when the download ends. Nothing when neither is under way. */
+export function SearchProgress({ framed = false }: { framed?: boolean }) {
+  const semantic = useSemantic();
+  const status = semantic.data;
+  const model = status?.models.find((row) => row.active) ?? status?.models[0];
+  if (!status || !model) return null;
+  const downloading = model.state === "downloading";
+  const total = status.total ?? 0;
+  const indexed = status.indexed ?? 0;
+  const indexing = model.state === "ready" && total > 0 && indexed < total;
+  if (!downloading && !indexing) return null;
+  return (
+    <div data-testid="search-progress" className={`flex flex-col gap-1 ${framed ? "rounded-md border border-line-subtle bg-surface-sunken px-3 py-2" : ""}`}>
+      <p className="text-sm text-ink-secondary">{t(downloading ? "semantic.stage.download" : "semantic.stage.index")}</p>
+      {downloading ? (
+        <>
+          <Progress label={t("semantic.downloading")} value={percent(model.downloaded_bytes ?? 0, model.size_bytes)} />
+          <p className="text-sm tabular-nums text-ink-muted">{t("semantic.progress", { done: megabytes(model.downloaded_bytes ?? 0), total: megabytes(model.size_bytes) })}</p>
+        </>
+      ) : (
+        <>
+          <Progress label={t("semantic.indexing")} value={percent(indexed, total)} />
+          <p className="text-sm tabular-nums text-ink-muted">{t("semantic.indexed", { done: indexed.toLocaleString(), total: total.toLocaleString() })}</p>
+        </>
+      )}
+      <p className="text-sm text-ink-muted">{t("semantic.stage.meanwhile")}</p>
+    </div>
+  );
+}
+
 /** For screens that search: what's true about meaning right now, in one line. */
 export function MeaningNotice() {
   const semantic = useSemantic();
   const status = semantic.data;
   if (!status || status.ready) return null;
   const model = status.models.find((row) => row.active);
-  if (model?.state === "downloading") {
+  // Downloading, or downloaded and still preparing: both are under way, not missing.
+  if (model?.state === "downloading" || model?.state === "ready") {
     return (
-      <div data-testid="meaning-notice" className="flex flex-col gap-1 rounded-md border border-line-subtle bg-surface-sunken px-3 py-2">
-        <p className="text-sm text-ink-secondary">{t("semantic.notice.downloading")}</p>
-        <Progress label={t("semantic.downloading")} value={percent(model.downloaded_bytes ?? 0, model.size_bytes)} />
+      <div data-testid="meaning-notice">
+        <SearchProgress framed />
       </div>
     );
   }

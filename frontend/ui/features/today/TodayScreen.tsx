@@ -8,6 +8,7 @@ import type { ChannelMessage, DueItem, MailCategory, TodayThread, ToolApproval }
 import { useDateOnly, useDateTime, useShortDate } from "@/ui/client/format";
 import { useCategories, useDecideCategory, useDecidePriority, useMailStatus, useSetImportance, useSetStatus } from "@/ui/client/mail";
 import { groupApprovals, useApprovals, useDecideApprovals, useSessions } from "@/ui/client/sessions";
+import { useLeadName } from "@/ui/client/home";
 import { useProfile } from "@/ui/client/onboarding";
 import { useChannel, useCockpit, useDecideMemory, useDecideSuggestion, useSuggestions, useDismissChannel, useMarkTodaySeen, useMemory, useReactToBrief, useReminders, useRemoveReminder, useRemoveTask, useRespondChannel, useSaveReminder, useSaveTask, useTasks, useToday, useWaitingCount, useAgentName } from "@/ui/client/work";
 import { AskAgent } from "@/ui/features/agent/AskAgent";
@@ -71,15 +72,20 @@ function Stat({ href, label, value, urgent = false, alarming = false }: { href: 
 
 const NEXT_ACTION_LABEL: Partial<Record<string, StringKey>> = { reply: "today.action.reply", do: "today.action.do", decide: "today.action.decide", read: "today.action.read" };
 
+// The first screen shows a few, not twenty: the rest are a click away and nothing is lost.
+const FIRST_SHOWN = 5;
+
 function ThreadList({ id, icon, title, hint, urgent = false, threads, empty, chase = false }: { id?: string; icon: IconName; title: string; hint?: string; urgent?: boolean; threads: readonly TodayThread[]; empty: string; chase?: boolean }) {
   const format = useShortDate();
   const setStatus = useSetStatus();
   const setImportance = useSetImportance();
+  const [all, setAll] = useState(false);
+  const shown = all ? threads : threads.slice(0, FIRST_SHOWN);
   return (
     <Panel {...(id ? { id } : {})} icon={icon} title={title} count={threads.length} urgent={urgent && threads.length > 0} {...(hint && threads.length ? { hint } : {})}>
       {threads.length === 0 ? <p className="text-md text-ink-muted">{empty}</p> : null}
       <ul className="flex flex-col">
-        {threads.map((thread) => {
+        {shown.map((thread) => {
           const action = thread.next_action ? NEXT_ACTION_LABEL[thread.next_action] : undefined;
           return (
             <li key={thread.id} className="flex flex-col gap-2 border-t border-line-subtle py-3">
@@ -96,13 +102,18 @@ function ThreadList({ id, icon, title, hint, urgent = false, threads, empty, cha
               </Link>
               <span className="flex flex-wrap items-center gap-2">
                 {chase ? <AskAgent context={[`mail:${thread.id}`]} title={t("today.chase.title")} label={t("today.chase.draft")} text={t("today.chase.ask")} /> : <Link href={`/mail/all/${thread.id}?draft`} data-testid="today-draft" className="focus-ring press ai-glow relative inline-flex items-center rounded-md px-3 py-2 text-md font-medium text-ink-primary">{t("mail.draftReply")}</Link>}
-                <Button onClick={() => setStatus.mutate({ id: thread.id, status: "resolved" })}>{t("today.done")}</Button>
+                <Button variant="quiet" onClick={() => setStatus.mutate({ id: thread.id, status: "resolved" })}>{t("today.done")}</Button>
                 {thread.importance !== "low" && !chase ? <Button variant="quiet" onClick={() => setImportance.mutate({ id: thread.id, importance: "low" })}>{t("today.notImportant")}</Button> : null}
               </span>
             </li>
           );
         })}
       </ul>
+      {threads.length > FIRST_SHOWN ? (
+        <Button variant="quiet" className="self-start" onClick={() => setAll(!all)}>
+          {all ? t("today.showFewer") : t("today.showMore", { count: threads.length - FIRST_SHOWN })}
+        </Button>
+      ) : null}
     </Panel>
   );
 }
@@ -131,6 +142,34 @@ function AskRow({ message }: { message: ChannelMessage }) {
 }
 
 /** One thing waiting on the person, however it came to be, so it can be done alone or in bulk. */
+// Past this many of one kind, they fold into one row: twenty memory notes read as one decision.
+const GROUP_AT = 3;
+
+/** Many proposals of one kind as one row: accept them all, or open the list to go one by one. */
+function ProposalGroup({ testid, icon, title, accept, items, children }: { testid: string; icon: IconName; title: string; accept: string; items: readonly WaitingItem[]; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const acceptAll = async () => {
+    setBusy(true);
+    try {
+      for (const item of items) if (item.doIt) await item.doIt();
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <li data-testid={testid} className="flex flex-col gap-2">
+      <div className="flex items-center gap-3">
+        <Icon name={icon} className="h-4 w-4 shrink-0 text-ink-muted" />
+        <span className="min-w-0 flex-1 text-md text-ink-primary">{title}</span>
+        <Button variant="quiet" aria-expanded={open} onClick={() => setOpen(!open)}>{t(open ? "today.group.hide" : "today.group.review")}</Button>
+        <Button loading={busy} onClick={() => void acceptAll()}>{accept}</Button>
+      </div>
+      {open ? <ul className="flex flex-col gap-3 border-l border-line-subtle pl-4">{children}</ul> : null}
+    </li>
+  );
+}
+
 interface WaitingItem {
   key: string;
   title: string;
@@ -244,6 +283,7 @@ function BulkBar({ items, picked, onPick, onClear, onCancel }: { items: readonly
 
 /** Everything agents are waiting on the person for, in one place, answered right here. */
 function WaitingOnYou() {
+  const lead = useLeadName();
   const channel = useChannel();
   const approvals = useApprovals();
   const tasks = useTasks(false);
@@ -347,10 +387,18 @@ function WaitingOnYou() {
       </Presence>
       <ul className="flex flex-col gap-3">
         <Presence>
-          {proposedTasks.map((task) => {
-            const item = taskItem(task);
-            return <ProposalRow key={item.key} {...row(item)} icon="tasks" title={task.title} meta={task.due ? t("today.proposal.taskDue", { when: formatDay(task.due) }) : t("today.proposal.task")} />;
-          })}
+          {(() => {
+            const rows = proposedTasks.map((task) => {
+              const item = taskItem(task);
+              return <ProposalRow key={item.key} {...row(item)} icon="tasks" title={task.title} meta={task.due ? t("today.proposal.taskDue", { when: formatDay(task.due) }) : t("today.proposal.task")} />;
+            });
+            if (selecting || rows.length <= GROUP_AT) return rows;
+            return (
+              <ProposalGroup key="task-group" testid="proposal-group-tasks" icon="tasks" title={t("today.group.tasks", { count: rows.length, name: lead })} accept={t("today.group.addAll")} items={proposedTasks.map(taskItem)}>
+                {rows}
+              </ProposalGroup>
+            );
+          })()}
           {proposedReminders.map((reminder) => {
             const item = reminderItem(reminder);
             return <ProposalRow key={item.key} {...row(item)} icon="reminders" title={reminder.title} meta={t("today.proposal.reminder", { when: formatWhen(reminder.when) })} />;
@@ -367,10 +415,18 @@ function WaitingOnYou() {
             const item = suggestionItem(suggestion);
             return <ProposalRow key={item.key} {...row(item)} icon="categories" title={item.title} meta={t("today.suggestion.meta", { senders: suggestion.senders.length, opened: suggestion.opened, replied: suggestion.replied })} why={suggestion.quiet ? t("today.suggestion.quiet", { why: suggestion.reason, count: suggestion.to_archive }) : suggestion.reason} accept={t("today.suggestion.accept")} />;
           })}
-          {proposedMemories.map((proposal) => {
-            const item = memoryItem(proposal);
-            return <ProposalRow key={item.key} {...row(item)} icon="memory" title={proposal.text} meta={t("today.proposal.memory")} accept={t("memory.keep")} />;
-          })}
+          {(() => {
+            const rows = proposedMemories.map((proposal) => {
+              const item = memoryItem(proposal);
+              return <ProposalRow key={item.key} {...row(item)} icon="memory" title={proposal.text} meta={t("today.proposal.memory")} accept={t("memory.keep")} />;
+            });
+            if (selecting || rows.length <= GROUP_AT) return rows;
+            return (
+              <ProposalGroup key="memory-group" testid="proposal-group-memory" icon="memory" title={t("today.group.memory", { count: rows.length, name: lead })} accept={t("today.group.keepAll")} items={proposedMemories.map(memoryItem)}>
+                {rows}
+              </ProposalGroup>
+            );
+          })()}
         </Presence>
       </ul>
     </Panel>
@@ -446,32 +502,6 @@ function MorningBrief() {
         </form>
       ) : said ? <p data-testid="brief-said" className="text-sm text-ink-secondary">{said}</p> : null}
     </fieldset>
-  );
-}
-
-function AgentNotes() {
-  const channel = useChannel();
-  const dismiss = useDismissChannel();
-  const notes = (channel.data?.messages ?? []).filter((message) => message.kind !== "ask");
-  if (!notes.length) return null;
-  return (
-    <Panel id="today-agents" icon="channel" title={t("channel.title")} count={notes.length} hint={t("today.agents.hint")}>
-      <ul className="flex flex-col">
-        {notes.map((message) => (
-          <li key={message.id} data-testid="channel-message" className="flex flex-col gap-2 border-t border-line-subtle py-3">
-            <p className="break-words text-md text-ink-primary">{message.text}</p>
-            <p className="flex items-center gap-2 text-sm text-ink-muted">
-              {message.agent}
-              {message.count > 1 ? <span className="tabular-nums">{t("channel.times", { count: message.count })}</span> : null}
-            </p>
-            <span className="flex flex-wrap items-center gap-2">
-              {message.thread ? <TextLink className="text-sm" href={`/mail/all/${message.thread}`}>{t("channel.openSource")}</TextLink> : null}
-              <Button onClick={() => dismiss.mutate(message.id)}>{t("channel.dismiss")}</Button>
-            </span>
-          </li>
-        ))}
-      </ul>
-    </Panel>
   );
 }
 
@@ -589,7 +619,6 @@ export function TodayScreen() {
         </div>
         <div className="flex min-w-0 flex-col gap-6">
           <DueToday items={due} />
-          <AgentNotes />
           {today.data && !noMail ? <SinceYouLooked /> : null}
           {today.data?.automated_count ? <TextLink className="self-start text-md" href="/mail/all">{tn("today.automated", today.data.automated_count)}</TextLink> : null}
           <StatusLine />

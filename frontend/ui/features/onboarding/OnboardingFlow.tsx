@@ -2,18 +2,20 @@
 
 import { AssistantGuide } from "@/ui/shell/AssistantGuide";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, type ReactNode } from "react";
-import { useHomeStatus } from "@/ui/client/home";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useHomeStatus, useLeadName } from "@/ui/client/home";
 import { useFinishOnboarding, useOnboarding, useSetStep } from "@/ui/client/onboarding";
 import { useMailStatus } from "@/ui/client/mail";
 import { useSemantic } from "@/ui/client/semantic";
 import { useStarterPrompts } from "@/ui/client/work";
 import { AgentPresets } from "@/ui/features/settings/AgentSettings";
 import { HomeChooser } from "@/ui/features/home/HomeChooser";
+import { WELCOME_PARAM } from "@/ui/features/today/FinishSetup";
 import { EmailConnector } from "@/ui/features/connectors/ConnectorsScreen";
 import { LocalModelSettings } from "@/ui/features/settings/LocalModelSettings";
 import { ProfileForm } from "@/ui/features/settings/ProfileForm";
 import { Button } from "@/ui/primitives/Button";
+import { Dialog } from "@/ui/primitives/Dialog";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { Steps } from "@/ui/primitives/Motion";
@@ -45,6 +47,7 @@ function SearchStep() {
 
 function Frame({ step, index, actions, children }: { step: Step; index: number; actions?: ReactNode; children: ReactNode }) {
   const seen = useRef(index);
+  const lead = useLeadName();
   const main = useRef<HTMLElement>(null);
   const forward = index >= seen.current;
   useEffect(() => {
@@ -63,14 +66,15 @@ function Frame({ step, index, actions, children }: { step: Step; index: number; 
       </header>
       <main ref={main} className="min-h-0 flex-1 overflow-y-auto overscroll-contain lg:grid lg:grid-cols-5 lg:overflow-hidden">
         <aside className="relative flex min-h-drawer flex-col justify-between px-6 py-6 lg:col-span-2 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:px-7 lg:py-7">
-          <AssistantGuide prominent title={t(step.title)} message={`guide.setup.${step.id}` as StringKey} />
+          <AssistantGuide prominent title={t(step.title, { name: lead })} message={`guide.setup.${step.id}` as StringKey} />
           <p className="mt-6 text-sm text-ink-muted">{t(index === STEPS.length - 1 ? "setup.lastStep" : "setup.time")}</p>
           <span aria-hidden className="absolute right-0 top-1/2 hidden h-popover w-px -translate-y-1/2 bg-line-subtle lg:block" />
         </aside>
         <section className="flex min-w-0 items-start px-6 py-6 lg:col-span-3 lg:h-full lg:items-center lg:overflow-y-auto lg:px-7 lg:py-7">
-          <div className="mx-auto flex h-onboarding w-full max-w-onboarding flex-col">
-            <p className="mb-2 text-sm font-medium tracking-wide text-ink-muted">{t(step.label)}</p>
-            <h2 className="font-serif text-title text-ink-primary">{t(step.formTitle)}</h2>
+          {/* At least the step's height, so buttons sit in one place; taller steps scroll. */}
+          <div className="mx-auto flex min-h-onboarding w-full max-w-onboarding flex-col">
+            <p className="mb-2 text-sm font-medium tracking-wide text-ink-muted">{t(step.label, { name: lead })}</p>
+            <h2 className="font-serif text-title text-ink-primary">{t(step.formTitle, { name: lead })}</h2>
             <p className="mb-8 mt-2 text-md leading-relaxed text-ink-muted">{t(step.formNote)}</p>
             <Steps step={step.id} forward={forward}>
               <section className="onboarding-fields flex h-full flex-col gap-5">
@@ -94,11 +98,15 @@ export function OnboardingFlow() {
   const starters = useStarterPrompts();
   const mail = useMailStatus();
   const semantic = useSemantic();
+  // Skipping mail leaves the app with little to do, so it's confirmed rather than one click.
+  const [confirmSkip, setConfirmSkip] = useState(false);
+  // Finishing sends the person on with the welcome; the redirect for returning people waits.
+  const finishing = useRef(false);
 
   const done = onboarding.data?.completed;
   useEffect(() => {
     if (home.data && NEEDS_RECOVERY.has(home.data.state)) router.replace("/recover");
-    else if (done) router.replace("/today");
+    else if (done && !finishing.current) router.replace("/today");
   }, [home.data, done, router]);
 
   if (home.isError || onboarding.isError) {
@@ -126,12 +134,18 @@ export function OnboardingFlow() {
   const step = STEPS[index] as Step;
   const isLast = index === STEPS.length - 1;
   const goNext = () => {
+    if (step.id === "mail" && !mail.data?.account && !confirmSkip) {
+      setConfirmSkip(true);
+      return;
+    }
+    setConfirmSkip(false);
     const next = STEPS[index + 1];
     if (next) setStep.mutate(next.id);
     else {
       // So the mail agent has something sensible to judge by, even if the person never edits it.
       starters.mutate(undefined);
-      finish.mutate(undefined, { onSuccess: () => router.replace("/today") });
+      finishing.current = true;
+      finish.mutate(undefined, { onSuccess: () => router.replace(`/today?${WELCOME_PARAM}`) });
     }
   };
   const back =
@@ -162,6 +176,14 @@ export function OnboardingFlow() {
       }
     >
       {step.id === "mail" ? <EmailConnector brief /> : null}
+      {step.id === "mail" ? (
+        <Dialog title={t("setup.mail.skip.title")} description={t("setup.mail.skip.description")} open={confirmSkip} onOpenChange={setConfirmSkip}>
+          <footer className="flex justify-end gap-2">
+            <Button variant="quiet" onClick={goNext}>{t("setup.mail.skip.confirm")}</Button>
+            <Button variant="primary" onClick={() => setConfirmSkip(false)}>{t("setup.mail.skip.connect")}</Button>
+          </footer>
+        </Dialog>
+      ) : null}
       {step.id === "search" ? <SearchStep /> : null}
       {step.id === "permissions" ? <AgentPresets /> : null}
     </Frame>
