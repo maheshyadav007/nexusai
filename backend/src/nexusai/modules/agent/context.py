@@ -29,6 +29,7 @@ from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from nexusai.contracts.agent import ContextProfile, ContextSettings
 from nexusai.kernel.config import Config
 from nexusai.kernel.database import Database
+from nexusai.modules.agent.guard import DAMAGED_KEY
 from nexusai.modules.agent.model import is_summary
 from nexusai.modules.agent.prompts_builder import packaged
 
@@ -282,6 +283,27 @@ class TaskNotes(AgentMiddleware):
         return {"messages": [HumanMessage(content=notes, id=f"{TASK_NOTE}{uuid.uuid4().hex}")]}
 
 
+class Placeholders(AgentMiddleware):
+    """A call holding a value the model wasn't given never runs. The model is told, and tries
+    again, instead of the whole run failing."""
+
+    def wrap_tool_call(self, request: Any, handler: Callable[[Any], Any]) -> Any:
+        call = request.tool_call
+        damaged = (call.get("args") or {}).get(DAMAGED_KEY)
+        if not damaged:
+            return handler(request)
+        return ToolMessage(
+            content=(
+                f"Not run: {', '.join(damaged)} isn't a value you were given. Copy placeholders "
+                "exactly as they were written, like <PHONE_3>, or leave that value out. "
+                "Then call the tool again."
+            ),
+            tool_call_id=str(call.get("id") or ""),
+            name=str(call.get("name") or ""),
+            status="error",
+        )
+
+
 class ToolLog(AgentMiddleware):
     """Records every tool call the approval path didn't already, so the run's record is whole."""
 
@@ -337,6 +359,7 @@ def middleware(
     chain: list[Any] = [ToolSearch(shown_tools, always_shown_prefix)]
     if log_tool is not None:
         chain.append(ToolLog(log_tool))
+    chain.append(Placeholders())
     if profile.mode == "auto_compact":
         trigger = ("tokens", settings.compact.trigger_tokens)
         chain.append(summarizer(model, settings, trigger=trigger, on_compacted=on_compacted))

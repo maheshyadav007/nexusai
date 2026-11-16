@@ -289,7 +289,7 @@ def stream_model(
     """Every prompt layer, message and tool description is masked before it leaves.
 
     Whatever returns is restored: text as it streams, and tool arguments before any tool sees them.
-    A damaged token in tool arguments raises DamagedToken, so that tool never runs.
+    A damaged token in tool arguments marks that call, so that tool never runs.
     """
     db = ctx.bus.db
     guard = DataGuard(db, guards.load_rules(ctx.config.home))
@@ -393,7 +393,9 @@ def stream_model(
         if text:
             yield TextChunk(text)
         for call in raw_calls:
-            yield ToolCall(call.id, call.name, guard.restore_arguments(call.arguments))
+            # A miscopied value no longer fails the whole run: the call is marked, the tool
+            # doesn't run, and the model is told to copy the value exactly (context.Placeholders).
+            yield ToolCall(call.id, call.name, guard.restore_call(call.arguments))
     except Exception as error:
         status = "flagged" if isinstance(error, ModelFlagged) else "failed"
         finish(status, str(error))

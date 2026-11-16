@@ -348,6 +348,8 @@ def test_sync_resumes_after_restart_without_repeats(config: Config, fake: FakeMa
 
 def test_reconnects_when_the_connection_drops(client: TestClient, fake: FakeMail) -> None:
     connect(client, fake)
+    # Drop a connection that is actually waiting in IDLE; right after connecting there may be none.
+    wait(lambda: fake.state.idlers, "the connection to wait in IDLE")
     logins = fake.state.logins
     for idler, _ in list(fake.state.idlers):
         idler.connection.shutdown(socket.SHUT_RDWR)

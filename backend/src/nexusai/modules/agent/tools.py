@@ -1056,7 +1056,11 @@ def _untrusted(text: str) -> str:
 def _meaning_is_on() -> bool:
     """Skipping its model means this isn't offered, so the agent doesn't plan around it."""
     engine = semantic.engine()
-    return engine is not None and engine.is_ready()
+    try:
+        return engine is not None and engine.is_ready()
+    except Exception:
+        # Closing while Home switches or the app restarts: offer keyword search only.
+        return False
 
 
 def _connector_tool(ctx: Context, session: str, tool: connectors.AgentTool) -> StructuredTool:

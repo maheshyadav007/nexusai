@@ -24,6 +24,10 @@ CREATE TABLE guard_tokens (value TEXT PRIMARY KEY, token TEXT NOT NULL UNIQUE, k
 """,
 )
 TOKEN = re.compile(r"<([A-Z][A-Z_]*)_(\d+)>")
+# The shapes a model writes when it miscopies a token: <phone>, <Email_3>, < PHONE 3 >.
+LOOSE_TOKEN = re.compile(r"<\s*([A-Za-z][A-Za-z_ ]*?)(?:[_\s-]*(\d+))?\s*>")
+# Set on a tool call whose arguments hold a value the model wasn't given, so it isn't run.
+DAMAGED_KEY = "__damaged_placeholders__"
 # A token cut off at the end of a stream chunk: the next chunk may finish it.
 PARTIAL_TOKEN = re.compile(r"<[A-Z_0-9]*$")
 MAX_TOKEN_LENGTH = 48
@@ -166,15 +170,22 @@ class DataGuard:
         return TOKEN.sub(lambda match: known.get(match.group(0), match.group(0)), text)
 
     def damaged_tokens(self, text: str) -> list[str]:
-        """Things shaped like one of our tokens that we never issued."""
-        found = {match.group(0) for match in TOKEN.finditer(text)}
+        """Things shaped like one of our tokens that we never issued, in any case or spacing.
+
+        Only exact <KIND_n> shapes used to count, so "<phone>" passed through as literal text
+        and could end up in a draft or a sent email."""
+        found = {match.group(0) for match in LOOSE_TOKEN.finditer(text)}
         if not found:
             return []
         kinds = {compiled.rule.kind for compiled in self.rules}
-        known = self._lookup(found)
-        return sorted(
-            token for token in found if token not in known and token[1:].rpartition("_")[0] in kinds
-        )
+        known = self._lookup({token for token in found if TOKEN.fullmatch(token)})
+        damaged = []
+        for token in found:
+            match = LOOSE_TOKEN.fullmatch(token)
+            kind = match.group(1).strip().upper().replace(" ", "_") if match else ""
+            if token not in known and kind in kinds:
+                damaged.append(token)
+        return sorted(damaged)
 
     def restore_strict(self, text: str) -> str:
         """For sends and tool arguments: a damaged token stops the action."""
@@ -193,6 +204,37 @@ class DataGuard:
             return {
                 self.restore_strict(str(k)): self.restore_arguments(v) for k, v in value.items()
             }
+        return value
+
+    def restore_call(self, value: dict[str, Any]) -> dict[str, Any]:
+        """Tool arguments with real values. A value the model wasn't given isn't guessed: the call
+        is marked, so the tool doesn't run and the model is told to copy it exactly."""
+        damaged = sorted(set(self._damaged_in(value)))
+        restored = self._restore_known(value)
+        if damaged and isinstance(restored, dict):
+            return {**restored, DAMAGED_KEY: damaged}
+        return restored if isinstance(restored, dict) else value
+
+    def _damaged_in(self, value: Any) -> list[str]:
+        if isinstance(value, str):
+            return self.damaged_tokens(value)
+        if isinstance(value, list):
+            return [token for item in value for token in self._damaged_in(item)]
+        if isinstance(value, dict):
+            return [
+                token
+                for key, item in value.items()
+                for token in (*self.damaged_tokens(str(key)), *self._damaged_in(item))
+            ]
+        return []
+
+    def _restore_known(self, value: Any) -> Any:
+        if isinstance(value, str):
+            return self.restore(value)
+        if isinstance(value, list):
+            return [self._restore_known(item) for item in value]
+        if isinstance(value, dict):
+            return {self.restore(str(k)): self._restore_known(v) for k, v in value.items()}
         return value
 
     def stream_restorer(self) -> "StreamRestorer":

@@ -679,3 +679,19 @@ def test_exact_historical_sort_requires_confirmation_and_preserves_user_filing(
     assert result.queued == 1
     assert thread(ctx, first.thread)["category"] == "History"
     assert thread(ctx, chosen.thread)["category"] is None
+
+
+def test_only_a_newer_reply_moves_waiting_on_others_back_to_the_person(ctx: Context) -> None:
+    """Regression: a late event for an older message undid the person's own status choice."""
+    first = add(ctx, "Quote", days=2)
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "UPDATE threads SET status='waiting_on_others',status_user_message=? WHERE id=?",
+            (first.message, first.thread),
+        )
+    mail_agent.they_answered(ctx, first.message, first.thread)
+    assert thread(ctx, first.thread)["status"] == "waiting_on_others"
+    reply = add(ctx, "Re: Quote", days=1, reply_to="<organization-1@test>")
+    assert reply.thread == first.thread
+    mail_agent.they_answered(ctx, reply.message, reply.thread)
+    assert thread(ctx, first.thread)["status"] == "waiting_on_you"

@@ -694,5 +694,9 @@ def test_read_more_groups_incoming_and_sent_conversations(
         make_mail(subject="Theirs", sender=USER, to="b@x.example", message_id="<ac2@x>"), box="Sent"
     )
     thread_named(client, "Not theirs")
-    wait(lambda: mail_agent.conversations_not_read(mail_context(client)), "their conversation")
+    # Inbox and Sent sync separately, so wait for both rather than the first to arrive.
+    wait(
+        lambda: mail_agent.conversations_not_read(mail_context(client)) == 2,
+        "both conversations",
+    )
     assert mail_agent.queue_learning(mail_context(client), 5) == 2

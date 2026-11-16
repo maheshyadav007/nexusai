@@ -663,7 +663,13 @@ class SessionRuntime:
         """So the agent plans around what's there, rather than finding out from a refused tool."""
         _, accounts_found = accounts.read_accounts(self.ctx.config)
         engine = semantic.engine()
-        status = engine.status() if engine is not None else None
+        try:
+            status = engine.status() if engine is not None else None
+        except Exception:
+            # The search index can be closing while Home switches or the app restarts. Search by
+            # meaning is then just unavailable; the run used to fail with a harness error.
+            log.warning("semantic_status_unavailable", exc_info=True)
+            status = None
         if status is None or not status.ready:
             meaning = (
                 "Search by meaning is off, so search by keyword. Say results may be incomplete."

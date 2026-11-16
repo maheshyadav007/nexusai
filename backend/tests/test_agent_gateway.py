@@ -12,7 +12,13 @@ from nexusai.kernel.home import create_home
 from nexusai.kernel.module import Context
 from nexusai.modules.agent import gateway, guard
 from nexusai.modules.agent.gateway import DailyCapReached, Layer, call_model
-from nexusai.modules.agent.guard import DamagedToken, DataGuard, GuardBlocked, default_rules
+from nexusai.modules.agent.guard import (
+    DAMAGED_KEY,
+    DamagedToken,
+    DataGuard,
+    GuardBlocked,
+    default_rules,
+)
 from nexusai.modules.agent.providers import (
     Message,
     ModelFlagged,
@@ -221,13 +227,22 @@ def test_replies_stream_restored_and_tool_arguments_come_back_real(
     assert result.tool_calls[0].arguments == {"to": [SECRET]}
 
 
-def test_a_damaged_tool_argument_stops_the_call(ctx: Context, provider: FakeProvider) -> None:
-    provider.script = [ToolCall("c", "send", {"to": "<EMAIL_999>"})]
-    with pytest.raises(DamagedToken):
-        call_model(
-            ctx, agent="a", session=None, layers=[Layer("S", "x")], messages=[Message("user", "hi")]
-        )
-    assert ctx.bus.db.fetch_all("SELECT status FROM model_calls")[0]["status"] == "failed"
+@pytest.mark.parametrize("value", ["<EMAIL_999>", "<email>", "<Phone_2>", "< PHONE >"])
+def test_a_damaged_tool_argument_marks_the_call_and_isnt_guessed(
+    ctx: Context, provider: FakeProvider, value: str
+) -> None:
+    provider.script = [ToolCall("c", "send", {"to": f"Write to {value} today"})]
+    result = call_model(
+        ctx, agent="a", session=None, layers=[Layer("S", "x")], messages=[Message("user", "hi")]
+    )
+    arguments = result.tool_calls[0].arguments
+    assert arguments[DAMAGED_KEY] == [value]
+    assert ctx.bus.db.fetch_all("SELECT status FROM model_calls")[0]["status"] == "done"
+
+
+def test_plain_angle_brackets_are_not_placeholders(ctx: Context) -> None:
+    guard = DataGuard(ctx.bus.db, default_rules())
+    assert guard.damaged_tokens("Use <b>bold</b> and a <note> or <EMAIL_ADDRESS_HERE>") == []
 
 
 def test_final_prompt_view_has_each_layer_masked_and_real(

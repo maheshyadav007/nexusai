@@ -669,10 +669,15 @@ def they_answered(ctx: Context, message: int, thread: int) -> None:
     if not rows or rows[0]["rule"] or rows[0]["from_addr"].lower() in signals.own_addresses(ctx):
         return
     with ctx.bus.unit_of_work() as work:
+        # Events are handled in the background, so this can arrive after the person set the
+        # status. Only a message newer than their choice, and the latest in the conversation,
+        # can be an answer; an older one used to flip "waiting on others" back.
         changed = work.tx.execute(
             "UPDATE threads SET status = 'waiting_on_you', follow_up_on = NULL,"
-            " followup_notified = NULL, why = 'They replied' WHERE id = ? AND status = 'waiting_on_others'",
-            (thread,),
+            " followup_notified = NULL, why = 'They replied' WHERE id = ? AND status = 'waiting_on_others'"
+            " AND (status_user_message IS NULL OR status_user_message < ?)"
+            " AND ? = (SELECT MAX(id) FROM messages WHERE thread_id = ?)",
+            (thread, message, message, thread),
         ).rowcount
         if changed:
             work.emit(
