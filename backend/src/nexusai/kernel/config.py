@@ -87,6 +87,8 @@ class AgentConfig:
     max_agent_messages_per_run: int
     max_steps: int
     bulk_mail_threshold: int = 50
+    # Off: no run stops at a per-run token limit. Limits are still stored for later.
+    run_token_limits: bool = False
 
 
 @dataclass(frozen=True)

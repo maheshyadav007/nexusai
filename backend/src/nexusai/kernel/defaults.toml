@@ -108,6 +108,10 @@ rate_limit_longest_wait = 60
 max_recent_thread_messages = 8
 max_thread_chars = 20000
 memory_max_chars = 8000
+# Per-run token limits: Mail agent runs, learning batches, schedules and team tasks. Off for now,
+# so no run stops partway; the limits below are kept for when this is turned back on. The daily
+# cap (daily_token_cap) is separate and still applies when set.
+run_token_limits = false
 # One run of the Mail agent. It stops there, and what it finished is kept.
 triage_token_limit = 30000
 # A suggested category shows once this many conversations would go in it.

@@ -221,7 +221,9 @@ def _assign(
             + ". Say what to achieve, what to send back, and how you'll check it's done."
         )
     budget = budget_tokens or team.task_token_budget
-    if budget > team.task_token_budget_max:
+    from nexusai.modules.agent import gateway
+
+    if gateway.run_limits_on(ctx) and budget > team.task_token_budget_max:
         return f"Not assigned: the most a task may use is {team.task_token_budget_max} tokens."
     turns = db.fetch_all(
         "SELECT id FROM agent_turns WHERE session = ? AND closed = 0 ORDER BY id DESC LIMIT 1",

@@ -880,8 +880,9 @@ def test_a_one_time_schedule_runs_once(client: TestClient, script: Script) -> No
 
 
 def test_a_scheduled_run_stops_at_its_token_limit_and_keeps_its_work(
-    client: TestClient, script: Script
+    client: TestClient, script: Script, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setattr(gateway, "run_limits_on", lambda _ctx: True)
     saved = client.post(
         "/api/commands/schedules.save",
         json={"title": "Small prep", "prompt": "Use a tool", "token_limit": 1},
@@ -906,6 +907,35 @@ def test_a_scheduled_run_stops_at_its_token_limit_and_keeps_its_work(
     assert "limit of 1 tokens" in row["error"]
     assert len(script.requests) == 1
     assert client.post("/api/queries/usage.get").json()["total_today"] == 15
+
+
+def test_with_run_limits_off_a_run_goes_past_its_token_limit(
+    client: TestClient, script: Script
+) -> None:
+    """Per-run limits are off by default for now, so a tiny limit stops nothing."""
+    saved = client.post(
+        "/api/commands/schedules.save",
+        json={"title": "Unlimited prep", "prompt": "Use a tool", "token_limit": 1},
+    ).json()["schedules"]
+    schedule = next(row for row in saved if row["title"] == "Unlimited prep")
+    script.replies = [
+        [Usage(input_tokens=10, output_tokens=5), ToolCall("c1", "read_work_board", {})],
+        ["Done."],
+    ]
+    client.post("/api/commands/schedules.runNow", json={"id": schedule["id"]})
+    row = wait(
+        lambda: next(
+            (
+                s
+                for s in client.post("/api/queries/sessions.list", json={}).json()["sessions"]
+                if s["title"] == "Unlimited prep" and s["status"] in {"done", "stopped", "failed"}
+            ),
+            None,
+        ),
+        "finished",
+    )
+    assert row["status"] == "done", row
+    assert len(script.requests) == 2
 
 
 def test_daily_prep_shows_on_today(client: TestClient, script: Script, fake: FakeMail) -> None:

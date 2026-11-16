@@ -248,8 +248,13 @@ def test_a_schedules_runs_are_one_chat(client: TestClient, script: Script) -> No
     assert [row["title"] for row in names].count("Weekly") == 1
 
 
-def test_a_token_limit_counts_each_run_on_its_own(client: TestClient, script: Script) -> None:
+def test_a_token_limit_counts_each_run_on_its_own(
+    client: TestClient, script: Script, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from nexusai.modules.agent import gateway
     from nexusai.modules.agent.providers import Usage
+
+    monkeypatch.setattr(gateway, "run_limits_on", lambda _ctx: True)
 
     script.default = [TextChunk("Report."), Usage(60, 60)]
     saved = client.post(

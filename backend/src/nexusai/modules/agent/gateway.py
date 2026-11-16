@@ -189,6 +189,11 @@ def instructions_text(layers: list[Layer]) -> str:
     )
 
 
+def run_limits_on(ctx: Context) -> bool:
+    """Every per-run token limit goes through here, so one setting turns them all off."""
+    return bool(ctx.config.agent.run_token_limits)
+
+
 def _check_run_limit(db: Database, session: str | None) -> None:
     """Checked before each call, so a run can pass its limit by at most the call in progress."""
     if not session:
@@ -303,7 +308,8 @@ def stream_model(
         over = monitor.over_daily_cap(ctx, agent, turns[0]["origin"] if turns else "person")
         if over:
             raise DailyCapReached(over)
-    _check_run_limit(db, session)
+    if run_limits_on(ctx):
+        _check_run_limit(db, session)
 
     provider, default_model = resolve_provider(ctx)
     model = model_override or default_model

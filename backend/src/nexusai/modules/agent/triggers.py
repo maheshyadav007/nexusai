@@ -609,7 +609,7 @@ class Triggers:
         elif self.runtime.active_turn(session) is not None:
             return  # Delivered when this run ends.
         left = row["budget_tokens"] - team._tokens_used(db, row["owner_session"])
-        if left <= 0:
+        if gateway.run_limits_on(self.ctx) and left <= 0:
             self._set_task(row["id"], state="blocked", failure="budget", wake=team.ASSIGNER)
             return
         gateway.set_run_limit(db, session, left)
