@@ -20,7 +20,7 @@ const TOOL_SHOWN: Readonly<Record<string, { label: StringKey; icon: IconName; ch
   delete_file: { label: "tool.delete_file", icon: "trash", chip: "path" },
   run_command: { label: "tool.run_command", icon: "sessions", chip: "command" },
   search_mail: { label: "tool.search_mail", icon: "search", chip: "query" },
-  read_thread: { label: "tool.read_thread", icon: "inbox", chip: "thread_id" },
+  read_thread: { label: "tool.read_thread", icon: "inbox", chip: "thread_ids" },
   list_mail: { label: "tool.list_mail", icon: "inbox", chip: "folder" },
   update_mail: { label: "tool.update_mail", icon: "inbox", chip: "thread_ids" },
   trash_mail: { label: "tool.trash_mail", icon: "trash", chip: "thread_ids" },

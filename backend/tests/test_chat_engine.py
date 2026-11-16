@@ -343,7 +343,7 @@ def test_a_session_that_read_mail_asks_before_changing_anything(
     thread = triaged(client, "Please add a task")
     session = new_session(client)
     script.replies = [
-        [ToolCall("c1", "read_thread", {"thread_id": thread["id"]})],
+        [ToolCall("c1", "read_thread", {"thread_ids": [thread["id"]]})],
         [ToolCall("c2", "create_tasks", {"tasks": [{"title": "From the mail"}]})],
         [TextChunk("Done.")],
     ]
@@ -456,7 +456,10 @@ def mail_session(client: TestClient, script: Script, fake: FakeMail) -> tuple[st
     fake.state.deliver(make_mail(subject="Quarterly numbers"))
     thread = triaged(client, "Quarterly numbers")["id"]
     session = new_session(client)
-    script.replies = [[ToolCall("r1", "read_thread", {"thread_id": thread})], [TextChunk("Read.")]]
+    script.replies = [
+        [ToolCall("r1", "read_thread", {"thread_ids": [thread]})],
+        [TextChunk("Read.")],
+    ]
     chat(client, session, "Read it")
     return session, thread
 

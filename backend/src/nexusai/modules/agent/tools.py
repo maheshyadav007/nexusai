@@ -548,8 +548,16 @@ class _Search(BaseModel):
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
+# How many conversations one read_thread call takes. They share one tool output, so each gets less.
+MAX_THREADS_PER_READ = 10
+
+
 class _ReadThread(BaseModel):
-    thread_id: int = Field(description="The conversation's ID, from search results.")
+    thread_ids: list[int] = Field(
+        min_length=1,
+        max_length=MAX_THREADS_PER_READ,
+        description=f"The conversations' IDs, from a search or list. Up to {MAX_THREADS_PER_READ}.",
+    )
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
@@ -1474,11 +1482,21 @@ def build_tools(
             marks_untrusted=True,
         )
 
-    def read_thread(thread_id: int, tool_call_id: str) -> str:
+    def read_thread(thread_ids: list[int], tool_call_id: str) -> str:
+        ids = list(dict.fromkeys(thread_ids))[:MAX_THREADS_PER_READ]
+
         def work() -> str:
+            # One tool output holds them all, so each conversation gets an equal share of it.
+            share = min(
+                ctx.config.agent.max_thread_chars,
+                ctx.config.agent.max_tool_output_chars // len(ids) - 100,
+            )
+            return _untrusted("\n\n---\n\n".join(_thread_text(thread, share) for thread in ids))
+
+        def _thread_text(thread_id: int, budget: int) -> str:
             view = store.thread_view(ctx.bus.db, thread_id)
             if view is None:
-                return "That conversation no longer exists."
+                return f"Conversation {thread_id} no longer exists."
             citations.note(ctx.bus.db, session, citations.MAIL, str(thread_id), opened=True)
             recent = view.messages[-ctx.config.agent.max_recent_thread_messages :]
             attachments = [
@@ -1494,14 +1512,25 @@ def build_tools(
                 if attachments
                 else ""
             )
-            body = "\n\n".join(
-                f"From {m.from_name} <{m.from_addr}> on {m.date}\n{m.own_text}" for m in recent
-            )
-            skipped = len(view.messages) - len(recent)
+            head = f"Conversation {thread_id}\nSubject: {view.thread.subject}\n{manifest}"
+            # The newest messages matter most, so when space runs out the oldest go first.
+            kept: list[str] = []
+            room = budget - len(head)
+            for message in reversed(recent):
+                text = f"From {message.from_name} <{message.from_addr}> on {message.date}\n{message.own_text}"
+                if kept and len(text) > room:
+                    break
+                kept.insert(0, text[: max(room, 0)])
+                room -= len(text) + 2
+            skipped = len(view.messages) - len(kept)
             note = f"[{skipped} older messages not shown]\n\n" if skipped else ""
-            limit = ctx.config.agent.max_thread_chars
-            return _untrusted(f"Subject: {view.thread.subject}\n{manifest}{note}{body}"[:limit])
+            return f"{head}{note}" + "\n\n".join(kept)
 
+        summary = (
+            f"Read conversation {ids[0]}"
+            if len(ids) == 1
+            else f"Read {len(ids)} conversations: {', '.join(map(str, ids))}"
+        )
         return _guarded(
             ctx,
             session,
@@ -1509,7 +1538,7 @@ def build_tools(
             "read_thread",
             "read",
             ctx.config.home / "memory",
-            f"Read conversation {thread_id}",
+            summary,
             "",
             False,
             work,
@@ -2131,7 +2160,9 @@ def build_tools(
         (
             read_thread,
             _ReadThread,
-            "Read a whole mail conversation, by the ID from a search or list.",
+            "Read whole mail conversations by the IDs from a search or list. When you need "
+            f"several, read them together, up to {MAX_THREADS_PER_READ} in one call. When space is "
+            "short, the oldest messages are left out first.",
         ),
         (
             read_recipients,

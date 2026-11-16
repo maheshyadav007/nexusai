@@ -215,7 +215,7 @@ def test_many_conversations_change_in_one_call_with_one_approval(
     session = new_session(client)
     change = {"thread_ids": threads, "category": "Finance", "flagged": True, "status": "resolved"}
     script.replies = [
-        [ToolCall("r", "read_thread", {"thread_id": threads[0]})],
+        [ToolCall("r", "read_thread", {"thread_ids": [threads[0]]})],
         [ToolCall("u", "update_mail", change)],
         [TextChunk("Done.")],
     ]
@@ -228,6 +228,23 @@ def test_many_conversations_change_in_one_call_with_one_approval(
     assert {(t["category"], t["flagged"], t["status"]) for t in rows} == {
         ("Finance", True, "resolved")
     }
+
+
+def test_several_conversations_are_read_in_one_call(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    threads = two_filed_threads(client, script, fake)
+    session = new_session(client)
+    script.replies = [
+        [ToolCall("r", "read_thread", {"thread_ids": [*threads, 999999]})],
+        [TextChunk("Read both.")],
+    ]
+    done = chat_in_background(client, session, "Read them")
+    wait(lambda: done, "finish")
+    results = [m.text for m in script.requests[-1].messages if m.role == "tool"]
+    assert len(results) == 1
+    assert "Report one" in results[0] and "Report two" in results[0]
+    assert "Conversation 999999 no longer exists." in results[0]
 
 
 def test_mail_can_be_trashed_but_only_after_asking(

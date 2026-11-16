@@ -85,7 +85,7 @@ def test_an_answer_cites_what_it_read_and_shows_titles_from_the_database(
     thread = triaged(client, "Budget numbers")["id"]
     wait(lambda: status(client, "mail-agent") == "done", "triage")
     script.replies = [
-        [ToolCall("r1", "read_thread", {"thread_id": thread})],
+        [ToolCall("r1", "read_thread", {"thread_ids": [thread]})],
         [TextChunk(f"The budget is approved [mail:{thread}]. Also [mail:987654].")],
     ]
     session = new_session(client)

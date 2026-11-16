@@ -1096,7 +1096,7 @@ def test_agent_can_discover_and_read_an_email_attachment(
     )
     thread = thread_named(client, "Attachment evidence")
     session, output = run_tool(
-        client, script, ToolCall("attachment-list", "read_thread", {"thread_id": thread["id"]})
+        client, script, ToolCall("attachment-list", "read_thread", {"thread_ids": [thread["id"]]})
     )
     assert "brief.txt" in output and "read_document key m:" in output
     import re
