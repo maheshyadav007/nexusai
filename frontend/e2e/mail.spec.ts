@@ -439,9 +439,14 @@ test("a document uploads, opens with its text, and can be filed, tagged and remo
   await expect(row).toHaveCount(0);
   await page.getByRole("textbox", { name: "Search documents" }).fill("");
 
-  await page.getByRole("textbox", { name: "New folder" }).fill("Legal");
-  await page.getByRole("textbox", { name: "New folder" }).press("Enter");
-  await expect(page.getByRole("navigation", { name: "Folders" }).getByRole("button", { name: "Legal", exact: true })).toBeVisible();
+  // Folders are made and ordered in their own dialog.
+  await page.getByRole("button", { name: "Manage folders" }).click();
+  const folders = page.getByRole("dialog", { name: "Manage folders" });
+  await folders.getByRole("textbox", { name: "New folder" }).fill("Legal");
+  await folders.getByRole("textbox", { name: "New folder" }).press("Enter");
+  await expect(folders.getByRole("navigation", { name: "Folders" }).getByRole("button", { name: "Legal", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(folders).toHaveCount(0);
 
   // One click shows the file itself, with its details one step further.
   await row.click();
@@ -487,6 +492,7 @@ test("PST imports show progress and can be paused and resumed", async ({ page })
     return route.fulfill({ json: { imports: [{ ...job, status }] } });
   });
   await page.reload();
+  await page.getByRole("button", { name: "Mail archives" }).click();
   const card = page.getByTestId("pst-import");
   await expect(card).toContainText("40 of 100 read, 38 added, 2 already here");
   await card.getByRole("button", { name: "Pause" }).click();
@@ -622,7 +628,7 @@ test("a file opens straight away, arrows move between files, and right-click has
   await newest.click();
   const preview = page.getByTestId("document-preview");
   await expect(preview).toContainText("Second file text.");
-  await expect(page.getByTestId("assistant-pill")).toHaveCount(0);
+  await expect(page.getByTestId("assistant-pill")).toBeHidden();
   await page.getByRole("button", { name: "Next file" }).click();
   await expect(preview).toContainText("First file text.");
   await page.keyboard.press("ArrowLeft");

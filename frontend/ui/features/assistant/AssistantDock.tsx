@@ -146,7 +146,7 @@ export function AssistantDock() {
       {assistant.open ? (
         <Panel key="panel" />
       ) : (
-        <RiseButton key="pill" onClick={() => assistant.setOpen(true)} data-testid="assistant-pill" className="ai-glow focus-ring fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full px-4 py-2 text-md font-medium text-ink-primary shadow-overlay">
+        <RiseButton key="pill" onClick={() => assistant.setOpen(true)} data-testid="assistant-pill" className="assistant-pill ai-glow focus-ring fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full px-4 py-2 text-md font-medium text-ink-primary shadow-overlay">
           <Icon name="chat" />
           {t("chat.pill", { agent: lead })}
           {waiting ? (

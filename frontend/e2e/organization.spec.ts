@@ -70,7 +70,8 @@ test("Priority, Important and Starred are separate views", async ({ page, reques
   await expect(page.getByText(target.subject, { exact: true })).toBeVisible();
   await page.getByText(target.subject, { exact: true }).click();
   await page.getByRole("button", { name: "Remove star", exact: true }).click();
-  await expect.poll(async () => (await post(request, "/api/queries/threads.list", { folder: "starred" })).threads.length).toBe(0);
+  // Other tests star mail too, so check this one left the view rather than that it's empty.
+  await expect.poll(async () => (await post(request, "/api/queries/threads.list", { folder: "starred" })).threads.some((row: { id: number }) => row.id === target.id)).toBe(false);
 });
 
 test("folder and category context menus perform scoped operations", async ({ page, request }) => {

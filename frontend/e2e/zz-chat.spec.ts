@@ -396,8 +396,11 @@ test("mail has folders, a reading pane, and categories people make", async ({ pa
   await page.getByRole("button", { name: "New category" }).click();
   await noViolations(page);
   await page.getByRole("textbox", { name: "Name" }).fill("Invoices");
-  await page.getByRole("textbox", { name: "File mail automatically from" }).fill("vendor.example");
-  await page.getByRole("checkbox", { name: "Show in Priority inbox" }).click();
+  // A rule needs an Exact folder; a new one starts as Smart.
+  await page.getByRole("combobox", { name: "Mode" }).click();
+  await page.getByRole("option", { name: "Exact" }).click();
+  await page.getByRole("textbox", { name: "File mail automatically from" }).fill("billing@vendor.example");
+  await page.getByRole("checkbox", { name: "Show in Priority" }).click();
   await page.getByRole("button", { name: "Create category" }).click();
   const link = page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Invoices" });
   await expect(link).toBeVisible();

@@ -179,6 +179,11 @@ svg.lucide {
   inherits: false;
   initial-value: 0deg;
 }
+/* An open dialog has the screen; the chat button would float over it, above the dimmed page. */
+body[data-scroll-locked] .assistant-pill {
+  display: none;
+}
+
 .ai-glow {
   --ai-colors: theme(colors.ai.one), theme(colors.ai.two), theme(colors.ai.three), theme(colors.ai.four), theme(colors.ai.one);
   isolation: isolate;
