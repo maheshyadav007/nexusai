@@ -764,7 +764,7 @@ class _FoldSuggestions(BaseModel):
 class _LearningAnswers(BaseModel):
     answers: list[dict[str, str]] = Field(
         max_length=100,
-        description="One item per explicit answer, with id and importance (low/normal/high). Copy supplied ids as values.",
+        description="One item per explicit answer, with id and importance (low/normal/high). Copy the supplied short ids, such as q1, exactly.",
     )
     tool_call_id: Annotated[str, InjectedToolCallId]
 
@@ -1066,9 +1066,16 @@ def build_tools(
     RUN_CONTROLS[session] = control
 
     def apply_mail_learning_answers(answers: list[dict[str, str]], tool_call_id: str) -> str:
-        importance = {answer.get("id", ""): answer.get("importance", "") for answer in answers}
+        given = {
+            str(answer.get("id", "")): str(answer.get("importance", ""))
+            for answer in answers
+            if isinstance(answer, dict)
+        }
+        importance, unknown = bulk_learning.interview_answers(ctx, session, given)
 
         def work() -> str:
+            if unknown:
+                return f"Unknown ids: {', '.join(unknown)}. Use only the supplied ids, such as q1. Nothing was saved."
             reviews = ctx.bus.db.fetch_all(
                 "SELECT account FROM mail_learning_reviews WHERE interview=? AND state='asking'",
                 (session,),

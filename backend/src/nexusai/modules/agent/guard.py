@@ -43,13 +43,35 @@ def default_rules() -> GuardRules:
     return GuardRules.model_validate(json.loads(text))
 
 
+# Earlier shipped patterns only refused a neighbouring digit, so ten digits inside a word, a hash or
+# an order code were masked as a phone number. Saved copies of exactly these are upgraded on load;
+# a pattern the person edited is left alone.
+UPGRADED_PATTERNS = {
+    r"(?<![\d+])(?:\+?91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}(?!\d)": r"(?<![\w+])(?:\+?91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}(?!\w)",
+    r"(?<![\d+])\+\d{1,3}[\s-]?\(?\d{1,4}\)?(?:[\s-]?\d{2,4}){2,4}(?!\d)": r"(?<![\w+])\+\d{1,3}[\s-]?\(?\d{1,4}\)?(?:[\s-]?\d{2,4}){2,4}(?!\w)",
+}
+
+
 def load_rules(home: Path) -> GuardRules:
     path = home / "system" / FILE_NAME
     if not path.exists():
         rules = default_rules()
         save_rules(home, rules)
         return rules
-    return GuardRules.model_validate(json.loads(path.read_text(encoding="utf-8")))
+    rules = GuardRules.model_validate(json.loads(path.read_text(encoding="utf-8")))
+    if any(rule.pattern in UPGRADED_PATTERNS for rule in rules.rules):
+        rules = rules.model_copy(
+            update={
+                "rules": [
+                    rule.model_copy(
+                        update={"pattern": UPGRADED_PATTERNS.get(rule.pattern, rule.pattern)}
+                    )
+                    for rule in rules.rules
+                ]
+            }
+        )
+        save_rules(home, rules)
+    return rules
 
 
 def save_rules(home: Path, rules: GuardRules) -> None:

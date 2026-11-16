@@ -347,7 +347,14 @@ class Triggers:
             (accounts.current_account(ctx.config),),
         )
         session = review[0]["interview"] if review else mail_agent._setting(ctx, INTERVIEW_STARTED)
-        if review:
+        if review and review[0]["state"] == "failed":
+            # Failed learning used to hold the first meeting until someone retried it. The meeting
+            # is about the person, so it goes ahead now; group questions follow a successful retry.
+            if mail_agent._setting(ctx, INTERVIEW_STARTED):
+                return
+            review = []
+            session = None
+        elif review:
             if review[0]["state"] != "asking":
                 return
         elif mail_agent.learning_state(ctx) != "done":
@@ -377,10 +384,11 @@ class Triggers:
             unclear = [
                 dict(row)
                 for row in ctx.bus.db.fetch_all(
-                    "SELECT id,sender,subject,note,importance FROM mail_learning_groups WHERE account=? AND uncertain=1",
+                    "SELECT id,sender,subject,note,importance FROM mail_learning_groups WHERE account=? AND uncertain=1 ORDER BY id",
                     (accounts.current_account(ctx.config),),
                 )
             ]
+            unclear = bulk_learning.alias_interview_groups(ctx, session, unclear)
             request = replace(
                 request,
                 task=(request.task or "")
@@ -500,7 +508,11 @@ class Triggers:
             self.release_mail = False
             return
         request, runs = prepared
-        self._dispatch(request, runs, own["token_limit"] or self.config.triage_token_limit)
+        limit = own["token_limit"] or self.config.triage_token_limit
+        if request.target and request.target.get("bulk_batch") is not None:
+            # A batch of groups is many emails' worth of reading, not one email.
+            limit = max(limit, bulk_learning.token_budget(request.task))
+        self._dispatch(request, runs, limit)
 
     def _mail_trigger(self) -> Any:
         return self.ctx.bus.db.fetch_all(

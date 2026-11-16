@@ -244,13 +244,15 @@ def test_cached_groups_use_no_further_learning_calls(ctx: Context) -> None:
     assert bulk_learning.queue(ctx) == 1
 
 
-def test_learning_is_batched_and_invalid_coverage_is_atomic(ctx: Context) -> None:
+def test_learning_is_batched_and_missing_coverage_is_asked_again(ctx: Context) -> None:
     for index in range(65):
         add(ctx, "Monthly report", sender=f"person{index}@example.com", days=10)
     assert bulk_learning.queue(ctx) == 65
     batches = ctx.bus.db.fetch_all("SELECT * FROM mail_learning_batches")
     assert [len(json.loads(batch["groups_json"])) for batch in batches] == [30, 30, 5]
-    assert bulk_learning.record(ctx, batches[0]["id"], {"groups": []}, 1).startswith("Incomplete")
+    assert bulk_learning.record(ctx, batches[0]["id"], {"groups": []}, 1).startswith(
+        "Saved 0 groups. Still missing: g1, g2,"
+    )
     assert not ctx.bus.db.fetch_all("SELECT 1 FROM mail_learning_groups WHERE learned=1")
     run = ctx.bus.db.fetch_all("SELECT * FROM trigger_runs ORDER BY id LIMIT 1")[0]
     for _ in range(3):

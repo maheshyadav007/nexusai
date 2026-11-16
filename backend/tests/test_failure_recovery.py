@@ -459,3 +459,39 @@ def test_outbox_failure_upgrade_preserves_pending_changes(ctx: Context) -> None:
         assert json.loads(row["payload"]) == {"value": True}
     finally:
         db.close()
+
+
+def test_failed_group_learning_does_not_hold_the_first_meeting(
+    ctx: Context, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    engine = runtime.SessionRuntime(ctx)
+    try:
+        submitted = []
+        monkeypatch.setattr(engine, "_submit", lambda *args: submitted.append(args))
+        dispatcher = triggers.Triggers(ctx, engine)
+        monkeypatch.setattr(dispatcher, "_model_ready", lambda: True)
+        with ctx.bus.db.transaction() as tx:
+            tx.execute(
+                "INSERT INTO mail_learning_reviews(account,state,updated) VALUES('test','failed',?)",
+                (mail_agent._now(),),
+            )
+        mail_agent.set_learning_state(ctx, "failed")
+        dispatcher._start_interview()
+        assert len(submitted) == 1
+        first = ctx.bus.db.fetch_all("SELECT id FROM agent_sessions WHERE agent='interview'")
+        assert len(first) == 1
+        # Once is enough while learning stays failed.
+        dispatcher._start_interview()
+        assert len(submitted) == 1
+        # The failed learning stays retryable, and a successful retry asks its own questions.
+        assert (
+            ctx.bus.db.fetch_all("SELECT state FROM mail_learning_reviews")[0]["state"] == "failed"
+        )
+        with ctx.bus.db.transaction() as tx:
+            tx.execute("UPDATE mail_learning_reviews SET state='asking'")
+        dispatcher._start_interview()
+        assert len(submitted) == 2
+        review = ctx.bus.db.fetch_all("SELECT interview FROM mail_learning_reviews")[0]
+        assert review["interview"] and review["interview"] != first[0]["id"]
+    finally:
+        engine.close()
