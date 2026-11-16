@@ -172,7 +172,7 @@ test("a schedule is created and runs on demand", async ({ page }) => {
   const prep = page.getByTestId("schedule").filter({ hasText: "Daily prep" });
   await prep.getByRole("button", { name: "Edit Daily prep" }).click();
   await noViolations(page);
-  await prep.getByLabel("Time").fill("05:30");
+  await prep.getByLabel("Time", { exact: true }).fill("05:30");
   await prep.getByRole("spinbutton", { name: "Token limit for each run" }).fill("20000");
   await prep.getByRole("button", { name: "Save" }).click();
   await expect(prep).toContainText("Limit: 20,000 tokens");
@@ -193,10 +193,10 @@ test("what the agent knows, and is told, can be seen and it asks before moving m
   await layers.getByRole("button", { name: "Open Mail agent's instructions" }).click();
   await expect(layers.getByText("chief of staff")).toBeVisible();
   await noViolations(page);
-  await page.getByRole("switch", { name: "Morning brief" }).click();
-  await expect(page.getByRole("switch", { name: "Morning brief" })).not.toBeChecked();
-  await page.getByRole("switch", { name: "Morning brief" }).click();
-  await expect(page.getByRole("switch", { name: "Morning brief" })).toBeChecked();
+  await page.getByRole("switch", { name: "Your brief" }).click();
+  await expect(page.getByRole("switch", { name: "Your brief" })).not.toBeChecked();
+  await page.getByRole("switch", { name: "Your brief" }).click();
+  await expect(page.getByRole("switch", { name: "Your brief" })).toBeChecked();
   await page.getByRole("tab", { name: "What it sees" }).click();
   await expect(page.getByText("calls no model")).toBeVisible();
   await noViolations(page);
@@ -362,6 +362,7 @@ test("switches animate from one place and keep their state", async ({ page }) =>
 
 test("the agent list says what each one runs on and when it runs next", async ({ page }) => {
   await page.goto("/agent/channel");
+  await page.getByRole("tab", { name: "Schedules" }).click();
   const rows = page.getByTestId("agent-entry");
   await expect(rows.filter({ hasText: "Judges your mail" })).toBeVisible();
   await expect(rows.filter({ hasText: "Writes your morning brief" }).getByTestId("agent-next")).toBeVisible();

@@ -101,6 +101,14 @@ The app has connected to the real company servers, and the first feedback came f
 | Inbox review says "Hasn't run yet" | Its first run happened inside the Mail agent's chat, so it isn't counted | Implemented: Inbox review uses its own turn origin and timestamp, including shared-chat runs. Regression tested; confirm after the next real review. |
 | Removed agents can vanish | A removed agent is only listed if it left a chat behind | Keep a small record when an agent is removed |
 
+## Agent memory and tools (planned)
+
+| Problem | What happens | How we'll solve it |
+|---|---|---|
+| Saving memory depends on the chat model | Posty is told to save facts and corrections in the same step ("Saving what you learn" in `system.md`), but a small model can still answer "I'll keep that in mind" without saving | Next iteration: a background memory review. When a chat has been quiet for a few minutes, one short run reads only the new messages and must call a single `save_memories` tool: what the person said directly is saved, "always/never" rules become preference proposals, duplicates are skipped with `kernel/textmatch.py`, and the chat shows "Memory updated" with a link to review. Triggered by idle time, not keywords, and resumable from a per-session cursor |
+| Per-run token limits are off | `run_token_limits = false` in `defaults.toml`, so no run stops partway. Nothing bounds one runaway run except the daily cap, when set | Size limits to the work (a base plus an allowance per email or group) before turning them back on, and retry a stopped run once instead of marking its mail failed |
+| Folded proposals unproven with real data | "For your decision" folds more than three memory notes or tasks into one row with Keep all / Add all; covered by typecheck only | Check on the real account after learning, and add a browser test with seeded proposals |
+
 ## Mail handling
 
 | Problem | What happens | How we'll solve it |

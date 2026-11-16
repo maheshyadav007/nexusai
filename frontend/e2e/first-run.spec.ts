@@ -85,6 +85,8 @@ test("a new person goes from landing through setup into the app, and setup resum
   const welcome = page.getByRole("dialog", { name: "Hi, I'm Posty" });
   await expect(welcome.getByText("Connect your mail")).toBeVisible();
   await expect(welcome.getByText("Your first brief")).toBeVisible();
+  // The title is set just after the redirect; check the page once it's there.
+  await expect(page).toHaveTitle(/\S/);
   await noViolations(page);
   await welcome.getByRole("button", { name: "Got it" }).click();
   const checklist = page.getByTestId("finish-setup");

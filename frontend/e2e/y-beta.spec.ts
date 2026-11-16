@@ -52,7 +52,7 @@ test("desktop header integrates actions and exposes staged update controls", asy
   await page.getByRole("button", { name: "Check for updates", exact: true }).click();
   await expect(page.getByRole("button", { name: "Download update", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Download update", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Restart to install", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Restart to update", exact: true })).toBeVisible();
   await page.screenshot({ path: "test-results/beta-about-updates.png", fullPage: true });
 });
 

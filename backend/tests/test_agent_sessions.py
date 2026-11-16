@@ -756,3 +756,36 @@ def test_a_closing_search_index_does_not_fail_the_run(
     stream_parts(client, session, "Hi")
     assert status(client, session) == "done"
     assert "search by keyword" in script.requests[0].instructions
+
+
+def test_a_chat_knows_its_other_tools_and_how_to_save_what_it_learns(
+    client: TestClient, script: Script
+) -> None:
+    """Regression: Posty said it couldn't delete a task, and promised to remember without saving."""
+    session = new_session(client)
+    stream_parts(client, session, "Hi")
+    call = client.post("/api/queries/modelCall.get", json={"session": session}).json()
+    layers = {layer["name"]: layer["real"] for layer in call["layers"]}
+    others = layers["Your other tools"]
+    listed = others.split("\n", 1)[1]
+    task_line = next(line for line in listed.splitlines() if line.startswith("- task:"))
+    assert "delete_tasks" in task_line and "update_tasks" in task_line
+    # What it starts with isn't repeated, and find_tools itself isn't a hidden tool.
+    assert "create_tasks" not in listed and "find_tools" not in listed
+    system = layers["System prompt"]
+    assert "## Saving what you learn" in system and "## Finding tools" in system
+    assert "unless you saved it in this same step" in system
+
+
+def test_other_tools_are_grouped_by_what_they_act_on() -> None:
+    from nexusai.modules.agent import tools
+
+    text = tools.other_tools(
+        ["create_tasks", "delete_tasks", "update_tasks", "delete_reminders", "find_tools"],
+        frozenset({"create_tasks"}),
+    )
+    assert text.splitlines()[1:] == [
+        "- reminder: delete_reminders",
+        "- task: delete_tasks, update_tasks",
+    ]
+    assert tools.other_tools(["create_tasks"], None) == ""

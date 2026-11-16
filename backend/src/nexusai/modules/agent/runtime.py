@@ -728,6 +728,16 @@ class SessionRuntime:
             note = "This is grouped learning. Record only supplied group IDs, inferred notes and folder suggestions; never create work or drafts."
         elif target.get("sent"):
             note = "The person sent the latest message. Assess commitments and follow-ups; do not draft another reply."
+        engine = cards.engine(self.db, agent)
+        has_email = bool(turn and turn["target"])
+        built = tools.build_tools(
+            self.ctx, session, control, tools.allowed_for(engine, origin, has_email)
+        )
+        shown = tools.shown_for(engine, has_email)
+        others = tools.other_tools([tool.name for tool in built], shown)
+        if others:
+            # Stable for this agent and kind of run, so it sits with the cached layers.
+            layers.append(Layer("Your other tools", others))
         stable = list(layers)
         # Last, because it changes: open tasks, then the time.
         live = team.live_block(self.db, agent)
@@ -745,13 +755,9 @@ class SessionRuntime:
         settings = context.load_settings(self.db, config)
         own = json.loads(turn["context"]) if turn and turn["context"] else None
         profile: ContextProfile = context.profile_for(settings, origin, own)
-        engine = cards.engine(self.db, agent)
-        has_email = bool(turn and turn["target"])
         return create_agent(
             model,
-            tools.build_tools(
-                self.ctx, session, control, tools.allowed_for(engine, origin, has_email)
-            ),
+            built,
             middleware=context.middleware(
                 model,
                 settings,
@@ -762,7 +768,7 @@ class SessionRuntime:
                 log_tool=lambda call, tool, args, result, ms: tools.record_call(
                     self.ctx, session, call, tool, args, result, ms
                 ),
-                shown_tools=tools.shown_for(engine, has_email),
+                shown_tools=shown,
                 always_shown_prefix=tools.CONNECTOR_PREFIX,
             ),
             checkpointer=self.saver,

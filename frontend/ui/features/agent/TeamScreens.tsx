@@ -146,6 +146,8 @@ export function TeamCards() {
   if (cards.isError) return <ErrorState title={t("team.error")} onRetry={() => void cards.refetch()} />;
   return (
     <div className="flex flex-col gap-3">
+      {/* Each card's name is an h3, so the list needs its h2 for screen-reader navigation. */}
+      <h2 className="sr-only">{t("team.title")}</h2>
       <p className="text-md text-ink-secondary">{t("team.description")}</p>
       <ul aria-label={t("team.title")} className="grid gap-3 xl:grid-cols-2">
         {rows.map((card) => <ProfileCard key={card.id} card={card} />)}

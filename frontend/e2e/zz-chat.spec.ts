@@ -13,9 +13,12 @@ const noViolations = async (page: Page) => {
 };
 
 const openFresh = async (page: Page) => {
-  await page.goto("/agent/sessions");
-  await page.getByRole("button", { name: "New session" }).click();
-  await expect(page.getByTestId("assistant-dock")).toBeVisible();
+  // "New session" opens in the side panel now; these tests read the full session page.
+  const created = await page.request.post("/api/commands/session.create", { data: { title: "Chat" } });
+  const { id } = (await created.json()) as { id: string };
+  // A session opens in the side panel unless the full page is asked for.
+  await page.goto(`/agent/sessions/${id}?view=full`);
+  await expect(page.getByTestId("session-status")).toBeVisible();
 };
 
 const say = async (page: Page, text: string) => {
@@ -53,7 +56,8 @@ test.afterAll(async ({ request }) => {
 test("a question appears as choices in the chat, and picking one carries on", async ({ page }) => {
   await openFresh(page);
   await say(page, "ask me something");
-  const card = page.getByTestId("question-card");
+  // The session page's own card; a waiting question is also shown outside the page.
+  const card = page.getByRole("main").getByTestId("question-card");
   await expect(card).toContainText("Which day works?");
   await expect(page.getByTestId("session-status")).toContainText("Waiting");
   await noViolations(page);
@@ -199,7 +203,7 @@ test("work folds behind a thinking line that opens to each step", async ({ page 
   const approval = page.getByTestId("approval");
   await expect(approval).toBeVisible();
   await noViolations(page);
-  await approval.getByRole("button", { name: "Allow once" }).click();
+  await approval.getByRole("button", { name: "Approve once" }).click();
   await expect(page.getByTestId("agent-message")).toContainText("Tool said:");
   const thinking = page.getByTestId("thinking");
   await expect(thinking).toContainText("1 step");
@@ -250,7 +254,7 @@ test("many requests at once are one decision, and one can be left out", async ({
 
   await openFresh(page);
   await say(page, "add three tasks");
-  await page.getByTestId("approval-group").getByRole("button", { name: "Allow for this session" }).click();
+  await page.getByTestId("approval-group").getByRole("button", { name: "Approve for this session" }).click();
   await expect(page.getByTestId("session-status")).toContainText("Done");
   await expect(page.getByTestId("approval-group")).toHaveCount(0);
   await request.post("/api/commands/permissions.save", { data: current });
@@ -301,13 +305,14 @@ test("a session waiting on you is first in the list and says so at the top", asy
   const group = page.getByRole("region", { name: "Waiting on you" });
   await expect(group.getByTestId("session-row").filter({ hasText: "Waiting one" })).toBeVisible({ timeout: 15_000 });
   await noViolations(page);
+  // It opens beside the list, in the side panel, and says it's waiting at the top.
   await group.getByTestId("session-row").filter({ hasText: "Waiting one" }).click();
-  const place = page.getByRole("navigation", { name: "Where you are" });
-  await expect(place.getByRole("link", { name: "Sessions" })).toBeVisible();
-  await expect(place).toContainText("Waiting one");
-  await expect(page.getByTestId("session-status")).toContainText("Waiting");
-  await page.getByTestId("question-card").getByRole("radio", { name: "Monday" }).click();
-  await expect(page.getByTestId("session-status")).toContainText("Done");
+  const dock = page.getByTestId("assistant-dock");
+  const current = dock.getByRole("combobox", { name: "Switch conversation" });
+  await expect(current).toContainText("Waiting one");
+  await expect(current).toContainText("Waiting");
+  await dock.getByTestId("question-card").getByRole("radio", { name: "Monday" }).click();
+  await expect(dock.getByTestId("answered-question")).toContainText("Monday");
 });
 
 test("new mail appears live in the Mail agent's chat, as a message and a judgement", async ({ page }) => {
@@ -316,10 +321,12 @@ test("new mail appears live in the Mail agent's chat, as a message and a judgeme
   const subject = unique("Live trigger");
   await page.request.post(CONTROL, { data: { subject, body: "Please review." } });
   const message = page.getByTestId("user-message").filter({ hasText: subject });
+  // The Mail agent's chat is locked until the person chooses to write in it.
   await expect(message).toContainText("Triage it.", { timeout: 20_000 });
   await expect(message.getByTestId("message-origin")).toContainText("From new mail");
   await expect(page.getByTestId("triage-card").last()).toBeVisible();
   await noViolations(page);
+  await page.getByRole("button", { name: "Still proceed" }).click();
   await page.getByRole("textbox", { name: "Message the agent" }).fill("Hello mail agent");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByTestId("user-message").last()).toContainText("Hello mail agent");
@@ -339,6 +346,8 @@ test("the Cockpit shows health, what's running and what happened", async ({ page
   const subject = unique("Cockpit");
   await page.goto("/cockpit");
   await expect(page.getByRole("heading", { level: 1, name: "Cockpit" })).toBeVisible();
+  const health = page.getByRole("button", { name: "Health", exact: true });
+  if ((await health.getAttribute("aria-expanded")) !== "true") await health.click();
   await expect(page.getByTestId("health-mail")).toContainText("Mail");
   await page.request.post(CONTROL, { data: { subject, body: "Please review." } });
   await expect(page.getByTestId("cockpit-event").filter({ hasText: `New mail: ${subject}` })).toBeVisible({ timeout: 20_000 });
@@ -439,17 +448,16 @@ test("counts in the sidebar change the moment mail moves, without asking the ser
   expect(asked).toBe(0);
 });
 
-test("the chat can be attached to the right, slides in, and keeps the conversation", async ({ page }) => {
+test("the chat sits attached on the right, beside the page, and keeps the conversation", async ({ page }) => {
   await page.goto("/today");
   await page.getByTestId("assistant-pill").click();
   const dock = page.getByTestId("assistant-dock");
-  await expect(dock).toHaveAttribute("data-pinned", "false");
+  // Floating was retired: the chat is always attached beside the page.
+  await expect(dock).toHaveAttribute("data-pinned", "true");
   await dock.getByRole("button", { name: "Set a reminder for me" }).click();
   await expect(dock.getByTestId("agent-message")).toBeVisible();
   const session = dock.getByRole("combobox", { name: "Switch conversation" });
   const title = await session.textContent();
-  await dock.getByRole("button", { name: "Attach to the right" }).click();
-  await expect(dock).toHaveAttribute("data-pinned", "true");
   await expect(session).toHaveText(title ?? "");
   // The same conversation, still on screen rather than loaded again.
   await expect(dock.getByTestId("agent-message")).toBeVisible();
@@ -462,7 +470,6 @@ test("the chat can be attached to the right, slides in, and keeps the conversati
   await noViolations(page);
   await page.reload();
   await expect(page.getByTestId("assistant-dock")).toHaveAttribute("data-pinned", "true");
-  await page.getByRole("button", { name: "Float instead" }).click();
-  await expect(page.getByTestId("assistant-dock")).toHaveAttribute("data-pinned", "false");
+  await expect(page.getByTestId("assistant-dock").getByRole("combobox", { name: "Switch conversation" })).toHaveText(title ?? "");
   await page.getByRole("button", { name: "Minimize" }).click();
 });

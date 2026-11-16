@@ -1000,6 +1000,38 @@ def shown_for(agent: str, has_email: bool) -> frozenset[str] | None:
     return BRIEF_SHOWN if agent == "daily-prep" else LEAD_SHOWN
 
 
+def other_tools(all_names: list[str], shown: frozenset[str] | None) -> str:
+    """The names of the tools a run has but doesn't start with, grouped by what they act on.
+
+    Only names, so it costs little; without it a small model never knows to look, and says it
+    can't delete a task it has a tool for."""
+    if shown is None:
+        return ""
+    hidden = sorted(
+        name
+        for name in all_names
+        if name not in shown and name != "find_tools" and not name.startswith(CONNECTOR_PREFIX)
+    )
+    if not hidden:
+        return ""
+
+    def topic(name: str) -> str:
+        # One group for "update_category" and "delete_categories".
+        word = name.rsplit("_", 1)[-1]
+        if word.endswith("ies"):
+            return word[:-3] + "y"
+        return word[:-1] if word.endswith("s") and not word.endswith("ss") else word
+
+    groups: dict[str, list[str]] = {}
+    for name in hidden:
+        groups.setdefault(topic(name), []).append(name)
+    lines = [f"- {topic}: {', '.join(names)}" for topic, names in sorted(groups.items())]
+    return (
+        "Yours too, not loaded yet. Load one with find_tools, naming it, before you use it.\n"
+        + "\n".join(lines)
+    )
+
+
 def find(catalog: list[StructuredTool], query: str, shown: int = FOUND_SHOWN) -> str:
     """Tools by the words they share with the query, name words counting most."""
     words = set(re.findall(r"[a-z]{3,}", query.lower()))

@@ -49,7 +49,8 @@ function NavRow({ item, active, collapsed, count, attention }: { item: NavItem; 
         {counted && count ? (
           <>
             <span aria-hidden>{attention ? <AttentionCount value={count} /> : <CountPop value={count} className="text-sm text-ink-muted" />}</span>
-            <span id={countId} className="sr-only">{t(attention ? "nav.count.attention" : "nav.count.quiet", { count })}</span>
+            {/* Hidden, so it isn't part of the link's name, yet still read as its description. */}
+            <span id={countId} hidden>{t(attention ? "nav.count.attention" : "nav.count.quiet", { count })}</span>
           </>
         ) : null}
       </span>

@@ -25,6 +25,12 @@ test.beforeAll(async ({ request }) => {
 
 test.describe.configure({ mode: "serial" });
 
+// The Cockpit folds background work and health away; open them, unless they're open already.
+const unfold = async (page: Page, name: string) => {
+  const toggle = page.getByRole("button", { name, exact: true });
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+};
+
 test("a mail account can be tested, and a wrong password says so", async ({ page }) => {
   await page.goto("/mail/all");
   await expect(page.getByText("No mail account connected")).toBeVisible();
@@ -97,6 +103,8 @@ test("mail sync shows on the Schedules page and the Cockpit, and can be paused f
   await deliver(page, { subject });
 
   await page.goto("/cockpit");
+  await unfold(page, "Background work");
+  await unfold(page, "Health");
   const again = page.getByTestId("pipeline").filter({ hasText: "Mail sync" });
   await expect(again).toContainText("Paused.");
   await expect(page.getByTestId("health-mail")).toContainText("Paused");
@@ -109,6 +117,7 @@ test("mail sync shows on the Schedules page and the Cockpit, and can be paused f
 
   // What came in while it was stopped is reported once it's going again.
   await page.goto("/cockpit");
+  await unfold(page, "Background work");
   await expect(page.getByTestId("cockpit-event").filter({ hasText: "Found 1 new, pulled 1" }).first()).toBeVisible({ timeout: 20_000 });
   await expect(page.getByTestId("pipeline").filter({ hasText: "Mail sync" })).toContainText("Found 1, pulled 1");
 });
@@ -251,7 +260,7 @@ test("right-clicking a conversation offers what can be done to it", async ({ pag
   await page.keyboard.press("Escape");
 });
 
-test("the chat tucks to the edge while reading, comes out on hover, and returns afterwards", async ({ page }) => {
+test("the chat makes room while reading, and opens again from its button", async ({ page }) => {
   await page.goto("/mail/all");
   const subject = unique("Needs the room");
   await deliver(page, { subject });
@@ -264,27 +273,16 @@ test("the chat tucks to the edge while reading, comes out on hover, and returns 
   await row.getByRole("link").click();
   await expect(page.getByRole("heading", { name: subject })).toBeVisible();
   await expect(dock).toHaveCount(0);
-  const aura = page.getByTestId("assistant-aura");
-  await expect(aura).toBeVisible();
+  // Tucked away, it waits as the usual button rather than covering the mail.
+  await expect(page.getByTestId("assistant-pill")).toBeVisible();
   await noViolations(page);
 
-  await aura.hover();
-  await expect(dock).toBeVisible();
-  await page.mouse.move(10, 400);
-  await expect(dock).toHaveCount(0);
-
-  // Leaving brings it back as it was, because tucking away never changed that.
+  // Leaving keeps it minimized; the person opens it again when they want it.
   await page.goBack();
   await expect(page).toHaveURL(/\/mail\/all$/);
+  await expect(dock).toHaveCount(0);
+  await page.getByTestId("assistant-pill").click();
   await expect(dock).toBeVisible();
-
-  // Pinned, it stays, because the person said so.
-  await dock.getByRole("button", { name: "Attach to the right" }).click();
-  await row.getByRole("link").click();
-  await expect(page.getByRole("heading", { name: subject })).toBeVisible();
-  await expect(dock).toBeVisible();
-  await expect(aura).toHaveCount(0);
-  await dock.getByRole("button", { name: "Float instead" }).click();
 });
 
 test("replying goes out with the right people and joins the conversation", async ({ page }) => {
@@ -374,8 +372,13 @@ test("search finds mail from the top bar and filters narrow it", async ({ page }
 
 test("a rule files new mail, and the reason is shown", async ({ page }) => {
   await page.goto("/settings?section=rules");
-  await page.getByRole("button", { name: "Add rule" }).click();
-  await page.getByRole("textbox", { name: "Rule name" }).fill("Invoices");
+  // A click before the page is interactive does nothing, so try until the form opens.
+  const ruleName = page.getByRole("textbox", { name: "Rule name" });
+  await expect(async () => {
+    if (!(await ruleName.isVisible())) await page.getByRole("button", { name: "Add rule" }).click();
+    await expect(ruleName).toBeVisible({ timeout: 1000 });
+  }).toPass();
+  await ruleName.fill("Invoices");
   await page.getByRole("textbox", { name: "Contains" }).fill("invoice");
   await page.getByRole("textbox", { name: "Category" }).fill("Finance");
   await noViolations(page);
@@ -391,14 +394,14 @@ test("a rule files new mail, and the reason is shown", async ({ page }) => {
   await expect(page.getByText("Matched the rule “Invoices”").first()).toBeVisible();
 });
 
-test("status and flag are kept, and archive removes it from the inbox", async ({ page }) => {
+test("status and star are kept, and archive removes it from the inbox", async ({ page }) => {
   await page.goto("/mail/all");
   const subject = unique("Archive this");
   await deliver(page, { subject });
   await page.getByTestId("thread-row").filter({ hasText: subject }).getByRole("link").click();
 
-  await page.getByRole("button", { name: "Flag", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Remove flag" })).toBeVisible();
+  await page.getByRole("button", { name: "Star", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Remove star" })).toBeVisible();
   await page.getByRole("combobox", { name: "Status" }).click();
   await page.getByRole("option", { name: "Waiting on others" }).click();
   await page.reload();
