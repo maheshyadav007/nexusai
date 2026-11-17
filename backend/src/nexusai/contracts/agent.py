@@ -151,6 +151,8 @@ class SessionRow(BaseModel):
     updated: str
     archived: bool
     model: str | None = None
+    # The start of the last reply, for lists. Only the session list fills it.
+    preview: str | None = None
 
 
 class ListSessions(BaseModel):
@@ -435,6 +437,27 @@ class SavePrompt(BaseModel):
     content: str = Field(max_length=100000)
 
 
+SourceKind = Literal["mail", "doc"]
+
+
+class SourceRef(BaseModel):
+    """Where something came from: an email thread or a document. Its title, detail and date are
+    read from the database, never written by a model."""
+
+    kind: SourceKind
+    # The thread id, or the document key.
+    ref: str
+    # One message in the thread, when it's that message in particular.
+    message: int | None = None
+    page: str | None = None
+    title: str
+    # Who sent it, or where the document came from.
+    detail: str = ""
+    date: str | None = None
+    # Its number in the text that cites it. None when it was read but not cited.
+    n: int | None = None
+
+
 class ChannelMessage(BaseModel):
     id: int
     kind: Literal["ask", "suggest", "tell"]
@@ -449,6 +472,7 @@ class ChannelMessage(BaseModel):
     time: str
     urgent: bool
     count: int
+    source_ref: SourceRef | None = None
 
 
 class ListChannel(BaseModel):
@@ -970,8 +994,10 @@ class DueItem(BaseModel):
     title: str
     when: str
     overdue: bool
+    # Where it lives: the planner, or Today for a deadline.
     link: str
     task_id: int | None = None
+    source_ref: SourceRef | None = None
 
 
 class SinceLastLook(BaseModel):
@@ -1179,10 +1205,21 @@ class GetTeamTask(BaseModel):
     id: int
 
 
+class TaskStep(BaseModel):
+    """One tool call the agent doing a task made, for following the work as it happens."""
+
+    tool: str
+    input: dict[str, Any] = Field(default_factory=dict)
+    status: str
+    started: str
+
+
 class TeamTaskView(BaseModel):
     task: TeamTask
     messages: list[TeamMessage]
     children: list[TeamTask]
+    # The doing agent's latest steps on this task, oldest first.
+    steps: list[TaskStep] = Field(default_factory=list)
 
 
 class NoteOnTeamTask(BaseModel):
@@ -1213,6 +1250,8 @@ class TodayView(BaseModel):
     automated_count: int
     prep_session: str | None
     prep_text: str | None
+    # What the brief's citation numbers point to.
+    prep_sources: list[SourceRef] = Field(default_factory=list)
     prep_at: str | None = None
     prep_artifact: int | None = None
     prep_freshness: Literal["fresh", "stale", "partial", "failed", "none"] = "none"

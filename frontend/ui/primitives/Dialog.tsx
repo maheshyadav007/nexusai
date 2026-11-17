@@ -20,7 +20,7 @@ export function Dialog({ title, description, trigger, shape = "dialog", open, on
     <RadixDialog.Root {...(open === undefined ? {} : { open })} {...(onOpenChange ? { onOpenChange } : {})}>
       {trigger ? <RadixDialog.Trigger asChild>{trigger}</RadixDialog.Trigger> : null}
       <RadixDialog.Portal>
-        <RadixDialog.Overlay className={`fixed inset-0 z-40 animate-fade data-[state=closed]:animate-fade-out ${shape === "glass" || shape === "palette" ? "" : "bg-surface-scrim/40"} ${SHAPES[shape].overlay}`}>
+        <RadixDialog.Overlay className={`fixed inset-0 z-dialog animate-fade data-[state=closed]:animate-fade-out ${shape === "glass" || shape === "palette" ? "" : "bg-surface-scrim/40"} ${SHAPES[shape].overlay}`}>
           <RadixDialog.Content {...(description ? {} : { "aria-describedby": undefined })} className={`border-line-subtle p-5 text-ink-primary shadow-overlay ${shape === "glass" || shape === "palette" ? "" : "bg-surface-raised"} ${SHAPES[shape].panel}`}>
             <header className="mb-4 flex items-start justify-between gap-4">
               <div>

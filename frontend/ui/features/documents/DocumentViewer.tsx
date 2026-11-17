@@ -56,9 +56,10 @@ function Picture({ src, name }: { src: string; name: string }) {
 }
 
 /** One door for showing a file: each kind the way it reads best. */
-export function DocumentViewer({ reader }: { reader: DocumentReader }) {
+export function DocumentViewer({ reader, page = null }: { reader: DocumentReader; page?: number | null }) {
   const inline = `${reader.url}&inline=true`;
-  if (reader.kind === "pdf") return <iframe data-testid="pdf-frame" title={reader.name} src={inline} className="h-screen w-full rounded-md border border-line-subtle" />;
+  // A cited page opens where it's cited. The browser's PDF reader takes it after the #.
+  if (reader.kind === "pdf") return <iframe data-testid="pdf-frame" title={reader.name} src={page ? `${inline}#page=${page}` : inline} className="h-screen w-full rounded-md border border-line-subtle" />;
   if (reader.kind === "image") return <Picture src={inline} name={reader.name} />;
   if (reader.html) return <SafeMailFrame html={reader.html} title={reader.name} />;
   if (!reader.text) return <EmptyState icon="documents" title={reader.status_reason ?? t("documents.noText")} />;

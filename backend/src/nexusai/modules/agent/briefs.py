@@ -1,12 +1,14 @@
 """Briefs reach Today only through the brief agent's update_brief, never from what it replies."""
 
 import json
+import re
 from contextlib import suppress
 from datetime import UTC, datetime
 from typing import Any
 
 from nexusai.kernel.database import Migration
 from nexusai.kernel.module import Context
+from nexusai.modules.agent import citations
 from nexusai.modules.agent.prompt_data import untrusted
 from nexusai.modules.mail import accounts
 
@@ -21,6 +23,17 @@ CREATE TABLE brief_artifact_feedback(
  artifact INTEGER PRIMARY KEY, rating TEXT, comment TEXT NOT NULL DEFAULT '', updated TEXT NOT NULL);
 """,
 )
+
+
+# The brief keeps its citations, numbered, with the sources they point to.
+SOURCES_MIGRATION = Migration(
+    "agent_brief_sources_001",
+    "ALTER TABLE brief_artifacts ADD COLUMN sources TEXT NOT NULL DEFAULT '[]';",
+)
+BULLET = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
+REPLY_PREFIX = re.compile(r"^(?:(?:re|fwd?|aw|sv)\s*:\s*)+", re.IGNORECASE)
+# Shorter subjects, like "Hi", would match bullets that aren't about them.
+SUBJECT_MATCH_FROM = 8
 
 
 def snapshot(ctx: Context) -> str:
@@ -89,6 +102,18 @@ def save(ctx: Context, session: str, text: str) -> str:
     if not turns:
         return "There's no run to save this brief from."
     turn = turns[0]["id"]
+    if not _refused_in(ctx, session, turn):
+        missing = uncited(ctx, text)
+        if missing:
+            return (
+                "Not saved: these bullets are about mail on the plate but have no marker. Add each "
+                "marker straight after what it supports, then call update_brief again:\n"
+                + "\n".join(missing)
+            )
+    cited = citations.Citations(ctx, turn)
+    shown = cited.rewrite(text.strip())
+    part = cited.part()
+    sources = part[0]["data"]["sources"] if part else []
     inputs = ctx.bus.db.fetch_all("SELECT * FROM brief_inputs WHERE turn=?", (turn,))
     account = inputs[0]["account"] if inputs else accounts.current_account(ctx.config)
     # Chat and team runs have no snapshot of their own, so take one now for coverage.
@@ -102,20 +127,54 @@ def save(ctx: Context, session: str, text: str) -> str:
             coverage = json.loads(data.splitlines()[0].removeprefix("Coverage: "))
     with ctx.bus.unit_of_work() as work:
         work.tx.execute(
-            "INSERT INTO brief_artifacts(turn,session,account,text,created,partial,snapshot) VALUES(?,?,?,?,?,?,?)"
-            " ON CONFLICT(turn) DO UPDATE SET text=excluded.text,created=excluded.created,partial=excluded.partial",
+            "INSERT INTO brief_artifacts(turn,session,account,text,created,partial,snapshot,sources)"
+            " VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(turn) DO UPDATE SET text=excluded.text,"
+            "created=excluded.created,partial=excluded.partial,sources=excluded.sources",
             (
                 turn,
                 session,
                 account,
-                text.strip(),
+                shown,
                 datetime.now(UTC).isoformat(),
                 int(bool(pending or coverage.get("partial"))),
                 data,
+                json.dumps(sources),
             ),
         )
         work.emit("brief.ready", {"turn": turn}, source="agent", trace_id=ctx.trace_id)
     return "Saved. It's at the top of their Today page now."
+
+
+def uncited(ctx: Context, text: str) -> list[str]:
+    """Bullets that name a thread on the plate by its subject and cite nothing, each with the
+    marker it needs, so a small model only has to copy it."""
+    from nexusai.modules.agent import mail_agent
+
+    plate = [*mail_agent.needs_them(ctx), *mail_agent.to_chase(ctx)]
+    missing = []
+    for line in text.splitlines():
+        if not BULLET.match(line) or citations.MARKER.search(line):
+            continue
+        said = line.lower()
+        for row in plate:
+            subject = REPLY_PREFIX.sub("", row["subject"] or "").strip().lower()
+            if len(subject) >= SUBJECT_MATCH_FROM and subject in said:
+                missing.append(
+                    f"- {citations.mark(citations.MAIL, row['id'])} for: {line.strip()[:80]}"
+                )
+                break
+    return missing
+
+
+def _refused_in(ctx: Context, session: str, turn: int) -> bool:
+    """Asked once already in this run, so the next try is saved whatever it says."""
+    return bool(
+        ctx.bus.db.fetch_all(
+            "SELECT 1 FROM tool_calls c JOIN agent_turns t ON t.id = ? WHERE c.session = ?"
+            " AND c.tool = 'update_brief' AND c.result LIKE 'Not saved:%' AND c.started >= t.created",
+            (turn, session),
+        )
+    )
 
 
 def saved_in(ctx: Context, turn: int) -> bool:

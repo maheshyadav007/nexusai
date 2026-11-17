@@ -32,6 +32,7 @@ const config: Config = {
     transitionDuration: vars("motion", durations),
     transitionTimingFunction: { DEFAULT: "var(--motion-easing)" },
     maxWidth: { none: "none", full: "100%", ...layout },
+    zIndex: { auto: "auto", ...vars("layer", light.layer) },
     extend: {
       inset: layout,
       width: layout,
@@ -51,6 +52,8 @@ const config: Config = {
         "drawer-in": { from: { transform: "translateX(100%)" } },
         "drawer-out": { to: { transform: "translateX(100%)" } },
         working: { "0%, 100%": { opacity: "1" }, "50%": { opacity: "0.45" } },
+        // A soft ring leaving a dot: something is alive right now.
+        "live-ring": { "0%": { transform: "scale(1)", opacity: "0.55" }, "70%, 100%": { transform: "scale(2.4)", opacity: "0" } },
       },
       animation: {
         fade: "fade var(--motion-normal) var(--motion-easing)",
@@ -65,6 +68,7 @@ const config: Config = {
         "drawer-out": "drawer-out var(--motion-normal) var(--motion-easing) forwards",
         // Only for something that's really running right now.
         working: "working 1600ms var(--motion-easing) infinite",
+        "live-ring": "live-ring 1600ms cubic-bezier(0.2, 0.6, 0.3, 1) infinite",
       },
     },
   },

@@ -133,8 +133,10 @@ ORIGIN_NOTES = {
     "task-report": "Work you handed out, or a question about it, needs you now. The person may not be looking, so check it and say what matters in your reply.",
 }
 RESUMABLE = {"queued", "running"}
+# Runs whose reply the person reads, so what it says from mail or documents is cited.
+WRITES_FOR_PERSON = {PERSON, "task-report", "schedule", "event"}
 # Bumped when the harness changes how runs are put together, and recorded on every run.
-HARNESS_VERSION = "2026.11.3"
+HARNESS_VERSION = "2026.11.5"
 KEEPALIVE_SECONDS = 15
 TITLE_LENGTH = 60
 
@@ -519,6 +521,7 @@ class SessionRuntime:
                     ),
                 )
                 turn = int(cursor.lastrowid or 0)
+                citations.shown(tx, turn, f"{request.task or ''}\n{request.model_text or ''}")
                 if prepare is not None:
                     prepare(tx, turn)
         values: dict[str, Any] = {"status": "queued", "error": None}
@@ -771,6 +774,12 @@ class SessionRuntime:
                 task,
                 on_compacted=lambda before, after: self._auto_compacted(session, before, after),
                 notes=lambda: team.take_notes(self.ctx, session),
+                task_over=lambda: team.run_should_end(self.db, session),
+                used_sources=(
+                    (lambda: citations.used_in_session(self.db, session))
+                    if origin in WRITES_FOR_PERSON
+                    else None
+                ),
                 log_tool=lambda call, tool, args, result, ms: tools.record_call(
                     self.ctx, session, call, tool, args, result, ms
                 ),
@@ -985,6 +994,15 @@ class SessionRuntime:
         )[0]
         self._set(session, input_tokens=totals["i"], output_tokens=totals["o"])
 
+    def _recorded_result(self, session: str, call: str) -> str | None:
+        """What a call's tool said, as logged, unless an approval turned it down: that shows itself."""
+        rows = self.db.fetch_all(
+            "SELECT result FROM tool_calls WHERE session = ? AND tool_call_id = ? AND status != 'denied'"
+            " ORDER BY id DESC LIMIT 1",
+            (session, call),
+        )
+        return rows[0]["result"] if rows and rows[0]["result"] is not None else None
+
     def _finish(
         self,
         session: str,
@@ -995,7 +1013,8 @@ class SessionRuntime:
         ending: str,
         failure: str | None = None,
     ) -> None:
-        parts = translator.close_open_blocks()
+        parts = translator.settle_tools(lambda call: self._recorded_result(session, call))
+        parts += translator.close_open_blocks()
         if translator.citations is not None:
             parts += translator.citations.part()
         if ending == "error":

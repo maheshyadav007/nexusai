@@ -1,4 +1,4 @@
-import { Zap, Tag, Eye, EyeOff, Activity, AlarmClock, Archive, ArrowDown, ArrowUp, Bell, Bot, Brain, BrainCircuit, CalendarDays, Check, ChevronDown, Volume2, VolumeX, Info, ChevronLeft, ChevronRight, CircleAlert, Clock, Copy, CornerDownRight, File, FileText, Flag, FoldVertical, Folder, FolderOpen, Gauge, GripVertical, Inbox, LayoutPanelTop, ListChecks, LockKeyhole, Loader, MailOpen, Mails, Maximize2, MessageCircle, MessagesSquare, Minus, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Paperclip, PenLine, Pencil, Plug, Plus, Repeat, Reply, ReplyAll, RotateCcw, ScrollText, Search, Send, Settings, ShieldCheck, SlidersHorizontal, Square, Star, Sun, Tags, Terminal, ThumbsDown, ThumbsUp, Trash2, Upload, WifiOff, X } from "lucide-react";
+import { Zap, Tag, Eye, EyeOff, Activity, AlarmClock, Archive, ArrowDown, ArrowUp, Bell, Bot, Brain, BrainCircuit, CalendarDays, Check, ChevronDown, Volume2, VolumeX, Info, ChevronLeft, ChevronRight, CircleAlert, Clock, Copy, CornerDownRight, File, FileText, Flag, FoldVertical, Folder, FolderOpen, Gauge, GripVertical, Inbox, LayoutPanelTop, ListChecks, LockKeyhole, Loader, MailOpen, Mails, Maximize2, MessageSquare, MessagesSquare, Minus, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Paperclip, PenLine, Pencil, Plug, Plus, Repeat, Reply, ReplyAll, RotateCcw, ScrollText, Search, Send, Settings, ShieldCheck, SlidersHorizontal, Square, Star, Sun, Tags, Terminal, ThumbsDown, ThumbsUp, Trash2, Upload, WifiOff, X } from "lucide-react";
 
 // Features name an icon by what it's for, so one change here updates every use.
 export const ICONS = {
@@ -25,7 +25,7 @@ export const ICONS = {
   minimize: Minus,
   openFull: Maximize2,
   newChat: Plus,
-  chat: MessageCircle,
+  chat: MessageSquare,
   followUp: CornerDownRight,
   file: File,
   priority: Zap,
@@ -72,6 +72,8 @@ export const ICONS = {
   panels: LayoutPanelTop,
   reminders: AlarmClock,
   schedules: CalendarDays,
+  date: CalendarDays,
+  time: Clock,
   search: Search,
   sent: Send,
   sessions: Terminal,

@@ -270,3 +270,49 @@ def test_only_the_brief_agent_can_update_the_brief(client: TestClient) -> None: 
     assert not {"update_brief", "read_plate"} & lead
     allowed = tools.allowed_for("daily-prep", "task", False)
     assert allowed is not None and "team_close" in allowed and "ask_user" not in allowed
+
+
+def test_a_brief_cites_the_plate_and_is_sent_back_once_when_it_doesnt(
+    client: TestClient,  # noqa: F811
+    script: Script,  # noqa: F811
+    fake: FakeMail,  # noqa: F811
+) -> None:
+    from test_agent_work import triaged
+
+    connect(client, fake)
+    fake.state.deliver(make_mail(subject="Quarterly budget numbers"))
+    thread = triaged(client, "Quarterly budget numbers")["id"]
+    wait(lambda: status(client, "mail-agent") == "done", "triage")
+    with current().db.transaction() as tx:
+        tx.execute("UPDATE threads SET status = 'waiting_on_you' WHERE id = ?", (thread,))
+    session_id = str(current().create("Your brief", [], "daily-prep").id)
+    bare = "- Reply to the quarterly budget numbers from Priya."
+    script.replies = [
+        [ToolCall("p", "read_plate", {})],
+        [ToolCall("b1", "update_brief", {"text": bare})],
+        [
+            ToolCall(
+                "b2", "update_brief", {"text": f"{bare} [mail:{thread}] Made up [mail:987654]."}
+            )
+        ],
+        [TextChunk("Updated.")],
+    ]
+    current().dispatch(TurnRequest(session_id, "Brief me", "schedule"))
+    wait(lambda: post(client, "today.view").json()["prep_text"], "brief")
+    wait(lambda: status(client, session_id) == "done", "brief run finished")
+    refused = script.requests[-2].messages[-1].text
+    assert refused.startswith("Not saved") and f"[mail:{thread}]" in refused
+    today = post(client, "today.view").json()
+    assert "[1](#cite-1)" in today["prep_text"] and "987654" not in today["prep_text"]
+    assert [(s["n"], s["title"]) for s in today["prep_sources"]] == [
+        (1, "Quarterly budget numbers")
+    ]
+
+    # Asked once in a run: the next try is saved as it is.
+    script.replies = [
+        [ToolCall("b3", "update_brief", {"text": bare})],
+        [ToolCall("b4", "update_brief", {"text": bare})],
+        [TextChunk("Updated.")],
+    ]
+    current().dispatch(TurnRequest(session_id, "Again", "schedule"))
+    wait(lambda: post(client, "today.view").json()["prep_text"] == bare, "saved as it is")

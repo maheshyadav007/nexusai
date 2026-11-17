@@ -16,6 +16,10 @@ import { Input } from "@/ui/primitives/Input";
 import { Mascot } from "@/ui/primitives/Mascot";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { StatusDot } from "@/ui/primitives/StatusDot";
+import { LiveDot } from "@/ui/primitives/LiveDot";
+import { Pressable } from "@/ui/primitives/Pressable";
+import { TextLink } from "@/ui/primitives/TextLink";
+import { Icon } from "@/ui/icons";
 import { t, type StringKey } from "@/ui/strings";
 
 const NOW_TONE = { idle: "idle", working: "running", waiting: "waiting", blocked: "failed", off: "idle" } as const;
@@ -79,79 +83,131 @@ function RenameDialog({ card }: { card: AgentCard }) {
   );
 }
 
-function ProfileCard({ card }: { card: AgentCard }) {
+const compact = new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 });
+const usageOf = (card: AgentCard) => ({ tokens_today: 0, tokens_week: 0, tokens_usual_day: 0, messages_today: 0, tasks_verified: 0, tasks_rejected: 0, tasks_blocked: 0, ...card.usage });
+
+/** What the agent is doing now, with the live signal when it's really working. */
+function NowLine({ card }: { card: AgentCard }) {
+  const name = useAgentName();
+  const relative = useRelativeTime();
+  const now = card.now ?? { state: "idle" as const };
+  return (
+    <span data-testid="agent-now" data-state={now.state} className="flex min-w-0 items-center gap-2 text-sm text-ink-muted">
+      {now.state === "working" ? <LiveDot /> : now.state === "waiting" ? <LiveDot tone="waiting" /> : <StatusDot tone={NOW_TONE[now.state]} />}
+      <span className="min-w-0 truncate">{nowLine(card, name)}{now.since && now.state !== "idle" ? ` · ${relative(now.since)}` : ""}</span>
+    </span>
+  );
+}
+
+function talk(card: AgentCard, assistant: ReturnType<typeof useAssistant>) {
+  if (card.default) assistant.newChat();
+  else assistant.talkTo(card.handle);
+}
+
+/** One agent at a glance: who it is, what it's doing, and one way to talk to it. The rest opens beside. */
+function ProfileCard({ card, selected, onSelect }: { card: AgentCard; selected: boolean; onSelect: () => void }) {
+  const assistant = useAssistant();
+  const usage = usageOf(card);
+  const talkable = card.accepts.includes("person");
+  return (
+    <li data-testid="agent-card" data-agent={card.id} className={`flex flex-col overflow-hidden rounded-lg border bg-surface-raised transition-colors duration-fast ${selected ? "border-accent-default" : "border-line-subtle hover:border-line-strong"}`}>
+      <Pressable aria-pressed={selected} onClick={onSelect} className="focus-ring flex flex-1 flex-col gap-3 rounded-lg p-4 text-left">
+        <span className="flex items-center gap-3">
+          <Mascot seed={card.mascot.seed} shape={card.mascot.style} name={card.name} size="md" />
+          <span className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className="flex min-w-0 items-baseline gap-2">
+              <span className="truncate text-lg font-medium text-ink-primary">{card.name}</span>
+              <span className="shrink-0 text-sm text-ink-muted">@{card.handle}</span>
+            </span>
+            <NowLine card={card} />
+          </span>
+          {card.default ? <Badge tone="accent">{t("team.default")}</Badge> : card.kind === "yours" ? <Badge>{t("team.yours")}</Badge> : null}
+        </span>
+        <span className="line-clamp-2 text-md text-ink-secondary">{card.role}</span>
+      </Pressable>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line-subtle px-4 py-2 text-sm text-ink-muted">
+        <span><strong className="font-medium tabular-nums text-ink-primary">{compact.format(usage.tokens_today)}</strong> {t("team.card.tokens")}</span>
+        <span><strong className="font-medium tabular-nums text-ink-primary">{usage.tasks_verified}</strong> {t("team.card.tasks")}</span>
+        {talkable ? <span className="ml-auto"><Button variant="quiet" aria-label={t("team.talk", { agent: card.name })} onClick={() => talk(card, assistant)}><Icon name="chat" className="h-4 w-4" />{t("team.card.talk")}</Button></span> : <span className="ml-auto text-ink-muted">{t("team.ownChatOnly")}</span>}
+      </div>
+    </li>
+  );
+}
+
+/** Everything about the chosen agent, beside the cards, so the cards themselves stay calm. */
+function AgentDetail({ card }: { card: AgentCard }) {
   const name = useAgentName();
   const assistant = useAssistant();
   const mascot = useSetMascot();
-  const relative = useRelativeTime();
-  const usage = { tokens_today: 0, tokens_week: 0, tokens_usual_day: 0, messages_today: 0, tasks_verified: 0, tasks_rejected: 0, tasks_blocked: 0, ...card.usage };
-  const now = card.now ?? { state: "idle" as const };
+  const usage = usageOf(card);
   const gives = card.may_assign_to.map((id) => name(id)).filter(Boolean);
   const talkable = card.accepts.includes("person");
   return (
-    <li data-testid="agent-card" data-agent={card.id} className="flex flex-col gap-4 rounded-lg border border-line-subtle bg-surface-raised p-4 shadow-raised">
-      <div className="flex items-start gap-4">
+    <aside aria-label={t("team.detail", { agent: card.name })} data-testid="agent-detail" className="flex flex-col gap-5 rounded-lg border border-line-subtle bg-surface-raised p-5">
+      <div className="flex items-center gap-4">
         <Mascot seed={card.mascot.seed} shape={card.mascot.style} name={card.name} size="lg" />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <h3 className="flex flex-wrap items-baseline gap-2 text-lg font-medium text-ink-primary">
-            {card.name}
-            <span className="text-sm font-normal text-ink-muted">@{card.handle}</span>
-            {card.default ? <Badge tone="accent">{t("team.default")}</Badge> : null}
-            {card.kind === "yours" ? <Badge>{t("team.yours")}</Badge> : null}
-          </h3>
-          <p className="text-md text-ink-secondary">{card.role}</p>
-          <p data-testid="agent-now" data-state={now.state} className="flex items-center gap-2 text-sm text-ink-primary">
-            <StatusDot tone={NOW_TONE[now.state]} />
-            {nowLine(card, name)}
-            {now.since && now.state !== "idle" ? <span className="text-ink-muted">· {relative(now.since)}</span> : null}
-          </p>
+          <h3 className="truncate text-xl font-medium text-ink-primary">{card.name}</h3>
+          <span className="text-sm text-ink-muted">@{card.handle}</span>
+          <NowLine card={card} />
         </div>
       </div>
-      <dl className="grid grid-cols-3 gap-2 border-y border-line-subtle py-3">
+      <p className="text-md text-ink-secondary">{card.role}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        {talkable ? <Button variant="primary" onClick={() => talk(card, assistant)}><Icon name="chat" className="h-4 w-4" />{t("team.talk", { agent: card.name })}</Button> : null}
+        <RenameDialog card={card} />
+        <Button variant="quiet" loading={mascot.isPending} onClick={() => mascot.mutate({ id: card.id, seed: freshSeed() })}>{t("team.newFace")}</Button>
+      </div>
+      <dl className="grid grid-cols-3 gap-2">
         {([
           ["team.usage.today", usage.tokens_today],
           ["team.usage.week", usage.tokens_week],
           ["team.usage.messages", usage.messages_today],
         ] as const).map(([label, value]) => (
-          <div key={label} className="flex flex-col gap-px">
+          <div key={label} className="flex flex-col gap-1 rounded-md bg-surface-sunken px-3 py-2">
             <dt className="text-sm text-ink-muted">{t(label)}</dt>
-            <dd className="text-lg tabular-nums text-ink-primary">{value.toLocaleString()}</dd>
-            {label === "team.usage.today" && usage.tokens_usual_day ? <dd className="text-sm tabular-nums text-ink-muted">{t("team.usage.usual", { count: usage.tokens_usual_day.toLocaleString() })}</dd> : null}
+            <dd className="text-lg tabular-nums text-ink-primary">{compact.format(value)}</dd>
           </div>
         ))}
       </dl>
-      <p className="text-sm text-ink-secondary">
-        {t("team.usage.recordLine", { verified: usage.tasks_verified, rejected: usage.tasks_rejected, blocked: usage.tasks_blocked })}
-        {" · "}
-        {gives.length ? t("team.givesTo", { agents: gives.join(", ") }) : t("team.givesNone")}
-      </p>
       {card.can_do.length ? (
-        <ul aria-label={t("team.canDo", { agent: card.name })} className="flex flex-col gap-1 text-sm text-ink-secondary">
-          {card.can_do.map((line) => <li key={line}>{line}</li>)}
-        </ul>
+        <section className="flex flex-col gap-2">
+          <h4 className="text-sm font-medium text-ink-muted">{t("team.whatItDoes")}</h4>
+          <ul aria-label={t("team.canDo", { agent: card.name })} className="flex list-disc flex-col gap-1 pl-5 text-md text-ink-secondary">
+            {card.can_do.map((line) => <li key={line}>{line}</li>)}
+          </ul>
+        </section>
       ) : null}
-      <div className="flex flex-wrap items-center gap-2">
-        {talkable ? <Button variant="secondary" onClick={() => (card.default ? assistant.newChat() : assistant.talkTo(card.handle))}>{t("team.talk", { agent: card.name })}</Button> : <span className="text-sm text-ink-muted">{t("team.ownChatOnly")}</span>}
-        <RenameDialog card={card} />
-        <Button variant="quiet" loading={mascot.isPending} onClick={() => mascot.mutate({ id: card.id, seed: freshSeed() })}>{t("team.newFace")}</Button>
-      </div>
-    </li>
+      <section className="flex flex-col gap-2">
+        <h4 className="text-sm font-medium text-ink-muted">{t("team.work")}</h4>
+        <p className="text-md text-ink-secondary">{t("team.usage.recordLine", { verified: usage.tasks_verified, rejected: usage.tasks_rejected, blocked: usage.tasks_blocked })}</p>
+        <p className="text-md text-ink-secondary">{gives.length ? t("team.givesTo", { agents: gives.join(", ") }) : t("team.givesNone")}</p>
+        {usage.tokens_usual_day ? <p className="text-sm text-ink-muted">{t("team.usage.usual", { count: usage.tokens_usual_day.toLocaleString() })}</p> : null}
+      </section>
+      <TextLink href="/agent/channel?tab=runs">{t("team.seeRuns")}</TextLink>
+    </aside>
   );
 }
 
 export function TeamCards() {
   const cards = useAgentCards();
   const rows = cards.data?.cards ?? [];
+  const [chosen, setChosen] = useState<string | null>(null);
   if (cards.isPending) return <Skeleton className="h-6 w-full" />;
   if (cards.isError) return <ErrorState title={t("team.error")} onRetry={() => void cards.refetch()} />;
+  const selected = rows.find((card) => card.id === chosen) ?? rows.find((card) => card.default) ?? rows[0];
+  const working = rows.filter((card) => card.now?.state === "working").length;
   return (
-    <div className="flex flex-col gap-3">
-      {/* Each card's name is an h3, so the list needs its h2 for screen-reader navigation. */}
+    <div className="flex flex-col gap-4">
+      {/* Each card's name is in a button, so the list needs its h2 for screen-reader navigation. */}
       <h2 className="sr-only">{t("team.title")}</h2>
-      <p className="text-md text-ink-secondary">{t("team.description")}</p>
-      <ul aria-label={t("team.title")} className="grid gap-3 xl:grid-cols-2">
-        {rows.map((card) => <ProfileCard key={card.id} card={card} />)}
-      </ul>
+      <p className="text-md text-ink-muted">{t("team.summary", { count: rows.length, working, lead: rows.find((card) => card.default)?.name ?? "" })}</p>
+      <div className="flex flex-wrap items-start gap-4">
+        <ul aria-label={t("team.title")} className="grid min-w-0 flex-1 gap-3 2xl:grid-cols-2">
+          {rows.map((card) => <ProfileCard key={card.id} card={card} selected={card.id === selected?.id} onSelect={() => setChosen(card.id)} />)}
+        </ul>
+        {selected ? <div className="w-full xl:w-drawer"><AgentDetail card={selected} /></div> : null}
+      </div>
     </div>
   );
 }

@@ -20,6 +20,7 @@ export function themeToCss(theme: Theme, isDefault: boolean): string {
   for (const [name, value] of Object.entries(theme.shadow)) lines.push(`--shadow-${name}: ${value};`);
   for (const [name, value] of Object.entries(theme.motion)) lines.push(`--motion-${name}: ${value};`);
   for (const [name, value] of Object.entries(theme.layout)) lines.push(`--layout-${name}: ${value};`);
+  for (const [name, value] of Object.entries(theme.layer)) lines.push(`--layer-${name}: ${value};`);
   lines.push(`--glass-opacity: ${theme.glass.opacity};`);
   lines.push(`--glass-blur: ${theme.glass.blur};`);
   lines.push(`--icon-stroke: ${theme.icon.stroke};`);

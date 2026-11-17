@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { ContextMenu } from "@/ui/primitives/ContextMenu";
-import { usePreview } from "./DocumentPreview";
+import { useOpenSource } from "@/ui/features/sources/context";
+import { fileSource } from "@/ui/features/sources/kinds";
 import { sizeOf } from "./sizes";
 import { useState } from "react";
 import { ApiRequestError } from "@/ui/client/api";
@@ -22,9 +23,9 @@ export function HomeFolderView() {
   const folder = useHomeFolder(path);
   const format = useDateTime();
   const entries = folder.data?.entries ?? [];
-  const preview = usePreview();
+  const sources = useOpenSource();
   const router = useRouter();
-  const files = entries.filter((entry) => !entry.is_folder).map((entry) => ({ path: entry.path }));
+  const files = entries.filter((entry) => !entry.is_folder).map((entry) => fileSource(entry.path));
   const steps = path ? path.split("/") : [];
   return (
     <section aria-label={t("documents.view.home")} className="flex flex-col gap-3">
@@ -49,8 +50,8 @@ export function HomeFolderView() {
                 <span className="min-w-0 flex-1 truncate text-md text-ink-primary">{entry.label}</span>
               </RowButton>
             ) : (
-              <ContextMenu items={[{ id: "open", label: t("menu.open"), onSelect: () => preview.show({ path: entry.path }, files) }, { id: "full", label: t("documents.openFull"), onSelect: () => router.push(`/documents/view?path=${encodeURIComponent(entry.path)}`) }]}>
-              <RowButton onClick={() => preview.show({ path: entry.path }, files)}>
+              <ContextMenu items={[{ id: "open", label: t("menu.open"), onSelect: () => sources.open(fileSource(entry.path), files) }, { id: "full", label: t("documents.openFull"), onSelect: () => router.push(`/documents/view?path=${encodeURIComponent(entry.path)}`) }]}>
+              <RowButton onClick={() => sources.open(fileSource(entry.path), files)}>
                 <Icon name="file" className="h-4 w-4 shrink-0 text-ink-muted" />
                 <span className="min-w-0 flex-1 truncate text-md text-ink-primary">{entry.label}</span>
                 <span className="shrink-0 text-sm tabular-nums text-ink-muted">{sizeOf(entry.size ?? 0)}</span>

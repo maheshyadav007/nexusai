@@ -9,7 +9,7 @@ import { TopBar } from "./TopBar";
 export function AppShell({ activities, counts, room, search, children }: { room?: ReactNode; search?: ReactNode; activities?: readonly Activity[]; counts?: Readonly<Record<string, number>>; children: ReactNode }) {
   return (
     <div className="app-shell relative flex overflow-hidden bg-surface-page">
-      <a href="#main" className="focus-ring sr-only rounded-md bg-surface-raised p-2 text-md text-ink-primary focus:not-sr-only focus:absolute focus:z-50">
+      <a href="#main" className="focus-ring sr-only rounded-md bg-surface-raised p-2 text-md text-ink-primary focus:not-sr-only focus:absolute focus:z-float">
         {t("nav.skip")}
       </a>
       <BrowserAlerts />

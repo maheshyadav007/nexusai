@@ -38,7 +38,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             </RadixToast.Close>
           </RadixToast.Root>
         ))}
-        <RadixToast.Viewport className="fixed bottom-0 right-0 z-50 flex w-popover max-w-full flex-col gap-2 p-4 outline-none" />
+        <RadixToast.Viewport className="fixed bottom-0 right-0 z-float flex w-popover max-w-full flex-col gap-2 p-4 outline-none" />
       </RadixToast.Provider>
     </ToastContext.Provider>
   );

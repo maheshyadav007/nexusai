@@ -1,4 +1,5 @@
 import json
+import re
 import threading
 import uuid
 from datetime import UTC, datetime
@@ -153,6 +154,7 @@ from nexusai.contracts.agent import (
     SinceLastLook,
     SkillList,
     SkillName,
+    SourceRef,
     SummarizeThread,
     TeamTaskList,
     TeamTaskView,
@@ -174,7 +176,7 @@ from nexusai.contracts.events import AppEvent
 from nexusai.contracts.mail import FinishMailLearning, GetMailStatus, MailOrganization, MailStatus
 from nexusai.contracts.semantic import IndexInfo
 from nexusai.kernel import backups
-from nexusai.kernel.database import Migration
+from nexusai.kernel.database import Database, Migration
 from nexusai.kernel.module import CommandError, Context, Module
 from nexusai.modules.agent import (
     briefs,
@@ -212,6 +214,7 @@ from nexusai.modules.agent import (
 from nexusai.modules.connectors import module as connectors
 from nexusai.modules.mail import accounts, pst_search, pst_upload
 from nexusai.modules.mail import module as mail
+from nexusai.modules.mail.source import thread_source
 from nexusai.modules.semantic import module as semantic
 
 STARTER_PROMPTS = ("importance", "categories")
@@ -265,6 +268,7 @@ agent_module = Module(
         scheduler.RELIABILITY_MIGRATION,
         personalization.MIGRATION,
         briefs.MIGRATION,
+        briefs.SOURCES_MIGRATION,
         facts.MIGRATION,
         summaries.MIGRATION,
         cards.MIGRATION,
@@ -648,11 +652,46 @@ def list_sessions(query: ListSessions, ctx: Context) -> SessionList:
     running = ctx.bus.db.fetch_all(
         "SELECT COUNT(*) AS n FROM agent_sessions WHERE status = 'running'"
     )[0]["n"]
+    previews = _previews(ctx.bus.db, [row["id"] for row in rows])
     return SessionList(
-        sessions=[runtime._row(row) for row in rows],
+        sessions=[
+            runtime._row(row).model_copy(update={"preview": previews.get(row["id"])})
+            for row in rows
+        ],
         running=running,
         limit=ctx.config.agent.max_running_sessions,
     )
+
+
+PREVIEW_CHARS = 140
+# Markdown and citation links, which read as noise in a one-line preview.
+CITE_LINK = re.compile(r"\[\d+\]\(#cite-\d+\)")
+MARKUP = re.compile(r"[*_`#>|]+")
+
+
+def _previews(db: Database, sessions: list[str]) -> dict[str, str]:
+    """The start of each session's last reply, read in one pass."""
+    if not sessions:
+        return {}
+    marks = ",".join("?" * len(sessions))
+    rows = db.fetch_all(
+        "SELECT t.session, json_extract(p.part, '$.delta') AS delta FROM agent_parts p"
+        f" JOIN (SELECT session, MAX(id) AS id FROM agent_turns WHERE session IN ({marks})"  # noqa: S608
+        " GROUP BY session) t ON p.turn = t.id"
+        " WHERE json_extract(p.part, '$.type') = 'text-delta' ORDER BY p.id",
+        tuple(sessions),
+    )
+    texts: dict[str, str] = {}
+    for row in rows:
+        so_far = texts.get(row["session"], "")
+        if len(so_far) < PREVIEW_CHARS * 3:
+            texts[row["session"]] = so_far + (row["delta"] or "")
+    previews = {}
+    for session, text in texts.items():
+        clean = " ".join(MARKUP.sub("", CITE_LINK.sub("", text)).split())
+        if clean:
+            previews[session] = clean[:PREVIEW_CHARS]
+    return previews
 
 
 @agent_module.query("session.get")
@@ -1629,6 +1668,11 @@ def today_view(query: GetToday, ctx: Context) -> TodayView:
     artifact = briefs.latest(ctx)
     prep_session = artifact["session"] if artifact else None
     prep_text = artifact["text"] if artifact else None
+    prep_sources = (
+        [SourceRef.model_validate(source) for source in json.loads(artifact["sources"] or "[]")]
+        if artifact
+        else []
+    )
     prep_at = artifact["created"] if artifact else None
     rating, comment = (artifact["rating"], artifact["comment"] or "") if artifact else (None, "")
     freshness = "none"
@@ -1654,6 +1698,7 @@ def today_view(query: GetToday, ctx: Context) -> TodayView:
         automated_count=automated,
         prep_session=prep_session,
         prep_text=prep_text,
+        prep_sources=prep_sources,
         prep_at=prep_at,
         prep_artifact=artifact["id"] if artifact else None,
         prep_freshness=freshness,
@@ -1705,43 +1750,43 @@ def _due_items(ctx: Context) -> list[DueItem]:
         "SELECT id, title, due, thread FROM tasks WHERE proposed = 0 AND status != 'done' AND due IS NOT NULL AND due <= ? ORDER BY due",
         (today,),
     ):
-        link = f"/mail/thread/{row['thread']}" if row["thread"] else "/planner/tasks"
         items.append(
             DueItem(
                 kind="task",
                 title=row["title"],
                 when=row["due"],
                 overdue=row["due"] < today,
-                link=link,
+                link="/planner/tasks",
                 task_id=row["id"],
+                source_ref=thread_source(db, row["thread"]),
             )
         )
     for row in db.fetch_all(
         "SELECT title, due_at, thread FROM reminders WHERE proposed = 0 AND fired = 0 AND due_at <= ? ORDER BY due_at",
         (f"{today}T23:59",),
     ):
-        link = f"/mail/thread/{row['thread']}" if row["thread"] else "/planner/reminders"
         items.append(
             DueItem(
                 kind="reminder",
                 title=row["title"],
                 when=row["due_at"],
                 overdue=row["due_at"][:10] < today,
-                link=link,
+                link="/planner/reminders",
+                source_ref=thread_source(db, row["thread"]),
             )
         )
     for row in db.fetch_all(
         "SELECT title, due, thread FROM work_board WHERE done = 0 AND kind = 'deadline' AND due IS NOT NULL AND due <= ? ORDER BY due",
         (today,),
     ):
-        link = f"/mail/thread/{row['thread']}" if row["thread"] else "/today"
         items.append(
             DueItem(
                 kind="deadline",
                 title=row["title"],
                 when=row["due"],
                 overdue=row["due"] < today,
-                link=link,
+                link="/today",
+                source_ref=thread_source(db, row["thread"]),
             )
         )
     items.sort(key=lambda item: (not item.overdue, item.when))

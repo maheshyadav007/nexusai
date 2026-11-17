@@ -4,6 +4,7 @@ import { FONT_CATALOG } from "./font-catalog";
 const hex = z.string().regex(/^#[0-9A-Fa-f]{6}$/);
 const size = z.string().regex(/^\d+(\.\d+)?(px|rem)$/);
 const scale = z.number().positive();
+const layer = z.string().regex(/^\d+$/);
 const accent = z.strictObject({ default: hex, hover: hex, bright: hex, on: hex });
 
 export const themeSchema = z
@@ -31,7 +32,10 @@ export const themeSchema = z
     radius: z.strictObject({ sm: size, md: size, lg: size, full: size }),
     shadow: z.strictObject({ raised: z.string(), overlay: z.string() }),
     motion: z.strictObject({ fast: z.string(), normal: z.string(), slow: z.string(), generation: z.string(), press: z.string(), easing: z.string() }),
-    layout: z.strictObject({ content: size, page: size, sidebar: size, folderList: size, rail: size, guide: size, onboarding: size, railWide: size, dock: size, dockHeight: size, reading: size, mailList: size, topbar: size, popover: size, drawer: size, dialog: size, modal: size, modalHeight: size, aura: size, quick: size, quickHeight: size }),
+    layout: z.strictObject({ content: size, page: size, sidebar: size, folderList: size, rail: size, guide: size, onboarding: size, railWide: size, dock: size, dockHeight: size, reading: size, mailList: size, topbar: size, popover: size, menu: size, drawer: size, dialog: size, modal: size, modalHeight: size, aura: size, quick: size, quickHeight: size }),
+    // What sits over what: content raised in its page, the chat dock, dialogs and previews over
+    // the dock, then menus, tooltips and toasts over everything.
+    layer: z.strictObject({ raised: layer, dock: layer, dialog: layer, float: layer }),
     glass: z.strictObject({ opacity: z.string(), blur: size }),
     icon: z.strictObject({ stroke: z.string() }),
     scale: z.strictObject({

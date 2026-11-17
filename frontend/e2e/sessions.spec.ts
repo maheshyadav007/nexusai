@@ -59,7 +59,10 @@ test("a reply streams in, and the session is kept", async ({ page }) => {
   await expect(page.getByTestId("agent-message")).toContainText("Hello from gpt-best");
 
   await page.goto("/agent/sessions");
-  await expect(page.getByTestId("session-row").filter({ hasText: "Hello there" })).toContainText("Done");
+  // Finished, it shows the start of its reply under the title.
+  const row = page.getByTestId("session-row").filter({ hasText: "Hello there" });
+  await expect(row).toHaveAttribute("data-state", "done");
+  await expect(row).toContainText("Hello from gpt-best");
   await noViolations(page);
 });
 
@@ -110,7 +113,8 @@ test("approvals can be answered from the top bar, and a denied command never run
   await expect(page.getByRole("button", { name: "Approvals", exact: true })).toBeVisible();
 
   await page.goto("/agent/sessions");
-  await page.getByTestId("session-row").first().click();
+  // Agent chats are listed first now, so pick this conversation by what was said.
+  await page.getByTestId("session-row").filter({ hasText: "please run a command" }).first().click();
   await expect(page.getByTestId("agent-message").last()).toContainText("Tool said: The person declined this.");
   await page.getByTestId("thinking").getByRole("button").first().click();
   await expect(page.getByTestId("tool-call")).toContainText("Declined");

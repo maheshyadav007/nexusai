@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from nexusai.contracts.agent import SourceRef
+
 TaskStatus = Literal["todo", "in_progress", "done"]
 
 
@@ -17,6 +19,8 @@ class Task(BaseModel):
     created: str
     updated: str | None = None
     completed: str | None = None
+    # The email it came from, named from the database.
+    source_ref: SourceRef | None = None
 
 
 class ListTasks(BaseModel):
@@ -58,6 +62,7 @@ class Reminder(BaseModel):
     proposed: bool
     fired: bool
     created: str | None = None
+    source_ref: SourceRef | None = None
     updated: str | None = None
 
 

@@ -4,14 +4,17 @@ import type { ReactNode } from "react";
 import { Icon, type IconName } from "@/ui/icons";
 import { Popover } from "./Popover";
 import { Pressable } from "./Pressable";
+import { quickLook } from "./SourceRef";
 import { Tooltip } from "./Tooltip";
 
-/** A small number after a statement, naming its source on hover and opening it on click. */
-export function CitationMark({ number, title, label, onOpen }: { number: string; title?: string | undefined; label: string; onOpen?: (() => void) | undefined }) {
-  const mark = (
-    <Pressable aria-label={label} onClick={onOpen} className="mx-px rounded-sm align-super text-xs tabular-nums text-accent-default underline-offset-2 hover:underline">
-      {number}
-    </Pressable>
+const MARK = "focus-ring mx-px rounded-sm align-super text-xs tabular-nums text-accent-default underline-offset-2 hover:underline";
+
+/** A small number after a statement, naming its source on hover and previewing it on click. */
+export function CitationMark({ number, title, label, href, onOpen, onOpenFull }: { number: string; title?: string | undefined; label: string; href?: string | undefined; onOpen?: (() => void) | undefined; onOpenFull?: (() => void) | undefined }) {
+  const mark = href && onOpen ? (
+    <a href={href} aria-label={label} data-testid="citation" {...quickLook(onOpen, onOpenFull)} className={MARK}>{number}</a>
+  ) : (
+    <Pressable aria-label={label} onClick={onOpen} className={MARK}>{number}</Pressable>
   );
   return title ? <Tooltip content={title}>{mark}</Tooltip> : mark;
 }

@@ -16,19 +16,16 @@ interface Start {
   agent?: "session" | "interview";
 }
 
-// Reading an email makes room by minimizing the attached chat.
-const READING = /^\/(mail\/.+|search)\/\d+$/;
+// Every page that makes the chat step aside, in one place: opening an email, from any list or
+// from search. Each fires once, when the page changes to it, so it never fights the person
+// opening the chat again. Everything else, previews included, opens over the chat instead.
+const NEEDS_ROOM: readonly RegExp[] = [/^\/(mail\/.+|search)\/\d+$/];
+const needsRoom = (path: string) => NEEDS_ROOM.some((rule) => rule.test(path));
 
 interface Assistant {
   /** Whether it's on screen right now. */
   open: boolean;
   ready: boolean;
-  /** Tucked away to the edge, ready to come out, because what's open needs the room. */
-  tucked: boolean;
-  /** Out from the edge for now, and goes back when the person's done. */
-  peeking: boolean;
-  /** A document in a large preview needs the room just as a conversation does. */
-  setNeedsRoom: (needed: boolean) => void;
   /** Attached to the right edge, with the page beside it instead of under it. */
   pinned: boolean;
   returnTo: string;
@@ -75,15 +72,14 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const keepOpen = useRef(false);
   const open = wanted;
   const setOpen = useCallback((next: boolean) => setWanted(next), []);
-  // Opening content makes room for reading. Explicitly docking from full page wins once.
+  // Opening a page that needs the room closes the chat. Explicitly docking from full page wins once.
   useEffect(() => {
     if (pathname.startsWith("/agent/sessions/")) return;
     setReturnTo(pathname);
-    if (pathname !== lastPath.current && READING.test(pathname) && !keepOpen.current) setWanted(false);
+    if (pathname !== lastPath.current && needsRoom(pathname) && !keepOpen.current) setWanted(false);
     keepOpen.current = false;
     lastPath.current = pathname;
   }, [pathname]);
-  const setNeedsRoom = useCallback((needed: boolean) => { if (needed) setWanted(false); }, []);
   // Floating view is disabled; the panel is always attached to the right edge.
   const pinned = true;
   const [draftRevision, setDraftRevision] = useState(0);
@@ -101,7 +97,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [restored, setRestored] = useState(false);
   useEffect(() => {
     const saved = remembered();
-    setWanted(saved.open && !READING.test(pathname));
+    setWanted(saved.open && !needsRoom(pathname));
     setSession(saved.session);
     setRestored(true);
   }, []);
@@ -155,9 +151,6 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     () => ({
       open,
       ready: restored,
-      tucked: false,
-      peeking: false,
-      setNeedsRoom,
       pinned,
       returnTo,
       draftRevision,
@@ -194,7 +187,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       },
       start,
     }),
-    [open, restored, setOpen, setNeedsRoom, pinned, returnTo, draftRevision, pathname, router, session, starting, startingTitle, startingText, startError, start],
+    [open, restored, setOpen, pinned, returnTo, draftRevision, pathname, router, session, starting, startingTitle, startingText, startError, start],
   );
   return <AssistantContext value={value}>{children}</AssistantContext>;
 }

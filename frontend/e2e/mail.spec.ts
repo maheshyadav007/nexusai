@@ -629,7 +629,7 @@ test("a file opens straight away, arrows move between files, and right-click has
   const preview = page.getByTestId("document-preview");
   await expect(preview).toContainText("Second file text.");
   await expect(page.getByTestId("assistant-pill")).toBeHidden();
-  await page.getByRole("button", { name: "Next file" }).click();
+  await page.getByRole("button", { name: "Next" }).click();
   await expect(preview).toContainText("First file text.");
   await page.keyboard.press("ArrowLeft");
   await expect(preview).toContainText("Second file text.");
@@ -642,6 +642,29 @@ test("a file opens straight away, arrows move between files, and right-click has
   await menu.getByRole("menuitem", { name: "Open" }).click();
   await expect(preview).toContainText("Second file text.");
   await page.keyboard.press("Escape");
+});
+
+test("a preview opens over the chat and leaves it open, draft and all", async ({ page }) => {
+  const name = `${unique("over-the-chat").replace(" ", "-")}.txt`;
+  await page.goto("/documents/all");
+  await page.getByTestId("file-input").setInputFiles({ name, mimeType: "text/plain", buffer: Buffer.from("Read over the chat.") });
+  const row = page.getByTestId("document-row").filter({ hasText: name });
+  await expect(row).toBeVisible();
+  await page.getByTestId("assistant-pill").click();
+  const dock = page.getByTestId("assistant-dock");
+  const box = dock.getByRole("textbox", { name: "Message the agent" });
+  await box.fill("Half a thought");
+
+  await row.click();
+  const preview = page.getByTestId("document-preview");
+  await expect(preview).toContainText("Read over the chat.");
+  await expect(dock).toBeVisible();
+  await page.screenshot({ path: "test-results/preview-over-chat.png" });
+  await page.keyboard.press("Escape");
+  await expect(preview).toHaveCount(0);
+  await expect(dock).toBeVisible();
+  await expect(box).toHaveValue("Half a thought");
+  await box.fill("");
 });
 
 test("each kind of file opens the way it reads best", async ({ page }) => {

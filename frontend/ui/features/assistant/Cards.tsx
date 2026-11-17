@@ -17,6 +17,8 @@ import { ApprovalPreviewView } from "@/ui/shell/ApprovalPreviewView";
 import { useAgentCards } from "@/ui/client/work";
 import { Mascot } from "@/ui/primitives/Mascot";
 import { isFinished, toolName, type ToolPart } from "./parts";
+import { SourceChip } from "@/ui/features/sources/SourceChip";
+import { mailSource } from "@/ui/features/sources/kinds";
 
 function Shell({ children, testid }: { children: ReactNode; testid?: string }) {
   return (
@@ -251,37 +253,12 @@ export function TriageCard({ part, thread }: { part: ToolPart; thread: number | 
       {input.summary ? <p className="break-words text-md text-ink-primary">{String(input.summary)}</p> : null}
       {input.reason ? <p className="break-words text-sm text-ink-muted">{String(input.reason)}</p> : null}
       {!isFinished(part) ? <p className="text-sm text-ink-muted">{t("chat.result.working")}</p> : null}
-      {thread ? (
-        <Link href={`/mail/thread/${thread}`} className="focus-ring self-start rounded-sm text-sm text-ink-secondary underline underline-offset-2 transition-colors duration-fast hover:text-ink-primary">
-          {t("chat.result.openMail")}
-        </Link>
-      ) : null}
+      {thread ? <div><SourceChip source={mailSource(Number(thread))} label={t("chat.result.openMail")} /></div> : null}
     </Shell>
   );
 }
 
 /** Work handed to another agent, shown in the conversation with who it went to and what came back. */
-export function HandoffCard({ part }: { part: ToolPart }) {
-  const input = part.input ?? {};
-  const to = String(input.to ?? "").replace(/^@/, "");
-  const card = (useAgentCards().data?.cards ?? []).find((item) => item.handle === to || item.id === to);
-  const output = typeof part.output === "string" ? part.output : null;
-  const refused = part.state === "output-denied" || part.state === "output-error" || Boolean(output?.startsWith("Not "));
-  return (
-    <Shell testid="handoff-card">
-      <p className="flex flex-wrap items-center gap-2 text-md font-medium text-ink-primary">
-        {card ? <Mascot seed={card.mascot.seed} shape={card.mascot.style} name={card.name} size="sm" /> : <Icon name="agent" className="h-4 w-4 text-ink-muted" />}
-        {t("chat.handoff.title", { agent: card?.name ?? to })}
-      </p>
-      {input.objective ? <p className="break-words text-md text-ink-primary">{String(input.objective)}</p> : null}
-      {!isFinished(part) ? <p className="text-sm text-ink-muted">{t("chat.result.working")}</p> : null}
-      {output ? <p className={`break-words text-sm ${refused ? "text-status-danger" : "text-ink-muted"}`}>{output}</p> : part.errorText ? <p className="break-words text-sm text-status-danger">{part.errorText}</p> : null}
-      <Link href="/agent/channel" className="focus-ring self-start rounded-sm text-sm text-ink-secondary underline underline-offset-2 transition-colors duration-fast hover:text-ink-primary">
-        {t("chat.handoff.open")}
-      </Link>
-    </Shell>
-  );
-}
 
 const RESULT: Readonly<Record<string, { icon: IconName; href: string; open: Parameters<typeof t>[0] }>> = {
   create_tasks: { icon: "tasks", href: "/planner/tasks", open: "chat.result.openTasks" },

@@ -75,7 +75,14 @@ test("new mail is judged, and reaches Today, the thread and the channel", async 
   await question.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByTestId("question-card").filter({ hasText: "Is this urgent for you?" })).toHaveCount(0);
 
+  // A click previews it over Today; Cmd or Ctrl and a click opens the email itself.
   await row.click();
+  const preview = page.getByTestId("thread-preview");
+  await expect(preview.getByRole("heading", { name: subject })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(preview).toHaveCount(0);
+  await row.click({ modifiers: ["ControlOrMeta"] });
+  await expect(page).toHaveURL(/\/mail\/all\/\d+$/);
   await expect(page.getByRole("heading", { name: subject })).toBeVisible();
   await page.getByRole("button", { name: "Details" }).click();
   await expect(page.getByTestId("triage-run").first()).toContainText("Someone needs a reply.");
@@ -110,10 +117,16 @@ test("a proposed task is accepted, finished, and removed", async ({ page }) => {
   await page.getByRole("radio", { name: /^To do/ }).click();
 
   const title = unique("Send the report");
-  await page.getByRole("textbox", { name: "New task" }).fill(title);
-  await page.getByRole("button", { name: "Add task" }).click();
+  const bar = page.getByTestId("add-bar");
+  await bar.getByRole("textbox", { name: "New task" }).fill(title);
+  // One quiet date button opens one picker; the day picked shows on the button.
+  await bar.getByRole("button", { name: "No date, change the due date" }).click();
+  await page.getByRole("dialog", { name: "Due" }).getByRole("button", { name: /^Tomorrow/ }).click();
+  await expect(bar.getByRole("button", { name: /^(?!No date).*, change the due date$/ })).toBeVisible();
+  await bar.getByRole("button", { name: "Add", exact: true }).click();
   const mine = page.getByTestId("task").filter({ hasText: title });
   await expect(mine).toBeVisible();
+  await noViolations(page);
 
   await mine.getByRole("checkbox").click();
   await expect(mine).toHaveCount(0);
@@ -136,10 +149,14 @@ test("a proposed task is accepted, finished, and removed", async ({ page }) => {
 test("a reminder is added and snoozed", async ({ page }) => {
   await page.goto("/planner/reminders");
   const title = unique("Call the vendor");
-  await page.getByRole("textbox", { name: "Remind me to" }).fill(title);
-  await page.getByRole("button", { name: "Tomorrow morning" }).click();
-  await page.getByLabel("When").fill("2031-05-01T09:00");
-  await page.getByRole("button", { name: "Add reminder" }).click();
+  const bar = page.getByTestId("add-bar");
+  await bar.getByRole("textbox", { name: "Remind me to" }).fill(title);
+  await bar.getByRole("button", { name: /, change when$/ }).click();
+  const picker = page.getByRole("dialog", { name: "When" });
+  await picker.getByLabel("Day").fill("2031-05-01");
+  await picker.getByLabel("Time").fill("09:00");
+  await page.keyboard.press("Escape");
+  await bar.getByRole("button", { name: "Add", exact: true }).click();
   const row = page.getByTestId("reminder").filter({ hasText: title });
   await expect(row).toBeVisible();
   await noViolations(page);
@@ -448,4 +465,21 @@ test("several things on Needs you can be done or declined together", async ({ pa
   await page.goto("/planner/tasks");
   await expect(page.getByText(one)).toBeVisible();
   await expect(page.getByText(three)).toHaveCount(0);
+});
+
+test("the team shows calm cards, and the chosen agent's details beside them", async ({ page }) => {
+  await page.goto("/agent/channel?tab=team");
+  const cards = page.getByTestId("agent-card");
+  await expect(cards.first()).toBeVisible();
+  const organizer = cards.filter({ hasText: "@organizer" });
+  await organizer.locator("[aria-pressed]").click();
+  const detail = page.getByTestId("agent-detail");
+  await expect(detail).toContainText("@organizer");
+  await expect(detail.getByRole("button", { name: "Rename" })).toBeVisible();
+  // Talk sits in the card's footer, inside the card, whatever the agent's name.
+  const talk = organizer.getByRole("button", { name: /^Talk to / });
+  const card = await organizer.boundingBox();
+  const button = await talk.boundingBox();
+  expect(card && button && button.x + button.width <= card.x + card.width).toBeTruthy();
+  await noViolations(page);
 });

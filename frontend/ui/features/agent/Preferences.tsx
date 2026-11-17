@@ -14,8 +14,9 @@ import { Skeleton } from "@/ui/primitives/Skeleton";
 import { TextEditor } from "@/ui/primitives/TextView";
 import { GenerationSurface } from "@/ui/primitives/GenerationSurface";
 import { useMailAccounts } from "@/ui/client/mail";
-import { TextLink } from "@/ui/primitives/TextLink";
 import { t } from "@/ui/strings";
+import { SourceChip } from "@/ui/features/sources/SourceChip";
+import { mailSource } from "@/ui/features/sources/kinds";
 
 function PreferenceHistory({ item }: { item: Preference }) {
   const history = usePreferenceHistory(item.id);
@@ -26,7 +27,7 @@ function PreferenceHistory({ item }: { item: Preference }) {
     {history.data?.evidence?.map((event,index) => <div key={index} className="border-t border-line-subtle pt-3 text-sm text-ink-secondary">
       <p>{event.time.slice(0,10)} · {event.action}</p>
       <p>{event.old_value} → {event.new_value}</p>
-      {event.artifact === "thread" ? <TextLink href={`/mail/all/${event.artifact_id}`}>{t("preferences.evidence.open")}</TextLink> : null}
+      {event.artifact === "thread" ? <SourceChip source={mailSource(Number(event.artifact_id))} label={t("preferences.evidence.open")} /> : null}
     </div>)}
     {history.data?.versions.map(version => <div key={version.revision} className="flex flex-col gap-2 border-t border-line-subtle pt-3">
       <p className="text-sm text-ink-muted">{t("preferences.version", { version: version.revision })} · {version.status}</p>
@@ -66,7 +67,7 @@ function PreferenceEditor({ item, onSaved }: { item?: Preference; onSaved?: () =
     </div>
     {preview.data && scopeIsCurrent ? <div role="status" className="rounded-md border border-line-subtle p-3 text-sm text-ink-secondary"><p>{t("preferences.preview.count", {matched:preview.data.matched,total:preview.data.total})}</p><p>{t("preferences.preview.hint")}</p><ul className="mt-2 list-inside list-disc">{preview.data.examples.map((subject,index) => <li key={index}>{subject}</li>)}</ul></div> : null}
     {simulate.isPending ? <GenerationSurface phase={simulate.phase} label={t("preferences.simulating")} placeholder /> : null}
-    {simulate.data && simulationIsCurrent ? <div className="flex flex-col gap-3 rounded-md border border-line-subtle p-3"><p className="text-sm text-ink-muted">{t("preferences.simulation.hint")}</p>{simulate.data.decisions.length === 0 ? <p>{t("preferences.simulation.empty")}</p> : null}{simulate.data.decisions.map(result => <div key={result.thread} className="border-t border-line-subtle pt-3"><TextLink href={`/mail/all/${result.thread}`}>{result.subject}</TextLink><p className="text-sm text-ink-secondary">{result.before} → {result.after}</p><p className="text-md text-ink-primary">{result.reason}</p></div>)}</div> : null}
+    {simulate.data && simulationIsCurrent ? <div className="flex flex-col gap-3 rounded-md border border-line-subtle p-3"><p className="text-sm text-ink-muted">{t("preferences.simulation.hint")}</p>{simulate.data.decisions.length === 0 ? <p>{t("preferences.simulation.empty")}</p> : null}{simulate.data.decisions.map(result => <div key={result.thread} className="border-t border-line-subtle pt-3"><SourceChip source={{ ...mailSource(result.thread), title: result.subject }} /><p className="text-sm text-ink-secondary">{result.before} → {result.after}</p><p className="text-md text-ink-primary">{result.reason}</p></div>)}</div> : null}
     {simulate.isError ? <ErrorState title={t("preferences.failed")} description={simulate.error.message} /> : null}
     {save.isError || preview.isError ? <ErrorState title={t("preferences.failed")} description={save.error?.message ?? preview.error?.message} /> : null}
     <div className="flex flex-wrap gap-2">

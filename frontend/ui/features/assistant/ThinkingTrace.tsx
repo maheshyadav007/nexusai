@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { clockText } from "@/ui/client/format";
 import { Icon, type IconName } from "@/ui/icons";
 import { t, tn, type StringKey } from "@/ui/strings";
 import { isFinished, toolName, type ToolPart } from "./parts";
@@ -81,10 +82,30 @@ const chipText = (value: unknown) => (Array.isArray(value) ? tn("tool.items", va
 
 const asText = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value, null, 2));
 
-const stepLabel = (part: ToolPart) => {
-  const shown = TOOL_SHOWN[toolName(part)];
-  return shown ? t(shown.label) : toolName(part).replaceAll("_", " ");
-};
+/** How a tool call reads wherever it's listed: in the trace, and in a hand-over's steps. */
+export function toolStep(name: string, input?: Readonly<Record<string, unknown>> | null): { label: string; icon: IconName; chip: string | null } {
+  const shown = TOOL_SHOWN[name];
+  const chip = shown?.chip ? input?.[shown.chip] : undefined;
+  return {
+    label: shown ? t(shown.label) : name.replaceAll("_", " "),
+    icon: shown?.icon ?? "customize",
+    chip: chip === undefined || chip === null || chip === "" ? null : chipText(chip),
+  };
+}
+
+const stepLabel = (part: ToolPart) => toolStep(toolName(part)).label;
+
+/** Seconds since it started, ticking while it runs. */
+function useElapsed(running: boolean) {
+  const began = useRef(Date.now());
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!running) return undefined;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [running]);
+  return Math.max(0, Math.round((now - began.current) / 1000));
+}
 
 function ToolRow({ part }: { part: ToolPart }) {
   const [open, setOpen] = useState(false);
@@ -125,12 +146,15 @@ export function ThinkingTrace({ steps, running }: { steps: readonly Step[]; runn
   const active = running && tools.some((part) => !isFinished(part));
   const current = [...tools].reverse().find((part) => !isFinished(part));
   const summary = seconds ? t("chat.thoughtFor", { seconds }) : t("chat.thought");
+  const elapsed = useElapsed(running);
   return (
     <div data-testid="thinking">
       <Pressable aria-expanded={open} onClick={() => setOpen((value) => !value)} className="focus-ring flex items-center gap-2 rounded-sm py-1 text-md text-ink-muted transition-colors duration-fast hover:text-ink-primary">
-        <Icon name="thinking" className={`h-4 w-4 shrink-0 ${running ? "animate-working motion-reduce:animate-none" : ""}`} />
+        <Icon name="thinking" className={`h-4 w-4 shrink-0 ${running ? "animate-working text-agent-running motion-reduce:animate-none" : ""}`} />
         <Swap value={running ? (current ? stepLabel(current) : t("chat.thinking")) : summary}>{running ? (current ? stepLabel(current) : t("chat.thinking")) : summary}</Swap>
-        {tools.length && !active ? <span className="text-sm tabular-nums text-ink-faint">{tn("chat.steps", tools.length)}</span> : null}
+        {running ? (
+          <span data-testid="thinking-clock" className="text-sm tabular-nums text-ink-faint">{tools.length ? `${tn("chat.steps", tools.length)} · ` : ""}{clockText(elapsed)}</span>
+        ) : tools.length && !active ? <span className="text-sm tabular-nums text-ink-faint">{tn("chat.steps", tools.length)}</span> : null}
         <Turn open={open}>
           <Icon name="chevronRight" className="h-3 w-3" />
         </Turn>

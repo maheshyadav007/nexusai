@@ -214,12 +214,29 @@ test("work folds behind a thinking line that opens to each step", async ({ page 
 
 test("a reminder asked for is set, and shows as a card that links to it", async ({ page }) => {
   await openFresh(page);
-  await say(page, "remind me to call");
+  // Reminders are the Organizer's work, so the person asks it by its @handle.
+  await say(page, "@organizer remind me to call");
   const card = page.getByTestId("result-card");
   await expect(card).toContainText("Call the vendor");
   await card.getByRole("link", { name: "Open reminders" }).click();
   await expect(page.getByTestId("reminder").filter({ hasText: "Call the vendor" })).toBeVisible();
   await expect(page.getByTestId("reminder").filter({ hasText: "Call the vendor" }).getByRole("button", { name: "Accept" })).toHaveCount(0);
+});
+
+test("a hand-over is one quiet line that opens to what it's doing", async ({ page }) => {
+  await openFresh(page);
+  await say(page, "hand the filing over");
+  const line = page.getByTestId("handoff-card");
+  await expect(line).toContainText("Organizer");
+  await expect(line).toContainText("File last week's PLM mail under PLM");
+  await expect(line).not.toHaveAttribute("data-state", "refused");
+  // Opened once the reply has finished, so the settled message keeps it open.
+  await expect(page.getByTestId("session-status")).toContainText("Done");
+  await line.getByRole("button", { expanded: false }).click();
+  await expect(line).toContainText("Every PLM thread from last week is in PLM");
+  await expect(line).toContainText(/#\d+ · \d+:\d\d · /);
+  await expect(line.getByRole("link", { name: "Team tasks" })).toBeVisible();
+  await noViolations(page);
 });
 
 test("sending mail shows the mail itself, and nothing goes without a yes", async ({ page }) => {
@@ -239,7 +256,8 @@ test("many requests at once are one decision, and one can be left out", async ({
   const current = await (await request.post("/api/queries/permissions.get", { data: {} })).json();
   await request.post("/api/commands/permissions.save", { data: { ...current, tools: { ...current.tools, create_tasks: "ask" } } });
   await openFresh(page);
-  await say(page, "add three tasks");
+  // Tasks are the Organizer's work, so the person asks it by its @handle.
+  await say(page, "@organizer add three tasks");
   const group = page.getByTestId("approval-group");
   await expect(group).toContainText("3 requests");
   await expect(page.getByTestId("approval")).toHaveCount(0);
@@ -253,7 +271,7 @@ test("many requests at once are one decision, and one can be left out", async ({
   await expect(page.getByTestId("task").filter({ hasText: "Second task" })).toHaveCount(0);
 
   await openFresh(page);
-  await say(page, "add three tasks");
+  await say(page, "@organizer add three tasks");
   await page.getByTestId("approval-group").getByRole("button", { name: "Approve for this session" }).click();
   await expect(page.getByTestId("session-status")).toContainText("Done");
   await expect(page.getByTestId("approval-group")).toHaveCount(0);
@@ -308,9 +326,14 @@ test("a session waiting on you is first in the list and says so at the top", asy
   // It opens beside the list, in the side panel, and says it's waiting at the top.
   await group.getByTestId("session-row").filter({ hasText: "Waiting one" }).click();
   const dock = page.getByTestId("assistant-dock");
-  const current = dock.getByRole("combobox", { name: "Switch conversation" });
+  const current = dock.getByTestId("conversation-switcher");
   await expect(current).toContainText("Waiting one");
-  await expect(current).toContainText("Waiting");
+  // The switcher puts it first, under what's waiting on the person.
+  await current.click();
+  const waiting = page.getByRole("dialog", { name: "Switch conversation" }).getByRole("group", { name: "Waiting on you" }).getByTestId("conversation-option").filter({ hasText: "Waiting one" });
+  await expect(waiting).toContainText("Your answer");
+  await noViolations(page);
+  await page.keyboard.press("Escape");
   await dock.getByTestId("question-card").getByRole("radio", { name: "Monday" }).click();
   await expect(dock.getByTestId("answered-question")).toContainText("Monday");
 });
@@ -459,7 +482,7 @@ test("the chat sits attached on the right, beside the page, and keeps the conver
   await expect(dock).toHaveAttribute("data-pinned", "true");
   await dock.getByRole("button", { name: "Set a reminder for me" }).click();
   await expect(dock.getByTestId("agent-message")).toBeVisible();
-  const session = dock.getByRole("combobox", { name: "Switch conversation" });
+  const session = dock.getByTestId("conversation-switcher");
   const title = await session.textContent();
   await expect(session).toHaveText(title ?? "");
   // The same conversation, still on screen rather than loaded again.
@@ -473,6 +496,6 @@ test("the chat sits attached on the right, beside the page, and keeps the conver
   await noViolations(page);
   await page.reload();
   await expect(page.getByTestId("assistant-dock")).toHaveAttribute("data-pinned", "true");
-  await expect(page.getByTestId("assistant-dock").getByRole("combobox", { name: "Switch conversation" })).toHaveText(title ?? "");
+  await expect(page.getByTestId("assistant-dock").getByTestId("conversation-switcher")).toHaveText(title ?? "");
   await page.getByRole("button", { name: "Minimize" }).click();
 });

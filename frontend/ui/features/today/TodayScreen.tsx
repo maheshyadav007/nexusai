@@ -15,6 +15,10 @@ import { AskAgent } from "@/ui/features/agent/AskAgent";
 import { useAssistant } from "@/ui/features/assistant/AssistantProvider";
 import { ApprovalGroupCard, QuestionCard } from "@/ui/features/assistant/Cards";
 import { Markdown } from "@/ui/features/assistant/Markdown";
+import { MessageSources } from "@/ui/features/assistant/MessageSources";
+import { useOpenSource } from "@/ui/features/sources/context";
+import { fullHref, mailSource, type PreviewSource } from "@/ui/features/sources/kinds";
+import { SourceChip } from "@/ui/features/sources/SourceChip";
 import { Icon, type IconName } from "@/ui/icons";
 import { AttentionCount } from "@/ui/primitives/AttentionCount";
 import { Badge } from "@/ui/primitives/Badge";
@@ -26,6 +30,7 @@ import { IconButton } from "@/ui/primitives/IconButton";
 import { Textarea } from "@/ui/primitives/Input";
 import { CountPop, Presence, Rise } from "@/ui/primitives/Motion";
 import { Pressable } from "@/ui/primitives/Pressable";
+import { quickLook } from "@/ui/primitives/SourceRef";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { StatusDot } from "@/ui/primitives/StatusDot";
 import { TextLink } from "@/ui/primitives/TextLink";
@@ -80,16 +85,19 @@ function ThreadList({ id, icon, title, hint, urgent = false, threads, empty, cha
   const setStatus = useSetStatus();
   const setImportance = useSetImportance();
   const [all, setAll] = useState(false);
+  const preview = useOpenSource();
   const shown = all ? threads : threads.slice(0, FIRST_SHOWN);
+  const sources: PreviewSource[] = shown.map((thread) => ({ ...mailSource(thread.id), title: thread.subject || t("mail.noSubject"), detail: thread.people[0] ?? "", date: thread.last_date }));
   return (
     <Panel {...(id ? { id } : {})} icon={icon} title={title} count={threads.length} urgent={urgent && threads.length > 0} {...(hint && threads.length ? { hint } : {})}>
       {threads.length === 0 ? <p className="text-md text-ink-muted">{empty}</p> : null}
       <ul className="flex flex-col">
-        {shown.map((thread) => {
+        {shown.map((thread, index) => {
           const action = thread.next_action ? NEXT_ACTION_LABEL[thread.next_action] : undefined;
+          const source = sources[index] as PreviewSource;
           return (
             <li key={thread.id} className="flex flex-col gap-2 border-t border-line-subtle py-3">
-              <Link href={`/mail/all/${thread.id}`} data-testid="today-thread" className="focus-ring flex min-w-0 flex-col gap-px rounded-sm transition-colors duration-fast hover:text-accent-default">
+              <a href={fullHref(source)} {...quickLook(() => preview.open(source, sources), () => preview.openFull(source))} data-testid="today-thread" className="focus-ring flex min-w-0 flex-col gap-px rounded-sm transition-colors duration-fast hover:text-accent-default">
                 <span className="flex items-baseline justify-between gap-3">
                   <span className="flex min-w-0 items-center gap-2">
                     {thread.importance === "high" ? <span aria-label={t("today.important")} role="img" className="h-2 w-2 shrink-0 rounded-full bg-accent-default" /> : null}
@@ -99,9 +107,9 @@ function ThreadList({ id, icon, title, hint, urgent = false, threads, empty, cha
                   <span className="shrink-0 text-sm tabular-nums text-ink-muted">{format(thread.last_date)}</span>
                 </span>
                 {thread.why ? <span className="truncate text-sm text-ink-secondary">{thread.why}</span> : null}
-              </Link>
+              </a>
               <span className="flex flex-wrap items-center gap-2">
-                {chase ? <AskAgent context={[`mail:${thread.id}`]} title={t("today.chase.title")} label={t("today.chase.draft")} text={t("today.chase.ask")} /> : <Link href={`/mail/all/${thread.id}?draft`} data-testid="today-draft" className="focus-ring press ai-glow relative inline-flex items-center rounded-md px-3 py-2 text-md font-medium text-ink-primary">{t("mail.draftReply")}</Link>}
+                {chase ? <AskAgent context={[`mail:${thread.id}`]} title={t("today.chase.title")} label={t("today.chase.draft")} text={t("today.chase.ask")} /> : <Link href={`${fullHref(mailSource(thread.id))}?draft`} data-testid="today-draft" className="focus-ring press ai-glow relative inline-flex items-center rounded-md px-3 py-2 text-md font-medium text-ink-primary">{t("mail.draftReply")}</Link>}
                 <Button variant="quiet" onClick={() => setStatus.mutate({ id: thread.id, status: "resolved" })}>{t("today.done")}</Button>
                 {thread.importance !== "low" && !chase ? <Button variant="quiet" onClick={() => setImportance.mutate({ id: thread.id, importance: "low" })}>{t("today.notImportant")}</Button> : null}
               </span>
@@ -134,7 +142,7 @@ function AskRow({ message }: { message: ChannelMessage }) {
         ) : (
           message.agent
         )}
-        {message.thread ? <TextLink className="text-sm" href={`/mail/all/${message.thread}`}>{t("channel.openSource")}</TextLink> : null}
+        {message.source_ref ? <SourceChip source={message.source_ref} /> : null}
       </p>
       <QuestionCard question={message.text} options={message.options} multiple={message.multiple ?? false} pending={respond.isPending || dismiss.isPending} error={respond.error?.message ?? dismiss.error?.message ?? null} onAnswer={(answer) => respond.mutate({ id: message.id, answer })} onSkip={() => dismiss.mutate(message.id)} />
     </div>
@@ -202,7 +210,7 @@ function useRowAction(item: Pick<WaitingItem, "doIt" | "decline">) {
   return { acting, done, failed, run };
 }
 
-function ProposalRow({ icon, title, meta, why, item, accept = t("tasks.accept"), selecting, selected, onToggle }: { icon: IconName; title: string; meta: string; why?: string | null | undefined; item: WaitingItem; accept?: string; selecting: boolean; selected: boolean; onToggle: () => void }) {
+function ProposalRow({ icon, title, meta, why, source, item, accept = t("tasks.accept"), selecting, selected, onToggle }: { icon: IconName; title: string; meta: string; why?: string | null | undefined; source?: PreviewSource | null | undefined; item: WaitingItem; accept?: string; selecting: boolean; selected: boolean; onToggle: () => void }) {
   const { acting, done, failed, run } = useRowAction(item);
   const busy = acting !== null || done;
   return (
@@ -216,6 +224,7 @@ function ProposalRow({ icon, title, meta, why, item, accept = t("tasks.accept"),
           <p className="break-words text-md font-medium text-ink-primary">{title}</p>
           <p className="text-sm tabular-nums text-ink-muted">{meta}</p>
           {why ? <p className="text-sm text-ink-secondary">{why}</p> : null}
+          {source ? <div><SourceChip source={source} /></div> : null}
         </div>
         {selecting ? null : (
           <div className="flex shrink-0 items-center gap-2">
@@ -270,7 +279,7 @@ function BulkBar({ items, picked, onPick, onClear, onCancel }: { items: readonly
   const busy = progress !== null;
   const counting = progress ? t("today.select.progress", { done: progress.done, total: progress.total }) : null;
   return (
-    <div data-testid="bulk-bar" className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-line-subtle bg-surface-raised p-2 shadow-raised">
+    <div data-testid="bulk-bar" className="sticky top-0 z-raised flex flex-wrap items-center gap-2 rounded-lg border border-line-subtle bg-surface-raised p-2 shadow-raised">
       <span role="status" className="px-2 text-sm tabular-nums text-ink-secondary">{chosen.length ? t("today.select.count", { count: chosen.length }) : t("today.select.none")}</span>
       <Button variant="quiet" disabled={busy} onClick={() => onPick(chosen.length === items.length ? [] : items.map((item) => item.key))}>{t("today.select.all")}</Button>
       <span className="flex-1" />
@@ -390,7 +399,7 @@ function WaitingOnYou() {
           {(() => {
             const rows = proposedTasks.map((task) => {
               const item = taskItem(task);
-              return <ProposalRow key={item.key} {...row(item)} icon="tasks" title={task.title} meta={task.due ? t("today.proposal.taskDue", { when: formatDay(task.due) }) : t("today.proposal.task")} />;
+              return <ProposalRow key={item.key} {...row(item)} icon="tasks" title={task.title} source={task.source_ref} meta={task.due ? t("today.proposal.taskDue", { when: formatDay(task.due) }) : t("today.proposal.task")} />;
             });
             if (selecting || rows.length <= GROUP_AT) return rows;
             return (
@@ -401,7 +410,7 @@ function WaitingOnYou() {
           })()}
           {proposedReminders.map((reminder) => {
             const item = reminderItem(reminder);
-            return <ProposalRow key={item.key} {...row(item)} icon="reminders" title={reminder.title} meta={t("today.proposal.reminder", { when: formatWhen(reminder.when) })} />;
+            return <ProposalRow key={item.key} {...row(item)} icon="reminders" title={reminder.title} source={reminder.source_ref} meta={t("today.proposal.reminder", { when: formatWhen(reminder.when) })} />;
           })}
           {proposedCategories.map((category) => {
             const item = categoryItem(category);
@@ -481,7 +490,8 @@ function MorningBrief() {
         {data.prep_at ? <span className="text-sm tabular-nums text-ink-muted">{t("today.brief.when", { when: format(data.prep_at) })}</span> : null}
       </header>
       {data.prep_freshness && data.prep_freshness !== "fresh" && data.prep_freshness !== "none" ? <p role="status" className="text-sm text-ink-secondary">{t(`today.brief.freshness.${data.prep_freshness}`)}</p> : null}
-      <div data-testid="today-prep" className="text-md text-ink-primary"><Markdown text={data.prep_text} /></div>
+      <div data-testid="today-prep" className="text-md text-ink-primary"><Markdown text={data.prep_text} sources={data.prep_sources ?? []} /></div>
+      {data.prep_sources?.length ? <div><MessageSources sources={data.prep_sources} /></div> : null}
       <div className="flex flex-wrap items-center gap-1">
         <IconButton icon="like" label={t("today.brief.like")} aria-pressed={rating === "up"} data-testid="brief-like" className={rating === "up" ? "text-accent-default" : ""} disabled={react.isPending} onClick={() => rate("up")} />
         <IconButton icon="dislike" label={t("today.brief.dislike")} aria-pressed={rating === "down"} data-testid="brief-dislike" className={rating === "down" ? "text-accent-default" : ""} disabled={react.isPending} onClick={() => rate("down")} />
@@ -528,7 +538,12 @@ function DueToday({ items }: { items: readonly DueItem[] }) {
                 {item.overdue ? t("today.due.overdue", { when: formatDay(item.when) }) : item.kind === "reminder" ? formatWhen(item.when) : t("today.due.today")}
               </span>
             </Link>
-            {item.task_id ? <span><Button onClick={() => finish(item.task_id as number)}>{t("today.due.finish")}</Button></span> : null}
+            {item.source_ref || item.task_id ? (
+              <span className="flex flex-wrap items-center gap-2">
+                {item.source_ref ? <SourceChip source={item.source_ref} /> : null}
+                {item.task_id ? <Button onClick={() => finish(item.task_id as number)}>{t("today.due.finish")}</Button> : null}
+              </span>
+            ) : null}
           </li>
         ))}
       </ul>

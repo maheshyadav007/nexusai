@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Task } from "@/ui/client/contracts.generated";
 import { useDateOnly, useRelativeTime } from "@/ui/client/format";
+import { AddBar, DuePicker } from "./AddBar";
 import { useRemoveTask, useSaveTask, useTasks } from "@/ui/client/work";
 import { AskAgent } from "@/ui/features/agent/AskAgent";
 import { Icon } from "@/ui/icons";
@@ -16,13 +17,13 @@ import { Field } from "@/ui/primitives/Field";
 import { IconButton } from "@/ui/primitives/IconButton";
 import { Input, Textarea } from "@/ui/primitives/Input";
 import { Presence, Rise } from "@/ui/primitives/Motion";
+import { ListGroup, MetaDot } from "@/ui/primitives/List";
 import { PageHeader } from "@/ui/primitives/PageHeader";
-import { BareInput } from "@/ui/primitives/Pressable";
 import { Segmented } from "@/ui/primitives/Segmented";
 import { Select } from "@/ui/primitives/Select";
 import { Skeleton } from "@/ui/primitives/Skeleton";
-import { TextLink } from "@/ui/primitives/TextLink";
 import { t, tn, type StringKey } from "@/ui/strings";
+import { SourceChip } from "@/ui/features/sources/SourceChip";
 
 const STATUSES = [
   { value: "todo", label: t("tasks.status.todo") },
@@ -68,16 +69,20 @@ function TaskRow({ task }: { task: Task }) {
       <ContextMenu items={[{ id: "done", label: t(done ? "menu.markOpen" : "menu.markDone"), onSelect: () => update({ status: done ? "todo" : "done" }) }, { id: "remove", label: t("menu.remove"), icon: "trash", danger: true, onSelect: () => remove.mutate(task.id) }]}>
       <div>
       <ExpandRow
-        variant="plain"
+        variant="list"
         testid="task"
         label={t("tasks.details", { title: task.title })}
         leading={task.proposed ? <Icon name="thinking" className="h-4 w-4 shrink-0 text-accent-default" /> : <Check task={task} onChange={(next) => update({ status: next ? "done" : "todo" })} />}
         title={<span className={done ? "text-ink-muted line-through" : ""}>{task.title}</span>}
         meta={
-          <span className="flex items-center gap-2">
-            {task.proposed ? <span className="text-accent-default">{t("tasks.proposed")}</span> : null}
-            {task.due ? <span className={overdue ? "text-accent-default" : ""}>{formatDay(task.due)}</span> : null}
-            {task.notes ? <span className="truncate">{task.notes.split("\n")[0]}</span> : null}
+          <span className="flex min-w-0 items-center gap-2">
+            {[
+              task.proposed ? <span key="proposed" className="text-accent-default">{t("tasks.proposed")}</span> : null,
+              task.due ? <span key="due" className={overdue ? "font-medium text-status-danger" : ""}>{formatDay(task.due)}</span> : null,
+              task.source_ref ? <SourceChip key="source" source={task.source_ref} look="inline" /> : null,
+              task.source === "agent" && !task.proposed ? <span key="agent">{t("tasks.byAgent")}</span> : null,
+              task.notes ? <span key="notes" className="min-w-0 truncate">{task.notes.split("\n")[0]}</span> : null,
+            ].filter(Boolean).flatMap((item, index) => (index ? [<MetaDot key={`dot-${index}`} />, item] : [item]))}
           </span>
         }
         aside={
@@ -110,7 +115,6 @@ function TaskRow({ task }: { task: Task }) {
             {task.completed ? ` · ${t("tasks.finished", { when: relative(task.completed) })}` : ""}
           </p>
           <div className="flex items-center gap-1">
-            {task.thread ? <TextLink className="mr-2 text-sm" href={`/mail/all/${task.thread}`}>{t("channel.openSource")}</TextLink> : null}
             <AskAgent context={[`task:${task.id}`]} title={task.title} label={t("tasks.doIt")} text={t("tasks.doIt.prompt")} quiet={false} />
             <IconButton icon="trash" label={t("tasks.remove", { title: task.title })} onClick={() => remove.mutate(task.id)} />
           </div>
@@ -128,65 +132,44 @@ export function TasksScreen() {
   const save = useSaveTask();
   const [view, setView] = useState<View>("open");
   const [title, setTitle] = useState("");
-  const [due, setDue] = useState("");
+  const [due, setDue] = useState<string | null>(null);
   const all = tasks.data?.tasks ?? [];
   const suggested = all.filter((task) => task.proposed);
   const open = all.filter((task) => !task.proposed && task.status !== "done");
   const done = all.filter((task) => task.status === "done");
+  const overdue = open.filter((task) => bucket(task) === "tasks.group.overdue").length;
   const shown = view === "open" ? open : view === "suggested" ? suggested : done;
-  const add = () => {
-    if (!title.trim()) return;
-    save.mutate({ title: title.trim(), ...(due ? { due } : {}) }, { onSuccess: () => { setTitle(""); setDue(""); } });
-  };
+  const add = () => save.mutate({ title: title.trim(), ...(due ? { due } : {}) }, { onSuccess: () => { setTitle(""); setDue(null); } });
   const groups = view === "open" ? ORDER.map((key) => ({ key, rows: shown.filter((task) => bucket(task) === key) })).filter((group) => group.rows.length) : [{ key: null, rows: shown }];
   return (
     <div className="mx-auto flex max-w-reading flex-col gap-5 p-6">
-      <PageHeader title={t("nav.tasks")} summary={tasks.data ? tn("tasks.summary", open.length) : undefined} />
-      <form
-        className="flex flex-wrap items-center gap-2 border-b border-line-strong py-3 transition-colors duration-fast focus-within:border-accent-default"
-        onSubmit={(event) => {
-          event.preventDefault();
-          add();
-        }}
-      >
-        <Icon name="add" className="h-4 w-4 text-ink-muted" />
-        <BareInput aria-label={t("tasks.new")} placeholder={t("tasks.new.placeholder")} value={title} onChange={(event) => setTitle(event.target.value)} className="min-w-0 flex-1 bg-transparent px-2 py-1 text-md text-ink-primary outline-none placeholder:text-ink-muted" />
-        <BareInput aria-label={t("tasks.due")} type="date" value={due} onChange={(event) => setDue(event.target.value)} className="focus-ring rounded-md bg-transparent px-2 py-1 text-sm text-ink-secondary" />
-        <Button type="submit" variant="quiet" loading={save.isPending} disabled={!title.trim()}>
-          {t("tasks.add")}
-        </Button>
-      </form>
-      {save.isError ? <ErrorState title={t("planner.saveFailed")} description={save.error.message} /> : null}
-      <Segmented
-        hideLabel
-        label={t("tasks.show")}
-        value={view}
-        onChange={setView}
-        options={[
+      <PageHeader
+        title={t("nav.tasks")}
+        summary={tasks.data ? [tn("tasks.summary", open.length), overdue ? t("tasks.overdueCount", { count: overdue }) : null].filter(Boolean).join(" · ") : undefined}
+        action={<Segmented hideLabel label={t("tasks.show")} value={view} onChange={setView} options={[
           { value: "open", label: t("tasks.view.open", { count: open.length }) },
           { value: "suggested", label: t("tasks.view.suggested", { count: suggested.length }) },
           { value: "done", label: t("tasks.view.done", { count: done.length }) },
-        ]}
+        ]} />}
       />
+      <AddBar label={t("tasks.new")} placeholder={t("tasks.new.placeholder")} icon="add" value={title} onChange={setTitle} onSubmit={add} pending={save.isPending} ready={Boolean(title.trim())} picker={<DuePicker value={due} onChange={setDue} />} />
+      {save.isError ? <ErrorState title={t("planner.saveFailed")} description={save.error.message} /> : null}
       {tasks.isPending ? <Skeleton className="h-6 w-full" /> : null}
       {tasks.isError ? <ErrorState title={t("tasks.error")} onRetry={() => void tasks.refetch()} /> : null}
       {tasks.isSuccess && shown.length === 0 ? <EmptyState icon="tasks" title={t(view === "open" ? "tasks.empty" : view === "suggested" ? "tasks.empty.suggested" : "tasks.empty.done")} /> : null}
-      <div className="flex flex-col gap-5">
-        <Presence>
+      <Presence>
         {groups.map((group) => (
-          <Rise as="section" settle="position" key={group.key ?? "all"} {...(group.key ? { "aria-label": t(group.key) } : {})} className="flex flex-col gap-2">
-            {group.key ? <h2 className={`text-sm ${group.key === "tasks.group.overdue" ? "text-accent-default" : "text-ink-muted"}`}>{t(group.key)}</h2> : null}
-            <ul aria-label={group.key ? t(group.key) : t("nav.tasks")} className="flex flex-col">
+          <Rise key={group.key ?? "all"} settle="position">
+            <ListGroup title={group.key ? t(group.key) : t(view === "suggested" ? "tasks.view.suggestedTitle" : "tasks.view.doneTitle")} detail={String(group.rows.length)} {...(group.key === "tasks.group.overdue" ? { tone: "danger" as const } : {})}>
               <Presence>
                 {group.rows.map((task) => (
                   <TaskRow key={task.id} task={task} />
                 ))}
               </Presence>
-            </ul>
+            </ListGroup>
           </Rise>
         ))}
-        </Presence>
-      </div>
+      </Presence>
     </div>
   );
 }

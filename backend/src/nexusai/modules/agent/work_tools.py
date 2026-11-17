@@ -468,6 +468,7 @@ def specs(
                 "\n".join(
                     f"{r['id']}: {r['title']} ({r['status']}, due {r['due']},"
                     f" added {r['created'][:10]}, changed {(r['updated'] or r['created'])[:10]})"
+                    f"{' from ' + citations.mark(citations.MAIL, r['thread']) if r['thread'] else ''}"
                     for r in rows
                 )
                 or "No tasks."
@@ -543,7 +544,9 @@ def specs(
             rows = db.fetch_all("SELECT * FROM reminders WHERE fired = 0 ORDER BY due_at LIMIT 200")
             return wrap_untrusted(
                 "\n".join(
-                    f"{r['id']}: {r['title']} at {r['due_at']}, repeats {r['repeat']}" for r in rows
+                    f"{r['id']}: {r['title']} at {r['due_at']}, repeats {r['repeat']}"
+                    f"{' from ' + citations.mark(citations.MAIL, r['thread']) if r['thread'] else ''}"
+                    for r in rows
                 )
                 or "No reminders."
             )
@@ -564,7 +567,8 @@ def specs(
             found = cast(ThreadList, mail.list_threads(query, ctx)).threads
             return wrap_untrusted(
                 "\n".join(
-                    f"{t.id}: {t.subject} | {t.category or 'no category'} | {t.last_date}"
+                    f"{citations.mark(citations.MAIL, t.id)} {t.subject} | {t.category or 'no category'}"
+                    f" | {t.last_date}"
                     for t in found
                 )
                 or "Nothing here."
@@ -951,7 +955,8 @@ def specs(
                     note
                     + (
                         "\n".join(
-                            f"[thread {h.thread.id}] {h.thread.subject}: {h.excerpt}" for h in found
+                            f"{citations.mark(citations.MAIL, h.thread.id)} {h.thread.subject}: {h.excerpt}"
+                            for h in found
                         )
                         or "Nothing found."
                     )
@@ -979,7 +984,7 @@ def specs(
                     if rows and rows[0]["thread_id"] in seen:
                         continue
                     name = (
-                        f"[thread {rows[0]['thread_id']}] {rows[0]['date'][:10]}"
+                        f"{citations.mark(citations.MAIL, rows[0]['thread_id'])} {rows[0]['date'][:10]}"
                         f" | {rows[0]['subject']} | from {rows[0]['from_addr']}"
                         if rows
                         else hit.ref
@@ -988,7 +993,9 @@ def specs(
                         seen.add(rows[0]["thread_id"])
                         citations.note(db, session, citations.MAIL, str(rows[0]["thread_id"]))
                 else:
-                    name = f"[document {hit.ref}{', ' + hit.place if hit.place else ''}]"
+                    name = citations.mark(citations.DOCUMENT, hit.ref) + (
+                        f" in {hit.place}" if hit.place else ""
+                    )
                     citations.note(db, session, citations.DOCUMENT, hit.ref)
                 lines.append(f"{name} ({hit.score:.2f}): {hit.excerpt}")
             if not hits:
