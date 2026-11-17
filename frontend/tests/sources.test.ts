@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 import { documentSource, fileSource, fullHref, mailSource, pageNumber } from "../ui/features/sources/kinds";
 import { loadThemes } from "../ui/theme/generate";
@@ -42,7 +42,8 @@ const MAY_LINK = [/^ui\/features\/sources\//, /^ui\/features\/mail\//, /^app\/\(
 describe("links to mail", () => {
   it("go through the sources registry", () => {
     const direct = [...files(join(ROOT, "ui")), ...files(join(ROOT, "app"))]
-      .map((path) => relative(ROOT, path))
+      // Forward slashes on every system, so the rules read the same on Windows.
+      .map((path) => relative(ROOT, path).split(sep).join("/"))
       .filter((path) => !MAY_LINK.some((rule) => rule.test(path)))
       .filter((path) => /\/mail\/(all|thread)\//.test(readFileSync(join(ROOT, path), "utf8")));
     expect(direct).toEqual([]);
