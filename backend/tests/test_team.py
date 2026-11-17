@@ -596,6 +596,33 @@ def test_a_run_refused_again_and_again_stops_and_tells_the_person(
     )
 
 
+def test_team_tools_refused_again_and_again_stop_the_run(
+    client: TestClient, script: TeamScript
+) -> None:
+    session = post(client, "session.create")["id"]
+    script.say(lead(), [ToolCall("a", "team_assign", ASSIGN)], [TextChunk("ok")])
+    chat(client, session, "Go")
+    wait(lambda: task_row(1)["state"] not in {"queued", "working"} or None, "the task settled", 20)
+    # Only the agent doing the task can ask about it, so each of these is "Not sent".
+    ask = {"task": 1, "kind": "ask", "text": "Which date?"}
+    script.say(
+        lead(),
+        [ToolCall("b", "team_message", ask)],
+        [ToolCall("c", "team_message", ask)],
+        [ToolCall("d", "team_message", ask)],
+        [TextChunk("still going")],
+    )
+    chat(client, session, "Check it")
+    turns = agent.current().db.fetch_all(
+        "SELECT failure FROM agent_turns WHERE session = ? ORDER BY id", (session,)
+    )
+    assert turns[-1]["failure"] == "refusals"
+    statuses = agent.current().db.fetch_all(
+        "SELECT status FROM tool_calls WHERE session = ? AND tool = 'team_message'", (session,)
+    )
+    assert [s["status"] for s in statuses] == ["refused"] * 3
+
+
 def test_a_note_from_the_person_reaches_the_agent_at_its_next_step(
     client: TestClient, script: TeamScript
 ) -> None:
@@ -833,6 +860,52 @@ def test_asking_ends_the_run_and_the_answer_starts_the_next(
     assert "answer from" in told[1] and "Friday" in told[1]
 
 
+def test_the_first_reject_sends_the_work_back_and_the_second_closes_it(
+    client: TestClient, script: TeamScript
+) -> None:
+    session = post(client, "session.create")["id"]
+    report = {"task": 1, "action": "report", "outcome": "Moved 3 threads."}
+    script.say(
+        mail(),
+        [ToolCall("r1", "team_close", report)],
+        [ToolCall("r2", "team_close", {**report, "outcome": "Moved all 5 threads."})],
+    )
+    reject = {"task": 1, "action": "reject", "outcome": "Two PLM threads are still in the inbox"}
+    script.say(
+        lead(),
+        [ToolCall("a", "team_assign", ASSIGN)],
+        [TextChunk("Given.")],
+        [ToolCall("x", "team_close", {"task": 1, "action": "reject"})],
+        [ToolCall("x1", "team_close", reject)],
+        [TextChunk("Sent back.")],
+        [ToolCall("v", "team_close", {"task": 1, "action": "verify", "outcome": "All there."})],
+        [TextChunk("Done.")],
+    )
+    chat(client, session, "Go")
+    wait(lambda: task_row(1)["state"] == "verified" or None, "verified", 30)
+    assert "say what's wrong" in script.requests_text(lead(), 4)
+    told = script.told(mail())
+    assert len(told) == 2
+    redo = script.requests_text(mail(), 2)
+    assert "Your report was sent back: Two PLM threads are still in the inbox" in redo
+    # A second reject is final.
+    db = agent.current().db
+    with db.transaction() as tx:
+        tx.execute("UPDATE team_tasks SET state = 'reported' WHERE id = 1")
+    giver = task_row(1)["assigner_session"]
+    said = team.close(
+        agent.current().ctx,
+        session=giver,
+        sender=task_row(1)["assigner"],
+        task=1,
+        action="reject",
+        outcome="Still wrong",
+        evidence=[],
+    )
+    assert said == "Task 1 rejected."
+    assert task_row(1)["state"] == "rejected"
+
+
 def test_an_answer_to_a_question_that_came_back_as_a_report_reaches_the_agent(
     client: TestClient, script: TeamScript
 ) -> None:
@@ -856,6 +929,35 @@ def test_an_answer_to_a_question_that_came_back_as_a_report_reaches_the_agent(
     wait(lambda: task_row(1)["state"] == "verified" or None, "verified", 30)
     assert task_row(1)["outcome"] == "Filed."
     assert any("answer from" in t and "PLM" in t for t in script.told(mail()))
+
+
+def test_a_report_to_a_closed_chat_carries_on_in_a_new_one(
+    client: TestClient, script: TeamScript
+) -> None:
+    session = post(client, "session.create")["id"]
+    waiting, go_on = script.hold(mail(), 1)
+    script.say(
+        mail(), [ToolCall("r", "team_close", {"task": 1, "action": "report", "outcome": "Filed."})]
+    )
+    script.say(
+        lead(),
+        [ToolCall("a", "team_assign", ASSIGN)],
+        [TextChunk("Given.")],
+        [ToolCall("v", "team_close", {"task": 1, "action": "verify", "outcome": "Seen."})],
+        [TextChunk("Done.")],
+    )
+    chat(client, session, "Go")
+    assert waiting.wait(15), "the task never started"
+    post(client, "session.archive", {"id": session})
+    go_on.set()
+    wait(lambda: task_row(1)["state"] == "verified" or None, "verified", 30)
+    assert task_row(1)["assigner_session"] != session
+    wait(
+        lambda: any(
+            "has news on task 1" in n["title"] for n in post(client, "notifications.list")["items"]
+        ),
+        "the person told",
+    )
 
 
 def test_canceling_a_task_ends_the_run_doing_it(client: TestClient, script: TeamScript) -> None:

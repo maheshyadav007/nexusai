@@ -660,14 +660,38 @@ class Triggers:
         except CommandError:
             return
 
+    def _reopen_giver(self, row: Any) -> str:
+        title = f"Task {row['id']}: {row['objective'][:50]}"
+        session = str(self.runtime.create(title, [], row["assigner"]).id)
+        owner = cards.name(self.ctx.bus.db, row["owner"])
+        with self.ctx.bus.unit_of_work() as work:
+            work.tx.execute(
+                "UPDATE team_tasks SET assigner_session = ? WHERE id = ?", (session, row["id"])
+            )
+            channel.notify(
+                self.ctx,
+                work,
+                f"{owner} has news on task {row['id']}",
+                "The chat that gave it was closed, so it carries on in a new one.",
+                f"/agent/sessions/{session}",
+                "agent",
+                False,
+            )
+        return session
+
     def _wake_assigner(self, row: Any) -> None:
         session = row["assigner_session"]
         alive = session and self.ctx.bus.db.fetch_all(
             "SELECT 1 FROM agent_sessions WHERE id = ? AND archived = 0", (session,)
         )
-        if row["assigner"] == team.PERSON or not alive:
+        if row["assigner"] == team.PERSON:
             self._set_task(row["id"], wake=None)
             return
+        if not alive:
+            # The chat that gave it was closed. The giver picks it up in a new one, and the person
+            # is told where, so a question or report is never dropped.
+            session = self._reopen_giver(row)
+            row = team.get(self.ctx.bus.db, row["id"]) or row
         if self.runtime.active_turn(session) is not None:
             return
         owner = cards.name(self.ctx.bus.db, row["owner"])

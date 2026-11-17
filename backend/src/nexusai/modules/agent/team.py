@@ -587,6 +587,8 @@ def _close(
                 f"Not done: task {task} is {row['state']}. Only a reported task can be verified "
                 "or rejected. Wait for the report."
             )
+        if action == "reject" and not _rejected_before(db, task):
+            return _send_back(ctx, row, sender, outcome)
         state = "verified" if action == "verify" else "rejected"
         with ctx.bus.unit_of_work() as work:
             work.tx.execute(
@@ -601,6 +603,34 @@ def _close(
             return "Not done: only the agent that gave the task, or the person, can cancel it."
         return cancel(ctx, task, sender, outcome)
     return "action must be report, verify, reject or cancel."
+
+
+def _rejected_before(db: Database, task: int) -> bool:
+    return bool(
+        db.fetch_all("SELECT 1 FROM agent_channel WHERE task = ? AND kind = 'reject'", (task,))
+    )
+
+
+def _send_back(ctx: Context, row: Any, sender: str, why: str) -> str:
+    """The first reject sends the work back with the reason, as a giver rejecting expects a redo.
+    A second reject closes the task."""
+    why = why.strip()
+    if not why:
+        return "Not done: say what's wrong or missing, so it can be redone."
+    task = row["id"]
+    due = _iso(_now() + timedelta(minutes=ctx.config.team.task_due_minutes))
+    with ctx.bus.unit_of_work() as work:
+        work.tx.execute(
+            "UPDATE team_tasks SET state = 'working', wake = ?, failure = NULL, due = ?,"
+            " updated = ? WHERE id = ?",
+            (OWNER, due, _iso(_now()), task),
+        )
+        _message(work.tx, task, "reject", sender, row["owner"], why[:2000], False)
+        work.emit("team.changed", {"task": task}, source="agent", trace_id=ctx.trace_id)
+    return (
+        f"Sent back to {cards.name(ctx.bus.db, row['owner'])} to redo, with your reason. Wait for "
+        "the new report. Rejecting it again closes the task."
+    )
 
 
 def cancel(ctx: Context, task: int, by: str, why: str = "") -> str:
@@ -710,6 +740,14 @@ def contract_text(db: Database, row: Any) -> str:
         "new one. Never mark your own work as "
         "verified.",
     ]
+    sent_back = db.fetch_all(
+        "SELECT text FROM agent_channel WHERE task = ? AND kind = 'reject' ORDER BY id DESC LIMIT 1",
+        (row["id"],),
+    )
+    if sent_back and row["state"] == "working":
+        lines.append(
+            f"Your report was sent back: {sent_back[0]['text']}. Fix that, then report again."
+        )
     said = _thread(db, row["id"])
     if said:
         lines.append("On this task so far:")

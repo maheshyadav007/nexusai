@@ -220,6 +220,32 @@ def _tools_called() -> list[tuple[str, str, str]]:
     ]
 
 
+def _team_flow(want: dict[str, Any]) -> list[str]:
+    """A task to that agent ends verified, or waits on the person's answer to a question the
+    giver passed on. Each task asks at most once, and an answer is followed by the owner's report."""
+    db = _db()
+    tasks = db.fetch_all("SELECT id, state FROM team_tasks WHERE owner = ?", (want["to"],))
+    if not tasks:
+        return [f"no task given to {want['to']}"]
+    missed = []
+    for task in tasks:
+        kinds = [
+            r["kind"]
+            for r in db.fetch_all(
+                "SELECT kind FROM agent_channel WHERE task = ? ORDER BY id", (task["id"],)
+            )
+        ]
+        if kinds.count("ask") > 1:
+            missed.append(f"task {task['id']} asked {kinds.count('ask')} times")
+        if "answer" in kinds and "report" not in kinds[kinds.index("answer") :]:
+            missed.append(f"task {task['id']} was answered but never reported after")
+        if task["state"] != "verified" and not (
+            task["state"] == "input_required" and _asked_person()
+        ):
+            missed.append(f"task {task['id']} ended {task['state']}, wanted verified")
+    return missed
+
+
 def _asked_person() -> bool:
     return bool(_db().fetch_all("SELECT 1 FROM channel_messages WHERE kind = 'ask' LIMIT 1"))
 
@@ -473,6 +499,8 @@ def graded(
             owners = [r["owner"] for r in _db().fetch_all("SELECT owner FROM team_tasks")]
             if checks["task_to"] not in owners:
                 missed.append(f"no task given to {checks['task_to']}: {owners}")
+        if "team" in checks:
+            missed += _team_flow(checks["team"])
         tasks = [
             dict(r)
             for r in _db().fetch_all("SELECT title, notes, due FROM tasks WHERE proposed = 0")

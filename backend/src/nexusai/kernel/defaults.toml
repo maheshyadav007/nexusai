@@ -143,8 +143,9 @@ task_due_minutes = 60
 # A working task whose run is gone for this long goes back in line, up to max_attempts.
 lease_seconds = 900
 max_attempts = 2
-# Two agents swapping more messages than this on one task are looping, so the task pauses.
-ping_pong_messages = 8
+# Two agents swapping more asks and answers than this on one task are looping, so the task
+# pauses. A repeat ask while one waits isn't sent, so this counts real rounds: 6 of them.
+ping_pong_messages = 12
 # Mail agents may send in an hour, whoever approves each one. Past it, sending is refused.
 sends_per_hour = 10
 # A run that keeps being refused stops and tells the person: this many in a row, or in all.

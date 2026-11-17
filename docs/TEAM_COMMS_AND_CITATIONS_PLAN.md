@@ -106,30 +106,19 @@ Posty handed a task to the Organizer, and the Organizer needed a decision.
   - `test_the_owner_can_never_verify_its_own_work`, updated: the run now ends at the report.
 - In `tests/test_monitor.py`: `test_a_task_waiting_on_the_person_is_not_silent`.
 
-## Part A, still to do
+## Part A, the rest (done)
 
-1. **Finish and commit A1–A11.** Bump the harness version, run the full check, fix anything it finds, and commit.
-2. **A12. Reject sends the work back once.**
-   - Today `reject` closes the task for good, and only the person can retry it.
-   - A weak Posty rejects expecting a redo, and nothing happens.
-   - Proposal: the first `reject` sets the task to working with `wake = owner`, and the reason reaches the owner as a message. A second reject closes it.
-   - Test: reject, redo, verify.
-3. **A13. Team refusals count toward "3 in a row".**
-   - `tools._after_refusal` counts only `tool_calls.status` refused or denied, which come from approvals.
-   - Proposal: `ToolLog` records status `refused` when the result is a refusal (`tool_errors._failed`), so a run refused three times in a row stops and tells the person.
-   - Watch out: argument errors a model can fix shouldn't stop a run on their own. Count only "Not sent" and "Not done", or use a higher limit for those.
-4. **A14. A question to a closed or archived Posty chat is dropped.**
-   - `_wake_assigner` clears `wake` when the giver's session is archived, and nobody is told.
-   - Proposal: notify the person, and wake the default agent in the current chat.
-5. **A15. The loop limit counts every ask and answer.**
-   - Four genuine rounds of questions pause a task.
-   - Proposal: count only an ask that repeats a previous one with no report or tool progress in between, or raise the limit and rely on A3.
-6. **Eval cases (fake first, real only with permission).** Add 3 cases to `backend/evals/team_b5g.json`:
-   - The Organizer asks which date, and Posty asks the person.
-   - The Organizer asks, and Posty can answer from mail.
-   - A question that comes back as a report.
+A1–A11 were committed as `d4bb3e9`. Then:
 
-   Checks: the task ends `verified`, exactly one ask, and the answer appears in the owner's next run.
+| # | Problem | What was built | Where |
+|---|---|---|---|
+| A12 | `reject` closed the task for good; a weak giver rejecting expects a redo | The first reject (a reason is required) sends the task back to working with `wake = owner`; the new run's contract starts "Your report was sent back: …". A second reject closes it | `team._send_back`, `team.contract_text`, `team_close` description |
+| A13 | Team refusals didn't count toward "3 in a row" | `record_call` stores status `refused` when a result starts "Not sent" or "Not done". Argument errors still count as done, so the model can fix them | `tools.record_call`, `tools.NOTHING_DONE` |
+| A14 | A question or report for a closed giver chat was dropped | The giver carries on in a new chat (`assigner_session` moves there) and the person is notified with a link | `triggers._reopen_giver` |
+| A15 | Four genuine rounds of questions paused a task | A3 stops repeat asks, so the limit now counts real rounds: `ping_pong_messages` 8 → 12 | `defaults.toml` |
+| A16 | No eval for asking | 3 cases in group `team` in `team_b5g.json`, graded by a new `team` check (`_team_flow`): ends verified, or waits on the person's answer; at most one ask per task; a report follows any answer. The eval can't answer the person's questions, so waiting on the person passes. **Not run on a real model yet: ask first.** | `evals/team_eval.py`, `evals/team_b5g.json` |
+
+Tests: `test_team_tools_refused_again_and_again_stop_the_run`, `test_the_first_reject_sends_the_work_back_and_the_second_closes_it`, `test_a_report_to_a_closed_chat_carries_on_in_a_new_one`.
 
 **Done when:**
 - The task 2 scenario can't loop: one ask, one answer, carry on.

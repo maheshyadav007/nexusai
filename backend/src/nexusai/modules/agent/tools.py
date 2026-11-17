@@ -369,9 +369,13 @@ def record_call(
     ):
         return
     shown = json.dumps(args, default=str)[:2000]
-    _log_call(ctx, session, call_id, tool, shown, result[:2000], "done", None, ms)
+    # A tool that said it did nothing counts as refused, so a run refused again and again stops.
+    # Other failures, such as a bad argument, are left for the model to fix.
+    status = "refused" if result.startswith(NOTHING_DONE) else "done"
+    _log_call(ctx, session, call_id, tool, shown, result[:2000], status, None, ms)
 
 
+NOTHING_DONE = ("Not sent", "Not done")
 REFUSED = frozenset({"refused", "denied"})
 # Each live run's stop handle, so a run that keeps being refused can be stopped from its tools.
 RUN_CONTROLS: dict[str, "RunControl"] = {}
@@ -680,7 +684,8 @@ class _TeamClose(BaseModel):
     task: int = Field(description="The task id.")
     action: Literal["report", "verify", "reject", "cancel"] = Field(
         description="report: you did it, here's the outcome. verify or reject: you gave it and "
-        "checked the report. cancel: you gave it and it's no longer needed."
+        "checked the report; the first reject sends it back to redo, the next closes it. cancel: "
+        "you gave it and it's no longer needed."
     )
     outcome: str = Field(
         default="",
