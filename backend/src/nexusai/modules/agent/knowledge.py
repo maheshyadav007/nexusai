@@ -8,6 +8,7 @@ from typing import Any
 from nexusai.contracts.agent import AgentKnowledge, KnowledgeLayer, LearnedNote, MailPreview
 from nexusai.kernel.module import Context
 from nexusai.modules.agent import (
+    briefs,
     facts,
     feedback,
     mail_agent,
@@ -33,6 +34,7 @@ TRUST = {
     "Personalized prompts": "yours",
     "What you corrected": "yours",
     "How they want the brief": "yours",
+    "The brief on Today now": "mixed",
     "What the mailbox shows": "counted",
     "Memory": "mixed",
     "Approved preferences": "yours",
@@ -129,6 +131,8 @@ def layers_for(
         **values,
     )
 
+    if agent == "daily-prep":
+        layers.append(Layer("The brief on Today now", briefs.current_layer(ctx)))
     learned = facts.layer(
         ctx, account, task_text, max(0, config.agent.memory_max_chars - len(selected_memory))
     )

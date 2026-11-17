@@ -71,6 +71,8 @@ const TOOL_SHOWN: Readonly<Record<string, { label: StringKey; icon: IconName; ch
   fold_suggested_categories: { label: "tool.fold_suggested_categories", icon: "categories", chip: "keep" },
   suggest: { label: "tool.suggest", icon: "channel" },
   tell: { label: "tool.tell", icon: "channel" },
+  read_plate: { label: "tool.read_plate", icon: "tasks" },
+  update_brief: { label: "tool.update_brief", icon: "thinking" },
   notify_person: { label: "tool.notify_person", icon: "notifications" },
 };
 

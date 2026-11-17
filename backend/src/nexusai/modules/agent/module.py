@@ -1237,15 +1237,6 @@ def compact_session(command: SessionAction, ctx: Context) -> CompactResult:
     return CompactResult(compacted=current().compact(command.id))
 
 
-def _brief_text(parts: list[dict[str, Any]]) -> str | None:
-    """What it replied, or what it posted, since a brief can arrive either way."""
-    said = "".join(part.get("text", "") for part in parts if part.get("type") == "text")
-    if said:
-        return said
-    posted = [part["input"]["text"] for part in parts if part.get("type") == "tool-tell"]
-    return posted[-1] if posted else None
-
-
 @agent_module.command("brief.react")
 def react_to_brief(command: ReactToBrief, ctx: Context) -> BriefReacted:
     """The next brief reads this, and the person sees it under What it knows."""

@@ -48,8 +48,8 @@ def test_finding_matches_words_and_lists_everything_when_nothing_matches(
 def test_judging_mail_and_the_interview_see_their_whole_small_set() -> None:
     assert tools.shown_for("mail", True) is None
     assert tools.shown_for("interview", False) is None
-    assert tools.shown_for("daily-prep", False) == tools.BRIEF_SHOWN
-    for shown in (tools.LEAD_SHOWN, tools.BRIEF_SHOWN, tools.MAIL_SHOWN):
+    assert tools.shown_for("daily-prep", False) is None
+    for shown in (tools.LEAD_SHOWN, tools.MAIL_SHOWN):
         assert shown >= tools.ALWAYS_SHOWN
 
 

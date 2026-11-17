@@ -988,7 +988,10 @@ def test_daily_prep_shows_on_today(client: TestClient, script: Script, fake: Fak
     assert today["brief"] == "1 important email to look at."
     assert today["prep_text"] is None
 
-    script.default = [TextChunk("Your morning: one thing needs you.")]
+    script.replies = [
+        [ToolCall("b", "update_brief", {"text": "Your morning: one thing needs you."})],
+        [TextChunk("Updated.")],
+    ]
     made = client.post(
         "/api/commands/schedules.save",
         json={"title": "Daily prep", "kind": "daily-prep", "every": "day", "time": "06:00"},

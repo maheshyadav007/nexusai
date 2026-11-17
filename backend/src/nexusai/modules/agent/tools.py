@@ -30,6 +30,7 @@ from nexusai.kernel.database import Migration
 from nexusai.kernel.home import scratch_folder
 from nexusai.kernel.module import CommandError, Context
 from nexusai.modules.agent import (
+    briefs,
     bulk_learning,
     cards,
     channel,
@@ -585,6 +586,15 @@ class _Say(BaseModel):
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
+class _Brief(BaseModel):
+    text: str = Field(
+        min_length=1,
+        max_length=6000,
+        description="The whole brief in Markdown bullets. It replaces the one on Today.",
+    )
+    tool_call_id: Annotated[str, InjectedToolCallId]
+
+
 class _BoardWrite(BaseModel):
     kind: str = Field(description="deadline, task, status or note.")
     title: str = Field(description="Short description.")
@@ -960,6 +970,31 @@ MAIL_AGENT_ONLY = frozenset(
 )
 
 
+# The brief agent reads and searches, then writes the brief. Nothing else is its job.
+BRIEF_TOOLS = frozenset(
+    {
+        "read_plate",
+        "update_brief",
+        "read_thread",
+        "read_recipients",
+        "search_mail",
+        "semantic_search",
+        "list_mail",
+        "list_tasks",
+        "list_reminders",
+        "read_work_board",
+        "draft_reply",
+        "read_feedback",
+        "remember",
+        "list_memory",
+        "team_inbox",
+        "team_message",
+        "team_close",
+    }
+)
+BRIEF_AGENT_ONLY = frozenset({"read_plate", "update_brief"})
+
+
 INTERVIEW_TOOLS = frozenset(
     {
         "ask_user",
@@ -990,10 +1025,6 @@ LEAD_SHOWN = ALWAYS_SHOWN | {
     "list_rules", "list_agents", "list_panels", "propose_preference",
     "team_assign", "team_inbox", "team_message", "team_close",
 }  # fmt: skip
-BRIEF_SHOWN = ALWAYS_SHOWN | {
-    "read_thread", "search_mail", "semantic_search", "list_tasks", "list_reminders",
-    "read_work_board", "draft_reply",
-}  # fmt: skip
 MAIL_SHOWN = ALWAYS_SHOWN | {
     "search_mail", "semantic_search", "read_thread", "read_recipients", "list_mail",
     "read_work_board", "update_mail", "draft_reply", "propose_task", "propose_reminder",
@@ -1009,7 +1040,8 @@ def shown_for(agent: str, has_email: bool) -> frozenset[str] | None:
         return None
     if agent == "mail":
         return None if has_email else MAIL_SHOWN
-    return BRIEF_SHOWN if agent == "daily-prep" else LEAD_SHOWN
+    # Its whole set is small enough to show.
+    return None if agent == "daily-prep" else LEAD_SHOWN
 
 
 def other_tools(all_names: list[str], shown: frozenset[str] | None) -> str:
@@ -1076,6 +1108,8 @@ def allowed_for(agent: str, origin: str, has_email: bool) -> frozenset[str] | No
     there's only a judgement to record when the run was started for an email."""
     if agent == "interview":
         return INTERVIEW_TOOLS
+    if agent == "daily-prep":
+        return BRIEF_TOOLS | {"ask_user"} if origin == "person" else BRIEF_TOOLS
     if agent != "mail":
         return None
     if has_email:
@@ -1586,6 +1620,12 @@ def build_tools(
         channel.post(ctx, "tell", "Session", text, session=session)
         return "Posted."
 
+    def read_plate(tool_call_id: str) -> str:
+        return mail_agent.brief_task(ctx)
+
+    def update_brief(text: str, tool_call_id: str) -> str:
+        return briefs.save(ctx, session, text)
+
     def notify_person(text: str, tool_call_id: str) -> str:
         with ctx.bus.unit_of_work() as work:
             channel.notify(ctx, work, text, "", f"/agent/sessions/{session}", "agent", False)
@@ -2012,6 +2052,19 @@ def build_tools(
             "one is reading this chat. When they are, say it in your reply.",
         ),
         (
+            read_plate,
+            _Nothing,
+            "Everything on their plate now: unfinished mail, tasks, reminders, deadlines and "
+            "decisions waiting, with earlier briefs and how they took them. A morning run already "
+            "has this in its message.",
+        ),
+        (
+            update_brief,
+            _Brief,
+            "Put the brief at the top of their Today page. Give the whole brief: it replaces the "
+            "one there. Your reply is not shown on Today, so this is the only way to update it.",
+        ),
+        (
             notify_person,
             _Say,
             "Raise a notification that interrupts the person. Only for what can't wait until they "
@@ -2209,8 +2262,8 @@ def build_tools(
         )
         for func, schema, description in specs
         if func.__name__ != "semantic_search" or _meaning_is_on()
-        # Judging mail belongs to the Mail agent alone.
-        if (allowed is None and func.__name__ not in MAIL_AGENT_ONLY)
+        # Judging mail belongs to the Mail agent alone, and the brief to the brief agent.
+        if (allowed is None and func.__name__ not in MAIL_AGENT_ONLY | BRIEF_AGENT_ONLY)
         or (allowed is not None and func.__name__ in allowed)
     ]
     catalog.extend(own if allowed is not None else [*own, *_connector_tools(ctx, session)])

@@ -176,12 +176,16 @@ def test_documents_rank_a_name_above_a_mention(
     assert [row["name"] for row in rows] == ["resume.txt", "notes.txt"]
 
 
+def brief_replies(text: str) -> list[list[Any]]:
+    return [[ToolCall("brief", "update_brief", {"text": text})], [TextChunk("Updated.")]]
+
+
 def test_a_brief_reaction_reaches_the_next_brief_and_the_person_can_see_it(
     client: TestClient,  # noqa: F811
     script: Script,  # noqa: F811
     config: Config,  # noqa: F811
 ) -> None:
-    script.replies = [[TextChunk("Reply to Priya first.")]]
+    script.replies = brief_replies("Reply to Priya first.")
     session_id = str(current().create("Your brief", [], "daily-prep").id)
     current().dispatch(TurnRequest(session_id, "Brief me", "schedule"))
     wait(lambda: post(client, "today.view").json()["prep_text"], "brief")
@@ -205,7 +209,7 @@ def test_a_brief_reaction_reaches_the_next_brief_and_the_person_can_see_it(
     assert knows["brief_reactions"][0]["comment"] == "Lead with recruiters."
 
     # The next run is told their words, as theirs.
-    script.replies = [[TextChunk("Recruiters first.")]]
+    script.replies = brief_replies("Recruiters first.")
     current().dispatch(TurnRequest(session_id, "Brief me again", "schedule"))
     wait(
         lambda: "Recruiters" in str(post(client, "today.view").json()["prep_text"]), "second brief"
@@ -228,3 +232,40 @@ def test_the_registry_lists_what_runs_and_when(client: TestClient) -> None:  # n
     post(client, "mailAgent.save", "commands", mode="both", morning_brief=False)
     off = {a["name"]: a for a in post(client, "agents.registry").json()["agents"]}["Your brief"]
     assert off["state"] == "off" and off["next_run"] is None
+
+
+def test_the_brief_changes_only_through_update_brief_from_any_run(
+    client: TestClient,  # noqa: F811
+    script: Script,  # noqa: F811
+) -> None:
+    session_id = str(current().create("Your brief", [], "daily-prep").id)
+    # A morning run that only replies leaves Today alone and is marked failed.
+    script.replies = [[TextChunk("Here is your brief.")]]
+    current().dispatch(TurnRequest(session_id, "Brief me", "schedule"))
+    wait(lambda: status(client, session_id) in {"failed", "done"}, "first run")
+    assert post(client, "today.view").json()["prep_text"] is None
+
+    # Asked in its own chat, it carries on from the brief on Today and replaces it.
+    script.replies = brief_replies("- Priya still waits on the budget.")
+    current().dispatch(TurnRequest(session_id, "Make my brief", "schedule"))
+    wait(lambda: post(client, "today.view").json()["prep_text"], "brief")
+    wait(lambda: status(client, session_id) == "done", "brief finished")
+    script.replies = brief_replies("- Budget sent. Nothing else waits.")
+    current().dispatch(TurnRequest(session_id, "Update it: I sent the budget", "person"))
+    wait(lambda: "Budget sent" in str(post(client, "today.view").json()["prep_text"]), "updated")
+    told = script.requests[-2]
+    assert "The brief on Today now" in told.instructions
+    assert "Priya still waits on the budget." in told.instructions
+    names = {tool.name for tool in told.tools}
+    assert {"update_brief", "read_plate", "read_thread"} <= names
+    assert "team_assign" not in names and "create_tasks" not in names
+
+
+def test_only_the_brief_agent_can_update_the_brief(client: TestClient) -> None:  # noqa: F811
+    from nexusai.modules.agent import tools
+
+    ctx = current().ctx
+    lead = {tool.name for tool in tools.build_tools(ctx, "s", tools.RunControl())}
+    assert not {"update_brief", "read_plate"} & lead
+    allowed = tools.allowed_for("daily-prep", "task", False)
+    assert allowed is not None and "team_close" in allowed and "ask_user" not in allowed

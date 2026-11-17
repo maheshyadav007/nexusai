@@ -1034,17 +1034,25 @@ class Triggers:
                 "SELECT t.origin,s.agent FROM agent_turns t JOIN agent_sessions s ON s.id=t.session WHERE t.id=?",
                 (turn,),
             )
-            needs_output = any(r["completed_through"] for r in runs) or (
+            scheduled_brief = bool(
                 origins
-                and (origins[0]["origin"] == "mail-review" or origins[0]["agent"] == "daily-prep")
+                and origins[0]["agent"] == "daily-prep"
+                and origins[0]["origin"] == SCHEDULE_ORIGIN
             )
+            needs_output = (
+                any(r["completed_through"] for r in runs)
+                or scheduled_brief
+                or bool(origins and origins[0]["origin"] == "mail-review")
+            )
+            # A morning run's result is the brief on Today, and nothing else counts.
+            if scheduled_brief:
+                output = briefs.saved_in(self.ctx, turn)
             if needs_output and not output:
                 error = "The run ended without producing its expected result."
                 sessions = db.fetch_all("SELECT session FROM agent_turns WHERE id=?", (turn,))
                 if sessions:
                     self.runtime._set(sessions[0]["session"], status="failed", error=error)
         if not error:
-            briefs.capture(self.ctx, turn)
             for run in runs:
                 if run["completed_through"]:
                     completed = json.loads(run["completed_through"])

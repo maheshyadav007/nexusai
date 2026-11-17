@@ -1,4 +1,4 @@
-"""Brief artifacts are immutable outcomes, independent of later chat messages."""
+"""Briefs reach Today only through the brief agent's update_brief, never from what it replies."""
 
 import json
 from contextlib import suppress
@@ -7,7 +7,6 @@ from typing import Any
 
 from nexusai.kernel.database import Migration
 from nexusai.kernel.module import Context
-from nexusai.modules.agent import ui_stream
 from nexusai.modules.agent.prompt_data import untrusted
 from nexusai.modules.mail import accounts
 
@@ -81,34 +80,19 @@ def snapshot(ctx: Context) -> str:
     )
 
 
-def capture(ctx: Context, turn: int) -> None:
-    rows = ctx.bus.db.fetch_all(
-        "SELECT t.session,t.origin,t.closed,t.created,s.agent FROM agent_turns t JOIN agent_sessions s ON s.id=t.session WHERE t.id=?",
-        (turn,),
+def save(ctx: Context, session: str, text: str) -> str:
+    """The brief agent's update_brief. One brief per run: saving again in the same run replaces it."""
+    turns = ctx.bus.db.fetch_all(
+        "SELECT id FROM agent_turns WHERE session=? AND closed=0 ORDER BY id DESC LIMIT 1",
+        (session,),
     )
-    if not rows or rows[0]["agent"] != "daily-prep" or rows[0]["origin"] != "schedule":
-        return
-    parts = [
-        json.loads(row["part"])
-        for row in ctx.bus.db.fetch_all(
-            "SELECT part FROM agent_parts WHERE turn=? ORDER BY id", (turn,)
-        )
-    ]
-    assembled = ui_stream.assemble_messages([{"id": turn, "text": "", "parts": parts}])
-    parts = assembled[-1]["parts"] if assembled else []
-    text = "".join(str(part.get("text", "")) for part in parts if part.get("type") == "text")
-    if not text:
-        posted = [
-            part.get("input", {}).get("text", "")
-            for part in parts
-            if part.get("type") == "tool-tell"
-        ]
-        text = str(posted[-1]) if posted else ""
-    if not text.strip():
-        return
+    if not turns:
+        return "There's no run to save this brief from."
+    turn = turns[0]["id"]
     inputs = ctx.bus.db.fetch_all("SELECT * FROM brief_inputs WHERE turn=?", (turn,))
     account = inputs[0]["account"] if inputs else accounts.current_account(ctx.config)
-    data = inputs[0]["snapshot"] if inputs else "Legacy brief: input snapshot unavailable."
+    # Chat and team runs have no snapshot of their own, so take one now for coverage.
+    data = inputs[0]["snapshot"] if inputs else snapshot(ctx)
     pending = ctx.bus.db.fetch_all(
         "SELECT COUNT(*) n FROM trigger_runs WHERE trigger='mail-received' AND status IN ('pending','running')"
     )[0]["n"]
@@ -117,43 +101,44 @@ def capture(ctx: Context, turn: int) -> None:
         with suppress(ValueError, IndexError):
             coverage = json.loads(data.splitlines()[0].removeprefix("Coverage: "))
     with ctx.bus.unit_of_work() as work:
-        inserted = work.tx.execute(
-            "INSERT OR IGNORE INTO brief_artifacts(turn,session,account,text,created,partial,snapshot) VALUES(?,?,?,?,?,?,?)",
+        work.tx.execute(
+            "INSERT INTO brief_artifacts(turn,session,account,text,created,partial,snapshot) VALUES(?,?,?,?,?,?,?)"
+            " ON CONFLICT(turn) DO UPDATE SET text=excluded.text,created=excluded.created,partial=excluded.partial",
             (
                 turn,
-                rows[0]["session"],
+                session,
                 account,
-                text,
-                (
-                    datetime.now(UTC).isoformat()
-                    if inputs
-                    else rows[0]["created"] or datetime.now(UTC).isoformat()
-                ),
+                text.strip(),
+                datetime.now(UTC).isoformat(),
                 int(bool(pending or coverage.get("partial"))),
                 data,
             ),
         )
+        work.emit("brief.ready", {"turn": turn}, source="agent", trace_id=ctx.trace_id)
+    return "Saved. It's at the top of their Today page now."
 
-        if inserted.rowcount:
-            work.emit("brief.ready", {"turn": turn}, source="agent", trace_id=ctx.trace_id)
+
+def saved_in(ctx: Context, turn: int) -> bool:
+    return bool(ctx.bus.db.fetch_all("SELECT 1 FROM brief_artifacts WHERE turn=?", (turn,)))
+
+
+def current_layer(ctx: Context) -> str:
+    """The brief on Today now, so the next one carries on from it rather than starting over."""
+    brief = latest(ctx)
+    if not brief:
+        return "There's no brief yet. This is the first one."
+    lines = [f"Written {brief['created']}."]
+    if brief["rating"]:
+        lines.append(f"They {'liked' if brief['rating'] == 'up' else 'disliked'} it.")
+    if brief["comment"]:
+        lines.append(f"They said: {brief['comment']}")
+    return " ".join(lines) + "\n" + untrusted(brief["text"])
 
 
 def latest(ctx: Context) -> Any:
     account = accounts.current_account(ctx.config)
     rows = ctx.bus.db.fetch_all(
-        "SELECT a.*,f.rating,f.comment FROM brief_artifacts a LEFT JOIN brief_artifact_feedback f ON f.artifact=a.id WHERE a.account=? ORDER BY a.id DESC LIMIT 1",
+        "SELECT a.*,f.rating,f.comment FROM brief_artifacts a LEFT JOIN brief_artifact_feedback f ON f.artifact=a.id WHERE a.account=? ORDER BY a.created DESC,a.id DESC LIMIT 1",
         (account,),
     )
-    if rows:
-        return rows[0]
-    # Preserve the existing brief at first upgrade, without allowing later person-origin chat replies to replace it.
-    old = ctx.bus.db.fetch_all(
-        "SELECT t.id FROM agent_turns t JOIN agent_sessions s ON s.id=t.session WHERE s.agent='daily-prep' AND t.origin='schedule' AND t.closed=1 AND s.status='done' ORDER BY t.id DESC LIMIT 1"
-    )
-    if old:
-        capture(ctx, old[0]["id"])
-        rows = ctx.bus.db.fetch_all(
-            "SELECT a.*,f.rating,f.comment FROM brief_artifacts a LEFT JOIN brief_artifact_feedback f ON f.artifact=a.id WHERE a.account=? ORDER BY a.id DESC LIMIT 1",
-            (account,),
-        )
     return rows[0] if rows else None

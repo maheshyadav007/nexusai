@@ -27,6 +27,7 @@ from test_agent_work import (
     triaged,
     wait,
 )
+from test_search_and_brief import brief_replies
 
 
 def post(client: TestClient, name: str, value: dict[str, Any]) -> Any:
@@ -270,7 +271,7 @@ def test_scoped_fact_confirmation_and_expiry(client: TestClient) -> None:
 def test_brief_runs_without_history_and_feedback_targets_immutable_artifact(
     client: TestClient, script: Script
 ) -> None:
-    script.default = [TextChunk("First brief.")]
+    script.replies = brief_replies("First brief.")
     db = agent.current().db
     with db.transaction() as tx:
         tx.execute("DELETE FROM agent_defaults WHERE key='mail_learning'")
@@ -282,8 +283,8 @@ def test_brief_runs_without_history_and_feedback_targets_immutable_artifact(
             client.post("/api/queries/today.view").json()
         )
     )
-    script.default = [TextChunk("Second brief.")]
     wait(lambda: agent.current().active_turn(first["prep_session"]) is None)
+    script.replies = brief_replies("Second brief.")
     post(client, "schedules.runNow", {"id": identifier})
     second = wait(
         lambda: (lambda d: d if d["prep_text"] == "Second brief." else None)(

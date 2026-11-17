@@ -499,7 +499,16 @@ def test_the_brief_can_explain_a_quiet_day_without_history_learning(
     rows = client.app.state.bus.db.fetch_all(  # type: ignore[attr-defined]
         "SELECT id FROM schedules WHERE kind = 'mail-brief'"
     )
-    script.default = [TextChunk("There are no open obligations yet. Mail may still be syncing.")]
+    script.replies = [
+        [
+            ToolCall(
+                "b",
+                "update_brief",
+                {"text": "There are no open obligations yet. Mail may still be syncing."},
+            )
+        ],
+        [TextChunk("Updated.")],
+    ]
     triggers = _triggers()
     triggers.fire_schedule("brief-now", rows[0]["id"])
     wait(
@@ -508,7 +517,7 @@ def test_the_brief_can_explain_a_quiet_day_without_history_learning(
         ),
         "quiet-day brief",
     )  # type: ignore[attr-defined]
-    assert len(script.requests) == 1
+    assert len(script.requests) == 2
     assert post(client, "today.view")["prep_text"].startswith("There are no open obligations")
 
 
