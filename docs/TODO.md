@@ -4,6 +4,8 @@ Work agreed on but not planned yet. Each item gets a proper plan before it's bui
 
 ## Monitoring schedules
 
+Planned in full in `docs/SCHEDULES_AND_MONITORS_PLAN.md`. Filling forms and spreadsheets from mail is planned in `docs/FORM_FILLING_PLAN.md`.
+
 Noted 2026-11-17. The Schedules page today only runs a prompt on a clock. The person wants schedules that watch things and alert, for example:
 
 > Monitor these MCP servers every hour (or every minute). If a health check fails, or a condition I set isn't met, email these addresses: …
