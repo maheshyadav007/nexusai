@@ -16,6 +16,33 @@ Same as the other plans: no real-model evals without asking; never delete on Goo
 - `send_mail` takes to, cc, subject and body. No attachments.
 - The Schedules page is a form and a list, and the person dislikes it.
 
+## What the big assistants already do (the baseline)
+
+Checked 2026-11-18, so nothing basic is missed:
+- **ChatGPT (Scheduled):** one-time or recurring tasks, and "monitor for changes" or react to supported events. A Scheduled page to create, review, share and manage them. Results by push, email or both. Runs while the person is offline. Caps on active tasks by plan (3 on Free, up to 15 on Pro and Enterprise). No webhooks, and a task in a project can't read the project's files.
+- **Gemini (Scheduled actions):** a prompt at a set time or on repeat, with a page to pause, resume, edit and delete. Up to 10 active on paid plans.
+- **Microsoft 365 Copilot (Scheduled prompts):** schedule any prompt from Teams, Outlook or Copilot chat; review them under Tasks › Scheduled; schedules can call agents; hourly, daily, weekly, monthly or yearly; admins govern the feature.
+- **Claude:** Routines run saved prompts in the cloud on a schedule; desktop tasks run on the person's computer only while the app is open; managed agents take a cron expression and start a fresh session each run.
+
+What they all share, and what this plan must not miss:
+1. **Made by asking**, in plain words, and confirmed before it's saved.
+2. **A page to see and manage them:** pause, resume, edit, delete and **run now**.
+3. **A history of runs** with what each run produced.
+4. **Delivery the person chooses:** a notification, an email, or a message in a chat that collects the results.
+5. **Common cadences** (once, hourly, daily, weekdays, weekly, monthly, yearly) and the person's **time zone**, with daylight saving handled.
+6. **Limits:** a cap on how many are active, and a cost limit per run.
+7. **Agents and tools inside a run:** the run can use the same tools and connectors as a chat.
+8. **Watching for changes** and **reacting to events**, not only clocks.
+
+Gaps worth closing that they leave open, or that matter more on a desktop app:
+- **Missed runs.** NexusAI runs on the person's computer, like Claude's desktop tasks: if it's closed or asleep, a run is missed. Each schedule says whether to catch up once on start, or skip. The run history shows what was missed.
+- **An end:** "for the next 4 weeks", "until 30 Dec", or "5 times".
+- **Working days and holidays:** "every working day", skipping weekends and a holiday list.
+- **Edit by asking:** "move my Friday report to 6" changes the existing schedule instead of making a new one.
+- **The schedule's own failures** are reported once: a run that can't start (no model, no network) shows on the page and in a notification, not silently.
+- **Fresh or continuing:** each run starts fresh by default, with an option to carry on in one conversation (already a setting on today's schedules).
+- **Duplicate and share** a schedule as a template, which corporate teams use to spread good ones.
+
 ## What a team head needs watched
 
 Grouped by what they'd say. Each becomes a ready-made template.
@@ -90,11 +117,11 @@ Redesigned with this work, in the style of Sessions and Tasks:
 
 ## Order of work
 
-1. **Model and runner.** Tables, contracts for the five parts, the runner with timeouts, state and history, and the cool-down and recovery rules. Fake clock tests: a failing check alerts once, recovers once, escalates after N.
+1. **Model and runner.** Tables, contracts for the five parts, the runner with timeouts, state and history, and the cool-down and recovery rules; cadences up to yearly, working days, an end, the time zone, missed-run catch-up, a cap on active schedules. Fake clock tests: a failing check alerts once, recovers once, escalates after N; a closed app catches up once.
 2. **Checks with no model.** Web address, MCP tool call, mail count, tasks and reminders, folder. Fake HTTP and fake MCP in tests.
 3. **Actions.** In-app notification, email to an approved list (first send asks), task or reminder, run an agent. The approval for a standing recipient list.
 4. **Asking for a monitor.** The proposal card from a chat request, with the form filled by the model and validated.
-5. **The page.** List, details with history, templates, editing.
+5. **The page.** List, details with history and each run's output, run now, pause and resume, templates, duplicate, editing; edit by asking from the chat.
 6. **Old schedules become monitors**, with a migration and no change in what they do.
 7. **Web search and page watch** (shares the web search tool with the form-filling plan).
 8. **Real checks, with permission:** a real MCP server and endpoint, alerts to the person's own address on Gmail.
