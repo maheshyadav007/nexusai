@@ -456,3 +456,20 @@ test("several things on Needs you can be done or declined together", async ({ pa
   await expect(page.getByText(one)).toBeVisible();
   await expect(page.getByText(three)).toHaveCount(0);
 });
+
+test("the team shows calm cards, and the chosen agent's details beside them", async ({ page }) => {
+  await page.goto("/agent/channel?tab=team");
+  const cards = page.getByTestId("agent-card");
+  await expect(cards.first()).toBeVisible();
+  const organizer = cards.filter({ hasText: "@organizer" });
+  await organizer.getByRole("button", { name: /^Show / }).click();
+  const detail = page.getByTestId("agent-detail");
+  await expect(detail).toContainText("@organizer");
+  await expect(detail.getByRole("button", { name: "Rename" })).toBeVisible();
+  // Talk sits in the card's footer, inside the card, whatever the agent's name.
+  const talk = organizer.getByRole("button", { name: /^Talk to / });
+  const card = await organizer.boundingBox();
+  const button = await talk.boundingBox();
+  expect(card && button && button.x + button.width <= card.x + card.width).toBeTruthy();
+  await noViolations(page);
+});
