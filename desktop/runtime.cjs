@@ -115,4 +115,12 @@ function waitInstalledServices(resources, executable, spawnProcess = spawn) {
   });
 }
 
-module.exports = { freePort, persistentFrontendPort, waitReady, waitExit, isAlive, launchInstaller, runInstaller, waitInstalledServices };
+// The bundled Python and Node run as shipped, whatever this computer set up for its own. Python
+// also starts with -I, which ignores every PYTHON* variable; Node has no such flag, so its
+// variables are left out. An installed app takes no NexusAI settings from the computer either.
+const PYTHON_FLAGS = ['-I', '-X', 'utf8'];
+function serviceEnv(env, packaged) {
+  return Object.fromEntries(Object.entries(env).filter(([name]) => !/^(NODE_OPTIONS|NODE_PATH)$/i.test(name) && !(packaged && /^NEXUSAI_/i.test(name))));
+}
+
+module.exports = { PYTHON_FLAGS, serviceEnv, freePort, persistentFrontendPort, waitReady, waitExit, isAlive, launchInstaller, runInstaller, waitInstalledServices };

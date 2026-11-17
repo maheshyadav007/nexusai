@@ -168,9 +168,14 @@ def extract_text(filename: str, data: bytes) -> str:
     return extract_detail(filename, data).text
 
 
+# Workers run on this Python as shipped: -I ignores the computer's PYTHONHOME, PYTHONPATH and
+# user packages, which would otherwise load another version's files.
+ISOLATED_PYTHON = (sys.executable, "-I", "-X", "utf8")
+
+
 def extract_safely(filename: str, data: bytes, seconds: float = WORKER_SECONDS) -> Extraction:
     """In a separate process with a time limit, so one bad file costs only itself."""
-    command = [sys.executable, "-m", "nexusai.modules.mail.extract_worker"]
+    command = [*ISOLATED_PYTHON, "-m", "nexusai.modules.mail.extract_worker"]
     # A newline in a name would split the header. The name is only used for its ending.
     header = filename.replace("\n", " ").encode("utf-8") + b"\n"
     try:

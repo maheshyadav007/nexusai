@@ -2,7 +2,6 @@
 
 import json
 import subprocess
-import sys
 import threading
 from dataclasses import dataclass
 
@@ -11,6 +10,7 @@ import structlog
 from nexusai.kernel.database import Migration
 from nexusai.kernel.module import Context
 from nexusai.modules.mail import accounts, store
+from nexusai.modules.mail.extract import ISOLATED_PYTHON
 from nexusai.modules.mail.parse import Part, parse_message
 from nexusai.modules.mail.rules import evaluate, own_domain_of
 
@@ -48,7 +48,7 @@ def failure_message(detail: str) -> str:
 
 
 def worker_command(path: str, start: int) -> list[str]:
-    return [sys.executable, "-m", "nexusai.modules.mail.pst_worker", path, str(start)]
+    return [*ISOLATED_PYTHON, "-m", "nexusai.modules.mail.pst_worker", path, str(start)]
 
 
 @dataclass

@@ -428,6 +428,15 @@ def test_reading_runs_apart_so_a_bad_file_cant_take_the_app_down() -> None:
     assert extract_safely("a.txt", b"hello").text == "hello"
 
 
+def test_reading_ignores_another_python_set_up_on_the_computer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Without -I these would point the worker at a Python that isn't there, and it couldn't start.
+    monkeypatch.setenv("PYTHONHOME", str(tmp_path / "other-python"))
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path / "other-python" / "Lib"))
+    assert extract_safely("a.txt", "héllo".encode()).text == "héllo"
+
+
 def test_a_file_that_failed_can_be_read_again(client: TestClient) -> None:
     added = upload(client, "plan.txt", b"walrus plan")
     read(client, added["key"])

@@ -135,7 +135,9 @@ module.exports = async function ci({ work, configFile, build, test, run, betaVer
     fs.writeFileSync(pointer, '[Install]\r\nCurrent=..\\..\\Windows\r\n');
     const recovery = path.join(ciRoot, 'launcher-recovery');
     fs.mkdirSync(recovery, { recursive: true });
-    await run(launcher, ['--smoke-dir', recovery], { timeout: 60000 });
+    // It also starts despite another Python and Node set up on this computer.
+    const elsewhere = path.join(ciRoot, 'not-ours');
+    await run(launcher, ['--smoke-dir', recovery], { timeout: 60000, env: { ...process.env, PYTHONHOME: elsewhere, PYTHONPATH: elsewhere, NODE_OPTIONS: `--require "${path.join(elsewhere, 'missing.js')}"` } });
     await waitFile(path.join(recovery, 'result.json'), 240000);
     const started = JSON.parse(fs.readFileSync(path.join(recovery, 'result.json'), 'utf8')).version;
     fs.writeFileSync(pointer, goodPointer);

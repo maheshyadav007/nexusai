@@ -5,7 +5,7 @@ const { randomBytes } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { freePort, persistentFrontendPort, waitReady, waitExit, isAlive, launchInstaller, runInstaller, waitInstalledServices } = require('./runtime.cjs');
+const { PYTHON_FLAGS, serviceEnv, freePort, persistentFrontendPort, waitReady, waitExit, isAlive, launchInstaller, runInstaller, waitInstalledServices } = require('./runtime.cjs');
 const layout = require('./layout.cjs');
 const { createQuickAsk } = require('./quick-ask.cjs');
 
@@ -456,10 +456,10 @@ async function start() {
     while (frontendPort === backendPort) backendPort = await freePort();
     backendUrl = `http://127.0.0.1:${backendPort}`;
     origin = `http://127.0.0.1:${frontendPort}`;
-    const env = { ...process.env, NEXUSAI_APP_DATA: dataDir, NEXUSAI_HOST: '127.0.0.1',
+    const env = { ...serviceEnv(process.env, app.isPackaged), NEXUSAI_APP_DATA: dataDir, NEXUSAI_HOST: '127.0.0.1',
       TZ: process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone,
       NEXUSAI_PORT: String(backendPort), NEXUSAI_ALLOWED_ORIGINS: `${origin},${backendUrl}`,
-      NEXUSAI_ENV_FILE: path.join(dataDir, 'company.env'), PYTHONUTF8: '1', PYTHONNOUSERSITE: '1',
+      NEXUSAI_ENV_FILE: path.join(dataDir, 'company.env'),
       NEXUSAI_ENV_DEFAULTS_FILE: path.join(resources, 'deployment.env'),
     };
     if (smokeDir) { delete env.NEXUSAI_HOME; delete env.NEXUSAI_SECRETS_TEST_FILE; }
@@ -469,7 +469,7 @@ async function start() {
     }
     log(`Starting NexusAI ${app.getVersion()} (${config.signed ? 'signed' : 'unsigned pilot'})`);
     backend = child(path.join(resources, 'python', process.platform === 'win32' ? 'python.exe' : 'bin/python3'),
-      ['-m', 'nexusai.api.desktop'], { env: { ...env, NEXUSAI_DESKTOP_CONTROL_TOKEN: controlToken }, cwd: dataDir });
+      [...PYTHON_FLAGS, '-m', 'nexusai.api.desktop'], { env: { ...env, NEXUSAI_DESKTOP_CONTROL_TOKEN: controlToken }, cwd: dataDir });
     const site = path.join(resources, 'frontend');
     frontend = child(path.join(resources, 'node', process.platform === 'win32' ? 'node.exe' : 'node'),
       [path.join(resources, 'frontend-server.cjs'), path.join(site, 'server.js')], { cwd: site, env: { ...env, PORT: String(frontendPort), HOSTNAME: '127.0.0.1',
