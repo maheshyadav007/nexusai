@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 
 from nexusai.api.app import create_app
 from nexusai.kernel.config import Config
-from nexusai.modules.agent import cards, gateway
+from nexusai.modules.agent import cards, gateway, team
 from nexusai.modules.agent import module as agent
 from nexusai.modules.agent.providers import ModelRequest, TextChunk, ToolCall
 
@@ -285,17 +285,16 @@ def test_the_team_block_is_stable_and_live_state_comes_last(
 # Tasks
 
 
-def test_a_task_needs_a_contract_and_an_allowed_recipient(
+def test_an_objective_is_enough_and_the_recipient_must_be_allowed(
     client: TestClient, script: TeamScript
 ) -> None:
     session = post(client, "session.create")["id"]
-    script.say(
-        lead(),
-        [ToolCall("a", "team_assign", {**ASSIGN, "done_criteria": "   "})],
-        [TextChunk("ok")],
-    )
+    only = {"to": ASSIGN["to"], "objective": ASSIGN["objective"]}
+    script.say(lead(), [ToolCall("a", "team_assign", only)], [TextChunk("ok")])
     chat(client, session, "Go")
-    assert "needs done_criteria" in script.told(lead())[-1]
+    assert " given to " in script.told(lead())[-1]
+    row = agent.current().db.fetch_all("SELECT * FROM team_tasks ORDER BY id DESC LIMIT 1")[0]
+    assert dict(row)["done_criteria"] == team.DEFAULT_DONE, dict(row)
     script.say(
         lead(),
         [ToolCall("b", "team_assign", {**ASSIGN, "to": "@meeting"})],
@@ -692,3 +691,79 @@ def test_a_task_lets_the_mail_agent_file_mail_through_approval() -> None:
     assert "update_mail" in (tools.allowed_for("mail", "task", False) or set())
     assert "update_mail" not in (tools.allowed_for("mail", "person", False) or set())
     assert "send_mail" not in (tools.allowed_for("mail", "task", False) or set())
+
+
+def test_tasks_and_reminders_are_the_organizers_and_come_back_in_the_same_turn(
+    config: Config, script: TeamScript
+) -> None:
+    waiting = replace(config, team=replace(config.team, assign_wait_seconds=20))
+    with TestClient(create_app(waiting), base_url="http://127.0.0.1:4100") as client:
+        session = post(client, "session.create")["id"]
+        organizer = cards.name(agent.current().db, "organizer")
+        task = {"tasks": [{"title": "Send the budget ask", "due": "2030-01-03"}]}
+        script.say(
+            organizer,
+            [ToolCall("l", "list_tasks", {})],
+            [ToolCall("c", "create_tasks", task)],
+            [
+                ToolCall(
+                    "r", "team_close", {"task": 1, "action": "report", "outcome": "Added task 1."}
+                )
+            ],
+            [TextChunk("Reported.")],
+        )
+        script.say(
+            lead(),
+            [ToolCall("x", "create_tasks", task)],
+            [ToolCall("a", "team_assign", {"to": "@organizer", "objective": "Add a task"})],
+            [ToolCall("v", "team_close", {"task": 1, "action": "verify", "outcome": "Seen."})],
+            [TextChunk("Added it.")],
+        )
+        chat(client, session, "Add a task to send the budget ask by 3 January 2030")
+        told = script.told(lead())
+        # The lead can't make tasks itself, and is pointed at who can.
+        assert "is @organizer's work" in told[1]
+        # The report came back inside the lead's own turn, ready to check.
+        assert "reported task 1" in told[2] and "Added task 1." in told[2]
+        assert "verified" in told[3]
+        db = agent.current().db
+        assert [r["title"] for r in db.fetch_all("SELECT title FROM tasks")] == [
+            "Send the budget ask"
+        ]
+        offered = {t.name for t in script.requests[0][1].tools}
+        assert "create_tasks" not in offered and "team_assign" in offered
+
+
+def test_a_blocked_task_tells_the_giver_what_was_done_before_it_stopped(
+    client: TestClient, script: TeamScript
+) -> None:
+    session = post(client, "session.create")["id"]
+    script.say(mail(), [ToolCall("l", "list_categories", {})], [TextChunk("Looked.")])
+    script.say(lead(), [ToolCall("a", "team_assign", ASSIGN)], [TextChunk("ok")])
+    chat(client, session, "Go")
+    task = wait(lambda: agent.current().db.fetch_all("SELECT id FROM team_tasks"), "task")[0]["id"]
+    wait(lambda: task_row(task)["state"] == "blocked" or None, "blocked", 20)
+    woken = wait(
+        lambda: [t for t in script.told(lead()) if "is blocked" in t] or None, "giver woken", 20
+    )[0]
+    assert "Done before it stopped, oldest first: list_categories (" in woken
+
+
+def test_stop_ends_the_wait_for_a_hand_over_at_once() -> None:
+    import threading
+    import time
+    from types import SimpleNamespace
+
+    row = {"state": "working", "wake": None, "owner": "organizer"}
+
+    class Db:
+        def fetch_all(self, sql: str, args: tuple[Any, ...] = ()) -> list[Any]:
+            return [row] if "team_tasks" in sql else []
+
+    ctx = SimpleNamespace(bus=SimpleNamespace(db=Db()))
+    stopped = threading.Event()
+    stopped.set()
+    began = time.monotonic()
+    told = team.await_result(ctx, "Task 7 given to @organizer.", 60, stopped)  # type: ignore[arg-type]
+    assert time.monotonic() - began < 1
+    assert told.startswith("Task 7 is still being worked on")

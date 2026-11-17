@@ -56,7 +56,9 @@ def last_result(script: Script) -> str:
 def use_tool(client: TestClient, script: Script, call: ToolCall) -> str:
     session = new_session(client)
     script.replies = [[call], [TextChunk("Done.")]]
-    chat(client, session, "Do it")
+    # Tasks and reminders are the Organizer's tools, so the call goes to it.
+    owner = "@organizer " if call.name in tools.ORGANIZER_ONLY else ""
+    chat(client, session, f"{owner}Do it")
     return last_result(script)
 
 

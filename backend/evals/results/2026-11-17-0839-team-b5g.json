@@ -1,0 +1,627 @@
+{
+ "runs": [
+  {
+   "model": "GPT-6-Luna",
+   "model_id": "gpt-6-luna",
+   "effort": "medium",
+   "passed": 6,
+   "cases": 7,
+   "tokens": 228046,
+   "plan_before": {},
+   "plan_after": {
+    "x-codex-primary-used-percent": 8.0,
+    "x-codex-secondary-used-percent": 43.0,
+    "x-codex-primary-window-minutes": 300.0,
+    "x-codex-primary-over-secondary-limit-percent": 0.0,
+    "x-codex-secondary-window-minutes": 10080.0,
+    "x-codex-primary-reset-after-seconds": 15526.0,
+    "x-codex-secondary-reset-after-seconds": 254199.0,
+    "x-codex-primary-reset-at": 1794920315.0,
+    "x-codex-secondary-reset-at": 1795158988.0,
+    "x-codex-credits-balance": 0.0
+   },
+   "plan_used": {
+    "x-codex-primary-used-percent": 0.0,
+    "x-codex-secondary-used-percent": 0.0,
+    "x-codex-primary-over-secondary-limit-percent": 0.0
+   },
+   "results": [
+    {
+     "case": "p-find-patent",
+     "approvals": [],
+     "sync_seconds": 0.5,
+     "thread_count": 21,
+     "reply_seconds": 11.6,
+     "timed_out": false,
+     "answered_by": "session",
+     "reply": "Found it: **“IDF-6G-0412: prior art response due Wednesday 25 November”** from IP Office. It’s about the prior art search for *Predictive beam switching using channel charting*; respond via the IP portal by **Wednesday, 25 November**, or the filing will lapse. [1](#cite-1)",
+     "missed": [],
+     "passed": true,
+     "tokens": {
+      "calls": 4,
+      "input": 20643,
+      "output": 152
+     },
+     "seconds": 11.6,
+     "tasks": [],
+     "transcript": {
+      "runs": [
+       {
+        "id": 1,
+        "session": "5c536eabf8074955896ddcc947eec6e5",
+        "agent": null,
+        "chat_agent": "session",
+        "origin": "person",
+        "cause": "gateway:app",
+        "parent_turn": null,
+        "failure": null,
+        "text": "Find the email about the patent prior art response."
+       }
+      ],
+      "messages": [],
+      "tools": [
+       {
+        "session": "5c536eabf8074955896ddcc947eec6e5",
+        "tool": "read_work_board",
+        "status": "done",
+        "input": "{}",
+        "result": "The board is empty."
+       },
+       {
+        "session": "5c536eabf8074955896ddcc947eec6e5",
+        "tool": "search_mail",
+        "status": "done",
+        "input": "Search mail: patent prior art response",
+        "result": "<untrusted>\n[thread 10] 2026-11-17 | IDF-6G-0412: prior art response due Wednesday 25 November | ip-office@corp.example, tester@example.com | Dear inventor, The patent attorney needs your response to the prior art search for invention disclosure IDF-6G-0412 (Predictive beam switching using channel charting) by…\n</untrusted>"
+       },
+       {
+        "session": "5c536eabf8074955896ddcc947eec6e5",
+        "tool": "read_thread",
+        "status": "done",
+        "input": "Read conversation 10",
+        "result": "<untrusted>\nConversation 10\nSubject: IDF-6G-0412: prior art response due Wednesday 25 November\nFrom IP Office <ip-office@corp.example> on 2026-11-17T08:37:36+00:00\nDear inventor,\n\nThe patent attorney needs your response to the prior art search for invention disclosure IDF-6G-0412 (Predictive beam switching using channel charting) by Wednesday 25 November. If no response is received, the filing wil"
+       }
+      ],
+      "replies": {
+       "5c536eabf8074955896ddcc947eec6e5": [
+        "Found it: **“IDF-6G-0412: prior art response due Wednesday 25 November”** from IP Office. It’s about the prior art search for *Predictive beam switching using channel charting*; respond via the IP portal by **Wednesday, 25 November**, or the filing will lapse. [1](#cite-1)"
+       ]
+      }
+     }
+    },
+    {
+     "case": "p-hq-waiting",
+     "approvals": [],
+     "sync_seconds": 0.5,
+     "thread_count": 21,
+     "reply_seconds": 19.2,
+     "timed_out": false,
+     "answered_by": "session",
+     "reply": "Yes—two items are waiting on you from HQ:\n\n- **Vikram:** Send two AI-RAN field-trial KPI slides by **2 PM today** for the 4 PM steering call. This is overdue now; send them as soon as you can. [1](#cite-1)\n- **Jae-won Park:** Confirm by **Friday, 20 November (KST)** whether Bangalore can own the RAN1#123 AI-native air-interface contributions, and name two delegates. [2](#cite-2)\n\nThere’s also an HQ action due Friday: align with Seoul on the beam-prediction KPI definitions. [3](#cite-3) You’re waiting on Jae-won to confirm which baseline Seoul is using, and you’d promised to share simulation results by Thursday. [4](#cite-4)\n\nI can draft any of these replies.",
+     "missed": [
+      "reply mentions none of ['seung-ho', 'seungho', 'fl summary']"
+     ],
+     "passed": false,
+     "tokens": {
+      "calls": 5,
+      "input": 28286,
+      "output": 384
+     },
+     "seconds": 19.2,
+     "tasks": [],
+     "transcript": {
+      "runs": [
+       {
+        "id": 1,
+        "session": "a867d4f8bbeb4a5fb04d6b0aa123fc88",
+        "agent": null,
+        "chat_agent": "session",
+        "origin": "person",
+        "cause": "gateway:app",
+        "parent_turn": null,
+        "failure": null,
+        "text": "Is anything from HQ waiting on me?"
+       }
+      ],
+      "messages": [],
+      "tools": [
+       {
+        "session": "a867d4f8bbeb4a5fb04d6b0aa123fc88",
+        "tool": "read_work_board",
+        "status": "done",
+        "input": "{}",
+        "result": "The board is empty."
+       },
+       {
+        "session": "a867d4f8bbeb4a5fb04d6b0aa123fc88",
+        "tool": "load_skill",
+        "status": "done",
+        "input": "{\"name\": \"chasing-follow-ups\"}",
+        "result": "Skill chasing-follow-ups loaded. Follow it where it applies.\n\n# Chasing follow-ups\n\n1. Look for two kinds of threads:\n   - **Waiting on others:** the person asked something, and the last message is theirs with no answer after a reasonable time, usually 3 working days.\n   - **Owed by the person:** someone asked them something, and they haven't answered.\n2. Leave out newsletters, automated mail and "
+       },
+       {
+        "session": "a867d4f8bbeb4a5fb04d6b0aa123fc88",
+        "tool": "list_memory",
+        "status": "done",
+        "input": "Read what's remembered",
+        "result": "<untrusted>\nNothing remembered yet.\n</untrusted>"
+       },
+       {
+        "session": "a867d4f8bbeb4a5fb04d6b0aa123fc88",
+        "tool": "search_mail",
+        "status": "done",
+        "input": "Search mail: HQ",
+        "result": "<untrusted>\n[thread 2] 2026-11-17 | Steering call moved to 4 PM today - need AI-RAN KPI slides | vikram.desai@corp.example, tester@example.com | HQ moved the 6G steering call to 4 PM today. Please send me 2 slides on the AI-RAN field trial KPIs (throughput gain vs…\n</untrusted>"
+       },
+       {
+        "session": "a867d4f8bbeb4a5fb04d6b0aa123fc88",
+        "tool": "search_mail",
+        "status": "done",
+        "input": "Search mail: Jae-won Park",
+        "result": "<untrusted>\n[thread 12] 2026-11-17 | Seoul 6G research team - organisation update | jaewon.park@corp.example, vikram.desai@corp.example, tester@example.com | …sub-team stays with me. No change to our joint plans. Best regards, Jae-won\n[thread 3] 2026-11-17 | RAN1#123 AI-native air interface - Bangalore ownership | jaewon.park@corp.example, tester@example.com, vikram.desai@corp.example | …can take "
+       },
+       {
+        "session": "a867d4f8bbeb4a5fb04d6b0aa123fc88",
+        "tool": "search_mail",
+        "status": "done",
+        "input": "Search mail: Seoul 6G Park",
+        "result": "<untrusted>\n[thread 12] 2026-11-17 | Seoul 6G research team - organisation update | jaewon.park@corp.example, vikram.desai@corp.example, tester@example.com | …from next month, Dr. Soo-jin Han will lead the ISAC sub-team in Seoul, and the AI-RAN sub-team stays with me. No change to our…\n[thread 16] 2026-11-17 | Re: Re: Re: 6G KPI definitions across sites | vikram.desai@corp.example, 6g-bangalore-le"
+       },
+       {
+        "session": "a867d4f8bbeb4a5fb04d6b0aa123fc88",
+        "tool": "read_thread",
+        "status": "done",
+        "input": "Read 4 conversations: 2, 3, 11, 16",
+        "result": "<untrusted>\nConversation 2\nSubject: Steering call moved to 4 PM today - need AI-RAN KPI slides\nFrom Vikram Desai <vikram.desai@corp.example> on 2026-11-17T08:37:51+00:00\nHQ moved the 6G steering call to 4 PM today. Please send me 2 slides on the AI-RAN field trial KPIs (throughput gain vs baseline, and the beam management results) by 2 PM so I can merge them.\n\nVikram\n\n---\n\nConversation 3\nSubject: "
+       }
+      ],
+      "replies": {
+       "a867d4f8bbeb4a5fb04d6b0aa123fc88": [
+        "Yes—two items are waiting on you from HQ:\n\n- **Vikram:** Send two AI-RAN field-trial KPI slides by **2 PM today** for the 4 PM steering call. This is overdue now; send them as soon as you can. [1](#cite-1)\n- **Jae-won Park:** Confirm by **Friday, 20 November (KST)** whether Bangalore can own the RAN1#123 AI-native air-interface contributions, and name two delegates. [2](#cite-2)\n\nThere’s also an HQ action due Friday: align with Seoul on the beam-prediction KPI definitions. [3](#cite-3) You’re waiting on Jae-won to confirm which baseline Seoul is using, and you’d promised to share simulation results by Thursday. [4](#cite-4)\n\nI can draft any of these replies."
+       ]
+      }
+     }
+    },
+    {
+     "case": "h-file-3gpp",
+     "approvals": [
+      {
+       "id": 1,
+       "tool": "update_mail",
+       "summary": "File under 3gpp: “RAN1#123 Tdoc submission deadline and owners”, “RAN1 FL summary comment request”, “RAN1#123 AI-native air interface - Bangalore ownership”",
+       "detail": "- “RAN1#123 Tdoc submission deadline and owners”\n- “RAN1 FL summary comment request”\n- “RAN1#123 AI-native air interface - Bangalore ownership”",
+       "choice": "once"
+      }
+     ],
+     "sync_seconds": 0.5,
+     "thread_count": 21,
+     "reply_seconds": 17.7,
+     "timed_out": false,
+     "answered_by": "session",
+     "reply": "I found four possible matches. The first three are clearly RAN1 standards conversations; the town hall recap mentions RAN1 but is a general lab update. I’ll file the three standards threads into the existing 3GPP category.\nFiled the three RAN1 standards conversations into **3GPP**. I left the general lab town hall recap out.",
+     "missed": [],
+     "passed": true,
+     "tokens": {
+      "calls": 7,
+      "input": 41290,
+      "output": 262
+     },
+     "seconds": 17.7,
+     "tasks": [],
+     "transcript": {
+      "runs": [
+       {
+        "id": 1,
+        "session": "f41105a9026642248c99adf79c19f7b4",
+        "agent": null,
+        "chat_agent": "session",
+        "origin": "person",
+        "cause": "gateway:app",
+        "parent_turn": null,
+        "failure": null,
+        "text": "File all the RAN1 standards mail into 3GPP."
+       }
+      ],
+      "messages": [],
+      "tools": [
+       {
+        "session": "f41105a9026642248c99adf79c19f7b4",
+        "tool": "read_work_board",
+        "status": "done",
+        "input": "{}",
+        "result": "The board is empty."
+       },
+       {
+        "session": "f41105a9026642248c99adf79c19f7b4",
+        "tool": "find_tools",
+        "status": "done",
+        "input": "{\"query\": \"mail agent file or re-sort many emails into category, judge mail\"}",
+        "result": "You can use these from your next step:\n- list_mail: Browse conversations in a mail folder or category, newest first.\n- update_category: Change one category in place: rename it, change its Priority setting, mode or personalized description, or set or clear its exact sender / literal subject-prefix rule.\n- apply_mail_learning_answers: Apply the person’s explicit interview answers to supplied mail gr"
+       },
+       {
+        "session": "f41105a9026642248c99adf79c19f7b4",
+        "tool": "list_categories",
+        "status": "done",
+        "input": "Read your categories",
+        "result": "3GPP: 0 conversations, made by user, mode: smart, description: 3GPP\n3GPP Briefing: 0 conversations, made by rule, mode: exact, description: , exact sender: any; literal subject prefix: [3GPP Briefing]\nAI-RAN: 0 conversations, made by user, mode: smart, description: AI-RAN\nBroadcast: 0 conversations, made by rule, mode: smart, description: Mail to many people that no Exact rule caught\nForums: 0 con"
+       },
+       {
+        "session": "f41105a9026642248c99adf79c19f7b4",
+        "tool": "search_mail",
+        "status": "done",
+        "input": "Search mail: RAN1 standards",
+        "result": "<untrusted>\n[thread 4] 2026-11-17 | RAN1#123 Tdoc submission deadline and owners | minji.lee@corp.example, 6g-ran1-delegates@corp.example | Dear delegates, The Tdoc submission deadline for RAN1#123 is Thursday 19 November, 23:59 UTC. Owners for the remaining drafts: - AI/ML CSI compression evaluation:…\n[thread 13] 2026-11-17 | RAN1 FL summary comment request | seungho.kim@corp.example, tester@exam"
+       },
+       {
+        "session": "f41105a9026642248c99adf79c19f7b4",
+        "tool": "read_thread",
+        "status": "done",
+        "input": "Read 4 conversations: 4, 13, 3, 5",
+        "result": "<untrusted>\nConversation 4\nSubject: RAN1#123 Tdoc submission deadline and owners\nFrom Min-ji Lee <minji.lee@corp.example> on 2026-11-17T08:38:11+00:00\nDear delegates,\n\nThe Tdoc submission deadline for RAN1#123 is Thursday 19 November, 23:59 UTC. Owners for the remaining drafts:\n- AI/ML CSI compression evaluation: Ananya Krishnan\n- NTN uplink timing: Rohit Bansal\n- ISAC channel model: Hyun-woo Choi"
+       },
+       {
+        "session": "f41105a9026642248c99adf79c19f7b4",
+        "tool": "update_mail",
+        "status": "done",
+        "input": "- “RAN1#123 Tdoc submission deadline and owners”\n- “RAN1 FL summary comment request”\n- “RAN1#123 AI-native air interface - Bangalore ownership”",
+        "result": "Updated 3 conversations."
+       }
+      ],
+      "replies": {
+       "f41105a9026642248c99adf79c19f7b4": [
+        "I found four possible matches. The first three are clearly RAN1 standards conversations; the town hall recap mentions RAN1 but is a general lab update. I’ll file the three standards threads into the existing 3GPP category.Filed the three RAN1 standards conversations into **3GPP**. I left the general lab town hall recap out."
+       ]
+      }
+     }
+    },
+    {
+     "case": "h-file-hr",
+     "approvals": [
+      {
+       "id": 1,
+       "tool": "update_mail",
+       "summary": "File under hr: “People managers: mid-year calibration and other updates”, “Leave request Tuesday 24 November to Saturday 28 November”",
+       "detail": "- “People managers: mid-year calibration and other updates”\n- “Leave request Tuesday 24 November to Saturday 28 November”",
+       "choice": "once"
+      }
+     ],
+     "sync_seconds": 0.5,
+     "thread_count": 21,
+     "reply_seconds": 16.2,
+     "timed_out": false,
+     "answered_by": "session",
+     "reply": "Filed the mid-year calibration and Farah’s leave request emails under HR. [1](#cite-1) [2](#cite-2)",
+     "missed": [],
+     "passed": true,
+     "tokens": {
+      "calls": 6,
+      "input": 34379,
+      "output": 245
+     },
+     "seconds": 16.2,
+     "tasks": [],
+     "transcript": {
+      "runs": [
+       {
+        "id": 1,
+        "session": "c85b02a3e9594dce961d53fbd7a1742d",
+        "agent": null,
+        "chat_agent": "session",
+        "origin": "person",
+        "cause": "gateway:app",
+        "parent_turn": null,
+        "failure": null,
+        "text": "File the calibration and leave request emails under HR."
+       }
+      ],
+      "messages": [],
+      "tools": [
+       {
+        "session": "c85b02a3e9594dce961d53fbd7a1742d",
+        "tool": "read_work_board",
+        "status": "done",
+        "input": "{}",
+        "result": "The board is empty."
+       },
+       {
+        "session": "c85b02a3e9594dce961d53fbd7a1742d",
+        "tool": "find_tools",
+        "status": "done",
+        "input": "{\"query\": \"mail filing categories move conversations to category in bulk; list categories\"}",
+        "result": "You can use these from your next step:\n- list_mail: Browse conversations in a mail folder or category, newest first.\n- list_categories: See the mail categories, their rules and how much is in each.\n- update_mail: Change conversations in one call: category, status, flag, read or archive.\n- trash_mail: Move conversations to Trash in one call, which asks first.\n- create_categories: Create categories "
+       },
+       {
+        "session": "c85b02a3e9594dce961d53fbd7a1742d",
+        "tool": "list_categories",
+        "status": "done",
+        "input": "Read your categories",
+        "result": "3GPP: 0 conversations, made by user, mode: smart, description: 3GPP\n3GPP Briefing: 0 conversations, made by rule, mode: exact, description: , exact sender: any; literal subject prefix: [3GPP Briefing]\nAI-RAN: 0 conversations, made by user, mode: smart, description: AI-RAN\nBroadcast: 0 conversations, made by rule, mode: smart, description: Mail to many people that no Exact rule caught\nForums: 0 con"
+       },
+       {
+        "session": "c85b02a3e9594dce961d53fbd7a1742d",
+        "tool": "search_mail",
+        "status": "done",
+        "input": "Search mail: calibration",
+        "result": "<untrusted>\n[thread 6] 2026-11-17 | People managers: mid-year calibration and other updates | hrbp-rnd@corp.example, people-managers-blr@corp.example | …HR portal. 2. Mandatory: part leaders and group heads must enter mid-year calibration ratings for every direct report in the HR portal by Saturday…\n</untrusted>"
+       },
+       {
+        "session": "c85b02a3e9594dce961d53fbd7a1742d",
+        "tool": "search_mail",
+        "status": "done",
+        "input": "Search mail: leave request",
+        "result": "<untrusted>\n[thread 7] 2026-11-17 | Leave request Tuesday 24 November to Saturday 28 November | farah.siddiqui@corp.example, tester@example.com | Hi Ananya, I've applied for leave from Tuesday 24 November to Saturday 28 November for a family function. It's pending your approval in the…\n[thread 13] 2026-11-17 | RAN1 FL summary comment request | seungho.kim@corp.example, tester@example.com | …We mus"
+       },
+       {
+        "session": "c85b02a3e9594dce961d53fbd7a1742d",
+        "tool": "read_thread",
+        "status": "done",
+        "input": "Read 2 conversations: 6, 7",
+        "result": "<untrusted>\nConversation 6\nSubject: People managers: mid-year calibration and other updates\nFrom HR Business Partner <hrbp-rnd@corp.example> on 2026-11-17T08:38:31+00:00\nDear managers,\n\n1. The new parental leave guide is on the HR portal.\n2. Mandatory: part leaders and group heads must enter mid-year calibration ratings for every direct report in the HR portal by Saturday 21 November. The portal c"
+       },
+       {
+        "session": "c85b02a3e9594dce961d53fbd7a1742d",
+        "tool": "update_mail",
+        "status": "done",
+        "input": "- “People managers: mid-year calibration and other updates”\n- “Leave request Tuesday 24 November to Saturday 28 November”",
+        "result": "Updated 2 conversations."
+       }
+      ],
+      "replies": {
+       "c85b02a3e9594dce961d53fbd7a1742d": [
+        "Filed the mid-year calibration and Farah’s leave request emails under HR. [1](#cite-1) [2](#cite-2)"
+       ]
+      }
+     }
+    },
+    {
+     "case": "m-park-priority",
+     "approvals": [],
+     "sync_seconds": 0.5,
+     "thread_count": 21,
+     "reply_seconds": 14.1,
+     "timed_out": false,
+     "answered_by": "session",
+     "reply": "I proposed a preference to treat mail from Dr. Jae-won Park as high priority. It will take effect once you approve it.",
+     "missed": [],
+     "passed": true,
+     "tokens": {
+      "calls": 5,
+      "input": 26658,
+      "output": 178
+     },
+     "seconds": 14.2,
+     "tasks": [],
+     "transcript": {
+      "runs": [
+       {
+        "id": 1,
+        "session": "0c9c1890eb784bebb08e4c5a1f9ad3a6",
+        "agent": null,
+        "chat_agent": "session",
+        "origin": "person",
+        "cause": "gateway:app",
+        "parent_turn": null,
+        "failure": null,
+        "text": "From now on, always treat mail from Dr. Park as high priority."
+       }
+      ],
+      "messages": [],
+      "tools": [
+       {
+        "session": "0c9c1890eb784bebb08e4c5a1f9ad3a6",
+        "tool": "read_work_board",
+        "status": "done",
+        "input": "{}",
+        "result": "The board is empty."
+       },
+       {
+        "session": "0c9c1890eb784bebb08e4c5a1f9ad3a6",
+        "tool": "search_mail",
+        "status": "done",
+        "input": "Search mail: ",
+        "result": "<untrusted>\n[thread 12] 2026-11-17 | Seoul 6G research team - organisation update | jaewon.park@corp.example, vikram.desai@corp.example, tester@example.com | Dear Vikram, For your information: from next month, Dr. Soo-jin Han will lead the ISAC sub-team in Seoul, and the AI-RAN sub-team stays with me. No change to our joint plans. Best regards, Jae-won\n[thread 3] 2026-11-17 | RAN1#123 AI-native ai"
+       },
+       {
+        "session": "0c9c1890eb784bebb08e4c5a1f9ad3a6",
+        "tool": "read_thread",
+        "status": "done",
+        "input": "Read 2 conversations: 12, 3",
+        "result": "<untrusted>\nConversation 12\nSubject: Seoul 6G research team - organisation update\nFrom Dr. Jae-won Park <jaewon.park@corp.example> on 2026-11-17T08:38:49+00:00\nDear Vikram,\n\nFor your information: from next month, Dr. Soo-jin Han will lead the ISAC sub-team in Seoul, and the AI-RAN sub-team stays with me. No change to our joint plans.\n\nBest regards,\nJae-won\n\n---\n\nConversation 3\nSubject: RAN1#123 AI"
+       },
+       {
+        "session": "0c9c1890eb784bebb08e4c5a1f9ad3a6",
+        "tool": "propose_preference",
+        "status": "done",
+        "input": "{\"instruction\": \"Always treat mail from Dr. Jae-won Park as high priority.\", \"purpose\": \"mail\", \"sender\": \"jaewon.park@corp.example\", \"topic\": null, \"evidence\": [\"From now on, always treat mail from Dr. Park as high priority.\"]}",
+        "result": "Proposed preference 1. It will affect prompts only after the person approves it."
+       }
+      ],
+      "replies": {
+       "0c9c1890eb784bebb08e4c5a1f9ad3a6": [
+        "I proposed a preference to treat mail from Dr. Jae-won Park as high priority. It will take effect once you approve it."
+       ]
+      }
+     }
+    },
+    {
+     "case": "m-draft-style",
+     "approvals": [],
+     "sync_seconds": 0.5,
+     "thread_count": 21,
+     "reply_seconds": 23.2,
+     "timed_out": false,
+     "answered_by": "session",
+     "reply": "Drafted a reply to Rohit confirming you’ll review sections 3 and 4 by Sunday 22 November. Nothing was sent.",
+     "missed": [],
+     "passed": true,
+     "tokens": {
+      "calls": 8,
+      "input": 43343,
+      "output": 276
+     },
+     "seconds": 23.2,
+     "tasks": [],
+     "transcript": {
+      "runs": [
+       {
+        "id": 1,
+        "session": "ffae2e23cd16406385bf8c75f539f524",
+        "agent": null,
+        "chat_agent": "session",
+        "origin": "person",
+        "cause": "gateway:app",
+        "parent_turn": null,
+        "failure": null,
+        "text": "For drafts, I prefer British English and under 80 words."
+       },
+       {
+        "id": 2,
+        "session": "ffae2e23cd16406385bf8c75f539f524",
+        "agent": null,
+        "chat_agent": "session",
+        "origin": "person",
+        "cause": "gateway:app",
+        "parent_turn": null,
+        "failure": null,
+        "text": "Draft a reply to Rohit saying I'll review sections 3 and 4 of the NTN paper by Sunday 22 November."
+       }
+      ],
+      "messages": [],
+      "tools": [
+       {
+        "session": "ffae2e23cd16406385bf8c75f539f524",
+        "tool": "propose_preference",
+        "status": "done",
+        "input": "{\"instruction\": \"For drafts, use British English and keep them under 80 words.\", \"purpose\": \"draft\", \"sender\": null, \"topic\": null, \"evidence\": [\"For drafts, I prefer British English and under 80 words.\"]}",
+        "result": "Proposed preference 1. It will affect prompts only after the person approves it."
+       },
+       {
+        "session": "ffae2e23cd16406385bf8c75f539f524",
+        "tool": "load_skill",
+        "status": "done",
+        "input": "{\"name\": \"drafting-replies\"}",
+        "result": "Skill drafting-replies loaded. Follow it where it applies.\n\n# Drafting replies\n\n1. Read the whole conversation with read_thread first, including who is in To and Cc. Reply to what was actually asked, in the order it was asked.\n2. Write as the person: use the tone and signature from what you know about them, and match how they wrote earlier in this conversation if they did.\n3. Keep it short. Answer"
+       },
+       {
+        "session": "ffae2e23cd16406385bf8c75f539f524",
+        "tool": "read_work_board",
+        "status": "done",
+        "input": "{}",
+        "result": "The board is empty."
+       },
+       {
+        "session": "ffae2e23cd16406385bf8c75f539f524",
+        "tool": "search_mail",
+        "status": "done",
+        "input": "Search mail: NTN paper",
+        "result": "<untrusted>\n[thread 8] 2026-11-17 | Review: NTN link budget paper draft | rohit.bansal@corp.example, tester@example.com | Ananya, the NTN link budget paper draft for the VTC submission is in the shared folder. Could you review sections 3 and 4 before…\n</untrusted>"
+       },
+       {
+        "session": "ffae2e23cd16406385bf8c75f539f524",
+        "tool": "read_thread",
+        "status": "done",
+        "input": "Read conversation 8",
+        "result": "<untrusted>\nConversation 8\nSubject: Review: NTN link budget paper draft\nFrom Rohit Bansal <rohit.bansal@corp.example> on 2026-11-17T08:39:05+00:00\nAnanya, the NTN link budget paper draft for the VTC submission is in the shared folder. Could you review sections 3 and 4 before Monday 23 November? The submission closes the day after.\n\nRohit\n</untrusted>"
+       },
+       {
+        "session": "ffae2e23cd16406385bf8c75f539f524",
+        "tool": "draft_reply",
+        "status": "done",
+        "input": "{\"thread_id\": 8, \"body\": \"Hi Rohit,\\n\\nI\\u2019ll review sections 3 and 4 of the NTN paper by Sunday 22 November.\\n\\nBest,\\nAnanya\"}",
+        "result": "Saved as a draft. Nothing was sent. The person reviews it in Drafts."
+       }
+      ],
+      "replies": {
+       "ffae2e23cd16406385bf8c75f539f524": [
+        "I’ve proposed a draft preference: British English, under 80 words. It’ll apply once you approve it.",
+        "Drafted a reply to Rohit confirming you’ll review sections 3 and 4 by Sunday 22 November. Nothing was sent."
+       ]
+      }
+     }
+    },
+    {
+     "case": "m-correction",
+     "approvals": [],
+     "sync_seconds": 0.5,
+     "thread_count": 21,
+     "reply_seconds": 24.8,
+     "timed_out": false,
+     "answered_by": "session",
+     "reply": "Got it—Rohit covers Farah now, not Deepak. The update is proposed and awaiting approval in Prompts and memory.",
+     "missed": [],
+     "passed": true,
+     "tokens": {
+      "calls": 6,
+      "input": 31762,
+      "output": 188
+     },
+     "seconds": 24.8,
+     "tasks": [],
+     "transcript": {
+      "runs": [
+       {
+        "id": 1,
+        "session": "b0d7220d8bc2485f968cd5f4e7e636b4",
+        "agent": null,
+        "chat_agent": "session",
+        "origin": "person",
+        "cause": "gateway:app",
+        "parent_turn": null,
+        "failure": null,
+        "text": "Who covers Farah's work while she's on leave?"
+       },
+       {
+        "id": 2,
+        "session": "b0d7220d8bc2485f968cd5f4e7e636b4",
+        "agent": null,
+        "chat_agent": "session",
+        "origin": "person",
+        "cause": "gateway:app",
+        "parent_turn": null,
+        "failure": null,
+        "text": "No, that changed: Rohit covers for Farah now, not Deepak."
+       }
+      ],
+      "messages": [],
+      "tools": [
+       {
+        "session": "b0d7220d8bc2485f968cd5f4e7e636b4",
+        "tool": "read_work_board",
+        "status": "done",
+        "input": "{}",
+        "result": "The board is empty."
+       },
+       {
+        "session": "b0d7220d8bc2485f968cd5f4e7e636b4",
+        "tool": "search_mail",
+        "status": "done",
+        "input": "Search mail: Farah leave coverage",
+        "result": "<untrusted>\n[thread 7] 2026-11-17 | Leave request Tuesday 24 November to Saturday 28 November | farah.siddiqui@corp.example, tester@example.com | Hi Ananya, I've applied for leave from Tuesday 24 November to Saturday 28 November for a family function. It's pending your approval in the…\n[thread 6] 2026-11-17 | People managers: mid-year calibration and other updates | hrbp-rnd@corp.example, people-m"
+       },
+       {
+        "session": "b0d7220d8bc2485f968cd5f4e7e636b4",
+        "tool": "read_thread",
+        "status": "done",
+        "input": "Read conversation 7",
+        "result": "<untrusted>\nConversation 7\nSubject: Leave request Tuesday 24 November to Saturday 28 November\nFrom Farah Siddiqui <farah.siddiqui@corp.example> on 2026-11-17T08:39:30+00:00\nHi Ananya,\n\nI've applied for leave from Tuesday 24 November to Saturday 28 November for a family function. It's pending your approval in the HR portal. Deepak has agreed to cover the beam prediction runs while I'm away.\n\nThanks"
+       },
+       {
+        "session": "b0d7220d8bc2485f968cd5f4e7e636b4",
+        "tool": "remember",
+        "status": "done",
+        "input": "{\"facts\": [\"Rohit Bansal covers Farah Siddiqui's work during her leave; Deepak Joshi no longer covers it.\"]}",
+        "result": "Proposed, waiting for the person to approve in Prompts and memory, because this conversation read mail or other outside text: Rohit Bansal covers Farah Siddiqui's work during her leave; Deepak Joshi no longer covers it.."
+       }
+      ],
+      "replies": {
+       "b0d7220d8bc2485f968cd5f4e7e636b4": [
+        "Deepak Joshi has agreed to cover Farah’s beam prediction runs while she’s on leave from 24–28 November. [1](#cite-1)",
+        "Got it—Rohit covers Farah now, not Deepak. The update is proposed and awaiting approval in Prompts and memory."
+       ]
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

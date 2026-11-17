@@ -38,4 +38,6 @@ def config(tmp_path: Path) -> Config:
         handler_retry_delay_seconds=0,
         secrets_test_file=tmp_path / "secrets.json",
         require_install_token=False,
+        # Most team tests follow a task step by step; tests of waiting turn it on themselves.
+        team=replace(loaded.team, assign_wait_seconds=0),
     )

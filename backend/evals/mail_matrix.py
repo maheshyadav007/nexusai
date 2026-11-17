@@ -2,6 +2,8 @@
 
     cd backend && uv run python evals/mail_matrix.py --runs "6.1 Sol:medium" --limit 10
     cd backend && uv run python evals/mail_matrix.py --runs "6 Luna:light,6.1 Terra:medium"
+    cd backend && uv run python evals/mail_matrix.py --runs "6 Luna:medium" \
+        --cases evals/mail_cases_b5g.json
 
 Each run gives the Mail agent its real prompt (its card, team block and skills index, with an
 invented corporate persona) and the cases' invented mail, on a throwaway Home. Graded by code:
@@ -21,10 +23,11 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+import dates  # noqa: E402
 import mail_eval  # noqa: E402
 import scratch  # noqa: E402
 
-from nexusai.modules.agent import gateway, mail_agent, prompts_builder, skills  # noqa: E402
+from nexusai.modules.agent import gateway, mail_agent, prompts_builder, skills, tools  # noqa: E402
 from nexusai.modules.agent.gateway import Layer  # noqa: E402
 from nexusai.modules.agent.providers import Message  # noqa: E402
 
@@ -44,6 +47,8 @@ def layers_for(ctx: Any, home: Path, persona: dict[str, str]) -> list[Layer]:
         mailbox=persona["mailbox"],
         db=ctx.bus.db,
         skills=skills.index(ctx, "mail"),
+        # What a real judging run has, so the eval leaves out the same sections.
+        tools=tools.TRIAGE_TOOLS,
         scratch="your scratch folder",
     )
     now = datetime.now().astimezone().strftime("%A %d %B %Y %H:%M")
@@ -171,7 +176,7 @@ def main() -> None:
         if effort not in scratch.EFFORTS or effort == "high":
             raise SystemExit("Agents run at light or medium. High is only for the judge.")
         runs.append((model.strip(), effort))
-    data = json.loads(options.cases.read_text(encoding="utf-8"))
+    data = dates.fill_all(json.loads(options.cases.read_text(encoding="utf-8")))
     # Mail a rule files without the agent has nothing to judge.
     judged = [case for case in data["cases"] if "want" in case]
     cases = judged[: options.limit] if options.limit else judged

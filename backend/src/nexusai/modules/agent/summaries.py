@@ -110,7 +110,7 @@ def generate(ctx: Context, thread: int) -> ThreadSummary:
         "Reconcile dates, negations, unresolved asks and commitments. Additional messages may be older than the earlier summary. Do not claim to have read omitted or encrypted content.\n"
         + untrusted(evidence)
     )
-    layers = prompts_builder.build_layers(ctx.config, "summary")
+    layers = prompts_builder.build_layers(ctx.config, "summary", tools=())
     try:
         result = gateway.call_model(
             ctx,

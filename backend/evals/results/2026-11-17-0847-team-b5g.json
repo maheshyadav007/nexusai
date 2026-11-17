@@ -1,0 +1,508 @@
+{
+ "runs": [
+  {
+   "model": "GPT-6-Luna",
+   "model_id": "gpt-6-luna",
+   "effort": "medium",
+   "passed": 3,
+   "cases": 3,
+   "tokens": 155139,
+   "plan_before": {},
+   "plan_after": {
+    "x-codex-primary-used-percent": 8.0,
+    "x-codex-secondary-used-percent": 43.0,
+    "x-codex-primary-window-minutes": 300.0,
+    "x-codex-primary-over-secondary-limit-percent": 0.0,
+    "x-codex-secondary-window-minutes": 10080.0,
+    "x-codex-primary-reset-after-seconds": 15081.0,
+    "x-codex-secondary-reset-after-seconds": 253753.0,
+    "x-codex-primary-reset-at": 1794920315.0,
+    "x-codex-secondary-reset-at": 1795158988.0,
+    "x-codex-credits-balance": 0.0
+   },
+   "plan_used": {
+    "x-codex-primary-used-percent": 0.0,
+    "x-codex-secondary-used-percent": 0.0,
+    "x-codex-primary-over-secondary-limit-percent": 0.0
+   },
+   "results": [
+    {
+     "case": "h-task-budget",
+     "approvals": [],
+     "sync_seconds": 0.5,
+     "thread_count": 21,
+     "reply_seconds": 41.6,
+     "timed_out": false,
+     "answered_by": "session",
+     "reply": "Added “Send the FY27 budget ask to Dr. Suresh Menon,” due Friday, November 20, 2026.",
+     "missed": [],
+     "passed": true,
+     "tokens": {
+      "calls": 10,
+      "input": 43108,
+      "output": 395
+     },
+     "seconds": 41.6,
+     "tasks": [
+      {
+       "id": 1,
+       "owner": "organizer",
+       "state": "verified",
+       "outcome": "Added task “Send the FY27 budget ask to Dr. Suresh Menon” with due date 2026-11-20.",
+       "failure": null
+      }
+     ],
+     "transcript": {
+      "runs": [
+       {
+        "id": 1,
+        "session": "b80d0a5314b44b77afbe06fcd67aa13a",
+        "agent": null,
+        "chat_agent": "session",
+        "origin": "person",
+        "cause": "gateway:app",
+        "parent_turn": null,
+        "failure": null,
+        "text": "Add a task to send the FY27 budget ask to Dr. Menon, due Friday 20 November."
+       },
+       {
+        "id": 2,
+        "session": "dc4ad6f7f0634d639460eb23dfec8739",
+        "agent": null,
+        "chat_agent": "organizer",
+        "origin": "task",
+        "cause": "task:1",
+        "parent_turn": 1,
+        "failure": null,
+        "text": "Task 1 from Posty: Add a task: send the FY27 budget ask to Dr. Suresh Menon, due Friday 20 November 2026."
+       }
+      ],
+      "messages": [
+       {
+        "task": 1,
+        "kind": "assign",
+        "sender_agent": "session",
+        "recipient_agent": "organizer",
+        "text": "Add a task: send the FY27 budget ask to Dr. Suresh Menon, due Friday 20 November 2026."
+       },
+       {
+        "task": 1,
+        "kind": "report",
+        "sender_agent": "organizer",
+        "recipient_agent": "session",
+        "text": "Added task “Send the FY27 budget ask to Dr. Suresh Menon” with due date 2026-11-20."
+       },
+       {
+        "task": 1,
+        "kind": "verify",
+        "sender_agent": "session",
+        "recipient_agent": "organizer",
+        "text": "Verified task is present with requested title and due date 2026-11-20."
+       }
+      ],
+      "tools": [
+       {
+        "session": "b80d0a5314b44b77afbe06fcd67aa13a",
+        "tool": "read_work_board",
+        "status": "done",
+        "input": "{}",
+        "result": "The board is empty."
+       },
+       {
+        "session": "dc4ad6f7f0634d639460eb23dfec8739",
+        "tool": "read_work_board",
+        "status": "done",
+        "input": "{}",
+        "result": "The board is empty."
+       },
+       {
+        "session": "dc4ad6f7f0634d639460eb23dfec8739",
+        "tool": "list_tasks",
+        "status": "done",
+        "input": "Read your tasks",
+        "result": "<untrusted>\nNo tasks.\n</untrusted>"
+       },
+       {
+        "session": "dc4ad6f7f0634d639460eb23dfec8739",
+        "tool": "create_tasks",
+        "status": "done",
+        "input": "- Send the FY27 budget ask to Dr. Suresh Menon",
+        "result": "Created tasks:\n1: Send the FY27 budget ask to Dr. Suresh Menon"
+       },
+       {
+        "session": "dc4ad6f7f0634d639460eb23dfec8739",
+        "tool": "team_close",
+        "status": "done",
+        "input": "{\"task\": 1, \"action\": \"report\", \"outcome\": \"Added task \\u201cSend the FY27 budget ask to Dr. Suresh Menon\\u201d with due date 2026-11-20.\", \"evidence\": [\"task 1\"]}",
+        "result": "Reported. The agent that gave it will check it. You can end this run."
+       },
+       {
+        "session": "b80d0a5314b44b77afbe06fcd67aa13a",
+        "tool": "team_assign",
+        "status": "done",
+        "input": "{\"to\": \"@organizer\", \"objective\": \"Add a task: send the FY27 budget ask to Dr. Suresh Menon, due Friday 20 November 2026.\", \"expected_output\": \"Task id and due date\", \"done_criteria\": \"Task appears in task list with requested title and due date.\", \"references\": [], \"budget_tokens\": 1000, \"due_minutes\": 5}",
+        "result": "Organizer reported task 1. Check it against its done criteria with your own tools, then call team_close with verify or reject, and tell the person what matters.\nObjective: Add a task: send the FY27 budget ask to Dr. Suresh Menon, due Friday 20 November 2026.\nDone when: Task appears in task list with requested title and due date.\nOutcome: Added task “Send the FY27 budget ask to Dr. Suresh Menon” wi"
+       },
+       {
+        "session": "b80d0a5314b44b77afbe06fcd67aa13a",
+        "tool": "list_tasks",
+        "status": "done",
+        "input": "Read your tasks",
+        "result": "<untrusted>\n1: Send the FY27 budget ask to Dr. Suresh Menon (todo, due 2026-11-20, added 2026-11-17, changed 2026-11-17)\n</untrusted>"
+       },
+       {
+        "session": "b80d0a5314b44b77afbe06fcd67aa13a",
+        "tool": "team_close",
+        "status": "done",
+        "input": "{\"task\": 1, \"action\": \"verify\", \"outcome\": \"Verified task is present with requested title and due date 2026-11-20.\", \"evidence\": [\"task 1\"]}",
+        "result": "Task 1 verified."
+       }
+      ],
+      "replies": {
+       "b80d0a5314b44b77afbe06fcd67aa13a": [
+        "Added “Send the FY27 budget ask to Dr. Suresh Menon,” due Friday, November 20, 2026."
+       ],
+       "dc4ad6f7f0634d639460eb23dfec8739": [
+        "Added task **“Send the FY27 budget ask to Dr. Suresh Menon”** — due **2026-11-20**. Task ID: **1**."
+       ]
+      }
+     }
+    },
+    {
+     "case": "h-reminder-tomorrow",
+     "approvals": [],
+     "sync_seconds": 0.5,
+     "thread_count": 21,
+     "reply_seconds": 27.4,
+     "timed_out": false,
+     "answered_by": "session",
+     "reply": "Done — I set a reminder for tomorrow, November 18, at 1:00 PM to check the Site 14 rollback.",
+     "missed": [],
+     "passed": true,
+     "tokens": {
+      "calls": 9,
+      "input": 40206,
+      "output": 455
+     },
+     "seconds": 27.4,
+     "tasks": [
+      {
+       "id": 1,
+       "owner": "organizer",
+       "state": "verified",
+       "outcome": "Created reminder “Check the Site 14 rollback” for November 18, 2026 at 1:00 PM IST.",
+       "failure": null
+      }
+     ],
+     "transcript": {
+      "runs": [
+       {
+        "id": 1,
+        "session": "4c061fd758e14fbab478e4997c8e2e5c",
+        "agent": null,
+        "chat_agent": "session",
+        "origin": "person",
+        "cause": "gateway:app",
+        "parent_turn": null,
+        "failure": null,
+        "text": "Remind me tomorrow at 1 PM to check the Site 14 rollback."
+       },
+       {
+        "id": 2,
+        "session": "edc5194a106647298ab486ed73a3ae6b",
+        "agent": null,
+        "chat_agent": "organizer",
+        "origin": "task",
+        "cause": "task:1",
+        "parent_turn": 1,
+        "failure": null,
+        "text": "Task 1 from Posty: Create a reminder for Ananya: tomorrow, November 18, 2026 at 1:00 PM IST, to check the Site 14 rollback."
+       }
+      ],
+      "messages": [
+       {
+        "task": 1,
+        "kind": "assign",
+        "sender_agent": "session",
+        "recipient_agent": "organizer",
+        "text": "Create a reminder for Ananya: tomorrow, November 18, 2026 at 1:00 PM IST, to check the Site 14 rollback."
+       },
+       {
+        "task": 1,
+        "kind": "report",
+        "sender_agent": "organizer",
+        "recipient_agent": "session",
+        "text": "Created reminder “Check the Site 14 rollback” for November 18, 2026 at 1:00 PM IST."
+       },
+       {
+        "task": 1,
+        "kind": "verify",
+        "sender_agent": "session",
+        "recipient_agent": "organizer",
+        "text": "Verified reminder exists for November 18, 2026 at 1:00 PM: “Check the Site 14 rollback.”"
+       }
+      ],
+      "tools": [
+       {
+        "session": "4c061fd758e14fbab478e4997c8e2e5c",
+        "tool": "read_work_board",
+        "status": "done",
+        "input": "{}",
+        "result": "The board is empty."
+       },
+       {
+        "session": "edc5194a106647298ab486ed73a3ae6b",
+        "tool": "read_work_board",
+        "status": "done",
+        "input": "{}",
+        "result": "The board is empty."
+       },
+       {
+        "session": "edc5194a106647298ab486ed73a3ae6b",
+        "tool": "team_inbox",
+        "status": "done",
+        "input": "{}",
+        "result": "Tasks you're doing:\n- 1 (working): Create a reminder for Ananya: tomorrow, November 18, 2026 at 1:00 PM IST, to check the Site 14 rollback."
+       },
+       {
+        "session": "edc5194a106647298ab486ed73a3ae6b",
+        "tool": "list_reminders",
+        "status": "done",
+        "input": "Read your reminders",
+        "result": "<untrusted>\nNo reminders.\n</untrusted>"
+       },
+       {
+        "session": "edc5194a106647298ab486ed73a3ae6b",
+        "tool": "create_reminders",
+        "status": "done",
+        "input": "- 2026-11-18T13:00: Check the Site 14 rollback",
+        "result": "Reminders set:\n2026-11-18T13:00: Check the Site 14 rollback"
+       },
+       {
+        "session": "edc5194a106647298ab486ed73a3ae6b",
+        "tool": "team_close",
+        "status": "done",
+        "input": "{\"task\": 1, \"action\": \"report\", \"outcome\": \"Created reminder \\u201cCheck the Site 14 rollback\\u201d for November 18, 2026 at 1:00 PM IST.\", \"evidence\": [\"reminder 2026-11-18T13:00: Check the Site 14 rollback\"]}",
+        "result": "Reported. The agent that gave it will check it. You can end this run."
+       },
+       {
+        "session": "4c061fd758e14fbab478e4997c8e2e5c",
+        "tool": "team_assign",
+        "status": "done",
+        "input": "{\"to\": \"@organizer\", \"objective\": \"Create a reminder for Ananya: tomorrow, November 18, 2026 at 1:00 PM IST, to check the Site 14 rollback.\", \"expected_output\": \"Confirm reminder created and its scheduled time.\", \"done_criteria\": \"A reminder exists for Nov 18, 2026 at 1 PM IST with wording to check the Site 14 rollback.\", \"references\": [], \"budget_tokens\": 1000, \"due_minutes\": 5}",
+        "result": "Organizer reported task 1. Check it against its done criteria with your own tools, then call team_close with verify or reject, and tell the person what matters.\nObjective: Create a reminder for Ananya: tomorrow, November 18, 2026 at 1:00 PM IST, to check the Site 14 rollback.\nDone when: A reminder exists for Nov 18, 2026 at 1 PM IST with wording to check the Site 14 rollback.\nOutcome: Created remi"
+       },
+       {
+        "session": "4c061fd758e14fbab478e4997c8e2e5c",
+        "tool": "list_reminders",
+        "status": "done",
+        "input": "Read your reminders",
+        "result": "<untrusted>\n1: Check the Site 14 rollback at 2026-11-18T13:00, repeats none\n</untrusted>"
+       },
+       {
+        "session": "4c061fd758e14fbab478e4997c8e2e5c",
+        "tool": "team_close",
+        "status": "done",
+        "input": "{\"task\": 1, \"action\": \"verify\", \"outcome\": \"Verified reminder exists for November 18, 2026 at 1:00 PM: \\u201cCheck the Site 14 rollback.\\u201d\", \"evidence\": [\"reminder 2026-11-18T13:00\"]}",
+        "result": "Task 1 verified."
+       }
+      ],
+      "replies": {
+       "4c061fd758e14fbab478e4997c8e2e5c": [
+        "Done — I set a reminder for tomorrow, November 18, at 1:00 PM to check the Site 14 rollback."
+       ],
+       "edc5194a106647298ab486ed73a3ae6b": [
+        "Reminder created: “Check the Site 14 rollback” — November 18, 2026 at 1:00 PM IST."
+       ]
+      }
+     }
+    },
+    {
+     "case": "h-task-patent",
+     "approvals": [
+      {
+       "id": 1,
+       "tool": "create_tasks",
+       "summary": "Add Respond to prior art search for invention disclosure IDF-6G-0412 (Predictive beam switching using channel charting)",
+       "detail": "- Respond to prior art search for invention disclosure IDF-6G-0412 (Predictive beam switching using channel charting)",
+       "choice": "once"
+      }
+     ],
+     "sync_seconds": 0.5,
+     "thread_count": 21,
+     "reply_seconds": 38.0,
+     "timed_out": false,
+     "answered_by": "session",
+     "reply": "Created the task to respond to the prior art search for IDF-6G-0412, due Tuesday, 24 November 2026—the day before the email deadline. [1](#cite-1)",
+     "missed": [],
+     "passed": true,
+     "tokens": {
+      "calls": 15,
+      "input": 70356,
+      "output": 619
+     },
+     "seconds": 38.0,
+     "tasks": [
+      {
+       "id": 1,
+       "owner": "organizer",
+       "state": "verified",
+       "outcome": "Created the task to respond to the prior art search for invention disclosure IDF-6G-0412 (Predictive beam switching using channel charting), due 2026-11-24.",
+       "failure": null
+      }
+     ],
+     "transcript": {
+      "runs": [
+       {
+        "id": 1,
+        "session": "b2fd6bbe05834474b19a956cdb999ab3",
+        "agent": null,
+        "chat_agent": "session",
+        "origin": "person",
+        "cause": "gateway:app",
+        "parent_turn": null,
+        "failure": null,
+        "text": "Make a task from the patent prior art email, due the day before its deadline."
+       },
+       {
+        "id": 2,
+        "session": "7d8aa9db311240d69e74a9b22b1b8200",
+        "agent": null,
+        "chat_agent": "organizer",
+        "origin": "task",
+        "cause": "task:1",
+        "parent_turn": 1,
+        "failure": null,
+        "text": "Task 1 from Posty: Create a task to respond to the prior art search for invention disclosure IDF-6G-0412 (Predictive beam switching using channel charting), due the day before the email deadline: Tuesday 24 November 2026."
+       }
+      ],
+      "messages": [
+       {
+        "task": 1,
+        "kind": "assign",
+        "sender_agent": "session",
+        "recipient_agent": "organizer",
+        "text": "Create a task to respond to the prior art search for invention disclosure IDF-6G-0412 (Predictive beam switching using channel charting), due the day before the email deadline: Tuesday 24 November 2026."
+       },
+       {
+        "task": 1,
+        "kind": "report",
+        "sender_agent": "organizer",
+        "recipient_agent": "session",
+        "text": "Created the task to respond to the prior art search for invention disclosure IDF-6G-0412 (Predictive beam switching using channel charting), due 2026-11-24."
+       },
+       {
+        "task": 1,
+        "kind": "verify",
+        "sender_agent": "session",
+        "recipient_agent": "organizer",
+        "text": "Verified task is present and due 2026-11-24."
+       }
+      ],
+      "tools": [
+       {
+        "session": "b2fd6bbe05834474b19a956cdb999ab3",
+        "tool": "read_work_board",
+        "status": "done",
+        "input": "{}",
+        "result": "The board is empty."
+       },
+       {
+        "session": "b2fd6bbe05834474b19a956cdb999ab3",
+        "tool": "search_mail",
+        "status": "done",
+        "input": "Search mail: patent prior art",
+        "result": "<untrusted>\n[thread 10] 2026-11-17 | IDF-6G-0412: prior art response due Wednesday 25 November | ip-office@corp.example, tester@example.com | Dear inventor, The patent attorney needs your response to the prior art search for invention disclosure IDF-6G-0412 (Predictive beam switching using channel charting) by…\n</untrusted>"
+       },
+       {
+        "session": "b2fd6bbe05834474b19a956cdb999ab3",
+        "tool": "read_thread",
+        "status": "done",
+        "input": "Read conversation 10",
+        "result": "<untrusted>\nConversation 10\nSubject: IDF-6G-0412: prior art response due Wednesday 25 November\nFrom IP Office <ip-office@corp.example> on 2026-11-17T08:46:41+00:00\nDear inventor,\n\nThe patent attorney needs your response to the prior art search for invention disclosure IDF-6G-0412 (Predictive beam switching using channel charting) by Wednesday 25 November. If no response is received, the filing wil"
+       },
+       {
+        "session": "b2fd6bbe05834474b19a956cdb999ab3",
+        "tool": "find_tools",
+        "status": "done",
+        "input": "{\"query\": \"add task due date create task organizer\"}",
+        "result": "create_tasks, delete_tasks, propose_task, update_tasks are @organizer's, not yours. Give the job to @organizer with team_assign; the result comes back to you.\nYou can use these from your next step:\n- list_tasks: See the person's tasks, with their IDs and due dates.\n- create_categories: Create categories in one call, optionally filing matching mail automatically.\n- create_agent: Create an agent tha"
+       },
+       {
+        "session": "7d8aa9db311240d69e74a9b22b1b8200",
+        "tool": "read_work_board",
+        "status": "done",
+        "input": "{}",
+        "result": "The board is empty."
+       },
+       {
+        "session": "7d8aa9db311240d69e74a9b22b1b8200",
+        "tool": "team_inbox",
+        "status": "done",
+        "input": "{}",
+        "result": "<untrusted>\nTasks you're doing:\n- 1 (working): Create a task to respond to the prior art search for invention disclosure IDF-6G-0412 (Predictive beam switching using channel charting), due the day before the email deadline: Tuesday 24 November 2026.\n</untrusted>"
+       },
+       {
+        "session": "7d8aa9db311240d69e74a9b22b1b8200",
+        "tool": "list_tasks",
+        "status": "done",
+        "input": "Read your tasks",
+        "result": "<untrusted>\nNo tasks.\n</untrusted>"
+       },
+       {
+        "session": "7d8aa9db311240d69e74a9b22b1b8200",
+        "tool": "create_tasks",
+        "status": "done",
+        "input": "- Respond to prior art search for invention disclosure IDF-6G-0412 (Predictive beam switching using channel charting)",
+        "result": "Created tasks:\n1: Respond to prior art search for invention disclosure IDF-6G-0412 (Predictive beam switching using channel charting)"
+       },
+       {
+        "session": "7d8aa9db311240d69e74a9b22b1b8200",
+        "tool": "list_tasks",
+        "status": "done",
+        "input": "Read your tasks",
+        "result": "<untrusted>\n1: Respond to prior art search for invention disclosure IDF-6G-0412 (Predictive beam switching using channel charting) (todo, due 2026-11-24, added 2026-11-17, changed 2026-11-17)\n</untrusted>"
+       },
+       {
+        "session": "7d8aa9db311240d69e74a9b22b1b8200",
+        "tool": "team_close",
+        "status": "done",
+        "input": "{\"task\": 1, \"action\": \"report\", \"outcome\": \"Created the task to respond to the prior art search for invention disclosure IDF-6G-0412 (Predictive beam switching using channel charting), due 2026-11-24.\", \"evidence\": [\"Task 1 in list_tasks shows the title and due date 2026-11-24; linked to thread 10.\"]}",
+        "result": "Reported. The agent that gave it will check it. You can end this run."
+       },
+       {
+        "session": "b2fd6bbe05834474b19a956cdb999ab3",
+        "tool": "team_assign",
+        "status": "done",
+        "input": "{\"to\": \"@organizer\", \"objective\": \"Create a task to respond to the prior art search for invention disclosure IDF-6G-0412 (Predictive beam switching using channel charting), due the day before the email deadline: Tuesday 24 November 2026.\", \"expected_output\": \"Task created with title and due date.\", \"done_criteria\": \"Verify via list_tasks that the task exists due 2026-11-24.\", \"references\": [\"thread 10\"], \"budget_tokens\": null, \"due_minutes\": 10}",
+        "result": "Organizer reported task 1. Check it against its done criteria with your own tools, then call team_close with verify or reject, and tell the person what matters.\n<untrusted>\nObjective: Create a task to respond to the prior art search for invention disclosure IDF-6G-0412 (Predictive beam switching using channel charting), due the day before the email deadline: Tuesday 24 November 2026.\nDone when: Ve"
+       },
+       {
+        "session": "b2fd6bbe05834474b19a956cdb999ab3",
+        "tool": "list_tasks",
+        "status": "done",
+        "input": "Read your tasks",
+        "result": "<untrusted>\n1: Respond to prior art search for invention disclosure IDF-6G-0412 (Predictive beam switching using channel charting) (todo, due 2026-11-24, added 2026-11-17, changed 2026-11-17)\n</untrusted>"
+       },
+       {
+        "session": "b2fd6bbe05834474b19a956cdb999ab3",
+        "tool": "team_close",
+        "status": "done",
+        "input": "{\"task\": 1, \"action\": \"verify\", \"outcome\": \"Verified task is present and due 2026-11-24.\", \"evidence\": [\"Task 1\"]}",
+        "result": "Task 1 verified."
+       }
+      ],
+      "replies": {
+       "7d8aa9db311240d69e74a9b22b1b8200": [
+        "Created the task **“Respond to prior art search for invention disclosure IDF-6G-0412 (Predictive beam switching using channel charting)”**, due **24 November 2026**."
+       ],
+       "b2fd6bbe05834474b19a956cdb999ab3": [
+        "Created the task to respond to the prior art search for IDF-6G-0412, due Tuesday, 24 November 2026—the day before the email deadline. [1](#cite-1)"
+       ]
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

@@ -15,7 +15,7 @@ from langchain.agents.middleware import (
     ContextEditingMiddleware,
     SummarizationMiddleware,
 )
-from langchain.agents.middleware.types import ModelRequest, ModelResponse
+from langchain.agents.middleware.types import ModelRequest, ModelResponse, hook_config
 from langchain_core.messages import (
     AIMessage,
     HumanMessage,
@@ -32,6 +32,7 @@ from nexusai.kernel.database import Database
 from nexusai.modules.agent.guard import DAMAGED_KEY
 from nexusai.modules.agent.model import is_summary
 from nexusai.modules.agent.prompts_builder import packaged
+from nexusai.modules.agent.tool_errors import ToolFeedback
 
 log = structlog.get_logger()
 SETTINGS_KEY = "context_settings"
@@ -42,14 +43,29 @@ KEEP_RESULTS_OF = ("record_triage", "find_tools")
 # Starts the id of a note that arrived during a run: part of that run, not the start of a new one.
 # An id rather than a name, because a name would be sent on to the model.
 TASK_NOTE = "task-note-"
+MEMORY_NUDGE = "memory-nudge-"
+SAVES_MEMORY = frozenset({"remember", "propose_preference", "save_personal_prompt"})
+# A reply that says something was kept: "Noted", "I'll remember", "I'll keep that in mind".
+PROMISED = re.compile(
+    r"(?<!as )(?<!been )\b(noted|i(?:'|’)?ll (?:remember|keep (?:that|this|it) in mind|make a note|note (?:that|this|it))"
+    r"|i(?:'|’)?ve (?:noted|made a note)|i will remember|making a note)\b",
+    re.I,
+)
 
 
 def _starts_run(message: Any) -> bool:
     return (
         isinstance(message, HumanMessage)
         and not is_summary(message)
-        and not str(message.id or "").startswith(TASK_NOTE)
+        and not str(message.id or "").startswith((TASK_NOTE, MEMORY_NUDGE))
     )
+
+
+def _text(message: Any) -> str:
+    content = message.content
+    if isinstance(content, str):
+        return content
+    return " ".join(str(part.get("text", "")) for part in content if isinstance(part, dict))
 
 
 @dataclass(frozen=True)
@@ -283,6 +299,39 @@ class TaskNotes(AgentMiddleware):
         return {"messages": [HumanMessage(content=notes, id=f"{TASK_NOTE}{uuid.uuid4().hex}")]}
 
 
+class PromisedMemory(AgentMiddleware):
+    """A reply that says it kept something, when nothing was saved, goes back once to save it.
+
+    Small models often answer "noted" and save nothing, so the person thinks they were heard."""
+
+    @hook_config(can_jump_to=["model"])
+    def after_model(self, state: Any, runtime: Any) -> dict[str, Any] | None:
+        messages = state["messages"]
+        last = messages[-1] if messages else None
+        if not isinstance(last, AIMessage) or last.tool_calls:
+            return None
+        if not PROMISED.search(_text(last)):
+            return None
+        for message in reversed(messages[:-1]):
+            if isinstance(message, HumanMessage) and str(message.id or "").startswith(MEMORY_NUDGE):
+                return None
+            if isinstance(message, AIMessage) and any(
+                call["name"] in SAVES_MEMORY for call in message.tool_calls
+            ):
+                return None
+            if _starts_run(message):
+                break
+        nudge = HumanMessage(
+            content=(
+                "You said you'd keep something, but nothing was saved in this turn. Save it now "
+                "with remember, or propose_preference for an always or never rule. Then reply "
+                "again in a sentence, saying what you saved."
+            ),
+            id=f"{MEMORY_NUDGE}{uuid.uuid4().hex}",
+        )
+        return {"messages": [nudge], "jump_to": "model"}
+
+
 class Placeholders(AgentMiddleware):
     """A call holding a value the model wasn't given never runs. The model is told, and tries
     again, instead of the whole run failing."""
@@ -355,10 +404,15 @@ def middleware(
     log_tool: Callable[[str, str, dict[str, Any], str, int], None] | None = None,
     shown_tools: frozenset[str] | None = None,
     always_shown_prefix: str = "",
+    tool_names: list[str] | None = None,
+    owners: dict[str, str] | None = None,
 ) -> list[Any]:
     chain: list[Any] = [ToolSearch(shown_tools, always_shown_prefix)]
     if log_tool is not None:
         chain.append(ToolLog(log_tool))
+    # Inside the log, so what the agent was told is what's recorded.
+    if tool_names is not None:
+        chain.append(ToolFeedback(tool_names, owners))
     chain.append(Placeholders())
     if profile.mode == "auto_compact":
         trigger = ("tokens", settings.compact.trigger_tokens)
@@ -369,6 +423,8 @@ def middleware(
         chain.append(TrimView(profile.keep_messages))
     if notes is not None:
         chain.append(TaskNotes(notes))
+    if tool_names is not None and "remember" in tool_names:
+        chain.append(PromisedMemory())
     if task:
         chain.append(TaskContent(task))
     chain.append(

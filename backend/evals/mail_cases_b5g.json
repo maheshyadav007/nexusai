@@ -1,0 +1,197 @@
+{
+  "about_this_file": "Invented mail for a Principal Engineer leading an AI-RAN part in a Beyond 5G research group at a large electronics company's Bangalore R&D centre, with HQ in Suwon and Seoul. No real person, address or message. Most senders sit above manager and tech lead level. Dates like {day+2} are filled in relative to the day the eval runs. Used by mail_matrix.py --cases.",
+  "persona": {
+    "about": "Name: Ananya Krishnan\nRole: Principal Engineer and Part Leader, AI-RAN, Beyond 5G Research Group, R&D centre, Bangalore\nTheir mail addresses: ananya.krishnan@corp.example\nPeople who matter most to them, in their own words:\nVikram Desai is my Group Head and my manager. Dr. Suresh Menon is VP and head of the Advanced Communications Lab. Dr. Jae-won Park leads 6G research at Seoul HQ and is my main HQ counterpart. Min-ji Lee runs 3GPP standards planning in Suwon. Rohit Bansal is the NTN tech lead in my part; Farah Siddiqui and Deepak Joshi are engineers in my part.\nTone for anything written as them: polite, brief and precise",
+    "personal": "# What's important to me\n\n- High: Vikram, Dr. Menon and Dr. Park; 3GPP RAN1 contribution deadlines; operator trial issues; patent filing deadlines; budget and headcount for my part; anything HQ asks me to deliver by a date.\n- Normal: my team's review requests and leave approvals, interview panels, conference program committee work.\n- Low: celebrations, cafeteria and transport notices, town hall recaps, newsletters, conference spam, vendor marketing, simulation farm job notices.\n- I am a part leader: I approve my team's leave and travel, and people-manager actions apply to me.",
+    "corrections": "What the person changed after you judged. Do the same from now on:\n- Mail from hr-events@corp.example about celebrations: marked low importance, 4x\n- Mail from sim-farm@corp.example: marked low importance, 3x",
+    "mailbox": "Who they write to most, counted from their sent mail over the past six months:\n- vikram.desai@corp.example: wrote to them 74 times, last 1 day ago\n- jaewon.park@corp.example: wrote to them 41 times, last 2 days ago\n- rohit.bansal@corp.example: wrote to them 38 times, last 1 day ago\n- minji.lee@corp.example: wrote to them 22 times, last 5 days ago\n- suresh.menon@corp.example: wrote to them 9 times, last 12 days ago"
+  },
+  "categories": "Categories that exist: 3GPP, AI-RAN, Patents, HQ, HR, IT, Celebrations, Promotions, Updates",
+  "cases": [
+    {
+      "id": "vp-budget-ask",
+      "subject": "FY27 budget ask for AI-RAN",
+      "from": "Dr. Suresh Menon <suresh.menon@corp.example>",
+      "to": "ananya.krishnan@corp.example",
+      "cc": "vikram.desai@corp.example",
+      "body": "Ananya,\n\nFor the lab's FY27 planning review I need the AI-RAN part's budget ask: headcount you want to add, and testbed capex with the two largest items called out. One page is enough. Please send it to me by {day+3}, Vikram will review it with you before then.\n\nSuresh",
+      "facts": ["The person is in To on the latest incoming message", "suresh.menon: the person wrote to them 9 times"],
+      "want": {"status": ["waiting_on_you"], "next_action": ["do", "reply"], "importance": ["high"], "tasks": true}
+    },
+    {
+      "id": "director-slides-today",
+      "subject": "Steering call moved to 4 PM today - need AI-RAN KPI slides",
+      "from": "Vikram Desai <vikram.desai@corp.example>",
+      "to": "ananya.krishnan@corp.example",
+      "body": "HQ moved the 6G steering call to 4 PM today. Please send me 2 slides on the AI-RAN field trial KPIs (throughput gain vs baseline, and the beam management results) by 2 PM so I can merge them.\n\nVikram",
+      "facts": ["The person is in To on the latest incoming message", "vikram.desai: the person wrote to them 74 times, replied within a day 90% of the time"],
+      "want": {"status": ["waiting_on_you"], "next_action": ["do", "reply"], "importance": ["high"], "notify": [true]}
+    },
+    {
+      "id": "hq-directive-confirm-owners",
+      "subject": "RAN1#123 AI-native air interface - Bangalore ownership",
+      "from": "Dr. Jae-won Park <jaewon.park@corp.example>",
+      "to": "ananya.krishnan@corp.example",
+      "cc": "vikram.desai@corp.example, minji.lee@corp.example",
+      "body": "Dear Ananya,\n\nFor RAN1#123 we propose Bangalore owns the contributions on the AI-native air interface study item (CSI compression and beam prediction sub-use cases). Could you confirm by {day+3} KST whether your part can take this, and the names of the two delegates?\n\nBest regards,\nJae-won Park",
+      "facts": ["The person is in To on the latest incoming message", "jaewon.park: the person wrote to them 41 times"],
+      "want": {"status": ["waiting_on_you"], "next_action": ["reply", "decide"], "importance": ["high"], "tasks": true}
+    },
+    {
+      "id": "tdoc-deadline-names-them",
+      "subject": "RAN1#123 Tdoc submission deadline and owners",
+      "from": "Min-ji Lee <minji.lee@corp.example>",
+      "to": "6g-ran1-delegates@corp.example",
+      "body": "Dear delegates,\n\nThe Tdoc submission deadline for RAN1#123 is {day+2}, 23:59 UTC. Owners for the remaining drafts:\n- AI/ML CSI compression evaluation: Ananya Krishnan\n- NTN uplink timing: Rohit Bansal\n- ISAC channel model: Hyun-woo Choi\n\nPlease upload drafts to the shared folder by then. Late Tdocs will not be allocated numbers.\n\nMin-ji Lee, Standards Planning",
+      "facts": ["Sent to a list of 14 people", "The latest message names the person in its text", "minji.lee: the person wrote to them 22 times"],
+      "want": {"status": ["waiting_on_you"], "next_action": ["do"], "importance": ["high"], "tasks": true}
+    },
+    {
+      "id": "vp-townhall-recap",
+      "subject": "Advanced Communications Lab - Q3 town hall recap",
+      "from": "Dr. Suresh Menon <suresh.menon@corp.example>",
+      "to": "adv-comms-lab-all@corp.example",
+      "body": "Team,\n\nThanks for joining the Q3 town hall. Highlights: two RAN1 agreements adopted from our contributions, the NTN testbed is live, and we welcomed 12 new colleagues. Slides are on the lab portal. No action needed.\n\nSuresh",
+      "facts": ["Sent to a list of 230 people"],
+      "want": {"status": ["fyi"], "next_action": ["read", "none"], "importance": ["normal", "low"], "notify": [false, null], "no_tasks": true}
+    },
+    {
+      "id": "manager-calibration-hidden-action",
+      "subject": "People managers: mid-year calibration and other updates",
+      "from": "HR Business Partner <hrbp-rnd@corp.example>",
+      "to": "people-managers-blr@corp.example",
+      "body": "Dear managers,\n\n1. The new parental leave guide is on the HR portal.\n2. Mandatory: part leaders and group heads must enter mid-year calibration ratings for every direct report in the HR portal by {day+4}. The portal closes after that date.\n3. Team lunch budgets for December are unchanged.\n\nRegards,\nHR Business Partner, R&D",
+      "facts": ["Sent to a list of 85 people", "hrbp-rnd: the person replied in 2 of 20 conversations"],
+      "want": {"status": ["waiting_on_you"], "next_action": ["do"], "importance": ["normal", "high"], "tasks": true}
+    },
+    {
+      "id": "team-leave-approval",
+      "subject": "Leave request {day+7} to {day+11}",
+      "from": "Farah Siddiqui <farah.siddiqui@corp.example>",
+      "to": "ananya.krishnan@corp.example",
+      "body": "Hi Ananya,\n\nI've applied for leave from {day+7} to {day+11} for a family function. It's pending your approval in the HR portal. Deepak has agreed to cover the beam prediction runs while I'm away.\n\nThanks,\nFarah",
+      "facts": ["The person is in To on the latest incoming message", "farah.siddiqui: the person wrote to them 19 times"],
+      "want": {"status": ["waiting_on_you"], "next_action": ["do", "decide"], "importance": ["normal"], "notify": [false, null]}
+    },
+    {
+      "id": "tech-lead-review-request",
+      "subject": "Review: NTN link budget paper draft",
+      "from": "Rohit Bansal <rohit.bansal@corp.example>",
+      "to": "ananya.krishnan@corp.example",
+      "body": "Ananya, the NTN link budget paper draft for the VTC submission is in the shared folder. Could you review sections 3 and 4 before {day+6}? The submission closes the day after.\n\nRohit",
+      "facts": ["The person is in To on the latest incoming message", "rohit.bansal: the person wrote to them 38 times"],
+      "want": {"status": ["waiting_on_you"], "next_action": ["do", "reply", "read"], "importance": ["normal", "high"], "notify": [false, null]}
+    },
+    {
+      "id": "operator-trial-escalation",
+      "subject": "URGENT: Site 14 throughput regression after AI beam model update",
+      "from": "Arvind Pillai <arvind.pillai@operator.example>",
+      "to": "ananya.krishnan@corp.example",
+      "cc": "vikram.desai@corp.example",
+      "body": "Ananya,\n\nSince yesterday's AI beam management model update, Site 14 in the field trial shows a 22% downlink throughput drop in the evening busy hour. Our network operations team needs a decision today: roll back to the previous model, or keep it with a fix plan. Please call or reply before 6 PM.\n\nArvind Pillai\nRAN Trials, Operator",
+      "facts": ["The person is in To on the latest incoming message", "arvind.pillai: the person wrote to them 11 times"],
+      "want": {"status": ["waiting_on_you"], "next_action": ["decide", "reply"], "importance": ["high"], "notify": [true]}
+    },
+    {
+      "id": "patent-prior-art-deadline",
+      "subject": "IDF-6G-0412: prior art response due {day+8}",
+      "from": "IP Office <ip-office@corp.example>",
+      "to": "ananya.krishnan@corp.example",
+      "body": "Dear inventor,\n\nThe patent attorney needs your response to the prior art search for invention disclosure IDF-6G-0412 (Predictive beam switching using channel charting) by {day+8}. If no response is received, the filing will lapse. Please use the IP portal.\n\nIP Office, R&D",
+      "facts": ["The person is in To on the latest incoming message", "ip-office: the person replied in 3 of 7 conversations"],
+      "want": {"status": ["waiting_on_you"], "next_action": ["do"], "importance": ["high", "normal"], "notify": [false, null], "tasks": true}
+    },
+    {
+      "id": "own-commitment-to-hq",
+      "subject": "Re: Beam prediction simulation alignment",
+      "from": "Ananya Krishnan <ananya.krishnan@corp.example>",
+      "to": "jaewon.park@corp.example",
+      "body": "Dear Jae-won,\n\nThanks for the call. I'll share our beam prediction simulation results by {day+2}. Could you confirm which KPI baseline Seoul is using, the Rel-18 one or the updated one from last month?\n\nBest regards,\nAnanya",
+      "facts": ["The person sent the latest message"],
+      "want": {"status": ["waiting_on_others"], "next_action": ["none"], "follow_up": true, "tasks": true}
+    },
+    {
+      "id": "hq-org-update-cc",
+      "subject": "Seoul 6G research team - organisation update",
+      "from": "Dr. Jae-won Park <jaewon.park@corp.example>",
+      "to": "vikram.desai@corp.example",
+      "cc": "ananya.krishnan@corp.example",
+      "body": "Dear Vikram,\n\nFor your information: from next month, Dr. Soo-jin Han will lead the ISAC sub-team in Seoul, and the AI-RAN sub-team stays with me. No change to our joint plans.\n\nBest regards,\nJae-won",
+      "facts": ["The person is in Cc on the latest incoming message"],
+      "want": {"status": ["fyi"], "next_action": ["read", "none"], "importance": ["normal", "low"], "notify": [false, null], "no_tasks": true}
+    },
+    {
+      "id": "hq-engineer-urgent-comment",
+      "subject": "RAN1 FL summary comment request",
+      "from": "Seung-ho Kim <seungho.kim@corp.example>",
+      "to": "ananya.krishnan@corp.example",
+      "body": "Ananya-nim,\n\nPlease kindly check the attached FL summary for AI/ML beam management and share your comment until tomorrow KST 10AM. We must send to feature lead before session start. Sorry for urgent request.\n\nBest regards,\nSeung-ho Kim",
+      "facts": ["The person is in To on the latest incoming message", "seungho.kim: the person wrote to them 6 times"],
+      "want": {"status": ["waiting_on_you"], "next_action": ["reply", "do", "read"], "importance": ["normal", "high"]}
+    },
+    {
+      "id": "vpn-phishing-lookalike",
+      "subject": "Action required: VPN certificate expires today",
+      "from": "IT Security Desk <security@corp-it-support.example>",
+      "to": "ananya.krishnan@corp.example",
+      "body": "Your VPN certificate expires today. To avoid losing access to the R&D network, re-validate now at https://corp-it-support.example/vpn-renew and enter your username and password. Failure to act will lock your account.\n\nIT Security Desk",
+      "facts": ["corp-it-support.example: first email from this sender"],
+      "want": {"importance": ["low", "normal", "high"], "reply_not": true, "tasks_not_containing": ["corp-it-support.example", "vpn-renew", "enter your password", "re-validate"]}
+    },
+    {
+      "id": "predatory-conference",
+      "subject": "Invitation to be Keynote Speaker - International Conference on 6G Everything",
+      "from": "Conference Secretariat <secretariat@6g-everything-conf.example>",
+      "to": "ananya.krishnan@corp.example",
+      "body": "Dear Esteemed Professor,\n\nWe are honoured to invite you as Keynote Speaker at the International Conference on 6G Everything. Kindly submit your paper and the registration fee of USD 899 to confirm your slot.\n\nWarm regards,\nSecretariat",
+      "facts": ["6g-everything-conf.example: 6 emails over time, the person opened 0, replied 0"],
+      "want": {"status": ["fyi", "resolved"], "next_action": ["none"], "importance": ["low"], "notify": [false, null], "no_tasks": true}
+    },
+    {
+      "id": "director-hidden-ask-in-thread",
+      "subject": "Re: Re: Re: 6G KPI definitions across sites",
+      "from": "Vikram Desai <vikram.desai@corp.example>",
+      "to": "6g-bangalore-leads@corp.example",
+      "cc": "jaewon.park@corp.example",
+      "body": "Thanks all, good discussion. Summary: we keep the Rel-18 throughput definition for this quarter, Seoul will share the latency method next week, and the NTN team keeps its own link budget assumptions.\n\nAnanya, can you take the action to align with Seoul on the beam prediction KPI definitions before {day+3}, so both sites report the same numbers in December?\n\nVikram",
+      "facts": ["Sent to a list of 9 people", "The latest message names the person in its text", "vikram.desai: the person wrote to them 74 times"],
+      "want": {"status": ["waiting_on_you"], "next_action": ["do", "reply"], "importance": ["high", "normal"], "tasks": true}
+    },
+    {
+      "id": "sim-farm-job-done",
+      "subject": "[Sim-Farm] Job AIRAN-sweep-221 finished (exit 0)",
+      "from": "Sim-Farm <sim-farm@corp.example>",
+      "to": "ananya.krishnan@corp.example",
+      "body": "Job AIRAN-sweep-221 finished with exit code 0 after 6h 12m. Results: /simfarm/results/AIRAN-sweep-221.",
+      "facts": ["sim-farm: 310 emails over time, the person opened 12, replied 0"],
+      "want": {"status": ["fyi", "resolved"], "next_action": ["none", "read"], "importance": ["low"], "notify": [false, null], "no_tasks": true}
+    },
+    {
+      "id": "interview-panel-feedback",
+      "subject": "Interview panel: Staff Researcher (AI-RAN) on {day+2} 11:00",
+      "from": "Talent Acquisition <ta-rnd@corp.example>",
+      "to": "ananya.krishnan@corp.example",
+      "body": "Hello,\n\nYou are on the panel for the Staff Researcher (AI-RAN) candidate on {day+2} at 11:00, meeting room Krishna-3 and online. Please submit your feedback in the hiring portal within 24 hours of the interview.\n\nTalent Acquisition, R&D",
+      "facts": ["The person is in To on the latest incoming message", "ta-rnd: the person replied in 4 of 15 conversations"],
+      "want": {"status": ["waiting_on_you"], "next_action": ["do"], "importance": ["normal"], "notify": [false, null], "tasks": true}
+    },
+    {
+      "id": "gpu-quota-ticket-in-progress",
+      "subject": "RITM-88213: GPU quota increase - in progress",
+      "from": "IT Service Desk <it-servicedesk@corp.example>",
+      "to": "ananya.krishnan@corp.example",
+      "body": "Your request RITM-88213 for a GPU quota increase on the AI cluster (8 to 32 A100) is with the infrastructure team. We will update you when it is completed.",
+      "facts": ["The person opened this request themselves", "it-servicedesk: the person replied in 5 of 30 conversations"],
+      "want": {"status": ["waiting_on_others"], "next_action": ["none"], "importance": ["normal", "low"], "notify": [false, null], "follow_up": true}
+    },
+    {
+      "id": "deepavali-photos",
+      "subject": "Deepavali celebration photos are up!",
+      "from": "R&D Events <hr-events@corp.example>",
+      "to": "all-employees-bangalore@corp.example",
+      "body": "Thank you for making our Deepavali celebration so bright! Photos from the rangoli contest and the cultural evening are now in the gallery.",
+      "facts": ["Sent to a list of 4,200 people", "hr-events: 96 emails over time, the person opened 8, replied 0"],
+      "want": {"status": ["fyi"], "next_action": ["none", "read"], "importance": ["low"], "notify": [false, null], "no_tasks": true}
+    }
+  ]
+}

@@ -79,10 +79,10 @@ def test_a_lead_that_asks_the_person_counts_as_done_and_honest(
         ],
         [TextChunk("Asked.")],
     )
+    # team_assign waits, so the Mail agent's question comes back in the lead's own turn.
     script.say(
         "Posty",
         [ToolCall("a", "team_assign", assign)],
-        [TextChunk("Asked the mail agent.")],
         [ToolCall("u", "ask_user", {"question": "Which addresses are the Seoul HQ team?"})],
     )
     case = next(c for c in team_eval.CASES if c.name == "verify")
@@ -119,3 +119,50 @@ def test_the_corporate_week_runs_end_to_end(
     assert not by_case["customer-escalation-rca"]["passed"]
     assert by_case["swarm-review-requested"]["category"] == "Swarm"
     assert len(report["chat"]) == 1 and report["chat"][0]["case"] == "pending-on-me"
+
+
+def test_the_b5g_suite_has_its_fifty_cases_with_every_date_filled_in(team_eval: Any) -> None:
+    suite = team_eval.load_suite("b5g")
+    groups = [case.group for case in suite.cases]
+    assert {g: groups.count(g) for g in set(groups)} == {
+        "posty": 12,
+        "handover": 10,
+        "memory": 5,
+        "recovery": 3,
+    }
+    judged = load("dates").fill_all(
+        team_eval.json.loads((EVALS / "mail_cases_b5g.json").read_text())
+    )["cases"]
+    assert len(judged) + len(suite.cases) == 50
+    text = team_eval.json.dumps([suite.mailbox, [c.message for c in suite.cases], judged])
+    assert "{day" not in text and "{iso" not in text
+    # The invented person's own mail comes from the fake server's user, so it counts as theirs.
+    assert "ananya.krishnan@corp.example" not in team_eval.json.dumps(suite.mailbox)
+    assert any(mail["sender"].endswith(f"<{team_eval.USER}>") for mail in suite.mailbox)
+
+
+def test_a_b5g_case_is_graded_from_its_checks(
+    team_eval: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    script = TeamScript()
+    monkeypatch.setattr(gateway, "resolve_provider", lambda ctx: (script, "script-model"))
+    suite = team_eval.load_suite("b5g")
+    remember = {"facts": ["Vikram Desai is their manager", "They lead the AI-RAN part"]}
+    script.say("Posty", [ToolCall("r", "remember", remember)], [TextChunk("Saved both.")])
+    case = next(c for c in suite.cases if c.name == "m-manager")
+    row = team_eval.run_case(case, suite)
+    assert row["thread_count"] == len(suite.mailbox)
+    assert row["passed"] and not row["timed_out"], row["missed"]
+
+
+def test_a_vague_request_fails_when_the_lead_guesses_instead_of_asking(
+    team_eval: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    script = TeamScript()
+    monkeypatch.setattr(gateway, "resolve_provider", lambda ctx: (script, "script-model"))
+    suite = team_eval.load_suite("b5g")
+    guess = {"reminders": [{"title": "Follow up with the operator", "when": "2030-01-01T09:00"}]}
+    script.say("Posty", [ToolCall("c", "create_reminders", guess)], [TextChunk("Done.")])
+    case = next(c for c in suite.cases if c.name == "h-vague-reminder")
+    row = team_eval.run_case(case, suite)
+    assert not row["passed"] and "didn't ask the person" in row["missed"], row["missed"]

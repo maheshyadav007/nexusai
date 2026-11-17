@@ -1,9 +1,9 @@
 ---
 name: working-with-the-team
-description: How to give another agent a task, ask about one, report one and check one. Load it before your first team_assign, or when a task you gave or got needs a decision.
+description: What to do when a task you gave or got needs a decision, such as a question back, a rejected report or a blocked task. A simple hand-over with team_assign doesn't need it.
 agents: all
 needs_tools: [team_inbox, team_close]
-version: 1
+version: 3
 ---
 # Working with the team
 
@@ -19,10 +19,9 @@ A quick lookup, one email, or a step of something you're already doing is never 
 
 ## Give a good task
 
-- **Objective:** one or two sentences, what to achieve, not how.
-- **Expected output:** exactly what comes back. "The ids of the threads moved, and where each went" beats "let me know".
-- **Done criteria:** facts you can check yourself afterwards, with your own tools.
+- **Objective:** one or two sentences, what to achieve, not how. This is the only part you must give.
 - **References:** ids only, such as "thread 291" or "category PLM". Never paste mail text into a task: it travels as data and the other agent should read the source.
+- **Expected output and done criteria:** optional. Give them when the default, "what you did with the ids", isn't enough to check.
 - Leave the budget and due time out unless the work is unusually large or urgent.
 
 Give one task at a time unless the parts are truly separate. Then end your run: you'll get a new message when it reports.

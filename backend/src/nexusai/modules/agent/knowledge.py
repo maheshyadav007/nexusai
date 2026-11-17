@@ -3,6 +3,7 @@
 import hashlib
 import json
 import re
+from collections.abc import Collection
 from typing import Any
 
 from nexusai.contracts.agent import AgentKnowledge, KnowledgeLayer, LearnedNote, MailPreview
@@ -21,6 +22,7 @@ from nexusai.modules.agent import (
 from nexusai.modules.agent import guard as guards
 from nexusai.modules.agent.gateway import Layer
 from nexusai.modules.agent.guard import DataGuard
+from nexusai.modules.semantic import module as semantic
 from nexusai.modules.settings.module import load_profile
 
 NOTE = re.compile(r"^- (?P<text>.*?)(?: \[mail:(?P<thread>\d+)\])?$")
@@ -107,6 +109,7 @@ def layers_for(
     account: str | None = None,
     exclude_preference: int | None = None,
     senders: set[str] | None = None,
+    tools: Collection[str] | None = None,
     **values: str,
 ) -> list[Layer]:
     from nexusai.modules.mail import accounts
@@ -114,8 +117,15 @@ def layers_for(
     config = ctx.config
     account = account or accounts.current_account(config)
     is_mail = agent == mail_agent.AGENT
+    engine = semantic.engine()
     selected_memory = memory.relevant(
-        config.home, agent, task_text, config.agent.memory_max_chars, include_learned=False
+        config.home,
+        agent,
+        task_text,
+        config.agent.memory_max_chars,
+        include_learned=False,
+        # Looked up, not called, here: the index can be closing while Home switches.
+        similar=getattr(engine, "similarity", None),
     )
     layers = prompts_builder.build_layers(
         config,
@@ -128,6 +138,7 @@ def layers_for(
         mailbox=signals.mailbox_layer(ctx, account) if is_mail else "",
         db=ctx.bus.db,
         skills=skills.index(ctx, agent),
+        tools=tools,
         **values,
     )
 
@@ -204,11 +215,15 @@ def preview(ctx: Context, thread: int) -> MailPreview:
     out. Calls no model."""
     subject, _, task = mail_agent.task_for(ctx, thread)
     source = ctx.bus.db.fetch_all("SELECT account FROM threads WHERE id=?", (thread,))
+    from nexusai.modules.agent import tools
+
     layers = layers_for(
         ctx,
         mail_agent.AGENT,
         f"{subject}\n{task}",
         "",
+        # What a judging run has, so the preview leaves out the same sections.
+        tools=tools.TRIAGE_TOOLS,
         scratch="your scratch folder",
         account=source[0]["account"] if source else None,
         senders=sender_scope(ctx, [thread]),

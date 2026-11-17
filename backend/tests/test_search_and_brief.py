@@ -253,7 +253,8 @@ def test_the_brief_changes_only_through_update_brief_from_any_run(
     script.replies = brief_replies("- Budget sent. Nothing else waits.")
     current().dispatch(TurnRequest(session_id, "Update it: I sent the budget", "person"))
     wait(lambda: "Budget sent" in str(post(client, "today.view").json()["prep_text"]), "updated")
-    told = script.requests[-2]
+    # The person's run, whether or not its last call has been made yet.
+    told = next(r for r in reversed(script.requests) if "The person sent this" in r.instructions)
     assert "The brief on Today now" in told.instructions
     assert "Priya still waits on the budget." in told.instructions
     names = {tool.name for tool in told.tools}

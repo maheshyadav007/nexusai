@@ -245,10 +245,17 @@ def load(ctx: Context, session: str, agent: str, name: str) -> str:
         "SELECT id FROM agent_turns WHERE session = ? AND closed = 0 ORDER BY id DESC LIMIT 1",
         (session,),
     )
+    turn = turns[0]["id"] if turns else None
+    if turn is not None and ctx.bus.db.fetch_all(
+        "SELECT 1 FROM skill_loads WHERE session = ? AND turn = ? AND skill = ? LIMIT 1",
+        (session, turn, skill.name),
+    ):
+        # Loading it again only repeats it, and a small model will keep doing so.
+        return f"Skill {skill.name} is already loaded above in this turn. Follow it, and carry on."
     with ctx.bus.db.transaction() as tx:
         tx.execute(
             "INSERT INTO skill_loads (session, turn, agent, skill, hash, time) VALUES (?, ?, ?, ?, ?, ?)",
-            (session, turns[0]["id"] if turns else None, agent, skill.name, skill.hash, _now()),
+            (session, turn, agent, skill.name, skill.hash, _now()),
         )
     others = sorted(path for path in skill.files if path != ENTRY)
     more = (

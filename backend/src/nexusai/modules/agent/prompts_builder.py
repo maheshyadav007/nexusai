@@ -2,8 +2,10 @@
 
 import os
 import platform
+import re
 import shutil
 import sys
+from collections.abc import Collection
 from importlib import resources
 from pathlib import Path
 
@@ -15,6 +17,8 @@ from nexusai.modules.agent.gateway import Layer
 SH_LIKE = frozenset({"bash", "zsh", "sh", "dash", "ksh"})
 PERSONAL_ORDER = ("about-me.md", "importance.md", "categories.md", "senders.md", "topics.md")
 TOOLS_TO_REPORT = ("python3", "git", "node", "uv")
+# A section marked like this under its heading is only for an agent that has one of those tools.
+NEEDS = re.compile(r"^<!-- needs: ([a-z_, ]+) -->\n", re.M)
 
 
 def packaged(name: str) -> str:
@@ -59,6 +63,21 @@ def personal_prompts(home: Path) -> str:
     ).strip()
 
 
+def for_tools(text: str, tools: Collection[str] | None) -> str:
+    """Leaves out "## " sections about tools this run doesn't have, so a small model isn't told to
+    use what it can't. None keeps every section, for showing the whole prompt."""
+    parts = re.split(r"(?m)^(?=## )", text)
+    kept = []
+    for part in parts:
+        needs = NEEDS.search(part)
+        if needs and tools is not None:
+            wanted = {name.strip() for name in needs.group(1).split(",")}
+            if not wanted & set(tools):
+                continue
+        kept.append(NEEDS.sub("", part))
+    return "".join(kept).replace("\n\n\n", "\n\n")
+
+
 def agent_prompt(home: Path, agent: str) -> str:
     base = packaged(f"{agent}.md")
     added = home / "prompts" / "agents" / f"{agent}.md"
@@ -76,6 +95,7 @@ def build_layers(
     brief_wishes: str = "",
     db: Database | None = None,
     skills: list[str] | None = None,
+    tools: Collection[str] | None = None,
     **values: str,
 ) -> list[Layer]:
     home = config.home
@@ -88,7 +108,8 @@ def build_layers(
         text = text.replace(f"{{{name}}}", value)
     if db is not None:
         text = cards.fill(db, text, agent)
-    system = packaged("system.md")
+    text = for_tools(text, tools)
+    system = for_tools(packaged("system.md"), tools)
     if db is not None:
         # Names come from the cards, so renaming the lead renames it here too.
         system = cards.fill(db, system, agent)
