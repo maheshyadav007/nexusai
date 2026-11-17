@@ -125,10 +125,13 @@ function ProfileCard({ card, selected, onSelect }: { card: AgentCard; selected: 
         </span>
         <span className="line-clamp-2 text-md text-ink-secondary">{card.role}</span>
       </Pressable>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line-subtle px-4 py-2 text-sm text-ink-muted">
-        <span><strong className="font-medium tabular-nums text-ink-primary">{compact.format(usage.tokens_today)}</strong> {t("team.card.tokens")}</span>
-        <span><strong className="font-medium tabular-nums text-ink-primary">{usage.tasks_verified}</strong> {t("team.card.tasks")}</span>
-        {talkable ? <span className="ml-auto"><Button variant="quiet" aria-label={t("team.talk", { agent: card.name })} onClick={() => talk(card, assistant)}><Icon name="chat" className="h-4 w-4" />{t("team.card.talk")}</Button></span> : <span className="ml-auto text-ink-muted">{t("team.ownChatOnly")}</span>}
+      <div className="flex items-center gap-3 border-t border-line-subtle py-2 pl-4 pr-2 text-sm text-ink-muted">
+        {/* One line at any width: the numbers give way, Talk keeps its place. */}
+        <span className="flex min-w-0 flex-1 items-center gap-3 truncate">
+          <span className="truncate"><strong className="font-medium tabular-nums text-ink-primary">{compact.format(usage.tokens_today)}</strong> {t("team.card.tokens")}</span>
+          <span className="shrink-0"><strong className="font-medium tabular-nums text-ink-primary">{usage.tasks_verified}</strong> {t("team.card.tasks")}</span>
+        </span>
+        {talkable ? <Button variant="quiet" aria-label={t("team.talk", { agent: card.name })} onClick={() => talk(card, assistant)}><Icon name="chat" className="h-4 w-4" />{t("team.card.talk")}</Button> : <span className="min-w-0 truncate text-ink-muted">{t("team.ownChatOnly")}</span>}
       </div>
     </li>
   );
@@ -203,7 +206,7 @@ export function TeamCards() {
       <h2 className="sr-only">{t("team.title")}</h2>
       <p className="text-md text-ink-muted">{t("team.summary", { count: rows.length, working, lead: rows.find((card) => card.default)?.name ?? "" })}</p>
       <div className="flex flex-wrap items-start gap-4">
-        <ul aria-label={t("team.title")} className="grid min-w-0 flex-1 gap-3 2xl:grid-cols-2">
+        <ul aria-label={t("team.title")} className="grid min-w-0 flex-1 gap-3 xl:grid-cols-2">
           {rows.map((card) => <ProfileCard key={card.id} card={card} selected={card.id === selected?.id} onSelect={() => setChosen(card.id)} />)}
         </ul>
         {selected ? <div className="w-full xl:w-drawer"><AgentDetail card={selected} /></div> : null}

@@ -89,8 +89,9 @@ function AgentList() {
 }
 
 export function AgentChannelScreen() {
+  // Page width, not reading width: the team's cards and details sit side by side, and the map needs room.
   return (
-    <div className="mx-auto flex max-w-reading flex-col gap-5 p-6">
+    <div className="mx-auto flex max-w-page flex-col gap-5 p-6">
       <PageHeader title={t("nav.channel")} />
       <Tabs
         label={t("nav.channel")}
