@@ -214,7 +214,8 @@ test("work folds behind a thinking line that opens to each step", async ({ page 
 
 test("a reminder asked for is set, and shows as a card that links to it", async ({ page }) => {
   await openFresh(page);
-  await say(page, "remind me to call");
+  // Reminders are the Organizer's work, so the person asks it by its @handle.
+  await say(page, "@organizer remind me to call");
   const card = page.getByTestId("result-card");
   await expect(card).toContainText("Call the vendor");
   await card.getByRole("link", { name: "Open reminders" }).click();
@@ -239,7 +240,8 @@ test("many requests at once are one decision, and one can be left out", async ({
   const current = await (await request.post("/api/queries/permissions.get", { data: {} })).json();
   await request.post("/api/commands/permissions.save", { data: { ...current, tools: { ...current.tools, create_tasks: "ask" } } });
   await openFresh(page);
-  await say(page, "add three tasks");
+  // Tasks are the Organizer's work, so the person asks it by its @handle.
+  await say(page, "@organizer add three tasks");
   const group = page.getByTestId("approval-group");
   await expect(group).toContainText("3 requests");
   await expect(page.getByTestId("approval")).toHaveCount(0);
@@ -253,7 +255,7 @@ test("many requests at once are one decision, and one can be left out", async ({
   await expect(page.getByTestId("task").filter({ hasText: "Second task" })).toHaveCount(0);
 
   await openFresh(page);
-  await say(page, "add three tasks");
+  await say(page, "@organizer add three tasks");
   await page.getByTestId("approval-group").getByRole("button", { name: "Approve for this session" }).click();
   await expect(page.getByTestId("session-status")).toContainText("Done");
   await expect(page.getByTestId("approval-group")).toHaveCount(0);

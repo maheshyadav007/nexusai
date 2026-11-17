@@ -994,6 +994,15 @@ class SessionRuntime:
         )[0]
         self._set(session, input_tokens=totals["i"], output_tokens=totals["o"])
 
+    def _recorded_result(self, session: str, call: str) -> str | None:
+        """What a call's tool said, as logged, unless an approval turned it down: that shows itself."""
+        rows = self.db.fetch_all(
+            "SELECT result FROM tool_calls WHERE session = ? AND tool_call_id = ? AND status != 'denied'"
+            " ORDER BY id DESC LIMIT 1",
+            (session, call),
+        )
+        return rows[0]["result"] if rows and rows[0]["result"] is not None else None
+
     def _finish(
         self,
         session: str,
@@ -1004,7 +1013,8 @@ class SessionRuntime:
         ending: str,
         failure: str | None = None,
     ) -> None:
-        parts = translator.close_open_blocks()
+        parts = translator.settle_tools(lambda call: self._recorded_result(session, call))
+        parts += translator.close_open_blocks()
         if translator.citations is not None:
             parts += translator.citations.part()
         if ending == "error":

@@ -1039,3 +1039,17 @@ def test_a_loop_pause_tells_the_person_and_the_giver(client: TestClient) -> None
         )
     team._pause_for_loop(ctx, task_row(9))
     assert task_row(9)["state"] == "blocked" and task_row(9)["wake"] == team.ASSIGNER
+
+
+def test_a_call_for_another_agents_tool_shows_why_it_didnt_run(
+    client: TestClient, script: TeamScript
+) -> None:
+    session = post(client, "session.create")["id"]
+    remind = {"reminders": [{"title": "Call the vendor", "when": "2031-05-01T09:00"}]}
+    script.say(lead(), [ToolCall("r", "create_reminders", remind)], [TextChunk("Handing it on.")])
+    chat(client, session, "Remind me to call")
+    shown = post(client, "session.get", {"id": session})["messages"][-1]["parts"]
+    call = next(p for p in shown if p["type"] == "tool-create_reminders")
+    # Turned away before it ran, it still says why, instead of looking like it's working.
+    assert call["state"] == "output-available"
+    assert call["output"].startswith("Not run") and "organizer" in call["output"]

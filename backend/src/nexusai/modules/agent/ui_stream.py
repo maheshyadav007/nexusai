@@ -5,6 +5,7 @@ This is the only file that knows either format, so a change in v3 stops here.
 
 import json
 import re
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -59,6 +60,8 @@ class UiTranslator:
         self.blocks: dict[int, dict[str, Any]] = {}
         self.announced: set[str] = set()
         self.finished_tools: set[str] = set()
+        # Every tool call shown, so one that never reported back can be settled at the end.
+        self.called_tools: list[str] = []
         self.usage: dict[str, int] = {}
         self._message = 0
         self._counter = 0
@@ -175,6 +178,7 @@ class UiTranslator:
             return self._end_text(block)
         if block["kind"] == "reasoning":
             return [{"type": "reasoning-end", "id": block["id"]}]
+        self.called_tools.append(block["id"])
         return [
             {
                 "type": "tool-input-available",
@@ -248,6 +252,20 @@ class UiTranslator:
         parts.append({"type": "text-end", "id": block["id"]})
         if "hidden" in block:
             parts += followups_part(block["hidden"])
+        return parts
+
+    def settle_tools(self, recorded: Callable[[str], str | None]) -> list[dict[str, Any]]:
+        """A call turned away before it ran, such as one for a tool another agent owns, sends no
+        result of its own. It shows what was recorded for it, not "Working" forever."""
+        parts: list[dict[str, Any]] = []
+        for call_id in self.called_tools:
+            if call_id in self.finished_tools:
+                continue
+            said = recorded(call_id)
+            if said is None:
+                continue
+            self.finished_tools.add(call_id)
+            parts.append({"type": "tool-output-available", "toolCallId": call_id, "output": said})
         return parts
 
     def close_open_blocks(self) -> list[dict[str, Any]]:
