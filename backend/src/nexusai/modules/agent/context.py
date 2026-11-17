@@ -299,6 +299,20 @@ class TaskNotes(AgentMiddleware):
         return {"messages": [HumanMessage(content=notes, id=f"{TASK_NOTE}{uuid.uuid4().hex}")]}
 
 
+class TaskOver(AgentMiddleware):
+    """Ends the run doing a task once the task no longer needs it: it asked and waits for the
+    answer, reported, or was paused or canceled. Being told to end isn't enough for a small model,
+    which asks again, or keeps acting on a task nobody wants any more."""
+
+    def __init__(self, over: Callable[[], bool]) -> None:
+        super().__init__()
+        self.over = over
+
+    @hook_config(can_jump_to=["end"])
+    def before_model(self, state: Any, runtime: Any) -> dict[str, Any] | None:
+        return {"jump_to": "end"} if self.over() else None
+
+
 class PromisedMemory(AgentMiddleware):
     """A reply that says it kept something, when nothing was saved, goes back once to save it.
 
@@ -406,6 +420,7 @@ def middleware(
     always_shown_prefix: str = "",
     tool_names: list[str] | None = None,
     owners: dict[str, str] | None = None,
+    task_over: Callable[[], bool] | None = None,
 ) -> list[Any]:
     chain: list[Any] = [ToolSearch(shown_tools, always_shown_prefix)]
     if log_tool is not None:
@@ -421,6 +436,8 @@ def middleware(
         chain.append(TrimSaved(profile.keep_messages))
     else:
         chain.append(TrimView(profile.keep_messages))
+    if task_over is not None:
+        chain.append(TaskOver(task_over))
     if notes is not None:
         chain.append(TaskNotes(notes))
     if tool_names is not None and "remember" in tool_names:

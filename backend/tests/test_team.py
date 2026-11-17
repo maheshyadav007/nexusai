@@ -65,6 +65,11 @@ class TeamScript:
     def told(self, speaker: str) -> list[str]:
         return [r.messages[-1].text for s, r in self.requests if s == speaker]
 
+    def requests_text(self, speaker: str, call: int) -> str:
+        """Everything in that speaker's nth model call (1 is the first)."""
+        mine = [r for s, r in self.requests if s == speaker]
+        return "\n".join(m.text for m in mine[call - 1].messages)
+
 
 @pytest.fixture
 def script(monkeypatch: pytest.MonkeyPatch) -> TeamScript:
@@ -399,7 +404,28 @@ def test_the_owner_can_never_verify_its_own_work(client: TestClient, script: Tea
     chat(client, session, "Go")
     task = wait(lambda: agent.current().db.fetch_all("SELECT id FROM team_tasks"), "task")[0]["id"]
     wait(lambda: task_row(task)["state"] == "reported" or None, "report", 20)
-    wait(lambda: any("someone else must check" in t for t in script.told(mail())), "refusal", 20)
+    owner = task_row(task)["owner_session"]
+    db = agent.current().db
+    wait(
+        lambda: (
+            db.fetch_all("SELECT 1 FROM agent_turns WHERE session = ? AND closed = 1", (owner,))
+            or None
+        ),
+        "run ended",
+        20,
+    )
+    # Its run ends at the report, so it never gets to try. Asked anyway, it's refused.
+    assert len(script.told(mail())) == 1
+    refused = team.close(
+        agent.current().ctx,
+        session=owner,
+        sender="mail",
+        task=task,
+        action="verify",
+        outcome="Fine",
+        evidence=[],
+    )
+    assert "someone else must check" in refused
 
 
 def test_a_run_that_ends_without_a_report_blocks_and_wakes_the_giver(
@@ -767,3 +793,134 @@ def test_stop_ends_the_wait_for_a_hand_over_at_once() -> None:
     told = team.await_result(ctx, "Task 7 given to @organizer.", 60, stopped)  # type: ignore[arg-type]
     assert time.monotonic() - began < 1
     assert told.startswith("Task 7 is still being worked on")
+
+
+# Questions on a task. Each replays how a small model got stuck on a real one.
+
+
+@pytest.mark.parametrize("kind", ["answer", "note"])
+def test_asking_ends_the_run_and_the_answer_starts_the_next(
+    client: TestClient, script: TeamScript, kind: str
+) -> None:
+    session = post(client, "session.create")["id"]
+    ask = {"task": 1, "kind": "ask", "text": "Which date should it be due?"}
+    script.say(
+        mail(),
+        # Asking twice at once sends one question; the run then ends instead of asking again.
+        [ToolCall("q1", "team_message", ask), ToolCall("q2", "team_message", ask)],
+        [ToolCall("r", "team_close", {"task": 1, "action": "report", "outcome": "Due Friday."})],
+    )
+    script.say(
+        lead(),
+        [ToolCall("a", "team_assign", ASSIGN)],
+        [TextChunk("Given.")],
+        # A reply sent as a note still answers the question.
+        [ToolCall("ans", "team_message", {"task": 1, "kind": kind, "text": "Friday"})],
+        [TextChunk("Answered.")],
+        [ToolCall("v", "team_close", {"task": 1, "action": "verify", "outcome": "Seen."})],
+        [TextChunk("Done.")],
+    )
+    chat(client, session, "Go")
+    wait(lambda: task_row(1)["state"] == "verified" or None, "verified", 30)
+    db = agent.current().db
+    asks = db.fetch_all("SELECT 1 FROM agent_channel WHERE task = 1 AND kind = 'ask'")
+    assert len(asks) == 1
+    told = script.told(mail())
+    # One model call for the run that asked, one for the run the answer started: each ends once
+    # its task no longer needs it, after asking and after reporting.
+    assert len(told) == 2
+    assert "Already asked" in script.requests_text(mail(), 2)
+    assert "answer from" in told[1] and "Friday" in told[1]
+
+
+def test_an_answer_to_a_question_that_came_back_as_a_report_reaches_the_agent(
+    client: TestClient, script: TeamScript
+) -> None:
+    session = post(client, "session.create")["id"]
+    script.say(
+        mail(),
+        [ToolCall("r", "team_close", {"task": 1, "action": "report", "outcome": "Which folder?"})],
+        [ToolCall("r2", "team_close", {"task": 1, "action": "report", "outcome": "Filed."})],
+        [TextChunk("Reported.")],
+    )
+    script.say(
+        lead(),
+        [ToolCall("a", "team_assign", ASSIGN)],
+        [TextChunk("Given.")],
+        [ToolCall("ans", "team_message", {"task": 1, "kind": "answer", "text": "PLM"})],
+        [TextChunk("Answered.")],
+        [ToolCall("v", "team_close", {"task": 1, "action": "verify", "outcome": "Seen."})],
+        [TextChunk("Done.")],
+    )
+    chat(client, session, "Go")
+    wait(lambda: task_row(1)["state"] == "verified" or None, "verified", 30)
+    assert task_row(1)["outcome"] == "Filed."
+    assert any("answer from" in t and "PLM" in t for t in script.told(mail()))
+
+
+def test_canceling_a_task_ends_the_run_doing_it(client: TestClient, script: TeamScript) -> None:
+    session = post(client, "session.create")["id"]
+    script.say(lead(), [ToolCall("a", "team_assign", ASSIGN)], [TextChunk("Given.")])
+    script.say(
+        mail(),
+        [ToolCall("l", "list_categories", {})],
+        [ToolCall("l2", "list_categories", {})],
+        [ToolCall("l3", "list_categories", {})],
+    )
+    waiting, go_on = script.hold(mail(), 2)
+    chat(client, session, "Go")
+    assert waiting.wait(15)
+    post(client, "team.cancel", {"id": 1})
+    go_on.set()
+    owner = task_row(1)["owner_session"]
+    db = agent.current().db
+    wait(
+        lambda: (
+            db.fetch_all("SELECT 1 FROM agent_turns WHERE session = ? AND closed = 1", (owner,))
+            or None
+        ),
+        "run ended",
+        20,
+    )
+    # The step under way finishes, and nothing after it.
+    assert len(script.told(mail())) == 2
+
+
+def test_an_answer_reaches_a_run_that_is_still_going(
+    client: TestClient, script: TeamScript
+) -> None:
+    session = post(client, "session.create")["id"]
+    script.say(lead(), [ToolCall("a", "team_assign", ASSIGN)], [TextChunk("Given.")])
+    script.say(
+        mail(),
+        [ToolCall("l", "list_categories", {})],
+        [ToolCall("l2", "list_categories", {})],
+        [TextChunk("ok")],
+    )
+    waiting, go_on = script.hold(mail(), 2)
+    chat(client, session, "Go")
+    assert waiting.wait(15)
+    db = agent.current().db
+    with db.transaction() as tx:
+        team._message(tx, 1, "answer", "session", "mail", "Use PLM", False)
+    go_on.set()
+    # Delivered before its next step, not held until a run that may never come.
+    third = wait(
+        lambda: [t for t in script.told(mail()) if "answer from" in t] or None, "delivered", 20
+    )
+    assert "Use PLM" in third[0]
+
+
+def test_a_loop_pause_tells_the_person_and_the_giver(client: TestClient) -> None:
+    db = agent.current().db
+    ctx = agent.current().ctx
+    session = post(client, "session.create")["id"]
+    with db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO team_tasks (id, objective, expected_output, done_criteria, refs, evidence,"
+            " assigner, assigner_session, owner, state, budget_tokens, created, updated)"
+            " VALUES (9, 'x', 'x', 'x', '[]', '[]', ?, ?, 'mail', 'input_required', 1000, ?, ?)",
+            (cards.default(db).id, session, "2030-01-01", "2030-01-01"),
+        )
+    team._pause_for_loop(ctx, task_row(9))
+    assert task_row(9)["state"] == "blocked" and task_row(9)["wake"] == team.ASSIGNER

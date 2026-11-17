@@ -99,6 +99,32 @@ def test_a_silent_task_is_stopped_and_blocked(client: TestClient) -> None:
     assert runtime.stopped == ["owner"]
 
 
+def test_a_task_waiting_on_the_person_is_not_silent(client: TestClient) -> None:
+    db = agent.current().db
+    old = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+    with db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO agent_sessions (id, title, agent, status, created, updated)"
+            " VALUES ('owner', 'Task', 'mail', 'waiting', ?, ?)",
+            (old, old),
+        )
+        tx.execute(
+            "INSERT INTO agent_turns (session, text, created) VALUES ('owner', 'Task', ?)", (old,)
+        )
+        turn = tx.execute("SELECT MAX(id) FROM agent_turns").fetchone()[0]
+        tx.execute(
+            "INSERT INTO team_tasks (objective, expected_output, done_criteria, assigner, owner,"
+            " owner_session, owner_turn, state, budget_tokens, created, updated)"
+            " VALUES ('o', 'e', 'd', 'session', 'mail', 'owner', ?, 'working', 1000, ?, ?)",
+            (turn, old, old),
+        )
+    runtime = FakeRuntime()
+    # An approval to move mail, left for an hour, must still find the run there.
+    monitor.check(agent.current().ctx, runtime)
+    assert db.fetch_all("SELECT state FROM team_tasks")[0]["state"] == "working"
+    assert runtime.stopped == []
+
+
 def test_an_agent_daily_cap_stops_background_work_only(config: Config) -> None:
     capped = replace(config, team=replace(config.team, agent_tokens_per_day=100))
     with TestClient(create_app(capped), base_url="http://127.0.0.1:4100"):

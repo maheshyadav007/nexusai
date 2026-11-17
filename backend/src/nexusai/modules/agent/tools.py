@@ -1814,9 +1814,14 @@ def build_tools(
         return team.await_result(ctx, given, ctx.config.team.assign_wait_seconds, control.stopped)
 
     def team_message(task: int, kind: str, text: str, tool_call_id: str) -> str:
-        return team.message(
+        said = team.message(
             ctx, session=session, sender=_speaker(), task=task, kind=kind, text=text
         )
+        if not said.startswith("Answered."):
+            return said
+        # As after a hand-over: a quick finish comes back here, so the giver doesn't act meanwhile.
+        news = team.wait_for(ctx, task, ctx.config.team.assign_wait_seconds, control.stopped)
+        return f"{said}\n{news}" if news else said
 
     def team_close(
         task: int,

@@ -112,6 +112,11 @@ def _silence(ctx: Context, runtime: Any) -> None:
         session = row["owner_session"]
         if runtime.active_turn(session) is None:
             continue
+        # Waiting on the person, for an approval or an answer, isn't hung: they may take a while.
+        if db.fetch_all(
+            "SELECT 1 FROM agent_sessions WHERE id = ? AND status = 'waiting'", (session,)
+        ):
+            continue
         last = db.fetch_all(
             "SELECT MAX(t) AS last FROM (SELECT MAX(time) AS t FROM model_calls WHERE session = ?"
             " UNION ALL SELECT MAX(started) FROM tool_calls WHERE session = ?"

@@ -150,7 +150,10 @@ def failed(tool: str, error: Exception) -> str:
 
 
 # How a tool's own reply says nothing was done.
-REFUSED_START = ("Not run", "Not allowed", "Not assigned", "Not proposed", "Not saved", "Error")
+REFUSED_START = (
+    "Not run", "Not allowed", "Not assigned", "Not proposed", "Not saved", "Not sent", "Not done",
+    "Error",
+)  # fmt: skip
 REPEATED = (
     "\nThis same call has now failed {count} times. Don't make it again. Try another way: "
     "different arguments, another tool, or find_tools. If nothing works, tell the person what "

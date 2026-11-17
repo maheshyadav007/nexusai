@@ -24,7 +24,7 @@ from nexusai.contracts.agent import (
 )
 from nexusai.kernel.database import Database, Migration
 from nexusai.kernel.module import CommandError, Context
-from nexusai.modules.agent import cards
+from nexusai.modules.agent import cards, channel
 from nexusai.modules.agent.prompt_data import untrusted
 
 MIGRATION = Migration(
@@ -114,6 +114,14 @@ def session_task(db: Database, session: str) -> Any | None:
         "SELECT * FROM team_tasks WHERE owner_session = ? ORDER BY id DESC LIMIT 1", (session,)
     )
     return rows[0] if rows else None
+
+
+def run_should_end(db: Database, session: str) -> bool:
+    """True when the run doing a task should stop before its next step: it asked and waits for
+    the answer, reported, or the task was paused or closed. A small model told to end its run often
+    carries on, asking again or acting on a task nobody wants any more."""
+    row = session_task(db, session)
+    return row is not None and row["state"] not in {"queued", "working"}
 
 
 def _tokens_used(db: Database, session: str | None) -> int:
@@ -371,7 +379,7 @@ def _message_on(ctx: Context, *, session: str, sender: str, task: int, kind: str
     if row is None:
         return f"No task {task}."
     if row["state"] in CLOSED:
-        return f"Task {task} is {row['state']}, so nothing more can be said on it."
+        return f"Not sent: task {task} is {row['state']}, so nothing more can be said on it."
     text = text.strip()
     if not text:
         return "Say something: the message is empty."
@@ -380,6 +388,12 @@ def _message_on(ctx: Context, *, session: str, sender: str, task: int, kind: str
     )
     is_owner = row["owner_session"] == session
     is_assigner = row["assigner_session"] == session
+    if kind == "ask" and is_owner and row["state"] == "input_required":
+        # Asking again sends nothing new, and must not count towards the loop limit.
+        return "Already asked. End this run now: the answer comes in a new message."
+    if kind == "note" and is_assigner and row["state"] == "input_required":
+        # A reply to a question is the answer, whatever it was sent as, or the asker never wakes.
+        kind = "answer"
     if _pair_is_busy(ctx, sender, row["assigner"] if is_owner else row["owner"]):
         return (
             f"Not sent: you've exchanged {ctx.config.team.messages_per_pair_per_hour} messages "
@@ -387,7 +401,7 @@ def _message_on(ctx: Context, *, session: str, sender: str, task: int, kind: str
         )
     if kind == "ask":
         if not is_owner:
-            return "Only the agent doing the task can ask about it. Use team_assign to ask someone else."
+            return "Not sent: only the agent doing the task can ask about it. Use team_assign to ask someone else."
         if row["assigner"] == PERSON:
             return "The person gave this task. Ask them with ask_user instead."
         if _ping_pong(db, task, ctx.config.team.ping_pong_messages):
@@ -396,9 +410,11 @@ def _message_on(ctx: Context, *, session: str, sender: str, task: int, kind: str
         state, wake, recipient = "input_required", ASSIGNER, row["assigner"]
     elif kind == "answer":
         if not is_assigner:
-            return "Only the agent that gave the task can answer on it."
-        if row["state"] != "input_required":
-            return f"Task {task} isn't waiting for an answer. Use note to add something."
+            return "Not sent: only the agent that gave the task can answer on it."
+        if row["state"] not in {"input_required", "blocked", "reported"}:
+            return f"Not sent: task {task} isn't waiting for an answer. Use note to add something."
+        # A question can come back as a report, or wait past the due time or into a pause. The
+        # answer still reaches the agent, and the task carries on.
         state, wake, recipient = "working", OWNER, row["owner"]
     elif kind == "note":
         if not (is_owner or is_assigner):
@@ -413,11 +429,19 @@ def _message_on(ctx: Context, *, session: str, sender: str, task: int, kind: str
             " updated = ? WHERE id = ?",
             (state, wake, int(is_untrusted), _iso(_now()), task),
         )
+        if kind == "answer" and row["state"] != "input_required":
+            work.tx.execute(
+                "UPDATE team_tasks SET failure = NULL, due = ? WHERE id = ?",
+                (_iso(_now() + timedelta(minutes=ctx.config.team.task_due_minutes)), task),
+            )
         work.emit("team.changed", {"task": task}, source="agent", trace_id=ctx.trace_id)
     if kind == "ask":
-        return "Asked. End this run now: you'll get a new message with the answer."
+        return "Asked. This run ends here; the answer comes in a new message."
     if kind == "answer":
-        return "Answered. They carry on in their own run."
+        return (
+            f"Answered. {cards.name(db, row['owner'])} carries on with task {task}. Don't verify "
+            "or report it: wait for their report."
+        )
     return "Noted."
 
 
@@ -440,14 +464,27 @@ def await_result(
     found = GIVEN.match(given)
     if found is None or seconds <= 0:
         return given
-    task = int(found.group(1))
+    return wait_for(ctx, int(found.group(1)), seconds, stopped, poll) or given
+
+
+def wait_for(
+    ctx: Context,
+    task: int,
+    seconds: float,
+    stopped: threading.Event | None = None,
+    poll: float = 0.5,
+) -> str | None:
+    """The assigner's news on a task once it reports, asks or stops, or that it's still being
+    worked on. None when there's nothing to add."""
+    if seconds <= 0:
+        return None
     db = ctx.bus.db
     stopped = stopped or threading.Event()
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline and not stopped.is_set():
         row = get(db, task)
         if row is None:
-            return given
+            return None
         if row["state"] in ANSWERED and row["wake"] == ASSIGNER:
             with ctx.bus.unit_of_work() as work:
                 taken = work.tx.execute(
@@ -461,7 +498,7 @@ def await_result(
                     )
             if taken:
                 return report_text(db, get(db, task) or row)
-            return given
+            return None
         stopped.wait(poll)
     latest = get(db, task)
     owner = cards.name(db, latest["owner"]) if latest is not None else "The agent"
@@ -474,9 +511,20 @@ def await_result(
 def _pause_for_loop(ctx: Context, row: Any) -> None:
     with ctx.bus.unit_of_work() as work:
         work.tx.execute(
-            "UPDATE team_tasks SET state = 'blocked', failure = 'loop', wake = NULL, updated = ?"
+            "UPDATE team_tasks SET state = 'blocked', failure = 'loop', wake = ?, updated = ?"
             " WHERE id = ?",
-            (_iso(_now()), row["id"]),
+            (ASSIGNER, _iso(_now()), row["id"]),
+        )
+        # Paused for the person, so they're told, and the giver hears it too.
+        channel.notify(
+            ctx,
+            work,
+            f"Task {row['id']} was paused: {cards.name(ctx.bus.db, row['owner'])} and "
+            f"{cards.name(ctx.bus.db, row['assigner'])} kept passing messages back and forth.",
+            "",
+            "/agent/channel?tab=tasks",
+            "agent",
+            False,
         )
         work.emit("team.changed", {"task": row["id"]}, source="agent", trace_id=ctx.trace_id)
 
@@ -508,9 +556,9 @@ def _close(
     now = _iso(_now())
     if action == "report":
         if not is_owner:
-            return "Only the agent doing the task can report it."
+            return "Not done: only the agent doing the task can report it. Wait for its report."
         if row["state"] not in {"working", "input_required"}:
-            return f"Task {task} is {row['state']}, so it can't be reported now."
+            return f"Not done: task {task} is {row['state']}, so it can't be reported now."
         if not outcome.strip():
             return "A report needs an outcome: what you did and what you found."
         limit = ctx.config.team.report_max_chars
@@ -531,12 +579,13 @@ def _close(
         return "Reported. The agent that gave it will check it. You can end this run."
     if action in {"verify", "reject"}:
         if is_owner:
-            return "You did this task, so someone else must check it."
+            return "Not done: you did this task, so someone else must check it."
         if not is_assigner:
-            return "Only the agent that gave the task can verify or reject it."
+            return "Not done: only the agent that gave the task can verify or reject it."
         if row["state"] != "reported":
             return (
-                f"Task {task} is {row['state']}. Only a reported task can be verified or rejected."
+                f"Not done: task {task} is {row['state']}. Only a reported task can be verified "
+                "or rejected. Wait for the report."
             )
         state = "verified" if action == "verify" else "rejected"
         with ctx.bus.unit_of_work() as work:
@@ -549,7 +598,7 @@ def _close(
         return f"Task {task} {state}."
     if action == "cancel":
         if not is_assigner:
-            return "Only the agent that gave the task, or the person, can cancel it."
+            return "Not done: only the agent that gave the task, or the person, can cancel it."
         return cancel(ctx, task, sender, outcome)
     return "action must be report, verify, reject or cancel."
 
@@ -617,8 +666,8 @@ def take_notes(ctx: Context, session: str) -> str:
     if row is None or row["state"] in CLOSED:
         return ""
     rows = db.fetch_all(
-        "SELECT id, sender_agent, text, untrusted, read_by FROM agent_channel"
-        " WHERE task = ? AND kind = 'note' AND recipient_agent = ? ORDER BY id",
+        "SELECT id, kind, sender_agent, text, untrusted, read_by FROM agent_channel"
+        " WHERE task = ? AND kind IN ('note', 'answer') AND recipient_agent = ? ORDER BY id",
         (row["id"], row["owner"]),
     )
     fresh = [r for r in rows if session not in json.loads(r["read_by"] or "[]")]
@@ -634,7 +683,7 @@ def take_notes(ctx: Context, session: str) -> str:
             "UPDATE team_tasks SET wake = NULL WHERE id = ? AND wake = ?", (row["id"], OWNER)
         )
     lines = "\n".join(
-        f"- from {'the person' if n['sender_agent'] == PERSON else cards.name(db, n['sender_agent'])}: {n['text']}"
+        f"- {n['kind']} from {'the person' if n['sender_agent'] == PERSON else cards.name(db, n['sender_agent'])}: {n['text']}"
         for n in fresh
     )
     text = f"New note on task {row['id']}, take it into account:\n{lines}"
@@ -657,7 +706,8 @@ def contract_text(db: Database, row: Any) -> str:
         f"Budget: {row['budget_tokens']} tokens. Due: {row['due']}.",
         "When it's done, call team_close with action report, an outcome and evidence (ids). If you "
         "can't finish, report what you found and what's missing. If you need something from "
-        f"{giver}, use team_message with kind ask, then end the run. Never mark your own work as "
+        f"{giver}, use team_message with kind ask once; the run ends there and the answer starts a "
+        "new one. Never mark your own work as "
         "verified.",
     ]
     said = _thread(db, row["id"])
