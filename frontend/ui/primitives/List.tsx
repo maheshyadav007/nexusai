@@ -31,7 +31,7 @@ export function ListRow({ lead, leadWidth = "icon", title, meta, trailing, onOpe
   const body = (
     <span className="flex min-w-0 flex-1 flex-col gap-1">
       <span className="min-w-0 truncate text-md text-ink-primary">{title}</span>
-      {meta ? <span className="flex min-w-0 items-center gap-2 text-sm text-ink-muted">{meta}</span> : null}
+      {meta ? <span className="min-w-0 truncate text-sm text-ink-muted">{meta}</span> : null}
     </span>
   );
   return (
