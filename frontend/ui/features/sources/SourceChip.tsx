@@ -6,7 +6,7 @@ import { useOpenSource } from "./context";
 import { fullHref, SOURCE_ICONS, type PreviewSource } from "./kinds";
 
 /** Where something came from, as one chip that opens the quick preview. Used everywhere a source shows. */
-export function SourceChip({ source, list, label }: { source: PreviewSource; list?: readonly PreviewSource[]; label?: string }) {
+export function SourceChip({ source, list, label, look = "chip" }: { source: PreviewSource; list?: readonly PreviewSource[]; label?: string; look?: "chip" | "inline" }) {
   const preview = useOpenSource();
   const format = useDateTime();
   const detail = [source.detail, source.date ? format(source.date) : ""].filter(Boolean).join(" · ");
@@ -19,6 +19,7 @@ export function SourceChip({ source, list, label }: { source: PreviewSource; lis
       href={fullHref(source)}
       onOpen={() => preview.open(source, list)}
       onOpenFull={() => preview.openFull(source)}
+      look={look}
     />
   );
 }

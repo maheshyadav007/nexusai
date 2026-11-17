@@ -15,6 +15,7 @@ import { Input } from "@/ui/primitives/Input";
 import { ListGroup, ListRow } from "@/ui/primitives/List";
 import { LiveDot } from "@/ui/primitives/LiveDot";
 import { Mascot } from "@/ui/primitives/Mascot";
+import { PageHeader } from "@/ui/primitives/PageHeader";
 import { Segmented } from "@/ui/primitives/Segmented";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { t, tn, type StringKey } from "@/ui/strings";
@@ -89,20 +90,11 @@ export function SessionsScreen() {
   const shown = sections.filter((section) => show(section.key) && groups[section.key].length);
   return (
     <div className="mx-auto flex max-w-reading flex-col gap-5 p-6">
-      <header className="flex items-end justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <h1 className="font-serif text-display text-ink-primary">{t("nav.sessions")}</h1>
-          {sessions.data ? (
-            <p className="text-md tabular-nums text-ink-muted">
-              {[tn("sessions.count", rows.length), groups.waiting.length ? tn("sessions.waitingCount", groups.waiting.length) : null, t("sessions.running", { running: sessions.data.running, limit: sessions.data.limit })].filter(Boolean).join(" · ")}
-            </p>
-          ) : null}
-        </div>
-        <Button variant="primary" onClick={assistant.newChat}>
-          <Icon name="newChat" className="h-4 w-4" />
-          {t("sessions.new")}
-        </Button>
-      </header>
+      <PageHeader
+        title={t("nav.sessions")}
+        summary={sessions.data ? [tn("sessions.count", rows.length), groups.waiting.length ? tn("sessions.waitingCount", groups.waiting.length) : null, t("sessions.running", { running: sessions.data.running, limit: sessions.data.limit })].filter(Boolean).join(" · ") : undefined}
+        action={<Button variant="primary" onClick={assistant.newChat}><Icon name="newChat" className="h-4 w-4" />{t("sessions.new")}</Button>}
+      />
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0 flex-1">
           <Input aria-label={t("sessions.search")} placeholder={t("sessions.search")} value={search} onChange={(event) => setSearch(event.target.value)} />

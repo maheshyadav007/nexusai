@@ -117,10 +117,16 @@ test("a proposed task is accepted, finished, and removed", async ({ page }) => {
   await page.getByRole("radio", { name: /^To do/ }).click();
 
   const title = unique("Send the report");
-  await page.getByRole("textbox", { name: "New task" }).fill(title);
-  await page.getByRole("button", { name: "Add task" }).click();
+  const bar = page.getByTestId("add-bar");
+  await bar.getByRole("textbox", { name: "New task" }).fill(title);
+  // One quiet date button opens one picker; the day picked shows on the button.
+  await bar.getByRole("button", { name: "Pick a due date" }).click();
+  await page.getByRole("dialog", { name: "Due" }).getByRole("button", { name: /^Tomorrow/ }).click();
+  await expect(bar.getByRole("button", { name: /^Due .*, change$/ })).toBeVisible();
+  await bar.getByRole("button", { name: "Add", exact: true }).click();
   const mine = page.getByTestId("task").filter({ hasText: title });
   await expect(mine).toBeVisible();
+  await noViolations(page);
 
   await mine.getByRole("checkbox").click();
   await expect(mine).toHaveCount(0);
@@ -143,10 +149,14 @@ test("a proposed task is accepted, finished, and removed", async ({ page }) => {
 test("a reminder is added and snoozed", async ({ page }) => {
   await page.goto("/planner/reminders");
   const title = unique("Call the vendor");
-  await page.getByRole("textbox", { name: "Remind me to" }).fill(title);
-  await page.getByRole("button", { name: "Tomorrow morning" }).click();
-  await page.getByLabel("When").fill("2031-05-01T09:00");
-  await page.getByRole("button", { name: "Add reminder" }).click();
+  const bar = page.getByTestId("add-bar");
+  await bar.getByRole("textbox", { name: "Remind me to" }).fill(title);
+  await bar.getByRole("button", { name: /, change$/ }).click();
+  const picker = page.getByRole("dialog", { name: "When" });
+  await picker.getByLabel("Day").fill("2031-05-01");
+  await picker.getByLabel("Time").fill("09:00");
+  await page.keyboard.press("Escape");
+  await bar.getByRole("button", { name: "Add", exact: true }).click();
   const row = page.getByTestId("reminder").filter({ hasText: title });
   await expect(row).toBeVisible();
   await noViolations(page);

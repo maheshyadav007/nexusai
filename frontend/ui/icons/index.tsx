@@ -72,6 +72,8 @@ export const ICONS = {
   panels: LayoutPanelTop,
   reminders: AlarmClock,
   schedules: CalendarDays,
+  date: CalendarDays,
+  time: Clock,
   search: Search,
   sent: Send,
   sessions: Terminal,
