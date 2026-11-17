@@ -86,10 +86,14 @@ def _example_call(schema: dict[str, Any]) -> str:
 
 def bad_arguments(tool: str, schema_type: type[BaseModel] | None, error: ValidationError) -> str:
     """The fields that were wrong, the shape the tool takes, and an example. Never the failed call."""
-    missing, wrong = [], []
+    missing, wrong, rules = [], [], []
     for item in error.errors(include_url=False, include_input=False):
         place = ".".join(str(part) for part in item.get("loc", ()) if part not in INJECTED)
         if not place:
+            # A rule across fields, such as "week needs weekday". Its own words say what to fix.
+            reason = str(item.get("msg", "")).removeprefix("Value error, ")
+            if reason:
+                rules.append(f"{reason}.")
             continue
         if item.get("type") == "missing":
             missing.append(place)
@@ -100,6 +104,7 @@ def bad_arguments(tool: str, schema_type: type[BaseModel] | None, error: Validat
         problems.append(f"{tool} is missing {', '.join(missing)}.")
     if wrong:
         problems.append(f"Wrong value for {'; '.join(wrong)}.")
+    problems += rules
     lines = [f"Not run: {' '.join(problems) or f'{tool} needs different arguments.'}"]
     if schema_type is not None:
         schema = schema_type.model_json_schema()

@@ -420,15 +420,17 @@ def test_the_database_tool_reads_only_and_only_listed_tables(
     assert client.post("/api/queries/tasks.list", json={}).json()["tasks"]
 
 
-def test_creating_an_agent_asks_first_then_schedules_it(client: TestClient, script: Script) -> None:
+def test_creating_a_schedule_asks_first_then_schedules_it(
+    client: TestClient, script: Script
+) -> None:
     session = new_session(client)
     arguments = {
         "name": "Friday note",
         "instructions": "Draft my status.",
         "every": "week",
-        "weekday": 4,
+        "weekday": "Friday",
     }
-    script.replies = [[ToolCall("c1", "create_agent", arguments)], [TextChunk("Made it.")]]
+    script.replies = [[ToolCall("c1", "create_schedule", arguments)], [TextChunk("Made it.")]]
     done = chat_in_background(client, session, "Make one")
     approval = approve_when_asked(client)
     assert "Draft my status." in approval["detail"]
@@ -537,7 +539,7 @@ def test_mail_cannot_earn_a_session_allowance_for_risky_tools(
     session, _ = mail_session(client, script, fake)
     calls = {
         "run_command": {"command": "echo hi"},
-        "create_agent": {"name": "Sneaky", "instructions": "Do things"},
+        "create_schedule": {"name": "Sneaky", "instructions": "Do things"},
     }
     for name, arguments in calls.items():
         script.replies = [[ToolCall(f"x-{name}", name, arguments)], [TextChunk("Ok.")]]
@@ -547,7 +549,9 @@ def test_mail_cannot_earn_a_session_allowance_for_risky_tools(
         # Even if asked for directly, nothing is remembered.
         client.post("/api/commands/approvals.decide", json={"id": item["id"], "choice": "session"})
         wait(lambda finished=done: finished, name)
-        script.replies = [[ToolCall(f"y-{name}", name, arguments)], [TextChunk("Ok.")]]
+        # A second schedule needs its own name; the same one is refused as a duplicate.
+        again = {**arguments, "name": "Sneaky again"} if name == "create_schedule" else arguments
+        script.replies = [[ToolCall(f"y-{name}", name, again)], [TextChunk("Ok.")]]
         done = chat_in_background(client, session, f"Use {name} again")
         again = pending(client, 1)[0]
         assert again["tool"] == name

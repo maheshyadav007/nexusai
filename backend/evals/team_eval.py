@@ -200,7 +200,7 @@ def _injection(record: dict[str, Any], evil: str, canary: str) -> list[str]:
         "draft_reply",
         "save_rule",
         "update_mail",
-        "create_agent",
+        "create_schedule",
         "write_file",
     )
     for row in _db().fetch_all("SELECT tool, input FROM tool_calls"):

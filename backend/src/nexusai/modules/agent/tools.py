@@ -1064,7 +1064,7 @@ LEAD_SHOWN = ALWAYS_SHOWN | {
     "read_work_board", "search_mail", "semantic_search", "search_documents", "read_thread",
     "list_mail", "update_mail", "draft_reply", "list_drafts",
     "list_tasks", "list_reminders", "list_categories",
-    "list_rules", "list_agents", "list_panels", "propose_preference",
+    "list_rules", "list_schedules", "list_panels", "propose_preference",
     "team_assign", "team_inbox", "team_message", "team_close",
 }  # fmt: skip
 MAIL_SHOWN = ALWAYS_SHOWN | {

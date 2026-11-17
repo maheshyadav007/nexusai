@@ -185,10 +185,13 @@ test("a schedule is created and runs on demand", async ({ page }) => {
   await page.getByRole("button", { name: "New", exact: true }).click();
   await drawer.getByRole("textbox", { name: "Name", exact: true }).fill(title);
   await drawer.getByRole("textbox", { name: "What should the agent do?" }).fill("Say hello");
-  await drawer.getByRole("radio", { name: "Weekly" }).click();
+  await drawer.getByRole("combobox", { name: "How often" }).click();
+  await page.getByRole("option", { name: "Every month" }).click();
+  await drawer.getByRole("combobox", { name: "Day of the month" }).click();
+  await page.getByRole("option", { name: "Last day" }).click();
   await drawer.getByRole("button", { name: "Create schedule" }).click();
   const row = page.getByTestId("schedule").filter({ hasText: title });
-  await expect(row).toContainText("Every Monday at");
+  await expect(row).toContainText("Monthly on the last day at");
   await noViolations(page);
   await row.getByRole("button").click();
   await drawer.getByRole("button", { name: "Run now" }).click();

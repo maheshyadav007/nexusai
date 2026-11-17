@@ -26,7 +26,10 @@ import { TriggerForm, triggerSaved } from "./TriggerForm";
 import { t, type StringKey } from "@/ui/strings";
 
 type Every = NonNullable<Schedule["every"]>;
-const REPEATS: readonly Every[] = ["once", "hour", "day", "week"];
+const REPEATS: readonly Every[] = ["day", "weekdays", "week", "month", "year", "hour", "once"];
+const LAST_DAY = 31;
+const MONTHS = Array.from({ length: 12 }, (_, index) => index + 1);
+const monthName = (month: number) => new Intl.DateTimeFormat(undefined, { month: "long" }).format(new Date(2000, month - 1, 1));
 const WEEKDAYS = ["schedules.day.0", "schedules.day.1", "schedules.day.2", "schedules.day.3", "schedules.day.4", "schedules.day.5", "schedules.day.6"] as const;
 const DEFAULT_TIME = "08:00";
 const PREP_TIME = "06:00";
@@ -53,7 +56,10 @@ const saved = (row: ScheduleRow, enabled = row.enabled ?? true): Schedule => ({
   time: row.time ?? DEFAULT_TIME,
   timezone: row.timezone ?? null,
   weekday: row.weekday ?? 0,
+  month_day: row.month_day ?? 1,
+  month: row.month ?? 1,
   date: row.date ?? null,
+  until: row.until ?? null,
   enabled,
   token_limit: row.token_limit ?? 0,
   context_mode: row.context_mode ?? null,
@@ -64,14 +70,29 @@ const saved = (row: ScheduleRow, enabled = row.enabled ?? true): Schedule => ({
 function useCadence() {
   const clock = useTimeOnly();
   const day = useDateOnly();
-  return (row: Pick<Schedule, "every" | "time" | "weekday" | "date">) => {
+  const when = (row: Pick<Schedule, "every" | "time" | "weekday" | "date" | "month_day" | "month">) => {
     const time = row.time ?? DEFAULT_TIME;
     const at = clock(`2000-01-01T${time}`);
-    if (row.every === "once") return row.date ? t("schedules.cadence.once", { date: day(row.date), time: at }) : t("schedules.cadence.onceNoDate", { time: at });
-    if (row.every === "hour") return t("schedules.cadence.hour", { minute: time.slice(3) });
-    if (row.every === "week") return t("schedules.cadence.week", { day: t(WEEKDAYS[row.weekday ?? 0] ?? "schedules.day.0"), time: at });
-    return t("schedules.cadence.day", { time: at });
+    const monthDay = row.month_day ?? 1;
+    switch (row.every) {
+      case "once":
+        return row.date ? t("schedules.cadence.once", { date: day(row.date), time: at }) : t("schedules.cadence.onceNoDate", { time: at });
+      case "hour":
+        return t("schedules.cadence.hour", { minute: time.slice(3) });
+      case "weekdays":
+        return t("schedules.cadence.weekdays", { time: at });
+      case "week":
+        return t("schedules.cadence.week", { day: t(WEEKDAYS[row.weekday ?? 0] ?? "schedules.day.0"), time: at });
+      case "month":
+        return monthDay === LAST_DAY ? t("schedules.cadence.monthLast", { time: at }) : t("schedules.cadence.month", { day: monthDay, time: at });
+      case "year":
+        return t("schedules.cadence.year", { date: `${monthName(row.month ?? 1)} ${monthDay}`, time: at });
+      default:
+        return t("schedules.cadence.day", { time: at });
+    }
   };
+  return (row: Pick<Schedule, "every" | "time" | "weekday" | "date" | "month_day" | "month" | "until">) =>
+    row.until && row.every !== "once" ? t("schedules.cadence.until", { when: when(row), date: day(row.until) }) : when(row);
 }
 
 function ScheduleForm({ initial, template, onSaved }: { initial?: ScheduleRow; template?: Template | null; onSaved: () => void }) {
@@ -83,6 +104,9 @@ function ScheduleForm({ initial, template, onSaved }: { initial?: ScheduleRow; t
   const [time, setTime] = useState(initial?.time ?? template?.time ?? DEFAULT_TIME);
   const [weekday, setWeekday] = useState(String(initial?.weekday ?? template?.weekday ?? 0));
   const [date, setDate] = useState(initial?.date ?? "");
+  const [monthDay, setMonthDay] = useState(String(initial?.month_day ?? 1));
+  const [month, setMonth] = useState(String(initial?.month ?? 1));
+  const [until, setUntil] = useState(initial?.until ?? "");
   const [timezone, setTimezone] = useState(initial?.timezone ?? "");
   const [options, setOptions] = useState(runOptions(initial));
   const kind = initial?.kind ?? template?.kind ?? "prompt";
@@ -96,7 +120,10 @@ function ScheduleForm({ initial, template, onSaved }: { initial?: ScheduleRow; t
     time,
     timezone: timezone.trim() || null,
     weekday: Number(weekday),
+    month_day: Number(monthDay),
+    month: Number(month),
     date: date || null,
+    until: until || null,
     ...savedRunOptions(options),
   };
   return (
@@ -112,14 +139,17 @@ function ScheduleForm({ initial, template, onSaved }: { initial?: ScheduleRow; t
         {({ invalid, ...control }) => <Textarea invalid={invalid} rows={3} value={prompt} onChange={(event) => setPrompt(event.target.value)} {...control} />}
       </Field>
       <div className="flex flex-col gap-3">
-        <Segmented label={t("schedules.every")} value={every} options={REPEATS.map((value) => ({ value, label: t(`schedules.repeat.${value}`) }))} onChange={setEvery} />
+        <Field label={t("schedules.every")}>{({ invalid, id }) => <Select id={id} invalid={invalid} value={every} options={REPEATS.map((value) => ({ value, label: t(`schedules.repeat.${value}`) }))} onChange={(value) => setEvery(value as Every)} />}</Field>
         <div className="grid grid-cols-2 gap-3">
+          {every === "year" ? <Field label={t("schedules.month")}>{({ invalid, id }) => <Select id={id} invalid={invalid} value={month} options={MONTHS.map((value) => ({ value: String(value), label: monthName(value) }))} onChange={setMonth} />}</Field> : null}
+          {every === "month" || every === "year" ? <Field label={t("schedules.monthDay")}>{({ invalid, id }) => <Select id={id} invalid={invalid} value={monthDay} options={Array.from({ length: LAST_DAY }, (_, index) => ({ value: String(index + 1), label: index + 1 === LAST_DAY && every === "month" ? t("schedules.lastDay") : String(index + 1) }))} onChange={setMonthDay} />}</Field> : null}
           {every === "week" ? <Field label={t("schedules.weekday")}>{({ invalid, id }) => <Select id={id} invalid={invalid} value={weekday} options={WEEKDAYS.map((key, index) => ({ value: String(index), label: t(key) }))} onChange={setWeekday} />}</Field> : null}
           {every === "once" ? <Field label={t("schedules.date")}>{({ invalid, ...control }) => <Input type="date" invalid={invalid} value={date} onChange={(event) => setDate(event.target.value)} {...control} />}</Field> : null}
           <Field label={t("schedules.time")}>{({ invalid, ...control }) => <Input type="time" invalid={invalid} value={time} onChange={(event) => setTime(event.target.value)} {...control} />}</Field>
         </div>
       </div>
       <MoreOptions values={options} onChange={setOptions}>
+        {every === "once" ? null : <Field label={t("schedules.until")} hint={t("schedules.until.hint")}>{({ invalid, ...control }) => <Input type="date" invalid={invalid} value={until} onChange={(event) => setUntil(event.target.value)} {...control} />}</Field>}
         <Field label={t("schedules.timezone")} hint={t("schedules.timezone.hint")}>{({ invalid, ...control }) => <Input {...control} invalid={invalid} value={timezone} onChange={(event) => setTimezone(event.target.value)} />}</Field>
       </MoreOptions>
       <div className="flex items-center justify-between gap-3">

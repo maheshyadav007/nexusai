@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal, cast
 
 from langchain_core.tools import InjectedToolCallId
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from nexusai.contracts.agent import RemoveSchedule, RunSchedule, Schedule
 from nexusai.contracts.documents import ListDocuments, RemoveDocument, UpdateDocument
@@ -46,7 +46,7 @@ from nexusai.contracts.mail import RemoveDraft as RemoveDraftCommand
 from nexusai.contracts.panels import GetPanelBoard, Panel, PanelBoard, PanelFilters
 from nexusai.kernel.database import connect_raw
 from nexusai.kernel.module import CommandError, Context
-from nexusai.modules.agent import citations, memory, signals
+from nexusai.modules.agent import cards, citations, memory, scheduler, signals
 from nexusai.modules.documents import module as documents_module
 from nexusai.modules.mail import module as mail
 from nexusai.modules.mail import rules as mail_rules
@@ -285,34 +285,91 @@ class _MeaningSearch(_Call):
     limit: int = Field(default=15, description="How many, up to 50.")
 
 
-class _NewAgent(_Call):
-    name: str = Field(description="What the agent is for, like Friday status writer.")
-    instructions: str = Field(description="What it should do each time it runs.")
-    every: str = Field(default="day", description="once, day or week.")
-    time: str = Field(default="08:00", description="HH:MM, in the person's local time.")
-    weekday: int = Field(default=0, description="For weekly agents: 0 is Monday, 6 is Sunday.")
-    date: str | None = Field(default=None, description="For a one-time agent: YYYY-MM-DD.")
-    token_limit: int = Field(default=0, description="Most tokens per run. 0 means no limit.")
+Weekday = Literal["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+WEEKDAYS: tuple[Weekday, ...] = cast("tuple[Weekday, ...]", Weekday.__args__)  # type: ignore[attr-defined]
+Every = Literal["once", "hour", "day", "weekdays", "week", "month", "year"]
+CLOCK = r"^([01]\d|2[0-3]):[0-5]\d$"
+DAY = r"^\d{4}-\d{2}-\d{2}$"
+EVERY_HELP = (
+    "once (needs date), hour, day, weekdays (Monday to Friday), week (needs weekday),"
+    " month (needs month_day) or year (needs month and month_day)."
+)
 
 
-class _ChangeAgent(_Call):
-    agent_id: int = Field(description="From list_agents.")
-    name: str | None = None
-    instructions: str | None = None
-    every: str | None = Field(default=None, description="once, day or week.")
-    time: str | None = Field(default=None, description="HH:MM.")
-    weekday: int | None = None
-    date: str | None = None
-    enabled: bool | None = Field(default=None, description="Pause or resume it.")
-    token_limit: int | None = None
+def _today() -> str:
+    return datetime.now().astimezone().strftime("%Y-%m-%d")
 
 
-class _AgentId(_Call):
-    agent_id: int = Field(description="From list_agents.")
+class _When(_Call):
+    """When a schedule runs. Checked before anything is shown to the person, so a wrong call is
+    fixed by the model rather than approved and then failing."""
+
+    every: Every | None = Field(default=None, description=EVERY_HELP)
+    time: str | None = Field(
+        default=None, pattern=CLOCK, description="24-hour HH:MM local time, like 17:00 for 5 pm."
+    )
+    weekday: Weekday | None = Field(default=None, description="For every=week, like Friday.")
+    month_day: int | None = Field(
+        default=None, ge=1, le=31, description="For month or year: 1 to 31. 31 means the last day."
+    )
+    month: int | None = Field(default=None, ge=1, le=12, description="For year: 1 to 12.")
+    date: str | None = Field(default=None, pattern=DAY, description="For once: YYYY-MM-DD.")
+    until: str | None = Field(
+        default=None,
+        pattern=DAY,
+        description="Last day it runs, YYYY-MM-DD. Leave out to keep going.",
+    )
+
+    @model_validator(mode="after")
+    def _complete(self) -> "_When":
+        today = _today()
+        if self.date and self.date < today:
+            raise ValueError(f"date {self.date} is in the past; today is {today}")
+        if self.until and self.until < today:
+            raise ValueError(f"until {self.until} is in the past; today is {today}")
+        return self
 
 
-class _AgentIds(_Call):
-    agent_ids: list[int] = Field(description="From list_agents. One or many.")
+class _NewSchedule(_When):
+    name: str = Field(min_length=1, max_length=200, description="Short, like Friday team status.")
+    instructions: str = Field(
+        min_length=1, description="What to do on each run, written as you'd ask the agent."
+    )
+    every: Every = Field(default="day", description=EVERY_HELP)
+    time: str = Field(
+        default="08:00", pattern=CLOCK, description="24-hour HH:MM local time, like 17:00 for 5 pm."
+    )
+    token_limit: int = Field(default=0, ge=0, description="Most tokens per run. 0 means no limit.")
+
+    @model_validator(mode="after")
+    def _needs(self) -> "_NewSchedule":
+        needs = {
+            "once": ("date", "date='2026-12-01'"),
+            "week": ("weekday", "weekday='Friday'"),
+            "month": ("month_day", "month_day=1"),
+            "year": ("month", "month=4, month_day=1"),
+        }.get(self.every)
+        if needs and getattr(self, needs[0]) is None:
+            raise ValueError(f"every='{self.every}' needs {needs[0]}, such as {needs[1]}")
+        if self.every == "year" and self.month_day is None:
+            raise ValueError("every='year' needs month_day as well, such as month=4, month_day=1")
+        return self
+
+
+class _ChangeSchedule(_When):
+    schedule_id: int = Field(description="From list_schedules.")
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    instructions: str | None = Field(default=None, min_length=1)
+    enabled: bool | None = Field(default=None, description="false pauses it, true resumes it.")
+    token_limit: int | None = Field(default=None, ge=0)
+
+
+class _ScheduleId(_Call):
+    schedule_id: int = Field(description="From list_schedules.")
+
+
+class _ScheduleIds(_Call):
+    schedule_ids: list[int] = Field(min_length=1, description="From list_schedules. One or many.")
 
 
 class _SearchMemory(_Call):
@@ -1015,115 +1072,262 @@ def specs(
             marks_untrusted=True,
         )
 
-    # Agents
+    # Schedules
 
-    def create_agent(
+    def _schedule_problem(error: ValidationError) -> str:
+        reasons = "; ".join(str(item.get("msg", "")) for item in error.errors(include_url=False))
+        return f"Not saved: {reasons}. Fix it and try again."
+
+    def _when_lines(schedule: Schedule, next_run: str | None) -> str:
+        zone = schedule.timezone or scheduler.system_timezone()
+        lines = [f"When: {scheduler.describe(schedule)} ({zone})"]
+        lines.append(
+            f"Next run: {scheduler.local_time(next_run, zone)}"
+            if next_run
+            else "Next run: none, it's paused or finished"
+        )
+        if schedule.token_limit:
+            lines.append(f"Token limit per run: {schedule.token_limit:,}")
+        return "\n".join(lines)
+
+    def _schedule_from(row: Any, **changes: Any) -> Schedule:
+        values = {
+            "id": row["id"],
+            "title": row["title"],
+            "prompt": row["prompt"],
+            "kind": row["kind"],
+            "every": row["every"],
+            "time": row["time"],
+            "weekday": row["weekday"],
+            "month_day": row["month_day"],
+            "month": row["month"],
+            "date": row["date"],
+            "until": row["until"],
+            "enabled": bool(row["enabled"]),
+            "token_limit": row["token_limit"],
+            "timezone": row["timezone"] or None,
+            "context_mode": row["context_mode"],
+            "keep_messages": row["keep_messages"],
+        }
+        return Schedule.model_validate(
+            {**values, **{k: v for k, v in changes.items() if v is not None}}
+        )
+
+    def _built_in(row: Any) -> str | None:
+        if row["kind"] in scheduler.BUILT_IN_KINDS:
+            owner = cards.name(db, "mail")
+            return (
+                f"Not changed: {row['title']} comes with the app. The person turns it on, off"
+                f" or changes its time in Settings, {owner}."
+            )
+        return None
+
+    def _same_name(name: str, other_than: int | None = None) -> Any:
+        rows = db.fetch_all(
+            "SELECT * FROM schedules WHERE lower(title)=lower(?) AND kind != 'mail-hourly' AND id IS NOT ?",
+            (name.strip(), other_than),
+        )
+        return rows[0] if rows else None
+
+    def create_schedule(
         name: str,
         instructions: str,
         tool_call_id: str,
         every: str = "day",
         time: str = "08:00",
-        weekday: int = 0,
+        weekday: str | None = None,
+        month_day: int | None = None,
+        month: int | None = None,
         date: str | None = None,
+        until: str | None = None,
         token_limit: int = 0,
     ) -> str:
         from nexusai.modules.agent.module import save_schedule
 
-        def work() -> str:
+        existing = _same_name(name)
+        if existing is not None:
+            return (
+                f"Not created: schedule {existing['id']} is already called {existing['title']} and runs"
+                f" {scheduler.describe(_schedule_from(existing))}. Change it with update_schedule,"
+                " or pick another name."
+            )
+        try:
             command = Schedule.model_validate(
                 {
-                    "title": name,
+                    "title": name.strip(),
                     "prompt": instructions,
                     "every": every,
                     "time": time,
-                    "weekday": weekday,
+                    "weekday": WEEKDAYS.index(cast("Weekday", weekday)) if weekday else 0,
+                    "month_day": month_day or 1,
+                    "month": month or 1,
                     "date": date,
+                    "until": until,
                     "token_limit": token_limit,
+                    "timezone": scheduler.system_timezone(),
                 }
             )
+        except ValidationError as error:
+            return _schedule_problem(error)
+        first = scheduler.next_scheduled_run(command, datetime.now(UTC))
+        if first is None:
+            return "Not created: with that end date it would never run. Pick a later until, or leave it out."
+
+        def work() -> str:
             save_schedule(command, ctx)
-            return f"Created {name}. It runs by itself from now on."
+            row = _same_name(command.title)
+            return (
+                f"Created schedule {row['id'] if row else ''}: {command.title}. It runs"
+                f" {scheduler.describe(command)}; first run {scheduler.local_time(first, command.timezone)}."
+                " Each run happens in its own chat, which the person finds on the Schedules page."
+            )
 
-        detail = f"Runs: {every} at {time}\n\n{instructions}"
-        return guard(tool_call_id, "create_agent", "data", f"Create agent: {name}", detail, work)
+        detail = f"{_when_lines(command, first)}\n\n{instructions}"
+        return guard(
+            tool_call_id, "create_schedule", "data", f"New schedule: {command.title}", detail, work
+        )
 
-    def update_agent(
-        agent_id: int,
+    def update_schedule(
+        schedule_id: int,
         tool_call_id: str,
         name: str | None = None,
         instructions: str | None = None,
         every: str | None = None,
         time: str | None = None,
-        weekday: int | None = None,
+        weekday: str | None = None,
+        month_day: int | None = None,
+        month: int | None = None,
         date: str | None = None,
+        until: str | None = None,
         enabled: bool | None = None,
         token_limit: int | None = None,
     ) -> str:
         from nexusai.modules.agent.module import save_schedule
 
-        rows = _rows("schedules", [agent_id])
+        rows = _rows("schedules", [schedule_id])
         if not rows:
-            return "That agent no longer exists."
+            return f"Not changed: there's no schedule {schedule_id}. See them with list_schedules."
         row = rows[0]
+        if (refused := _built_in(row)) is not None:
+            return refused
+        if name is not None and (clash := _same_name(name, schedule_id)) is not None:
+            return f"Not changed: schedule {clash['id']} is already called {clash['title']}."
+        try:
+            before = _schedule_from(row)
+            command = _schedule_from(
+                row,
+                title=name.strip() if name else None,
+                prompt=instructions,
+                every=every,
+                time=time,
+                weekday=WEEKDAYS.index(cast("Weekday", weekday)) if weekday else None,
+                month_day=month_day,
+                month=month,
+                date=date,
+                until=until,
+                enabled=enabled,
+                token_limit=token_limit,
+            )
+        except ValidationError as error:
+            return _schedule_problem(error)
+        if command.every == "once" and not command.date:
+            return "Not changed: every='once' needs date, such as date='2026-12-01'."
+        following = (
+            scheduler.next_scheduled_run(command, datetime.now(UTC)) if command.enabled else None
+        )
+        if command.enabled and following is None:
+            return "Not changed: with that end date it would never run again. Pick a later until, or pause it with enabled=false."
+        changes = []
+        if command.title != before.title:
+            changes.append(f"Name: {before.title} → {command.title}")
+        if scheduler.describe(command) != scheduler.describe(before):
+            changes.append(f"When: {scheduler.describe(before)} → {scheduler.describe(command)}")
+        if command.enabled != before.enabled:
+            changes.append("Paused" if not command.enabled else "Resumed")
+        if command.token_limit != before.token_limit:
+            changes.append(f"Token limit: {before.token_limit:,} → {command.token_limit:,}")
+        if command.prompt != before.prompt:
+            changes.append(f"Instructions:\n{command.prompt}")
+        if not changes:
+            return f"Nothing to change: {before.title} already runs {scheduler.describe(before)}."
 
         def work() -> str:
-            command = Schedule.model_validate(
-                {
-                    "id": agent_id,
-                    "title": name if name is not None else row["title"],
-                    "prompt": instructions if instructions is not None else row["prompt"],
-                    "kind": row["kind"],
-                    "every": every if every is not None else row["every"],
-                    "time": time if time is not None else row["time"],
-                    "weekday": weekday if weekday is not None else row["weekday"],
-                    "date": date if date is not None else row["date"],
-                    "enabled": enabled if enabled is not None else bool(row["enabled"]),
-                    "token_limit": token_limit if token_limit is not None else row["token_limit"],
-                }
-            )
             save_schedule(command, ctx)
-            return f"Updated {command.title}."
+            if not command.enabled:
+                return f"Paused schedule {schedule_id}: {command.title}. Nothing runs until it's resumed."
+            return (
+                f"Updated schedule {schedule_id}: {command.title}. It runs {scheduler.describe(command)};"
+                f" next run {scheduler.local_time(following, command.timezone)}."
+            )
 
-        summary = f"Change agent: {row['title']}"
-        detail = instructions or ""
-        return guard(tool_call_id, "update_agent", "data", summary, detail, work)
+        detail = "\n".join(changes)
+        return guard(
+            tool_call_id,
+            "update_schedule",
+            "data",
+            f"Change schedule: {before.title}",
+            detail,
+            work,
+        )
 
-    def run_agent(agent_id: int, tool_call_id: str) -> str:
+    def run_schedule(schedule_id: int, tool_call_id: str) -> str:
         from nexusai.modules.agent.module import run_schedule_now
 
+        rows = _rows("schedules", [schedule_id])
+        if not rows:
+            return f"Not run: there's no schedule {schedule_id}. See them with list_schedules."
+        title = rows[0]["title"]
+
         def work() -> str:
-            run_schedule_now(RunSchedule(id=agent_id), ctx)
-            return "Started."
+            run_schedule_now(RunSchedule(id=schedule_id), ctx)
+            return f"Started {title} now, in its own chat. Its result shows on the Schedules page; its next regular run doesn't change."
 
-        rows = _rows("schedules", [agent_id])
-        title = rows[0]["title"] if rows else str(agent_id)
-        return guard(tool_call_id, "run_agent", "data", f"Run agent: {title}", "", work)
+        return guard(tool_call_id, "run_schedule", "data", f"Run now: {title}", "", work)
 
-    def list_agents(tool_call_id: str) -> str:
+    def list_schedules(tool_call_id: str) -> str:
         def work() -> str:
             rows = db.fetch_all("SELECT * FROM schedules WHERE kind != 'mail-hourly' ORDER BY id")
-            return wrap_untrusted(
-                "\n".join(
-                    f"{r['id']}: {r['title']} ({r['every']} at {r['time']},"
-                    f" {'on' if r['enabled'] else 'paused'}, next {r['next_run']})"
-                    for r in rows
+            lines = []
+            for row in rows:
+                schedule = _schedule_from(row)
+                state = (
+                    f"next {scheduler.local_time(row['next_run'], schedule.timezone)}"
+                    if row["enabled"] and row["next_run"]
+                    else "paused"
                 )
-                or "No agents yet."
-            )
+                owner = (
+                    ", comes with the app (changed in Settings)"
+                    if row["kind"] in scheduler.BUILT_IN_KINDS
+                    else ""
+                )
+                lines.append(
+                    f"{row['id']}: {row['title']} — {scheduler.describe(schedule)} — {state}{owner}"
+                )
+            return wrap_untrusted("\n".join(lines) or "No schedules yet.")
 
-        return guard(tool_call_id, "list_agents", "read", "Read your agents", "", work, documents)
+        return guard(
+            tool_call_id, "list_schedules", "read", "Read your schedules", "", work, documents
+        )
 
-    def remove_agents(agent_ids: list[int], tool_call_id: str) -> str:
+    def remove_schedules(schedule_ids: list[int], tool_call_id: str) -> str:
         from nexusai.modules.agent.module import remove_schedule
 
-        def work() -> str:
-            for agent in agent_ids:
-                remove_schedule(RemoveSchedule(id=agent), ctx)
-            return f"Removed {len(agent_ids)} agents."
+        rows = _rows("schedules", schedule_ids)
+        missing = sorted(set(schedule_ids) - {row["id"] for row in rows})
+        if missing:
+            return f"Not removed: there's no schedule {', '.join(map(str, missing))}. See them with list_schedules."
+        for row in rows:
+            if (refused := _built_in(row)) is not None:
+                return refused.replace("Not changed", "Not removed")
+        titles = [str(row["title"]) for row in rows]
 
-        titles = [str(r["title"]) for r in _rows("schedules", agent_ids)]
-        summary = f"Remove agents: {_brief(titles)}"
-        return guard(tool_call_id, "remove_agents", "data", summary, _lines(titles), work)
+        def work() -> str:
+            for schedule in schedule_ids:
+                remove_schedule(RemoveSchedule(id=schedule), ctx)
+            return f"Removed {_brief(titles)}. They won't run again."
+
+        summary = f"Remove schedules: {_brief(titles)}"
+        return guard(tool_call_id, "remove_schedules", "data", summary, _lines(titles), work)
 
     # Memory
 
@@ -1379,15 +1583,20 @@ def specs(
             "It can't change anything.",
         ),
         (
-            create_agent,
-            _NewAgent,
-            "Create an agent that runs by itself on a schedule, with its own instructions. Only "
-            "when the person wants something to repeat. It asks first.",
+            create_schedule,
+            _NewSchedule,
+            "Make something run by itself at set times, like a Friday status or a morning check."
+            " Only when the person wants it to repeat or happen later. It asks the person first.",
         ),
-        (update_agent, _ChangeAgent, "Change, pause or resume a scheduled agent."),
-        (run_agent, _AgentId, "Run a scheduled agent now, in its own chat."),
-        (list_agents, _Nothing, "See the agents that run on a schedule, with their IDs."),
-        (remove_agents, _AgentIds, "Remove scheduled agents in one call."),
+        (
+            update_schedule,
+            _ChangeSchedule,
+            "Change a schedule's name, instructions or timing, or pause and resume it."
+            " Give only what changes.",
+        ),
+        (run_schedule, _ScheduleId, "Run a schedule now, in its own chat."),
+        (list_schedules, _Nothing, "See the schedules with their IDs, timing and next run."),
+        (remove_schedules, _ScheduleIds, "Remove schedules in one call."),
         (list_memory, _SearchMemory, "See what's remembered about the person and their work."),
         (update_memory, _ChangeMemory, "Change something remembered, when it's out of date."),
         (forget_memory, _MemoryPaths, "Forget remembered things in one call."),

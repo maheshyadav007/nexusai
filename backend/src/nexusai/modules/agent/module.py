@@ -266,6 +266,7 @@ agent_module = Module(
         ),
         suggestions.MIGRATION,
         scheduler.RELIABILITY_MIGRATION,
+        scheduler.CADENCE_MIGRATION,
         personalization.MIGRATION,
         briefs.MIGRATION,
         briefs.SOURCES_MIGRATION,
@@ -1111,18 +1112,21 @@ def save_schedule(command: Schedule, ctx: Context) -> ScheduleList:
         command.context_mode,
         command.keep_messages,
         command.timezone,
+        command.month_day,
+        command.month,
+        command.until,
     )
     now = datetime.now(UTC).isoformat()
     with ctx.bus.unit_of_work() as work:
         if command.id is None:
             work.tx.execute(
-                "INSERT INTO schedules (title, prompt, kind, every, time, weekday, date, enabled, token_limit, next_run, context_mode, keep_messages, timezone, created, updated)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO schedules (title, prompt, kind, every, time, weekday, date, enabled, token_limit, next_run, context_mode, keep_messages, timezone, month_day, month, until, created, updated)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (*values, now, now),
             )
         else:
             work.tx.execute(
-                "UPDATE schedules SET title = ?, prompt = ?, kind = ?, every = ?, time = ?, weekday = ?, date = ?, enabled = ?, token_limit = ?, next_run = ?, context_mode = ?, keep_messages = ?, timezone = ?, updated = ? WHERE id = ?",
+                "UPDATE schedules SET title = ?, prompt = ?, kind = ?, every = ?, time = ?, weekday = ?, date = ?, enabled = ?, token_limit = ?, next_run = ?, context_mode = ?, keep_messages = ?, timezone = ?, month_day = ?, month = ?, until = ?, updated = ? WHERE id = ?",
                 (*values, now, command.id),
             )
         if command.id is not None and not command.enabled:
