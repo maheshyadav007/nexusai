@@ -7,6 +7,7 @@ no agent can raise its own.
 
 import json
 import re
+import threading
 import time
 from collections import deque
 from datetime import UTC, datetime, timedelta
@@ -424,19 +425,26 @@ ANSWERED = {"reported", "input_required", "blocked", "failed", "canceled"}
 GIVEN = re.compile(r"^Task (\d+) given to ")
 
 
-def await_result(ctx: Context, given: str, seconds: float, poll: float = 0.5) -> str:
+def await_result(
+    ctx: Context,
+    given: str,
+    seconds: float,
+    stopped: threading.Event | None = None,
+    poll: float = 0.5,
+) -> str:
     """Waits for a task just given, so a quick job's result comes back in the assigner's own turn.
 
     The assigner is never woken while its turn is running, so taking the wake-up here is safe:
     whatever this returns, the assigner won't be told again. Past the wait, the task carries on
-    and the assigner is woken when it reports, as before."""
+    and the assigner is woken when it reports, as before. Stop ends the wait at once."""
     found = GIVEN.match(given)
     if found is None or seconds <= 0:
         return given
     task = int(found.group(1))
     db = ctx.bus.db
+    stopped = stopped or threading.Event()
     deadline = time.monotonic() + seconds
-    while time.monotonic() < deadline:
+    while time.monotonic() < deadline and not stopped.is_set():
         row = get(db, task)
         if row is None:
             return given
@@ -454,7 +462,7 @@ def await_result(ctx: Context, given: str, seconds: float, poll: float = 0.5) ->
             if taken:
                 return report_text(db, get(db, task) or row)
             return given
-        time.sleep(poll)
+        stopped.wait(poll)
     latest = get(db, task)
     owner = cards.name(db, latest["owner"]) if latest is not None else "The agent"
     return (

@@ -15,6 +15,8 @@ from langchain_core.messages import ToolMessage
 from langgraph.errors import GraphBubbleUp
 from pydantic import BaseModel, ValidationError
 
+from nexusai.modules.agent.gateway import DailyCapReached, RunLimitReached
+
 log = structlog.get_logger()
 FIND_TOOLS = "find_tools"
 # Filled in by the app, never by the model, so never shown or asked for.
@@ -210,8 +212,8 @@ class ToolFeedback(AgentMiddleware):
                 return told(bad_arguments(name, schema, error))
         try:
             return handler(request)
-        except GraphBubbleUp:
-            # Questions to the person and approvals pause the run this way. They aren't failures.
+        except (GraphBubbleUp, RunLimitReached, DailyCapReached):
+            # Questions and approvals pause the run this way, and a limit ends it. Not failures.
             raise
         except Exception as error:  # noqa: BLE001 - any failure becomes a message to act on
             log.warning("tool_failed", tool=name, exc_info=True)

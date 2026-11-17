@@ -47,7 +47,7 @@ MEMORY_NUDGE = "memory-nudge-"
 SAVES_MEMORY = frozenset({"remember", "propose_preference", "save_personal_prompt"})
 # A reply that says something was kept: "Noted", "I'll remember", "I'll keep that in mind".
 PROMISED = re.compile(
-    r"\b(noted|i(?:'|’)?ll (?:remember|keep (?:that|this|it) in mind|make a note|note (?:that|this|it))"
+    r"(?<!as )(?<!been )\b(noted|i(?:'|’)?ll (?:remember|keep (?:that|this|it) in mind|make a note|note (?:that|this|it))"
     r"|i(?:'|’)?ve (?:noted|made a note)|i will remember|making a note)\b",
     re.I,
 )

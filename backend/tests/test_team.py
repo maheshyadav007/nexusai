@@ -747,3 +747,23 @@ def test_a_blocked_task_tells_the_giver_what_was_done_before_it_stopped(
         lambda: [t for t in script.told(lead()) if "is blocked" in t] or None, "giver woken", 20
     )[0]
     assert "Done before it stopped, oldest first: list_categories (" in woken
+
+
+def test_stop_ends_the_wait_for_a_hand_over_at_once() -> None:
+    import threading
+    import time
+    from types import SimpleNamespace
+
+    row = {"state": "working", "wake": None, "owner": "organizer"}
+
+    class Db:
+        def fetch_all(self, sql: str, args: tuple[Any, ...] = ()) -> list[Any]:
+            return [row] if "team_tasks" in sql else []
+
+    ctx = SimpleNamespace(bus=SimpleNamespace(db=Db()))
+    stopped = threading.Event()
+    stopped.set()
+    began = time.monotonic()
+    told = team.await_result(ctx, "Task 7 given to @organizer.", 60, stopped)  # type: ignore[arg-type]
+    assert time.monotonic() - began < 1
+    assert told.startswith("Task 7 is still being worked on")

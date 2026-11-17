@@ -58,6 +58,15 @@ def test_a_tool_that_breaks_becomes_a_message_and_a_pause_still_pauses() -> None
     with pytest.raises(GraphInterrupt):
         feedback.wrap_tool_call(request, asks)
 
+    from nexusai.modules.agent.gateway import DailyCapReached
+
+    def over_cap(_: object) -> object:
+        raise DailyCapReached("Today's limit is used up.")
+
+    # A limit ends the run; it isn't a failure to try again.
+    with pytest.raises(DailyCapReached):
+        feedback.wrap_tool_call(request, over_cap)
+
 
 def test_sections_about_missing_tools_are_left_out() -> None:
     text = (

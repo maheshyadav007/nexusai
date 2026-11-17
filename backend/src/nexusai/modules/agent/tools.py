@@ -1811,7 +1811,7 @@ def build_tools(
             due_minutes=due_minutes,
             tool_call=tool_call_id,
         )
-        return team.await_result(ctx, given, ctx.config.team.assign_wait_seconds)
+        return team.await_result(ctx, given, ctx.config.team.assign_wait_seconds, control.stopped)
 
     def team_message(task: int, kind: str, text: str, tool_call_id: str) -> str:
         return team.message(
