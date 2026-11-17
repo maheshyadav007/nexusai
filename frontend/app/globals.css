@@ -283,6 +283,17 @@ body[data-scroll-locked] .assistant-pill {
 }
 .ai-result legend { background: theme(colors.surface.page); color: theme(colors.ink.secondary); }
 
+/* The team: cards and the chosen agent's details, by the room left beside the chat. */
+.team-container { container: team / inline-size; }
+.team-layout { display: grid; gap: theme(spacing.4); align-items: start; grid-template-columns: minmax(0, 1fr); }
+@container team (min-width: 40rem) {
+  .team-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); }
+}
+@container team (min-width: 64rem) {
+  .team-layout { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+  .team-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 .today-container { container: today / inline-size; }
 @container today (min-width: 48rem) {
   .today-columns { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }

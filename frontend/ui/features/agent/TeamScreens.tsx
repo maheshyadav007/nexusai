@@ -205,11 +205,13 @@ export function TeamCards() {
       {/* Each card's name is in a button, so the list needs its h2 for screen-reader navigation. */}
       <h2 className="sr-only">{t("team.title")}</h2>
       <p className="text-md text-ink-muted">{t("team.summary", { count: rows.length, working, lead: rows.find((card) => card.default)?.name ?? "" })}</p>
-      <div className="flex flex-wrap items-start gap-4">
-        <ul aria-label={t("team.title")} className="grid min-w-0 flex-1 gap-3 xl:grid-cols-2">
+      <div className="team-container">
+      <div className="team-layout">
+        <ul aria-label={t("team.title")} className="team-cards grid min-w-0 gap-3">
           {rows.map((card) => <ProfileCard key={card.id} card={card} selected={card.id === selected?.id} onSelect={() => setChosen(card.id)} />)}
         </ul>
-        {selected ? <div className="w-full xl:w-drawer"><AgentDetail card={selected} /></div> : null}
+        {selected ? <AgentDetail card={selected} /> : null}
+      </div>
       </div>
     </div>
   );
