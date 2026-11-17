@@ -151,6 +151,8 @@ class SessionRow(BaseModel):
     updated: str
     archived: bool
     model: str | None = None
+    # The start of the last reply, for lists. Only the session list fills it.
+    preview: str | None = None
 
 
 class ListSessions(BaseModel):

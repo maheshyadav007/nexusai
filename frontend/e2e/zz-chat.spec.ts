@@ -324,9 +324,14 @@ test("a session waiting on you is first in the list and says so at the top", asy
   // It opens beside the list, in the side panel, and says it's waiting at the top.
   await group.getByTestId("session-row").filter({ hasText: "Waiting one" }).click();
   const dock = page.getByTestId("assistant-dock");
-  const current = dock.getByRole("combobox", { name: "Switch conversation" });
+  const current = dock.getByTestId("conversation-switcher");
   await expect(current).toContainText("Waiting one");
-  await expect(current).toContainText("Waiting");
+  // The switcher puts it first, under what's waiting on the person.
+  await current.click();
+  const waiting = page.getByRole("dialog", { name: "Switch conversation" }).getByRole("region", { name: "Waiting on you" }).getByTestId("conversation-option").filter({ hasText: "Waiting one" });
+  await expect(waiting).toContainText("Your answer");
+  await noViolations(page);
+  await page.keyboard.press("Escape");
   await dock.getByTestId("question-card").getByRole("radio", { name: "Monday" }).click();
   await expect(dock.getByTestId("answered-question")).toContainText("Monday");
 });
@@ -475,7 +480,7 @@ test("the chat sits attached on the right, beside the page, and keeps the conver
   await expect(dock).toHaveAttribute("data-pinned", "true");
   await dock.getByRole("button", { name: "Set a reminder for me" }).click();
   await expect(dock.getByTestId("agent-message")).toBeVisible();
-  const session = dock.getByRole("combobox", { name: "Switch conversation" });
+  const session = dock.getByTestId("conversation-switcher");
   const title = await session.textContent();
   await expect(session).toHaveText(title ?? "");
   // The same conversation, still on screen rather than loaded again.
@@ -489,6 +494,6 @@ test("the chat sits attached on the right, beside the page, and keeps the conver
   await noViolations(page);
   await page.reload();
   await expect(page.getByTestId("assistant-dock")).toHaveAttribute("data-pinned", "true");
-  await expect(page.getByTestId("assistant-dock").getByRole("combobox", { name: "Switch conversation" })).toHaveText(title ?? "");
+  await expect(page.getByTestId("assistant-dock").getByTestId("conversation-switcher")).toHaveText(title ?? "");
   await page.getByRole("button", { name: "Minimize" }).click();
 });

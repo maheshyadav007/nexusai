@@ -109,6 +109,7 @@
     "onboarding": "520px",
     "topbar": "56px",
     "popover": "320px",
+    "menu": "392px",
     "drawer": "420px",
     "dialog": "480px",
     "modal": "1080px",

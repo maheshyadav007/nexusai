@@ -930,3 +930,14 @@ def test_the_chat_can_put_a_category_in_priority(
     chat(client, session, "Put Customers in my priority inbox")
     listed = client.post("/api/queries/categories.list").json()["categories"]
     assert next(c for c in listed if c["name"] == "Customers")["in_priority"] is True
+
+
+def test_the_session_list_shows_the_start_of_the_last_reply(
+    client: TestClient, script: Script
+) -> None:
+    session = new_session(client)
+    script.replies = [[TextChunk("## Flights\n**Going** tonight at 10:55 PM, IX 1360.")]]
+    chat(client, session, "When do I fly?")
+    listed = client.post("/api/queries/sessions.list", json={}).json()["sessions"]
+    shown = next(row for row in listed if row["id"] == session)
+    assert shown["preview"] == "Flights Going tonight at 10:55 PM, IX 1360."

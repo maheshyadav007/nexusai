@@ -59,7 +59,10 @@ test("a reply streams in, and the session is kept", async ({ page }) => {
   await expect(page.getByTestId("agent-message")).toContainText("Hello from gpt-best");
 
   await page.goto("/agent/sessions");
-  await expect(page.getByTestId("session-row").filter({ hasText: "Hello there" })).toContainText("Done");
+  // Finished, it shows the start of its reply under the title.
+  const row = page.getByTestId("session-row").filter({ hasText: "Hello there" });
+  await expect(row).toHaveAttribute("data-state", "done");
+  await expect(row).toContainText("Hello from gpt-best");
   await noViolations(page);
 });
 

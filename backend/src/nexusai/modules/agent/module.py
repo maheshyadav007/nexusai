@@ -1,4 +1,5 @@
 import json
+import re
 import threading
 import uuid
 from datetime import UTC, datetime
@@ -175,7 +176,7 @@ from nexusai.contracts.events import AppEvent
 from nexusai.contracts.mail import FinishMailLearning, GetMailStatus, MailOrganization, MailStatus
 from nexusai.contracts.semantic import IndexInfo
 from nexusai.kernel import backups
-from nexusai.kernel.database import Migration
+from nexusai.kernel.database import Database, Migration
 from nexusai.kernel.module import CommandError, Context, Module
 from nexusai.modules.agent import (
     briefs,
@@ -651,11 +652,46 @@ def list_sessions(query: ListSessions, ctx: Context) -> SessionList:
     running = ctx.bus.db.fetch_all(
         "SELECT COUNT(*) AS n FROM agent_sessions WHERE status = 'running'"
     )[0]["n"]
+    previews = _previews(ctx.bus.db, [row["id"] for row in rows])
     return SessionList(
-        sessions=[runtime._row(row) for row in rows],
+        sessions=[
+            runtime._row(row).model_copy(update={"preview": previews.get(row["id"])})
+            for row in rows
+        ],
         running=running,
         limit=ctx.config.agent.max_running_sessions,
     )
+
+
+PREVIEW_CHARS = 140
+# Markdown and citation links, which read as noise in a one-line preview.
+CITE_LINK = re.compile(r"\[\d+\]\(#cite-\d+\)")
+MARKUP = re.compile(r"[*_`#>|]+")
+
+
+def _previews(db: Database, sessions: list[str]) -> dict[str, str]:
+    """The start of each session's last reply, read in one pass."""
+    if not sessions:
+        return {}
+    marks = ",".join("?" * len(sessions))
+    rows = db.fetch_all(
+        "SELECT t.session, json_extract(p.part, '$.delta') AS delta FROM agent_parts p"
+        f" JOIN (SELECT session, MAX(id) AS id FROM agent_turns WHERE session IN ({marks})"  # noqa: S608
+        " GROUP BY session) t ON p.turn = t.id"
+        " WHERE json_extract(p.part, '$.type') = 'text-delta' ORDER BY p.id",
+        tuple(sessions),
+    )
+    texts: dict[str, str] = {}
+    for row in rows:
+        so_far = texts.get(row["session"], "")
+        if len(so_far) < PREVIEW_CHARS * 3:
+            texts[row["session"]] = so_far + (row["delta"] or "")
+    previews = {}
+    for session, text in texts.items():
+        clean = " ".join(MARKUP.sub("", CITE_LINK.sub("", text)).split())
+        if clean:
+            previews[session] = clean[:PREVIEW_CHARS]
+    return previews
 
 
 @agent_module.query("session.get")

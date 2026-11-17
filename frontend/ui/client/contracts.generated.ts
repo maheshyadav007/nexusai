@@ -864,6 +864,7 @@ export type Created1 = string;
 export type Updated1 = string;
 export type Archived = boolean;
 export type Model2 = string | null;
+export type Preview = string | null;
 export type Query3 = string;
 export type Archived1 = boolean;
 export type Sessions = SessionRow[];
@@ -3849,6 +3850,7 @@ export interface SessionRow {
   updated: Updated1;
   archived: Archived;
   model?: Model2;
+  preview?: Preview;
   [k: string]: unknown;
 }
 /**

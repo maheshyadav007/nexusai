@@ -11,12 +11,12 @@ import { Skeleton } from "@/ui/primitives/Skeleton";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Presence, readSpace, RiseButton, Room, SlidePanel, Swap } from "@/ui/primitives/Motion";
 import { Pressable } from "@/ui/primitives/Pressable";
-import { Select } from "@/ui/primitives/Select";
 import { StatusDot } from "@/ui/primitives/StatusDot";
 import { t, tn } from "@/ui/strings";
 import { useAssistant } from "./AssistantProvider";
 import { AttachedChips, AttachMenu, ModelPicker, useAttachedReading, type Attached } from "./ChatControls";
 import { ChatViewActions } from "./ChatViewActions";
+import { ConversationSwitcher } from "./ConversationSwitcher";
 import { Composer } from "./Composer";
 import { SessionChat } from "./SessionChat";
 
@@ -87,11 +87,7 @@ function useWindowSize() {
 
 function Panel() {
   const assistant = useAssistant();
-  const sessions = useSessions("");
   const { width, height, caption } = useWindowSize();
-  // The Mail agent's chat is always first, so its triggered runs are easy to get to.
-  const chats = [...(sessions.data?.sessions ?? [])].sort((a, b) => Number(b.id === MAIL_AGENT) - Number(a.id === MAIL_AGENT));
-  const options = chats.map((row) => ({ value: row.id, label: row.status === "waiting" ? t("chat.waitingLabel", { title: row.title }) : row.title }));
   // Only one panel ever exists, so pinning moves it instead of restarting the conversation.
   // Out from the edge it sits against that edge, so the pointer that called it is already on it.
   const attached = !FLOATING_VIEW_ENABLED || (assistant.pinned && width >= SMALL_SCREEN);
@@ -107,7 +103,7 @@ function Panel() {
     >
       <header className="flex h-topbar shrink-0 items-center gap-1 border-b border-line-subtle px-2">
         <div className="min-w-0 flex-1">
-          {assistant.session && options.length ? <Select quiet label={t("chat.switch")} value={assistant.session} options={options} onChange={assistant.openSession} /> : <p className="px-2 text-md font-medium text-ink-primary">{t("chat.title")}</p>}
+          <ConversationSwitcher />
         </div>
         <ChatViewActions session={assistant.session} />
       </header>
