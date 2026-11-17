@@ -13,7 +13,7 @@ import { Skeleton } from "@/ui/primitives/Skeleton";
 import { StatusDot } from "@/ui/primitives/StatusDot";
 import { t } from "@/ui/strings";
 
-const TONES = { running: "running", waiting: "done", stopped: "idle", problem: "failed" } as const;
+export const PIPELINE_TONES = { running: "running", waiting: "done", stopped: "idle", problem: "failed" } as const;
 
 const SUGGESTED_MORE = "1000";
 
@@ -52,7 +52,7 @@ export function PipelineRow({ row }: { row: Pipeline }) {
     <li data-testid="pipeline" className="flex flex-col gap-2 rounded-md border border-line-subtle p-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="flex min-w-0 items-center gap-2 text-md text-ink-primary">
-          <StatusDot tone={TONES[row.state]} />
+          <StatusDot tone={PIPELINE_TONES[row.state]} />
           {row.title}
         </span>
         {row.available ? (

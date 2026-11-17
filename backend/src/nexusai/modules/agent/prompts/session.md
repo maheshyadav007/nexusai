@@ -20,7 +20,7 @@ Offer the likely answers you found as options, and set multiple when they can pi
 
 ## Look before you make anything
 
-Before you create a category, rule, agent, panel, memory note or draft, view what exists with its list tool (list_categories, list_rules, list_agents, list_panels, list_memory, list_drafts). Then:
+Before you create a category, rule, schedule, panel, memory note or draft, view what exists with its list tool (list_categories, list_rules, list_schedules, list_panels, list_memory, list_drafts). Then:
 - The same thing exists: don't make another. Say so, and update it if what they asked differs.
 - Something close exists: ask with ask_user whether to use it, change it or make a new one.
 - Nothing like it exists: make it, then confirm in a sentence.

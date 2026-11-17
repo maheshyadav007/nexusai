@@ -48,7 +48,7 @@ Each filled field records its value, its source and a confidence (exact match, d
 |---|---|
 | `read_form` tool | The field list for an attachment or document: references, labels, types, allowed values, locked or not. Paged for big sheets. |
 | `fill_form` tool | Writes values to a working copy, in batches. Checks each value against its field (type, allowed list, locked cells, formulas) and refuses with a reason the model can fix. Stores the source of each value. |
-| `web_search` tool | DuckDuckGo results (title, address, snippet), then `read_page` for one page's text. Rate-limited, results treated as untrusted, and shared with the monitors plan. |
+| `web_search` tool | DuckDuckGo **web** and **news** search through the `ddgs` library (`text()` and `news()`), giving title, address, snippet, and the date for news. Then `read_page` for one page's text. Results are untrusted, and shared with the monitors plan. |
 | A guard on search queries | Before a query leaves the computer, the data guard masks internal names, numbers and addresses; a query that would leak them is refused with a reason. |
 | Attachments on outgoing mail | `send_mail` and a new `forward_mail` take attachments: documents by key, including the filled copy. The approval card shows each attached file, which opens in the quick preview. |
 | A **Forms** agent | Owns `read_form`, `fill_form`, `web_search` and `read_page`; uses MCP tools it's allowed; hands sending back to Posty. A short prompt: list the fields, fill what has a source, ask once for what's missing, never guess. |
@@ -81,5 +81,5 @@ A monthly report is a monitor with a "fill and send" action: on the 1st, fill th
 ## Decisions for the person
 
 - A **Forms** agent, or give Posty these tools? (Recommended: a Forms agent, so its prompt stays small and focused for a weak model.)
-- **Web search provider**: DuckDuckGo as asked; it has no official API, so it may be rate-limited. Keep a second provider in mind (Brave, SearXNG) behind the same tool.
+- **Web search provider**: DuckDuckGo web and news search, as asked, through `ddgs`. The library reads DuckDuckGo's results pages rather than a paid API, so DuckDuckGo may slow it down under heavy use: the tool spaces its calls, retries with back-off on a rate-limit error, and caches a query's results for a while. A second provider can sit behind the same tool if it's ever needed.
 - **Which formats first**: xlsx and csv, then docx, then PDF? (Recommended, based on corporate mail.)

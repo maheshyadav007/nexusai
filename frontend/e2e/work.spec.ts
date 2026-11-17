@@ -172,28 +172,45 @@ test("a reminder is added and snoozed", async ({ page }) => {
 
 test("a schedule is created and runs on demand", async ({ page }) => {
   await page.goto("/agent/schedules");
-  await page.getByRole("button", { name: "Add daily prep at 6:00" }).click();
+  const drawer = page.getByRole("dialog");
+  // A template fills the form, and nothing is saved until the person says so.
+  await page.getByRole("button", { name: "New", exact: true }).click();
+  await drawer.getByRole("button", { name: "Daily prep" }).click();
+  await expect(drawer.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Daily prep");
+  await drawer.getByRole("button", { name: "Create schedule" }).click();
+  await expect(drawer).toHaveCount(0);
   await expect(page.getByTestId("schedule").filter({ hasText: "Daily prep" })).toBeVisible();
 
   const title = unique("Weekly note");
-  await page.getByRole("textbox", { name: "Name", exact: true }).fill(title);
-  await page.getByRole("textbox", { name: "What should the agent do?" }).fill("Say hello");
-  await page.getByRole("button", { name: "Create schedule" }).click();
+  await page.getByRole("button", { name: "New", exact: true }).click();
+  await drawer.getByRole("textbox", { name: "Name", exact: true }).fill(title);
+  await drawer.getByRole("textbox", { name: "What should the agent do?" }).fill("Say hello");
+  await drawer.getByRole("combobox", { name: "How often" }).click();
+  await page.getByRole("option", { name: "Every month" }).click();
+  await drawer.getByRole("combobox", { name: "Day of the month" }).click();
+  await page.getByRole("option", { name: "Last day" }).click();
+  await drawer.getByRole("button", { name: "Create schedule" }).click();
   const row = page.getByTestId("schedule").filter({ hasText: title });
-  await expect(row).toBeVisible();
+  await expect(row).toContainText("Monthly on the last day at");
   await noViolations(page);
-  await row.getByRole("button", { name: "Run now" }).click();
-  await expect(row.getByRole("button", { name: "Last run" })).toBeVisible({ timeout: 20_000 });
+  await row.getByRole("button").click();
+  await drawer.getByRole("button", { name: "Run now" }).click();
+  await expect(drawer.getByRole("button", { name: "Last run" })).toBeVisible({ timeout: 20_000 });
+  await page.keyboard.press("Escape");
 
   // Daily prep's time and its nightly limit are the person's to set.
   const prep = page.getByTestId("schedule").filter({ hasText: "Daily prep" });
-  await prep.getByRole("button", { name: "Edit Daily prep" }).click();
+  await prep.getByRole("button").click();
   await noViolations(page);
-  await prep.getByLabel("Time", { exact: true }).fill("05:30");
-  await prep.getByRole("spinbutton", { name: "Token limit for each run" }).fill("20000");
-  await prep.getByRole("button", { name: "Save" }).click();
-  await expect(prep).toContainText("Limit: 20,000 tokens");
+  await drawer.getByLabel("Time", { exact: true }).fill("05:30");
+  await drawer.getByRole("button", { name: "More options" }).click();
+  await drawer.getByRole("spinbutton", { name: "Token limit for each run" }).fill("20000");
+  await drawer.getByRole("button", { name: "Save" }).click();
   await expect(prep).toContainText("5:30");
+  await prep.getByRole("button").click();
+  await drawer.getByRole("button", { name: "More options" }).click();
+  await expect(drawer.getByRole("spinbutton", { name: "Token limit for each run" })).toHaveValue("20000");
+  await page.keyboard.press("Escape");
 
   await page.getByRole("switch", { name: "Time check for reminders and deadlines" }).click();
   await page.reload();

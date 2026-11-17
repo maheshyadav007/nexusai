@@ -266,7 +266,7 @@ const RESULT: Readonly<Record<string, { icon: IconName; href: string; open: Para
   create_reminders: { icon: "reminders", href: "/planner/reminders", open: "chat.result.openReminders" },
   propose_reminder: { icon: "reminders", href: "/planner/reminders", open: "chat.result.openReminders" },
   create_categories: { icon: "categories", href: "/settings?section=categories", open: "chat.result.openCategories" },
-  create_agent: { icon: "schedules", href: "/agent/schedules", open: "chat.result.openAgents" },
+  create_schedule: { icon: "schedules", href: "/agent/schedules", open: "chat.result.openAgents" },
   draft_reply: { icon: "drafts", href: "/mail/drafts", open: "chat.result.openDrafts" },
   save_draft: { icon: "drafts", href: "/mail/drafts", open: "chat.result.openDrafts" },
 };

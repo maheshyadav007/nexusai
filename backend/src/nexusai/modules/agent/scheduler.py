@@ -3,6 +3,7 @@
 The clock only says something came due. Starting the agent is the same as for any other event.
 """
 
+import calendar
 import os
 import threading
 from collections.abc import Callable
@@ -63,6 +64,12 @@ RELIABILITY_MIGRATION = Migration(
     "ALTER TABLE trigger_runs ADD COLUMN completed_through TEXT;"
     "ALTER TABLE schedules ADD COLUMN timezone TEXT NOT NULL DEFAULT '';",
 )
+CADENCE_MIGRATION = Migration(
+    "agent_schedule_cadence_001",
+    "ALTER TABLE schedules ADD COLUMN month_day INTEGER NOT NULL DEFAULT 1;"
+    "ALTER TABLE schedules ADD COLUMN month INTEGER NOT NULL DEFAULT 1;"
+    "ALTER TABLE schedules ADD COLUMN until TEXT;",
+)
 FOLLOW_UP_NOTICE_KIND = "follow-up"
 BRIEF_KIND = "mail-brief"
 REVIEW_KIND = "mail-review"
@@ -94,6 +101,8 @@ def next_scheduled_run(schedule: Schedule, after: datetime) -> str | None:
             return None
         candidate = next_value
         result = datetime.fromisoformat(candidate).replace(tzinfo=zone, fold=0).astimezone(UTC)
+    if schedule.until and candidate[:10] > schedule.until:
+        return None
     return result.isoformat()
 
 
@@ -115,7 +124,16 @@ def _local_now() -> datetime:
     return datetime.now().astimezone().replace(second=0, microsecond=0)
 
 
+SATURDAY = 5
+
+
+def _on_day(year: int, month: int, day: int, at: datetime) -> datetime:
+    """A day of the month that's past its end means the last day, so the 31st runs every month."""
+    return at.replace(year=year, month=month, day=min(day, calendar.monthrange(year, month)[1]))
+
+
 def next_run_after(schedule: Schedule, after: datetime) -> str | None:
+    """The first local wall time strictly after `after`, as YYYY-MM-DDTHH:MM."""
     hour, minute = map(int, schedule.time.split(":"))
     if schedule.every == "once":
         if not schedule.date:
@@ -131,9 +149,69 @@ def next_run_after(schedule: Schedule, after: datetime) -> str | None:
         candidate += timedelta(days=(schedule.weekday - candidate.weekday()) % 7)
         if candidate <= after:
             candidate += timedelta(weeks=1)
-    elif candidate <= after:
-        candidate += timedelta(days=1)
+    elif schedule.every == "month":
+        candidate = _on_day(
+            candidate.year, candidate.month, schedule.month_day, candidate.replace(day=1)
+        )
+        if candidate <= after:
+            year, month = (
+                (candidate.year + 1, 1)
+                if candidate.month == 12
+                else (candidate.year, candidate.month + 1)
+            )
+            candidate = _on_day(year, month, schedule.month_day, candidate.replace(day=1))
+    elif schedule.every == "year":
+        candidate = _on_day(
+            candidate.year, schedule.month, schedule.month_day, candidate.replace(day=1)
+        )
+        if candidate <= after:
+            candidate = _on_day(
+                candidate.year + 1, schedule.month, schedule.month_day, candidate.replace(day=1)
+            )
+    else:
+        if candidate <= after:
+            candidate += timedelta(days=1)
+        while schedule.every == "weekdays" and candidate.weekday() >= SATURDAY:
+            candidate += timedelta(days=1)
     return candidate.strftime("%Y-%m-%dT%H:%M")
+
+
+WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+
+def _ordinal(day: int) -> str:
+    suffix = "th" if 11 <= day <= 13 else {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+    return f"{day}{suffix}"
+
+
+def describe(schedule: Schedule) -> str:
+    """When it runs, in the words a person would use: "every Friday at 17:00, until 2026-12-31"."""
+    at = schedule.time
+    month_day = (
+        "the last day" if schedule.month_day == 31 else f"the {_ordinal(schedule.month_day)}"
+    )
+    words = {
+        "once": f"once, on {schedule.date} at {at}",
+        "hour": f"every hour at {at[3:]} past",
+        "day": f"every day at {at}",
+        "weekdays": f"every weekday (Monday to Friday) at {at}",
+        "week": f"every {WEEKDAY_NAMES[schedule.weekday]} at {at}",
+        "month": f"on {month_day} of every month at {at}",
+        "year": f"every year on {calendar.month_name[schedule.month]} {schedule.month_day} at {at}",
+    }[schedule.every]
+    return (
+        f"{words}, until {schedule.until}" if schedule.until and schedule.every != "once" else words
+    )
+
+
+def local_time(value: str | None, timezone: str | None) -> str:
+    """A stored UTC moment as the schedule's own wall time, such as "Fri 21 Nov 2026, 17:00"."""
+    if not value:
+        return "not scheduled"
+    moment = datetime.fromisoformat(value)
+    zone = ZoneInfo(timezone or system_timezone())
+    local = (moment if moment.tzinfo else moment.replace(tzinfo=UTC)).astimezone(zone)
+    return f"{local:%a %d %b %Y, %H:%M} ({zone.key})"
 
 
 def row_to_schedule(row: object) -> ScheduleRow:
@@ -357,9 +435,10 @@ class Scheduler:
             schedule = row_to_schedule(row)
             following = None if schedule.every == "once" else next_scheduled_run(schedule, instant)
             with self.ctx.bus.unit_of_work() as work:
+                # Once done, or past its end date, it turns itself off rather than sit there idle.
                 work.tx.execute(
                     "UPDATE schedules SET next_run = ?, last_run = ?, enabled = ? WHERE id = ?",
-                    (following, stamp, int(schedule.every != "once"), schedule.id),
+                    (following, stamp, int(following is not None), schedule.id),
                 )
                 work.emit(
                     "schedule.due",

@@ -926,10 +926,15 @@ class Schedule(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     prompt: str = Field(default="", max_length=20000)
     kind: Literal["prompt", "daily-prep", "mail-hourly", "mail-brief", "mail-review"] = "prompt"
-    every: Literal["once", "hour", "day", "week"] = "day"
+    # Weekdays are Monday to Friday. A month day past the month's end runs on its last day.
+    every: Literal["once", "hour", "day", "weekdays", "week", "month", "year"] = "day"
     time: str = Field(default="08:00", pattern=r"^\d{2}:\d{2}$")
     weekday: int = Field(default=0, ge=0, le=6)
+    month_day: int = Field(default=1, ge=1, le=31)
+    month: int = Field(default=1, ge=1, le=12)
     date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    # The last day it runs on. Empty means it keeps going.
+    until: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     enabled: bool = True
     token_limit: int = Field(default=0, ge=0)
     # Empty means the default for events and schedules.

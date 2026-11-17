@@ -348,21 +348,21 @@ def test_reminders_change_snooze_and_go_in_bulk_and_record_their_times(
 # Agents, memory, files and panels
 
 
-def test_an_agent_can_be_changed_paused_and_removed(client: TestClient, script: Script) -> None:
+def test_a_schedule_can_be_changed_paused_and_removed(client: TestClient, script: Script) -> None:
     client.post("/api/commands/schedules.save", json={"title": "Note", "prompt": "Say hi"})
     row = client.post("/api/queries/schedules.list").json()["schedules"][0]
     assert row["created"]
     assert row["updated"]
     session = new_session(client)
-    change = {"agent_id": row["id"], "enabled": False, "instructions": "Say bye"}
-    script.replies = [[ToolCall("u", "update_agent", change)], [TextChunk("Paused.")]]
+    change = {"schedule_id": row["id"], "enabled": False, "instructions": "Say bye"}
+    script.replies = [[ToolCall("u", "update_schedule", change)], [TextChunk("Paused.")]]
     done = chat_in_background(client, session, "Pause it")
     approve_one(client)
     wait(lambda: done, "finish")
     changed = client.post("/api/queries/schedules.list").json()["schedules"][0]
     assert (changed["enabled"], changed["prompt"], changed["title"]) == (False, "Say bye", "Note")
-    gone = {"agent_ids": [row["id"]]}
-    script.replies = [[ToolCall("r", "remove_agents", gone)], [TextChunk("Gone.")]]
+    gone = {"schedule_ids": [row["id"]]}
+    script.replies = [[ToolCall("r", "remove_schedules", gone)], [TextChunk("Gone.")]]
     done = chat_in_background(client, session, "Remove it")
     approve_one(client)
     wait(lambda: done, "removed")

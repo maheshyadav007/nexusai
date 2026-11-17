@@ -93,7 +93,6 @@ test("mail sync shows on the Schedules page and the Cockpit, and can be paused f
   await page.goto("/agent/schedules");
   const row = page.getByTestId("pipeline").filter({ hasText: "Mail sync" });
   await expect(row).toContainText("Every minute");
-  await expect(row).toContainText("On the server");
   await expect(row).toContainText("Last checked");
   await noViolations(page);
 
@@ -107,6 +106,7 @@ test("mail sync shows on the Schedules page and the Cockpit, and can be paused f
   await unfold(page, "Health");
   const again = page.getByTestId("pipeline").filter({ hasText: "Mail sync" });
   await expect(again).toContainText("Paused.");
+  await expect(again).toContainText("On the server");
   await expect(page.getByTestId("health-mail")).toContainText("Paused");
   await noViolations(page);
 

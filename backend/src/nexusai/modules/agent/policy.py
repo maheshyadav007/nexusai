@@ -176,14 +176,24 @@ TOOL_ENTRIES = (
     ToolEntry("list_panels", DATA, "See panels", "Read your panels.", "read"),
     ToolEntry("save_panel", DATA, "Write panels", "Create or change a panel.", "data"),
     ToolEntry("remove_panels", DATA, "Remove panels", "Delete panels.", "data"),
-    ToolEntry("list_agents", AGENTS, "See agents", "See your scheduled agents.", "read"),
+    ToolEntry("list_schedules", AGENTS, "See schedules", "See what runs on a schedule.", "read"),
     ToolEntry(
-        "create_agent", AGENTS, "Create agents", "Make an agent that runs by itself.", "data", ASK
+        "create_schedule",
+        AGENTS,
+        "Create schedules",
+        "Make something run by itself at set times.",
+        "data",
+        ASK,
     ),
     ToolEntry(
-        "update_agent", AGENTS, "Change agents", "Edit, pause or resume an agent.", "data", ASK
+        "update_schedule",
+        AGENTS,
+        "Change schedules",
+        "Edit, pause or resume a schedule.",
+        "data",
+        ASK,
     ),
-    ToolEntry("run_agent", AGENTS, "Run agents", "Start an agent now.", "data"),
+    ToolEntry("run_schedule", AGENTS, "Run schedules", "Run a schedule now.", "data"),
     ToolEntry(
         "propose_skill",
         AGENTS,
@@ -191,7 +201,7 @@ TOOL_ENTRIES = (
         "Get a skill from a link for you to review. It always asks first.",
         "send",
     ),
-    ToolEntry("remove_agents", AGENTS, "Remove agents", "Delete scheduled agents.", "data", ASK),
+    ToolEntry("remove_schedules", AGENTS, "Remove schedules", "Delete schedules.", "data", ASK),
     ToolEntry(
         "save_personal_prompt",
         AGENTS,

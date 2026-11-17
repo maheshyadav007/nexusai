@@ -7,7 +7,8 @@ import { IconButton } from "./IconButton";
 
 const SHAPES = {
   dialog: { overlay: "grid grid-cols-1 place-items-center p-5", panel: "w-dialog max-w-full animate-dialog-in rounded-lg data-[state=closed]:animate-dialog-out" },
-  drawer: { overlay: "flex justify-end", panel: "h-full w-drawer max-w-full animate-drawer-in border-l data-[state=closed]:animate-drawer-out" },
+  // A column, so a child with min-h-0 and overflow-y-auto scrolls under a header that stays put.
+  drawer: { overlay: "flex justify-end", panel: "flex h-full w-drawer max-w-full animate-drawer-in flex-col border-l data-[state=closed]:animate-drawer-out" },
   // Frosted and roomy, for what needs space: settings, and reading a document.
   palette: { overlay: "glass-backdrop bg-surface-scrim/40 flex justify-center p-5 pt-10", panel: "surface-glass flex max-h-full w-dialog max-w-full animate-dialog-in flex-col self-start rounded-lg border data-[state=closed]:animate-dialog-out" },
   // The backdrop does the blurring: browsers only blur what's inside the nearest layer.
