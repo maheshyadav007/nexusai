@@ -79,10 +79,10 @@ def test_a_lead_that_asks_the_person_counts_as_done_and_honest(
         ],
         [TextChunk("Asked.")],
     )
+    # team_assign waits, so the Mail agent's question comes back in the lead's own turn.
     script.say(
         "Posty",
         [ToolCall("a", "team_assign", assign)],
-        [TextChunk("Asked the mail agent.")],
         [ToolCall("u", "ask_user", {"question": "Which addresses are the Seoul HQ team?"})],
     )
     case = next(c for c in team_eval.CASES if c.name == "verify")

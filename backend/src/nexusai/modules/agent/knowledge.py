@@ -22,6 +22,7 @@ from nexusai.modules.agent import (
 from nexusai.modules.agent import guard as guards
 from nexusai.modules.agent.gateway import Layer
 from nexusai.modules.agent.guard import DataGuard
+from nexusai.modules.semantic import module as semantic
 from nexusai.modules.settings.module import load_profile
 
 NOTE = re.compile(r"^- (?P<text>.*?)(?: \[mail:(?P<thread>\d+)\])?$")
@@ -116,8 +117,15 @@ def layers_for(
     config = ctx.config
     account = account or accounts.current_account(config)
     is_mail = agent == mail_agent.AGENT
+    engine = semantic.engine()
     selected_memory = memory.relevant(
-        config.home, agent, task_text, config.agent.memory_max_chars, include_learned=False
+        config.home,
+        agent,
+        task_text,
+        config.agent.memory_max_chars,
+        include_learned=False,
+        # Looked up, not called, here: the index can be closing while Home switches.
+        similar=getattr(engine, "similarity", None),
     )
     layers = prompts_builder.build_layers(
         config,

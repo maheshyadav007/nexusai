@@ -722,7 +722,11 @@ class SessionRuntime:
         engine = cards.engine(self.db, agent)
         has_email = bool(turn and turn["target"])
         built = tools.build_tools(
-            self.ctx, session, control, tools.allowed_for(engine, origin, has_email)
+            self.ctx,
+            session,
+            control,
+            tools.allowed_for(engine, origin, has_email),
+            tools.withheld_for(engine),
         )
         # The prompt speaks only of tools this run has, so a small model isn't sent looking.
         layers = knowledge.layers_for(
@@ -773,6 +777,7 @@ class SessionRuntime:
                 shown_tools=shown,
                 always_shown_prefix=tools.CONNECTOR_PREFIX,
                 tool_names=[tool.name for tool in built],
+                owners=tools.owners_of_withheld(self.db, engine),
             ),
             checkpointer=self.saver,
         )

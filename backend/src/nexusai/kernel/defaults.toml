@@ -159,6 +159,9 @@ spike_factor = 3
 spike_min_tokens = 50000
 # A working task with no new step for this long is stopped and blocked.
 silence_minutes = 20
+# How long team_assign waits for the result, so a quick job comes back in the same turn. Past it,
+# the work carries on and the assigner is woken when it reports. 0 never waits.
+assign_wait_seconds = 90
 
 # Typed messages. The chat shows everything, and this is only what the model is sent. A chat the
 # person is having keeps all of it, the most a setting allows; old tool results are still cleared

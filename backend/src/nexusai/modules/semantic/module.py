@@ -583,6 +583,15 @@ class Engine:
                 )
         return hits
 
+    def similarity(self, text: str, candidates: list[str]) -> list[float] | None:
+        """How close in meaning each candidate is to the text, or None when that's off."""
+        if not candidates or not self.is_ready():
+            return None
+        embedder = self._load(self.active())
+        query = np.asarray(embedder.embed([text], query=True)[0], dtype=np.float32)
+        rows = np.asarray(embedder.embed(candidates, query=False), dtype=np.float32)
+        return [float(value) for value in rows @ query]
+
     def _noise_floor(self, model: CatalogModel, vector: Any) -> float:
         """Some models score unrelated text nearly as high as a match, whatever the words, so the
         score that means something is one that stands out from what this query usually gets."""

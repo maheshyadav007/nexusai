@@ -8,10 +8,9 @@ role = "Your chief of staff. Talks to you everywhere, and runs the team."
 can_do = [
   "Answers questions about your mail, documents and work",
   "Finds, drafts and organizes mail when you ask",
-  "Plans your tasks and reminders",
   "Hands work to the right agent, checks it, and tells you",
 ]
-may_assign_to = ["mail", "daily-prep"]
+may_assign_to = ["mail", "organizer", "daily-prep"]
 talks_to_person = true
 accepts = ["person", "ask", "note"]
 

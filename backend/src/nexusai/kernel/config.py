@@ -111,6 +111,7 @@ class TeamConfig:
     spike_factor: float
     spike_min_tokens: int
     silence_minutes: int
+    assign_wait_seconds: int
 
 
 @dataclass(frozen=True)

@@ -27,7 +27,7 @@ import dates  # noqa: E402
 import mail_eval  # noqa: E402
 import scratch  # noqa: E402
 
-from nexusai.modules.agent import gateway, mail_agent, prompts_builder, skills  # noqa: E402
+from nexusai.modules.agent import gateway, mail_agent, prompts_builder, skills, tools  # noqa: E402
 from nexusai.modules.agent.gateway import Layer  # noqa: E402
 from nexusai.modules.agent.providers import Message  # noqa: E402
 
@@ -47,6 +47,8 @@ def layers_for(ctx: Any, home: Path, persona: dict[str, str]) -> list[Layer]:
         mailbox=persona["mailbox"],
         db=ctx.bus.db,
         skills=skills.index(ctx, "mail"),
+        # What a real judging run has, so the eval leaves out the same sections.
+        tools=tools.TRIAGE_TOOLS,
         scratch="your scratch folder",
     )
     now = datetime.now().astimezone().strftime("%A %d %B %Y %H:%M")

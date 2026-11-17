@@ -6,6 +6,8 @@ no agent can raise its own.
 """
 
 import json
+import re
+import time
 from collections import deque
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -418,6 +420,49 @@ def _message_on(ctx: Context, *, session: str, sender: str, task: int, kind: str
     return "Noted."
 
 
+ANSWERED = {"reported", "input_required", "blocked", "failed", "canceled"}
+GIVEN = re.compile(r"^Task (\d+) given to ")
+
+
+def await_result(ctx: Context, given: str, seconds: float, poll: float = 0.5) -> str:
+    """Waits for a task just given, so a quick job's result comes back in the assigner's own turn.
+
+    The assigner is never woken while its turn is running, so taking the wake-up here is safe:
+    whatever this returns, the assigner won't be told again. Past the wait, the task carries on
+    and the assigner is woken when it reports, as before."""
+    found = GIVEN.match(given)
+    if found is None or seconds <= 0:
+        return given
+    task = int(found.group(1))
+    db = ctx.bus.db
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        row = get(db, task)
+        if row is None:
+            return given
+        if row["state"] in ANSWERED and row["wake"] == ASSIGNER:
+            with ctx.bus.unit_of_work() as work:
+                taken = work.tx.execute(
+                    "UPDATE team_tasks SET wake = NULL WHERE id = ? AND wake = ?", (task, ASSIGNER)
+                ).rowcount
+                # What came back is no more trusted than what it was built from.
+                if taken and row["untrusted"]:
+                    work.tx.execute(
+                        "UPDATE agent_sessions SET untrusted = 1 WHERE id = ?",
+                        (row["assigner_session"],),
+                    )
+            if taken:
+                return report_text(db, get(db, task) or row)
+            return given
+        time.sleep(poll)
+    latest = get(db, task)
+    owner = cards.name(db, latest["owner"]) if latest is not None else "The agent"
+    return (
+        f"Task {task} is still being worked on by {owner}. End your turn: you'll get a new "
+        "message when it reports or asks something. Tell the person it's in hand."
+    )
+
+
 def _pause_for_loop(ctx: Context, row: Any) -> None:
     with ctx.bus.unit_of_work() as work:
         work.tx.execute(
@@ -630,10 +675,25 @@ def report_text(db: Database, row: Any) -> str:
             f"Done when: {row['done_criteria']}",
             f"Outcome: {row['outcome'] or 'none yet'}",
             f"Evidence: {', '.join(json.loads(row['evidence'])) or 'none'}",
+            _done_before_stopping(db, row) if row["state"] in {"blocked", "failed"} else "",
             _thread(db, row["id"]),
         ]
     ).strip()
     return head + "\n" + (untrusted(body) if row["untrusted"] else body)
+
+
+def _done_before_stopping(db: Database, row: Any) -> str:
+    """What the owner's run got done, so the assigner carries on from there instead of redoing it."""
+    if not row["owner_session"]:
+        return "It didn't start, so nothing was done."
+    calls = db.fetch_all(
+        "SELECT tool, status FROM tool_calls WHERE session = ? ORDER BY id DESC LIMIT 12",
+        (row["owner_session"],),
+    )
+    if not calls:
+        return "Nothing was done before it stopped."
+    steps = ", ".join(f"{c['tool']} ({c['status']})" for c in reversed(calls))
+    return f"Done before it stopped, oldest first: {steps}. Check what changed before redoing any of it."
 
 
 def _thread(db: Database, task: int) -> str:

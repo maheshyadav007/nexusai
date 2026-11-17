@@ -1,8 +1,11 @@
 """Memory as markdown files in Home, so people can read and edit them with anything."""
 
 import re
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+
+import structlog
 
 from nexusai.contracts.agent import MemoryFile, MemoryProposal
 from nexusai.kernel import textmatch
@@ -18,6 +21,7 @@ CREATE TABLE memory_proposals (
   status TEXT NOT NULL DEFAULT 'pending');
 """,
 )
+log = structlog.get_logger()
 WORD = re.compile(r"[\w@.-]{3,}", re.UNICODE)
 # What the Mail agent has picked up from mail. Only it reads this, always marked as from mail, so
 # a planted email can't reach other agents or give it instructions. The person can edit it.
@@ -167,9 +171,17 @@ def remove_file(home: Path, relative: str) -> None:
 
 
 def relevant(
-    home: Path, agent: str, task_text: str, limit: int, include_learned: bool = True
+    home: Path,
+    agent: str,
+    task_text: str,
+    limit: int,
+    include_learned: bool = True,
+    similar: Callable[[str, list[str]], list[float] | None] | None = None,
 ) -> str:
-    """Memories sharing the most words with this task, within the size limit."""
+    """The memories that bear most on this task, within the size limit.
+
+    Everything is kept while it fits. Past the limit, within each kind of memory, what's closest
+    in meaning to the task comes first, or what shares most words when meaning is off."""
     words = {word.lower() for word in WORD.findall(task_text)}
     scored: list[tuple[int, str, str]] = []
     for file in list_files(home):
@@ -198,7 +210,9 @@ def relevant(
             scored.append((1 << 30, file.name, untrusted(kept)))
         elif overlap or not words:
             scored.append((overlap, file.name, file.content.strip()))
-    scored.sort(key=lambda item: (-item[0], item[1]))
+    closeness = _closeness(task_text, words, [content for _, _, content in scored], limit, similar)
+    order = sorted(range(len(scored)), key=lambda i: (-scored[i][0], -closeness[i], scored[i][1]))
+    scored = [scored[i] for i in order]
     # One heading per file, with its chosen lines under it, rather than a heading on every line.
     chosen: dict[str, list[str]] = {}
     used = 0
@@ -209,6 +223,27 @@ def relevant(
         chosen.setdefault(name, []).append(content)
         used += cost
     return "\n\n".join(f"[{name}]\n" + "\n".join(lines) for name, lines in chosen.items())
+
+
+def _closeness(
+    task_text: str,
+    words: set[str],
+    contents: list[str],
+    limit: int,
+    similar: Callable[[str, list[str]], list[float] | None] | None,
+) -> list[float]:
+    """Only worked out when not everything fits, since then the order decides what's left out."""
+    if not task_text.strip() or sum(len(c) + 1 for c in contents) <= limit:
+        return [0.0] * len(contents)
+    if similar is not None:
+        try:
+            found = similar(task_text[:2000], contents)
+        except Exception:  # noqa: BLE001 - meaning is a bonus; words still work without it
+            log.warning("memory_similarity_failed", exc_info=True)
+            found = None
+        if found is not None and len(found) == len(contents):
+            return found
+    return [float(len(words & {w.lower() for w in WORD.findall(content)})) for content in contents]
 
 
 # Where facts the agents note down go, one per line, so they stay in one place the person can read.
@@ -225,6 +260,14 @@ def remember(
 ) -> tuple[int, int]:
     """Notes down facts not already known, as notes, or only as proposals after untrusted input.
     Returns how many were new and how many were already known."""
+    new, known = remember_facts(home, db, agent, facts, untrusted, source)
+    return len(new), len(known)
+
+
+def remember_facts(
+    home: Path, db: Database, agent: str, facts: list[str], untrusted: bool, source: str | None
+) -> tuple[list[str], list[str]]:
+    """As remember, returning which facts were new and which were already known."""
     known = {
         _plain(line.lstrip("- "))
         for file in list_files(home)
@@ -249,7 +292,8 @@ def remember(
         target.write_text(
             before + ("" if not before or before.endswith("\n") else "\n") + lines, "utf-8"
         )
-    return len(new), len(facts) - len(new)
+    given = [fact.strip() for fact in facts if fact.strip()]
+    return new, [fact for fact in given if fact not in new]
 
 
 def propose(

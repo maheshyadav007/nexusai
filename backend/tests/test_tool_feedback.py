@@ -15,7 +15,7 @@ def told(script: Script) -> list[str]:
 def test_a_bad_call_is_explained_without_repeating_it(client: TestClient, script: Script) -> None:
     session = client.post("/api/commands/session.create", json={}).json()["id"]
     script.replies = [
-        [ToolCall("a", "create_tasks", {"wrong": "SECRET-ARG"})],
+        [ToolCall("a", "read_thread", {"wrong": "SECRET-ARG"})],
         [ToolCall("b", "delete_everything", {"x": "SECRET-ARG"})],
         [TextChunk("Done.")],
     ]
@@ -24,8 +24,10 @@ def test_a_bad_call_is_explained_without_repeating_it(client: TestClient, script
     bad_args, unknown = told(script)
     # Seeing its failed call again makes a small model repeat it, so it's never echoed.
     assert "SECRET-ARG" not in bad_args and "SECRET-ARG" not in unknown
-    assert bad_args.startswith("Not run: create_tasks is missing tasks.")
-    assert "- tasks (required)" in bad_args and 'Example: create_tasks(tasks=[{"title"' in bad_args
+    assert bad_args.startswith("Not run: read_thread is missing thread_ids.")
+    assert (
+        "- thread_ids (required)" in bad_args and "Example: read_thread(thread_ids=[1])" in bad_args
+    )
     assert "no tool called delete_everything" in unknown and "Closest: delete_" in unknown
     assert "find_tools" in unknown
 
@@ -88,3 +90,22 @@ def test_the_lead_asks_when_unclear_in_a_section_of_its_own() -> None:
     assert "## Ask when it's unclear" in session
     section = session.split("## Ask when it's unclear", 1)[1].split("\n## ", 1)[0]
     assert "ask_user" in section and "can't find" in section
+
+
+def test_the_same_failing_call_twice_is_pointed_elsewhere(
+    client: TestClient, script: Script
+) -> None:
+    session = client.post("/api/commands/session.create", json={}).json()["id"]
+    script.replies = [
+        [ToolCall("a", "read_thread", {"ids": [1]})],
+        [ToolCall("b", "read_thread", {"ids": [1]})],
+        [ToolCall("c", "read_thread", {"ids": [2]})],
+        [TextChunk("Done.")],
+    ]
+    with client.stream("POST", "/api/sessions/chat", json={"id": session, "text": "Go"}) as r:
+        list(r.iter_lines())
+    first, second, other = told(script)
+    assert "failed 2 times" not in first
+    assert "This same call has now failed 2 times. Don't make it again." in second
+    # A different call is a new try, not a repeat.
+    assert "failed 2 times" not in other

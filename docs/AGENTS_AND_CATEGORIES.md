@@ -10,10 +10,11 @@ There are **5 agents**, plus 3 helpers that make a single model call. All of the
 
 | Agent | What it does | Prompt | Tools |
 |---|---|---|---|
-| **Posty** (card `session`, the default) | Talks to the person, does what they ask, and gives work to the others | `session.md` | All, with risky ones asking first |
+| **Posty** (card `session`, the default) | Talks to the person, searches, drafts, and gives work to the others | `session.md` | All but the Organizer's, with risky ones asking first |
 | **Mail agent** | Judges mail, learns about the person, and suggests where mail should go | `mail.md` | A small set for mail (`MAIL_AGENT_TOOLS`) |
-| **First meeting** | Asks a few questions, so mail is judged the way the person would | `interview.md` | All. Changes ask first, because it read mail |
-| **Brief writer** | Writes the brief at the top of Today | `daily-prep.md` | All |
+| **Organizer** | Adds, changes and removes tasks and reminders, given them by Posty | `organizer.md` | Tasks, reminders and reading mail (`ORGANIZER_TOOLS`) |
+| **First meeting** | Asks a few questions, so mail is judged the way the person would | `interview.md` | A small set for the interview (`INTERVIEW_TOOLS`) |
+| **Brief writer** | Writes the brief at the top of Today | `daily-prep.md` | A small set for the brief (`BRIEF_TOOLS`) |
 | **Scheduled** | Runs a prompt the person set up, on a schedule or an event | `scheduled.md` | All |
 
 | Helper | What it does | Started by |

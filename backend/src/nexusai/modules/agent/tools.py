@@ -995,6 +995,42 @@ BRIEF_TOOLS = frozenset(
 BRIEF_AGENT_ONLY = frozenset({"read_plate", "update_brief"})
 
 
+# The Organizer keeps tasks and reminders. It reads mail only to link and date what it adds.
+ORGANIZER_TOOLS = frozenset(
+    {
+        "list_tasks",
+        "create_tasks",
+        "update_tasks",
+        "delete_tasks",
+        "list_reminders",
+        "create_reminders",
+        "update_reminders",
+        "delete_reminders",
+        "search_mail",
+        "read_thread",
+        "read_work_board",
+        "remember",
+        "list_memory",
+        "team_inbox",
+        "team_message",
+        "team_close",
+    }
+)
+# Making and changing tasks and reminders is the Organizer's work, so the lead hands it over.
+ORGANIZER_ONLY = frozenset(
+    {
+        "create_tasks",
+        "update_tasks",
+        "delete_tasks",
+        "create_reminders",
+        "update_reminders",
+        "delete_reminders",
+        "propose_task",
+        "propose_reminder",
+    }
+)
+
+
 INTERVIEW_TOOLS = frozenset(
     {
         "ask_user",
@@ -1021,7 +1057,7 @@ ALWAYS_SHOWN = frozenset({"ask_user", "remember", "list_memory", "load_skill"})
 LEAD_SHOWN = ALWAYS_SHOWN | {
     "read_work_board", "search_mail", "semantic_search", "search_documents", "read_thread",
     "list_mail", "update_mail", "draft_reply", "list_drafts",
-    "list_tasks", "create_tasks", "list_reminders", "create_reminders", "list_categories",
+    "list_tasks", "list_reminders", "list_categories",
     "list_rules", "list_agents", "list_panels", "propose_preference",
     "team_assign", "team_inbox", "team_message", "team_close",
 }  # fmt: skip
@@ -1040,8 +1076,8 @@ def shown_for(agent: str, has_email: bool) -> frozenset[str] | None:
         return None
     if agent == "mail":
         return None if has_email else MAIL_SHOWN
-    # Its whole set is small enough to show.
-    return None if agent == "daily-prep" else LEAD_SHOWN
+    # Their whole sets are small enough to show.
+    return None if agent in {"daily-prep", "organizer"} else LEAD_SHOWN
 
 
 def other_tools(all_names: list[str], shown: frozenset[str] | None) -> str:
@@ -1103,6 +1139,17 @@ def find(catalog: list[StructuredTool], query: str, shown: int = FOUND_SHOWN) ->
     return "You can use these from your next step:\n" + "\n".join(lines)
 
 
+def withheld_for(agent: str) -> frozenset[str]:
+    """Tools another agent owns, kept from one that would otherwise have them all."""
+    return ORGANIZER_ONLY if agent == "session" else frozenset()
+
+
+def owners_of_withheld(db: Any, agent: str) -> dict[str, str]:
+    """Each withheld tool's owner, by @handle, so a call to one is pointed the right way."""
+    found = cards.card(db, "organizer")
+    return {name: found.at for name in withheld_for(agent)} if found else {}
+
+
 def allowed_for(agent: str, origin: str, has_email: bool) -> frozenset[str] | None:
     """None means every tool. Only someone typing can answer a question straight away, and
     there's only a judgement to record when the run was started for an email."""
@@ -1110,6 +1157,8 @@ def allowed_for(agent: str, origin: str, has_email: bool) -> frozenset[str] | No
         return INTERVIEW_TOOLS
     if agent == "daily-prep":
         return BRIEF_TOOLS | {"ask_user"} if origin == "person" else BRIEF_TOOLS
+    if agent == "organizer":
+        return ORGANIZER_TOOLS | {"ask_user"} if origin == "person" else ORGANIZER_TOOLS
     if agent != "mail":
         return None
     if has_email:
@@ -1182,7 +1231,11 @@ def _connector_tools(ctx: Context, session: str) -> list[StructuredTool]:
 
 
 def build_tools(
-    ctx: Context, session: str, control: RunControl, allowed: frozenset[str] | None = None
+    ctx: Context,
+    session: str,
+    control: RunControl,
+    allowed: frozenset[str] | None = None,
+    withheld: frozenset[str] = frozenset(),
 ) -> list[StructuredTool]:
     RUN_CONTROLS[session] = control
 
@@ -1738,7 +1791,7 @@ def build_tools(
         budget_tokens: int | None = None,
         due_minutes: int | None = None,
     ) -> str:
-        return team.assign(
+        given = team.assign(
             ctx,
             session=session,
             sender=_speaker(),
@@ -1752,6 +1805,7 @@ def build_tools(
             due_minutes=due_minutes,
             tool_call=tool_call_id,
         )
+        return team.await_result(ctx, given, ctx.config.team.assign_wait_seconds)
 
     def team_message(task: int, kind: str, text: str, tool_call_id: str) -> str:
         return team.message(
@@ -1819,18 +1873,23 @@ def build_tools(
 
     def remember(facts: list[str], tool_call_id: str) -> str:
         untrusted = _is_untrusted(ctx, session)
-        new, known = memory.remember(
+        new, known = memory.remember_facts(
             ctx.config.home, ctx.bus.db, _speaker_name(), facts, untrusted,
             f"/agent/sessions/{session}",
         )  # fmt: skip
         with ctx.bus.unit_of_work() as run:
             run.emit("memory.changed", {}, source="agent", trace_id=ctx.trace_id)
-        said = f" {known} already known." if known else ""
+        # Exactly what was kept, so the agent can tell the person in their own words.
+        said = f"\nAlready known: {'; '.join(known)}." if known else ""
         if not new:
-            return f"Nothing new: all {known} already known."
+            return f"Nothing new: already known: {'; '.join(known)}."
+        listed = "; ".join(new)
         if untrusted:
-            return f"Proposed {new}.{said} The person reviews them in Prompts and memory, because this conversation read mail or other outside text."
-        return f"Saved {new} to {memory.NOTES_PATH}.{said}"
+            return (
+                f"Proposed, waiting for the person to approve in Prompts and memory, because this "
+                f"conversation read mail or other outside text: {listed}.{said}"
+            )
+        return f"Saved to memory: {listed}.{said}"
 
     def propose_task(
         title: str, tool_call_id: str, due: str | None = None, thread_id: int | None = None
@@ -2113,9 +2172,9 @@ def build_tools(
         (
             team_assign,
             _TeamAssign,
-            "Give a task to another agent, only for work that stands on its own. Do it yourself "
-            "otherwise. The objective is enough; point to ids rather than copying text. You're "
-            "told when it reports.",
+            "Give a task to another agent that owns the work. The objective is enough; point to "
+            "ids rather than copying text. It waits for the result, so a quick job comes back "
+            "here; a longer one wakes you when it reports.",
         ),
         (
             team_message,
@@ -2265,7 +2324,7 @@ def build_tools(
         for func, schema, description in specs
         if func.__name__ != "semantic_search" or _meaning_is_on()
         # Judging mail belongs to the Mail agent alone, and the brief to the brief agent.
-        if (allowed is None and func.__name__ not in MAIL_AGENT_ONLY | BRIEF_AGENT_ONLY)
+        if (allowed is None and func.__name__ not in MAIL_AGENT_ONLY | BRIEF_AGENT_ONLY | withheld)
         or (allowed is not None and func.__name__ in allowed)
     ]
     catalog.extend(own if allowed is not None else [*own, *_connector_tools(ctx, session)])

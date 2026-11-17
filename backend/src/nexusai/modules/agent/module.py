@@ -223,7 +223,7 @@ PERSONAL_PROMPTS = (
     ("topics", "Instructions for specific topics"),
 )
 # Agents whose prompt the person can add to, titled by their cards.
-AGENT_PROMPTS = ("mail", "session", "daily-prep")
+AGENT_PROMPTS = ("mail", "session", "organizer", "daily-prep")
 
 agent_module = Module(
     name="agent",

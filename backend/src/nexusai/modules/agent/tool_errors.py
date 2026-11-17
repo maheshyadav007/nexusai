@@ -111,8 +111,13 @@ def bad_arguments(tool: str, schema_type: type[BaseModel] | None, error: Validat
     return "\n".join(lines)
 
 
-def unknown_tool(name: str, available: list[str]) -> str:
+def unknown_tool(name: str, available: list[str], owner: str | None = None) -> str:
     """The nearest names, and how to find the right one."""
+    if owner:
+        return (
+            f"Not run: {name} is {owner}'s work, not yours. Give it to {owner} with team_assign, "
+            "with the objective in a sentence and any ids. The result comes back to you."
+        )
     words = set(name.lower().replace("-", "_").split("_"))
     by_words = sorted(
         (n for n in available if words & set(n.split("_")) and n != FIND_TOOLS),
@@ -142,15 +147,51 @@ def failed(tool: str, error: Exception) -> str:
     )
 
 
+# How a tool's own reply says nothing was done.
+REFUSED_START = ("Not run", "Not allowed", "Not assigned", "Not proposed", "Not saved", "Error")
+REPEATED = (
+    "\nThis same call has now failed {count} times. Don't make it again. Try another way: "
+    "different arguments, another tool, or find_tools. If nothing works, tell the person what "
+    "you tried and what they can do."
+)
+
+
+def _failed(result: Any) -> bool:
+    if getattr(result, "status", None) == "error":
+        return True
+    content = getattr(result, "content", "")
+    return isinstance(content, str) and content.startswith(REFUSED_START)
+
+
 class ToolFeedback(AgentMiddleware):
     """Checks each call before it runs, and turns any failure into a message the agent can act
-    on, so one bad call never ends the run."""
+    on, so one bad call never ends the run. The same failing call made again is pointed elsewhere,
+    so a small model doesn't loop on it."""
 
-    def __init__(self, names: list[str]) -> None:
+    def __init__(self, names: list[str], owners: dict[str, str] | None = None) -> None:
         super().__init__()
         self.names = sorted(names)
+        # Tools another agent owns, by name, to that agent's @handle.
+        self.owners = owners or {}
+        # Failures this run, by tool and arguments.
+        self.failures: dict[str, int] = {}
 
     def wrap_tool_call(self, request: Any, handler: Callable[[Any], Any]) -> Any:
+        result = self._checked(request, handler)
+        if not _failed(result):
+            return result
+        call = request.tool_call
+        key = (
+            f"{call.get('name')}:{json.dumps(call.get('args') or {}, sort_keys=True, default=str)}"
+        )
+        self.failures[key] = self.failures.get(key, 0) + 1
+        if self.failures[key] < 2 or not isinstance(result.content, str):
+            return result
+        return result.model_copy(
+            update={"content": result.content + REPEATED.format(count=self.failures[key])}
+        )
+
+    def _checked(self, request: Any, handler: Callable[[Any], Any]) -> Any:
         call = request.tool_call
         name = str(call.get("name") or "")
         call_id = str(call.get("id") or "")
@@ -160,7 +201,7 @@ class ToolFeedback(AgentMiddleware):
 
         tool = request.tool
         if tool is None:
-            return told(unknown_tool(name, self.names))
+            return told(unknown_tool(name, self.names, self.owners.get(name)))
         schema = getattr(tool, "args_schema", None)
         if isinstance(schema, type) and issubclass(schema, BaseModel):
             try:
