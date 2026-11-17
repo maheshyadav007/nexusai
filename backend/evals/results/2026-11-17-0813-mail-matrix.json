@@ -1,0 +1,526 @@
+{
+ "cases_file": "mail_cases_b5g.json",
+ "stopped": null,
+ "runs": [
+  {
+   "model": "GPT-6-Luna",
+   "model_id": "gpt-6-luna",
+   "effort": "medium",
+   "cases": 20,
+   "passed": 19,
+   "tokens": {
+    "calls": 20,
+    "input": 79892,
+    "output": 4089
+   },
+   "seconds": 109.3,
+   "plan_before": {
+    "x-codex-primary-used-percent": 8.0,
+    "x-codex-secondary-used-percent": 43.0,
+    "x-codex-primary-window-minutes": 300.0,
+    "x-codex-primary-over-secondary-limit-percent": 0.0,
+    "x-codex-secondary-window-minutes": 10080.0,
+    "x-codex-primary-reset-after-seconds": 17243.0,
+    "x-codex-secondary-reset-after-seconds": 255916.0,
+    "x-codex-primary-reset-at": 1794920315.0,
+    "x-codex-secondary-reset-at": 1795158988.0,
+    "x-codex-credits-balance": 0.0
+   },
+   "plan_after": {
+    "x-codex-primary-used-percent": 8.0,
+    "x-codex-secondary-used-percent": 43.0,
+    "x-codex-primary-window-minutes": 300.0,
+    "x-codex-primary-over-secondary-limit-percent": 0.0,
+    "x-codex-secondary-window-minutes": 10080.0,
+    "x-codex-primary-reset-after-seconds": 17138.0,
+    "x-codex-secondary-reset-after-seconds": 255810.0,
+    "x-codex-primary-reset-at": 1794920315.0,
+    "x-codex-secondary-reset-at": 1795158988.0,
+    "x-codex-credits-balance": 0.0
+   },
+   "plan_used": {
+    "x-codex-primary-used-percent": 0.0,
+    "x-codex-secondary-used-percent": 0.0,
+    "x-codex-primary-over-secondary-limit-percent": 0.0
+   },
+   "results": [
+    {
+     "case": "vp-budget-ask",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "high",
+      "notify": false,
+      "category": "AI-RAN",
+      "tasks": [
+       {
+        "title": "Prepare one-page FY27 AI-RAN budget ask and review it with Vikram before sending to Dr. Menon",
+        "due": "2026-11-20"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Dr. Menon directly requests a dated planning deliverable, and you said he is among the people whose requests matter most.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 6.6
+    },
+    {
+     "case": "director-slides-today",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "high",
+      "notify": true,
+      "category": "AI-RAN",
+      "tasks": [
+       {
+        "title": "Send Vikram two AI-RAN field-trial KPI slides (throughput gain vs baseline and beam-management results) by 2 PM",
+        "due": "2026-11-17"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Vikram is your manager and frequent correspondent, and this asks you to deliver slides on a tight same-day deadline.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.8
+    },
+    {
+     "case": "hq-directive-confirm-owners",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "decide",
+      "importance": "high",
+      "notify": false,
+      "category": "3GPP",
+      "tasks": [
+       {
+        "title": "Decide whether the part can take ownership of the RAN1#123 AI-native air interface study item and identify two delegates",
+        "due": "2026-11-20"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Jae-won is your main HQ counterpart, and this dated request concerns a 3GPP contribution and a commitment of Bangalore ownership.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.7
+    },
+    {
+     "case": "tdoc-deadline-names-them",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "high",
+      "notify": true,
+      "category": "3GPP",
+      "tasks": [
+       {
+        "title": "Upload AI/ML CSI compression evaluation draft for RAN1#123 to the shared folder",
+        "due": "2026-11-19"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Min-ji names you as the draft owner, and late Tdocs will not receive numbers; RAN1 contribution deadlines are a stated high priority.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.7
+    },
+    {
+     "case": "vp-townhall-recap",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "read",
+      "importance": "normal",
+      "notify": false,
+      "category": null,
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "This was sent to 230 people and explicitly says no action is needed.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.4
+    },
+    {
+     "case": "manager-calibration-hidden-action",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "normal",
+      "notify": false,
+      "category": "HR",
+      "tasks": [
+       {
+        "title": "Enter mid-year calibration ratings for every direct report in the HR portal",
+        "due": "2026-11-21"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "The message is a broad managers' notice, but the mandatory calibration deadline applies to you as a part leader.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.7
+    },
+    {
+     "case": "team-leave-approval",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "normal",
+      "notify": false,
+      "category": "HR",
+      "tasks": [
+       {
+        "title": "Review Farah's leave request in the HR portal",
+        "due": null
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Farah addresses you directly, and as part leader you approve your team's leave; the request is pending your HR-portal approval.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 6.4
+    },
+    {
+     "case": "tech-lead-review-request",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "normal",
+      "notify": false,
+      "category": "AI-RAN",
+      "tasks": [
+       {
+        "title": "Review sections 3 and 4 of the NTN link budget paper",
+        "due": "2026-11-23"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Rohit addressed you directly and requested a review by Monday, with the submission closing the following day.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 7.2
+    },
+    {
+     "case": "operator-trial-escalation",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "decide",
+      "importance": "high",
+      "notify": true,
+      "category": "AI-RAN",
+      "tasks": [
+       {
+        "title": "Assess Site 14 regression and decide rollback vs. fix plan",
+        "due": "2026-11-17"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "The operator trial is affected, and Arvind asks for a decision before 6 PM today.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.6
+    },
+    {
+     "case": "patent-prior-art-deadline",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "high",
+      "notify": false,
+      "category": "Patents",
+      "tasks": [
+       {
+        "title": "Submit prior-art response for IDF-6G-0412 in the IP portal",
+        "due": "2026-11-25"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "You are directly addressed, and the notice states a firm deadline with a concrete consequence if you do not respond.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.8
+    },
+    {
+     "case": "own-commitment-to-hq",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_others",
+      "next_action": "none",
+      "importance": "normal",
+      "notify": false,
+      "category": "HQ",
+      "tasks": [
+       {
+        "title": "Share beam prediction simulation results with Jae-won",
+        "due": "2026-11-19"
+       }
+      ],
+      "follow_up_on": "2026-11-23",
+      "memory": null,
+      "learned": null,
+      "reason": "You sent the latest message, so Jae-won needs to confirm the KPI baseline before you can finalize the results.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 6.2
+    },
+    {
+     "case": "hq-org-update-cc",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "read",
+      "importance": "normal",
+      "notify": false,
+      "category": "HQ",
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Dr. Park is your main HQ counterpart, but the update is informational and explicitly says joint plans are unchanged.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 4.0
+    },
+    {
+     "case": "hq-engineer-urgent-comment",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "read",
+      "importance": "high",
+      "notify": true,
+      "category": "3GPP",
+      "tasks": [
+       {
+        "title": "Review the attached AI/ML beam management FL summary and share comments with Seung-ho",
+        "due": "2026-11-18"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "You are addressed directly, have written to Seung-ho six times, and this is a RAN1 contribution-related review with a deadline tomorrow morning.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.8
+    },
+    {
+     "case": "vpn-phishing-lookalike",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "high",
+      "notify": true,
+      "category": "IT",
+      "tasks": [
+       {
+        "title": "Verify VPN certificate expiry with IT through a known channel; renew if confirmed",
+        "due": "2026-11-17"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "It claims access to the R&D network will be lost today, but the sender and credential link are unverified.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.6
+    },
+    {
+     "case": "predatory-conference",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "none",
+      "importance": "low",
+      "notify": false,
+      "category": "Promotions",
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "This sender's domain has sent six emails you never opened or answered, and the invitation requires a substantial registration fee.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 3.2
+    },
+    {
+     "case": "director-hidden-ask-in-thread",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "normal",
+      "notify": false,
+      "category": "AI-RAN",
+      "tasks": [
+       {
+        "title": "Align beam prediction KPI definitions with Seoul",
+        "due": "2026-11-20"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Vikram names you personally and sets a deadline of 20 November for a cross-site KPI alignment action.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.0
+    },
+    {
+     "case": "sim-farm-job-done",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "none",
+      "importance": "low",
+      "notify": false,
+      "category": "AI-RAN",
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "The Sim-Farm notice reports exit code 0; you rarely open these automated notices and do not reply to them.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 4.0
+    },
+    {
+     "case": "interview-panel-feedback",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "waiting_on_you",
+      "next_action": "do",
+      "importance": "normal",
+      "notify": false,
+      "category": "HR",
+      "tasks": [
+       {
+        "title": "Interview the Staff Researcher (AI-RAN) candidate",
+        "due": "2026-11-19"
+       },
+       {
+        "title": "Submit interview feedback in the hiring portal",
+        "due": "2026-11-20"
+       }
+      ],
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "Talent Acquisition addressed the panel assignment to you and requires feedback within 24 hours of the interview.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 5.9
+    },
+    {
+     "case": "gpu-quota-ticket-in-progress",
+     "passed": false,
+     "missed": [
+      "no follow_up_on"
+     ],
+     "got": {
+      "status": "waiting_on_others",
+      "next_action": "none",
+      "importance": "normal",
+      "notify": false,
+      "category": "IT",
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "This is a service-desk status update on the request you opened; no action is requested from you.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 6.2
+    },
+    {
+     "case": "deepavali-photos",
+     "passed": true,
+     "missed": [],
+     "got": {
+      "status": "fyi",
+      "next_action": "none",
+      "importance": "low",
+      "notify": false,
+      "category": "Celebrations",
+      "tasks": null,
+      "follow_up_on": null,
+      "memory": null,
+      "learned": null,
+      "reason": "This is a large event announcement with no personal request, and prior celebration mail from this sender was marked low importance.",
+      "error": null,
+      "no_call": null
+     },
+     "seconds": 3.6
+    }
+   ]
+  }
+ ]
+}

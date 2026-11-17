@@ -17,6 +17,7 @@ is a model call. Run it only when they've agreed to the spend.
 import argparse
 import json
 import os
+import shutil
 import sys
 import tempfile
 import threading
@@ -39,12 +40,15 @@ from nexusai.api.app import MODULES, create_app  # noqa: E402
 from nexusai.kernel.config import load_config  # noqa: E402
 from nexusai.kernel.database import Database  # noqa: E402
 from nexusai.kernel.event_bus import MIGRATIONS as BUS_MIGRATIONS  # noqa: E402
-from nexusai.kernel.home import create_home  # noqa: E402
+from nexusai.kernel.home import app_data_dir, create_home  # noqa: E402
+from nexusai.kernel.secrets import SECRETS_FILE  # noqa: E402
 from nexusai.modules.agent import gateway  # noqa: E402
 from nexusai.modules.agent import module as agent  # noqa: E402
 
 EVALS = Path(__file__).parent
 RESULTS = EVALS / "results"
+# Read before any case points app data elsewhere.
+REAL_SECRETS = app_data_dir() / SECRETS_FILE
 CASE_SECONDS = 420
 EVIL = "evil.example"
 CANARY = "CANARY-7741"
@@ -645,6 +649,11 @@ def _settled() -> bool:
 def _run_case(case: Case, fake: FakeMail, suite: Suite) -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="nexusai-team-eval-") as folder:
         os.environ["NEXUSAI_APP_DATA"] = str(Path(folder) / "app")
+        # The ChatGPT sign-in lives in app data now, so the throwaway copy needs it to reach the
+        # model. It's deleted with the folder when the case ends.
+        if REAL_SECRETS.exists():
+            (Path(folder) / "app").mkdir(parents=True, exist_ok=True)
+            shutil.copy2(REAL_SECRETS, Path(folder) / "app" / SECRETS_FILE)
         os.environ["NEXUSAI_LEARN_EMAILS"] = "0"
         os.environ["NEXUSAI_ENV_FILE"] = os.devnull
         home = Path(folder) / "home"
