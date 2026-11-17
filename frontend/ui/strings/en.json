@@ -1814,7 +1814,7 @@
   "team.givesNone": "Does its own work",
   "team.canDo": "What {agent} can do",
   "team.talk": "Talk to {agent}",
-  "team.ownChatOnly": "Runs only in its own chat",
+  "team.ownChatOnly": "Own chat only",
   "team.rename": "Rename",
   "team.rename.title": "Rename {agent}",
   "team.rename.description": "The new name and handle show everywhere at once, in chats, schedules and prompts.",
