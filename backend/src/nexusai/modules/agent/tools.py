@@ -618,14 +618,14 @@ class _TeamAssign(BaseModel):
         min_length=1, max_length=1000, description="What to achieve, in one or two sentences."
     )
     expected_output: str = Field(
-        min_length=1,
+        default="",
         max_length=1000,
-        description="Exactly what to send back, such as 'the ids of the threads moved and where'.",
+        description="Optional. What to send back, such as 'the ids of the threads moved and where'.",
     )
     done_criteria: str = Field(
-        min_length=1,
+        default="",
         max_length=1000,
-        description="How you'll check it's done, using facts you can look up yourself.",
+        description="Optional. How you'll check it's done, using facts you can look up yourself.",
     )
     references: list[str] = Field(
         default_factory=list,
@@ -1731,9 +1731,9 @@ def build_tools(
     def team_assign(
         to: str,
         objective: str,
-        expected_output: str,
-        done_criteria: str,
         tool_call_id: str,
+        expected_output: str = "",
+        done_criteria: str = "",
         references: list[str] | None = None,
         budget_tokens: int | None = None,
         due_minutes: int | None = None,
@@ -1744,8 +1744,9 @@ def build_tools(
             sender=_speaker(),
             to=to,
             objective=objective,
-            expected_output=expected_output,
-            done_criteria=done_criteria,
+            # A small model gets the objective right and the rest wrong, so these have defaults.
+            expected_output=expected_output.strip() or team.DEFAULT_OUTPUT,
+            done_criteria=done_criteria.strip() or team.DEFAULT_DONE,
             references=references or [],
             budget_tokens=budget_tokens,
             due_minutes=due_minutes,
@@ -2113,7 +2114,8 @@ def build_tools(
             team_assign,
             _TeamAssign,
             "Give a task to another agent, only for work that stands on its own. Do it yourself "
-            "otherwise. Point to ids rather than copying text. You're told when it reports.",
+            "otherwise. The objective is enough; point to ids rather than copying text. You're "
+            "told when it reports.",
         ),
         (
             team_message,

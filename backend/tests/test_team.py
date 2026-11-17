@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 
 from nexusai.api.app import create_app
 from nexusai.kernel.config import Config
-from nexusai.modules.agent import cards, gateway
+from nexusai.modules.agent import cards, gateway, team
 from nexusai.modules.agent import module as agent
 from nexusai.modules.agent.providers import ModelRequest, TextChunk, ToolCall
 
@@ -285,17 +285,16 @@ def test_the_team_block_is_stable_and_live_state_comes_last(
 # Tasks
 
 
-def test_a_task_needs_a_contract_and_an_allowed_recipient(
+def test_an_objective_is_enough_and_the_recipient_must_be_allowed(
     client: TestClient, script: TeamScript
 ) -> None:
     session = post(client, "session.create")["id"]
-    script.say(
-        lead(),
-        [ToolCall("a", "team_assign", {**ASSIGN, "done_criteria": "   "})],
-        [TextChunk("ok")],
-    )
+    only = {"to": ASSIGN["to"], "objective": ASSIGN["objective"]}
+    script.say(lead(), [ToolCall("a", "team_assign", only)], [TextChunk("ok")])
     chat(client, session, "Go")
-    assert "needs done_criteria" in script.told(lead())[-1]
+    assert " given to " in script.told(lead())[-1]
+    row = agent.current().db.fetch_all("SELECT * FROM team_tasks ORDER BY id DESC LIMIT 1")[0]
+    assert dict(row)["done_criteria"] == team.DEFAULT_DONE, dict(row)
     script.say(
         lead(),
         [ToolCall("b", "team_assign", {**ASSIGN, "to": "@meeting"})],

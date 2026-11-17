@@ -123,8 +123,8 @@ FINISHED = {"done", "failed", "stopped"}
 ORIGIN_NOTES = {
     PERSON: "The person sent this message, and they're there to reply.",
     "mail": "New mail arrived, and this run started by itself. Nobody is waiting in the chat.",
-    "mail-hourly": "The hourly check started this run by itself. Nobody is waiting in the chat.",
-    "mail-review": "The inbox review came due, and this run started by itself. Nobody is waiting in the chat.",
+    "mail-hourly": "The hourly check started this run by itself. Nobody is waiting in the chat. Summarize the judgements already made; don't judge any email again.",
+    "mail-review": "The inbox review came due, and this run started by itself. Nobody is waiting in the chat. Propose changes to how mail is organized, for the person to accept; don't make them yourself.",
     "mail-learn": "You're reading past mail to learn about the person. Nobody is waiting in the chat.",
     "schedule": "A schedule came due, and this run started by itself. Nobody is waiting in the chat.",
     "event": "Something happened that the person asked to hear about, and this run started by itself. Nobody is waiting in the chat.",
@@ -134,7 +134,7 @@ ORIGIN_NOTES = {
 }
 RESUMABLE = {"queued", "running"}
 # Bumped when the harness changes how runs are put together, and recorded on every run.
-HARNESS_VERSION = "2026.11.2"
+HARNESS_VERSION = "2026.11.3"
 KEEPALIVE_SECONDS = 15
 TITLE_LENGTH = 60
 
@@ -710,6 +710,21 @@ class SessionRuntime:
                 else (set() if origin != PERSON else None)
             )
         )
+        zone = own_context.get("timezone")
+        now = datetime.now(ZoneInfo(zone)) if zone else datetime.now().astimezone()
+        note = ORIGIN_NOTES.get(origin, ORIGIN_NOTES["schedule"])
+        if target.get("filing_only"):
+            note = "This is historical filing only. Change only which existing Smart folders mail is in. Don't learn facts, suggest categories, change importance or status, notify, or create work."
+        elif target.get("bulk_batch") is not None:
+            note = "This is grouped learning. Record exactly one result for each supplied group ID, reuse folders that exist, and never create work or drafts."
+        elif target.get("sent"):
+            note = "The person sent the latest message. Assess commitments and follow-ups; do not draft another reply."
+        engine = cards.engine(self.db, agent)
+        has_email = bool(turn and turn["target"])
+        built = tools.build_tools(
+            self.ctx, session, control, tools.allowed_for(engine, origin, has_email)
+        )
+        # The prompt speaks only of tools this run has, so a small model isn't sent looking.
         layers = knowledge.layers_for(
             self.ctx,
             agent,
@@ -717,21 +732,8 @@ class SessionRuntime:
             self._capabilities(),
             account=thread_account[0]["account"] if thread_account else own_context.get("account"),
             senders=source_senders,
+            tools=[tool.name for tool in built],
             scratch=str(config.home / "scratch" / session),
-        )
-        zone = own_context.get("timezone")
-        now = datetime.now(ZoneInfo(zone)) if zone else datetime.now().astimezone()
-        note = ORIGIN_NOTES.get(origin, ORIGIN_NOTES["schedule"])
-        if target.get("filing_only"):
-            note = "This is explicit historical filing only. Do not learn facts, change importance/status, notify, or create work."
-        elif target.get("bulk_batch") is not None:
-            note = "This is grouped learning. Record only supplied group IDs, inferred notes and folder suggestions; never create work or drafts."
-        elif target.get("sent"):
-            note = "The person sent the latest message. Assess commitments and follow-ups; do not draft another reply."
-        engine = cards.engine(self.db, agent)
-        has_email = bool(turn and turn["target"])
-        built = tools.build_tools(
-            self.ctx, session, control, tools.allowed_for(engine, origin, has_email)
         )
         shown = tools.shown_for(engine, has_email)
         others = tools.other_tools([tool.name for tool in built], shown)
@@ -770,6 +772,7 @@ class SessionRuntime:
                 ),
                 shown_tools=shown,
                 always_shown_prefix=tools.CONNECTOR_PREFIX,
+                tool_names=[tool.name for tool in built],
             ),
             checkpointer=self.saver,
         )

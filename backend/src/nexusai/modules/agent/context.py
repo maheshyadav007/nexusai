@@ -32,6 +32,7 @@ from nexusai.kernel.database import Database
 from nexusai.modules.agent.guard import DAMAGED_KEY
 from nexusai.modules.agent.model import is_summary
 from nexusai.modules.agent.prompts_builder import packaged
+from nexusai.modules.agent.tool_errors import ToolFeedback
 
 log = structlog.get_logger()
 SETTINGS_KEY = "context_settings"
@@ -355,10 +356,14 @@ def middleware(
     log_tool: Callable[[str, str, dict[str, Any], str, int], None] | None = None,
     shown_tools: frozenset[str] | None = None,
     always_shown_prefix: str = "",
+    tool_names: list[str] | None = None,
 ) -> list[Any]:
     chain: list[Any] = [ToolSearch(shown_tools, always_shown_prefix)]
     if log_tool is not None:
         chain.append(ToolLog(log_tool))
+    # Inside the log, so what the agent was told is what's recorded.
+    if tool_names is not None:
+        chain.append(ToolFeedback(tool_names))
     chain.append(Placeholders())
     if profile.mode == "auto_compact":
         trigger = ("tokens", settings.compact.trigger_tokens)

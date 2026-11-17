@@ -50,6 +50,9 @@ CREATE INDEX agent_channel_task ON agent_channel (task, id);
 )
 PERSON = cards.PERSON
 TASK_ORIGIN = "task"
+# Used when the assigner gives only an objective.
+DEFAULT_OUTPUT = "What you did and found, with the ids of everything you changed or looked at."
+DEFAULT_DONE = "What the report says changed can be seen with your own tools."
 OWNER, ASSIGNER = "owner", "assigner"
 CLOSED = {"verified", "rejected", "failed", "canceled"}
 # Why a task stopped, in words the map and the person can read.
@@ -192,8 +195,15 @@ def _assign(
     if me is None:
         return "Not assigned: you have no card, so you can't give tasks."
     if target is None:
-        known = ", ".join(card.at for card in cards.all_cards(db).values())
-        return f"Not assigned: no agent is called {to}. The team is {known}."
+        # Only those it may give tasks to, so the agent isn't offered a choice that's refused next.
+        known = ", ".join(
+            found.at for a in me.may_assign_to if (found := cards.card(db, a)) is not None
+        )
+        return (
+            f"Not assigned: no agent is called {to}. You can give tasks to {known}."
+            if known
+            else f"Not assigned: no agent is called {to}, and you give no tasks. Do it yourself."
+        )
     if target.id == me.id:
         return "Not assigned: do this yourself, it's your own work."
     if target.id not in me.may_assign_to:

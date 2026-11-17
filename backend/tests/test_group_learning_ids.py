@@ -235,7 +235,7 @@ def test_every_agent_knows_it_is_posty_and_nexusai_is_the_app(ctx: Context, agen
     if agent == "session":
         assert "You are Posty (@posty). Your chief of staff." in text
     else:
-        assert "part of Posty's team" in system
+        assert "on Posty's team" in system
 
 
 # The same suggestion isn't asked twice

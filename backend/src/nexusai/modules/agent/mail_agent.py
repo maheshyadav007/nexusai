@@ -1401,6 +1401,7 @@ def draft_reply(ctx: Context, thread: int) -> DraftedReply:
         task,
         account=thread_account[0]["account"] if thread_account else None,
         senders=knowledge.sender_scope(ctx, [thread]),
+        tools=(),
     )
     layers.append(
         Layer(
