@@ -78,7 +78,7 @@ function Option({ label, detail, picked, onPick }: { label: string; detail?: str
   return (
     <Pressable onClick={onPick} aria-pressed={picked} className={`focus-ring flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-md text-ink-primary transition-colors duration-fast hover:bg-surface-sunken ${picked ? "bg-surface-sunken" : ""}`}>
       <span className="flex-1">{label}</span>
-      {detail ? <span className="text-sm tabular-nums text-ink-faint">{detail}</span> : null}
+      {detail ? <span className="text-sm tabular-nums text-ink-muted">{detail}</span> : null}
     </Pressable>
   );
 }
@@ -93,7 +93,7 @@ export function DuePicker({ value, onChange }: { value: string | null; onChange:
     setOpen(false);
   };
   const trigger = (
-    <Button type="button" variant="quiet" aria-label={value ? t("tasks.dueOn", { day: formatDay(value) }) : t("tasks.pickDue")}>
+    <Button type="button" variant="quiet" aria-label={`${value ? formatDay(value) : t("tasks.quick.none")}, ${t("tasks.changeDue")}`}>
       <Icon name="date" className="h-4 w-4" />
       {value ? formatDay(value) : t("tasks.quick.none")}
     </Button>
@@ -122,7 +122,7 @@ export function WhenPicker({ value, repeat, onChange, onRepeat }: { value: strin
   const label = value ? `${new Date(value).toDateString() === new Date().toDateString() ? t("reminders.group.today") : day(value)}, ${clock(value)}` : t("reminders.pickWhen");
   const [date, time] = value ? value.split("T") : ["", ""];
   const trigger = (
-    <Button type="button" variant="quiet" aria-label={value ? t("reminders.at", { when: label }) : t("reminders.pickWhen")}>
+    <Button type="button" variant="quiet" aria-label={`${label}, ${t("reminders.changeWhen")}`}>
       <Icon name={repeat === "none" ? "time" : "repeat"} className="h-4 w-4" />
       {label}
     </Button>

@@ -58,7 +58,7 @@ function ReminderRow({ reminder }: { reminder: Reminder }) {
         leading={
           <span className="flex w-guide shrink-0 flex-col tabular-nums">
             <span className={`text-md font-medium ${sameDay ? "text-accent-default" : "text-ink-primary"}`}>{clock(reminder.when)}</span>
-            {sameDay ? null : <span className="text-sm text-ink-faint">{day(reminder.when)}</span>}
+            {sameDay ? null : <span className="text-sm text-ink-muted">{day(reminder.when)}</span>}
           </span>
         }
         title={reminder.title}

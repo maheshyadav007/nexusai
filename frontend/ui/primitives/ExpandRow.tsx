@@ -24,7 +24,7 @@ export function ExpandRow({ label, testid, leading, title, meta, aside, children
         {/* The arrow is the control for keyboards and screen readers. The whole row answers a click. */}
         <div onClick={() => setOpen((current) => !current)} className="flex min-w-0 flex-1 cursor-pointer flex-col">
           <span className="min-w-0 break-words text-md text-ink-primary">{title}</span>
-          {meta ? <span className={`min-w-0 truncate text-sm tabular-nums ${list ? "mt-1 text-ink-faint" : "text-ink-muted"}`}>{meta}</span> : null}
+          {meta ? <span className={`min-w-0 truncate text-sm tabular-nums ${list ? "mt-1 text-ink-muted" : "text-ink-muted"}`}>{meta}</span> : null}
         </div>
         {aside}
         <button type="button" aria-expanded={open} aria-label={label} onClick={() => setOpen((current) => !current)} className="focus-ring shrink-0 rounded-sm p-1 text-ink-faint transition-colors duration-fast hover:text-ink-primary">

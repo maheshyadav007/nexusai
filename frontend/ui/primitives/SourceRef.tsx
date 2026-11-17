@@ -28,7 +28,7 @@ export function quickLook(onOpen: () => void, onOpenFull?: () => void) {
 const LOOKS = {
   chip: "rounded-full border border-line-subtle px-2 py-px text-ink-secondary hover:bg-surface-sunken",
   // In a row's small grey line: no border, the same grey, darker on hover.
-  inline: "rounded-sm text-ink-faint hover:text-ink-secondary",
+  inline: "rounded-sm text-ink-muted hover:text-ink-primary",
 } as const;
 
 export function SourceRef({ icon, title, detail, label, href, onOpen, onOpenFull, look = "chip" }: { icon: IconName; title: string; detail?: string; label?: string; href: string; onOpen: () => void; onOpenFull?: () => void; look?: keyof typeof LOOKS }) {

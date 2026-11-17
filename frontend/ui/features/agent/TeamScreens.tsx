@@ -111,7 +111,7 @@ function ProfileCard({ card, selected, onSelect }: { card: AgentCard; selected: 
   const talkable = card.accepts.includes("person");
   return (
     <li data-testid="agent-card" data-agent={card.id} className={`flex flex-col overflow-hidden rounded-lg border bg-surface-raised transition-colors duration-fast ${selected ? "border-accent-default" : "border-line-subtle hover:border-line-strong"}`}>
-      <Pressable aria-pressed={selected} aria-label={t("team.show", { agent: card.name })} onClick={onSelect} className="focus-ring flex flex-1 flex-col gap-3 rounded-lg p-4 text-left">
+      <Pressable aria-pressed={selected} onClick={onSelect} className="focus-ring flex flex-1 flex-col gap-3 rounded-lg p-4 text-left">
         <span className="flex items-center gap-3">
           <Mascot seed={card.mascot.seed} shape={card.mascot.style} name={card.name} size="md" />
           <span className="flex min-w-0 flex-1 flex-col gap-1">
@@ -125,11 +125,10 @@ function ProfileCard({ card, selected, onSelect }: { card: AgentCard; selected: 
         </span>
         <span className="line-clamp-2 text-md text-ink-secondary">{card.role}</span>
       </Pressable>
-      <div className="flex items-center gap-4 border-t border-line-subtle px-4 py-2 text-sm text-ink-muted">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line-subtle px-4 py-2 text-sm text-ink-muted">
         <span><strong className="font-medium tabular-nums text-ink-primary">{compact.format(usage.tokens_today)}</strong> {t("team.card.tokens")}</span>
         <span><strong className="font-medium tabular-nums text-ink-primary">{usage.tasks_verified}</strong> {t("team.card.tasks")}</span>
-        <span className="flex-1" />
-        {talkable ? <Button variant="quiet" aria-label={t("team.talk", { agent: card.name })} onClick={() => talk(card, assistant)}><Icon name="chat" className="h-4 w-4" />{t("team.card.talk")}</Button> : <span className="text-ink-faint">{t("team.ownChatOnly")}</span>}
+        {talkable ? <span className="ml-auto"><Button variant="quiet" aria-label={t("team.talk", { agent: card.name })} onClick={() => talk(card, assistant)}><Icon name="chat" className="h-4 w-4" />{t("team.card.talk")}</Button></span> : <span className="ml-auto text-ink-muted">{t("team.ownChatOnly")}</span>}
       </div>
     </li>
   );
@@ -183,7 +182,7 @@ function AgentDetail({ card }: { card: AgentCard }) {
         <h4 className="text-sm font-medium text-ink-muted">{t("team.work")}</h4>
         <p className="text-md text-ink-secondary">{t("team.usage.recordLine", { verified: usage.tasks_verified, rejected: usage.tasks_rejected, blocked: usage.tasks_blocked })}</p>
         <p className="text-md text-ink-secondary">{gives.length ? t("team.givesTo", { agents: gives.join(", ") }) : t("team.givesNone")}</p>
-        {usage.tokens_usual_day ? <p className="text-sm text-ink-faint">{t("team.usage.usual", { count: usage.tokens_usual_day.toLocaleString() })}</p> : null}
+        {usage.tokens_usual_day ? <p className="text-sm text-ink-muted">{t("team.usage.usual", { count: usage.tokens_usual_day.toLocaleString() })}</p> : null}
       </section>
       <TextLink href="/agent/channel?tab=runs">{t("team.seeRuns")}</TextLink>
     </aside>
@@ -204,7 +203,7 @@ export function TeamCards() {
       <h2 className="sr-only">{t("team.title")}</h2>
       <p className="text-md text-ink-muted">{t("team.summary", { count: rows.length, working, lead: rows.find((card) => card.default)?.name ?? "" })}</p>
       <div className="flex flex-wrap items-start gap-4">
-        <ul aria-label={t("team.title")} className="grid min-w-0 flex-1 gap-3 lg:grid-cols-2">
+        <ul aria-label={t("team.title")} className="grid min-w-0 flex-1 gap-3 2xl:grid-cols-2">
           {rows.map((card) => <ProfileCard key={card.id} card={card} selected={card.id === selected?.id} onSelect={() => setChosen(card.id)} />)}
         </ul>
         {selected ? <div className="w-full xl:w-drawer"><AgentDetail card={selected} /></div> : null}

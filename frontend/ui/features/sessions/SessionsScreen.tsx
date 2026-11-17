@@ -45,7 +45,7 @@ function When({ row }: { row: SessionRow }) {
   const time = useTimeOnly();
   const day = useShortDate();
   const today = new Date(row.updated).toDateString() === new Date().toDateString();
-  return <span className="w-guide text-right text-sm tabular-nums text-ink-faint">{today ? time(row.updated) : day(row.updated)}</span>;
+  return <span className="w-guide text-right text-sm tabular-nums text-ink-muted">{today ? time(row.updated) : day(row.updated)}</span>;
 }
 
 function Session({ row }: { row: SessionRow }) {

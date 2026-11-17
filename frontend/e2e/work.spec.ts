@@ -120,9 +120,9 @@ test("a proposed task is accepted, finished, and removed", async ({ page }) => {
   const bar = page.getByTestId("add-bar");
   await bar.getByRole("textbox", { name: "New task" }).fill(title);
   // One quiet date button opens one picker; the day picked shows on the button.
-  await bar.getByRole("button", { name: "Pick a due date" }).click();
+  await bar.getByRole("button", { name: "No date, change the due date" }).click();
   await page.getByRole("dialog", { name: "Due" }).getByRole("button", { name: /^Tomorrow/ }).click();
-  await expect(bar.getByRole("button", { name: /^Due .*, change$/ })).toBeVisible();
+  await expect(bar.getByRole("button", { name: /^(?!No date).*, change the due date$/ })).toBeVisible();
   await bar.getByRole("button", { name: "Add", exact: true }).click();
   const mine = page.getByTestId("task").filter({ hasText: title });
   await expect(mine).toBeVisible();
@@ -151,7 +151,7 @@ test("a reminder is added and snoozed", async ({ page }) => {
   const title = unique("Call the vendor");
   const bar = page.getByTestId("add-bar");
   await bar.getByRole("textbox", { name: "Remind me to" }).fill(title);
-  await bar.getByRole("button", { name: /, change$/ }).click();
+  await bar.getByRole("button", { name: /, change when$/ }).click();
   const picker = page.getByRole("dialog", { name: "When" });
   await picker.getByLabel("Day").fill("2031-05-01");
   await picker.getByLabel("Time").fill("09:00");
@@ -472,7 +472,7 @@ test("the team shows calm cards, and the chosen agent's details beside them", as
   const cards = page.getByTestId("agent-card");
   await expect(cards.first()).toBeVisible();
   const organizer = cards.filter({ hasText: "@organizer" });
-  await organizer.getByRole("button", { name: /^Show / }).click();
+  await organizer.locator("[aria-pressed]").click();
   const detail = page.getByTestId("agent-detail");
   await expect(detail).toContainText("@organizer");
   await expect(detail.getByRole("button", { name: "Rename" })).toBeVisible();

@@ -230,6 +230,8 @@ test("a hand-over is one quiet line that opens to what it's doing", async ({ pag
   await expect(line).toContainText("Organizer");
   await expect(line).toContainText("File last week's PLM mail under PLM");
   await expect(line).not.toHaveAttribute("data-state", "refused");
+  // Opened once the reply has finished, so the settled message keeps it open.
+  await expect(page.getByTestId("session-status")).toContainText("Done");
   await line.getByRole("button", { expanded: false }).click();
   await expect(line).toContainText("Every PLM thread from last week is in PLM");
   await expect(line).toContainText(/#\d+ · \d+:\d\d · /);
@@ -328,7 +330,7 @@ test("a session waiting on you is first in the list and says so at the top", asy
   await expect(current).toContainText("Waiting one");
   // The switcher puts it first, under what's waiting on the person.
   await current.click();
-  const waiting = page.getByRole("dialog", { name: "Switch conversation" }).getByRole("region", { name: "Waiting on you" }).getByTestId("conversation-option").filter({ hasText: "Waiting one" });
+  const waiting = page.getByRole("dialog", { name: "Switch conversation" }).getByRole("group", { name: "Waiting on you" }).getByTestId("conversation-option").filter({ hasText: "Waiting one" });
   await expect(waiting).toContainText("Your answer");
   await noViolations(page);
   await page.keyboard.press("Escape");

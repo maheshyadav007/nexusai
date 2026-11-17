@@ -82,7 +82,7 @@ function CopyAction({ text, label }: { text: string; label: string }) {
 
 function MessageTime({ value }: { value: string | null }) {
   const format = useTimeOnly();
-  return value ? <time dateTime={value} className="text-sm tabular-nums text-ink-faint">{format(value)}</time> : null;
+  return value ? <time dateTime={value} className="text-sm tabular-nums text-ink-muted">{format(value)}</time> : null;
 }
 
 function UserMessage({ message, onEdit }: { message: UIMessage; onEdit?: (text: string) => void }) {

@@ -113,7 +113,8 @@ test("approvals can be answered from the top bar, and a denied command never run
   await expect(page.getByRole("button", { name: "Approvals", exact: true })).toBeVisible();
 
   await page.goto("/agent/sessions");
-  await page.getByTestId("session-row").first().click();
+  // Agent chats are listed first now, so pick this conversation by what was said.
+  await page.getByTestId("session-row").filter({ hasText: "please run a command" }).first().click();
   await expect(page.getByTestId("agent-message").last()).toContainText("Tool said: The person declined this.");
   await page.getByTestId("thinking").getByRole("button").first().click();
   await expect(page.getByTestId("tool-call")).toContainText("Declined");

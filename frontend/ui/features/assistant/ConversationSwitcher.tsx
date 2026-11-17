@@ -37,7 +37,7 @@ function Row({ row, current, onPick }: { row: SessionRow; current: boolean; onPi
         ) : row.status === "running" || row.status === "queued" ? (
           <span className="flex shrink-0 items-center gap-2 text-sm text-agent-running"><LiveDot />{t("sessions.status.running")}</span>
         ) : (
-          <span className="shrink-0 text-sm tabular-nums text-ink-faint">{today ? time(row.updated) : day(row.updated)}</span>
+          <span className="shrink-0 text-sm tabular-nums text-ink-muted">{today ? time(row.updated) : day(row.updated)}</span>
         )}
       </Pressable>
     </li>
@@ -47,10 +47,11 @@ function Row({ row, current, onPick }: { row: SessionRow; current: boolean; onPi
 function Group({ title, rows, current, onPick }: { title: string; rows: readonly SessionRow[]; current: string | null; onPick: (id: string) => void }) {
   if (!rows.length) return null;
   return (
-    <section aria-label={title} className="flex flex-col">
+    // A group, not a landmark: the Sessions page beneath has sections with these same names.
+    <div role="group" aria-label={title} className="flex flex-col">
       <h3 className="px-3 pb-1 pt-3 text-sm font-medium text-ink-muted">{title}</h3>
       <ul className="flex flex-col">{rows.map((row) => <Row key={row.id} row={row} current={row.id === current} onPick={onPick} />)}</ul>
-    </section>
+    </div>
   );
 }
 
@@ -73,9 +74,9 @@ export function ConversationSwitcher() {
     setOpen(false);
   };
   const trigger = (
-    <Pressable aria-label={t("chat.switch")} data-testid="conversation-switcher" className="focus-ring flex min-w-0 max-w-full items-center gap-2 rounded-md px-2 py-1 text-md text-ink-primary transition-colors duration-fast hover:bg-surface-sunken">
+    <Pressable data-testid="conversation-switcher" className="focus-ring flex min-w-0 max-w-full items-center gap-2 rounded-md px-2 py-1 text-md text-ink-primary transition-colors duration-fast hover:bg-surface-sunken">
       {current?.status === "waiting" ? <LiveDot tone="waiting" /> : current?.status === "running" ? <LiveDot /> : null}
-      <span className="min-w-0 truncate">{current?.title ?? t("chat.title")}</span>
+      <span className="min-w-0 truncate"><span className="sr-only">{t("chat.switch")}: </span>{current?.title ?? t("chat.title")}</span>
       <Icon name="chevronDown" className="h-3 w-3 shrink-0 text-ink-muted" />
     </Pressable>
   );
