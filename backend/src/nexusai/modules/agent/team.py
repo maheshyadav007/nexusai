@@ -18,6 +18,7 @@ from nexusai.contracts.agent import (
     AgentCard,
     AgentNow,
     AgentUsage,
+    TaskStep,
     TeamMessage,
     TeamTask,
     TeamTaskView,
@@ -981,4 +982,33 @@ def view(db: Database, task: int) -> TeamTaskView:
         _task(r)
         for r in db.fetch_all("SELECT * FROM team_tasks WHERE parent = ? ORDER BY id", (task,))
     ]
-    return TeamTaskView(task=found, messages=messages, children=children)
+    return TeamTaskView(task=found, messages=messages, children=children, steps=_steps(db, row))
+
+
+# Enough to follow the work in the chat; the run itself has the rest.
+STEPS_SHOWN = 8
+
+
+def _steps(db: Database, row: Any) -> list[TaskStep]:
+    if not row["owner_session"]:
+        return []
+    rows = db.fetch_all(
+        "SELECT tool, input, status, started FROM tool_calls WHERE session = ? AND started >= ?"
+        " ORDER BY id DESC LIMIT ?",
+        (row["owner_session"], row["created"], STEPS_SHOWN),
+    )
+    steps = []
+    for call in reversed(rows):
+        try:
+            given = json.loads(call["input"] or "{}")
+        except ValueError:
+            given = {}
+        steps.append(
+            TaskStep(
+                tool=call["tool"],
+                input=given if isinstance(given, dict) else {},
+                status=call["status"],
+                started=call["started"],
+            )
+        )
+    return steps

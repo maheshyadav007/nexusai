@@ -223,6 +223,20 @@ test("a reminder asked for is set, and shows as a card that links to it", async 
   await expect(page.getByTestId("reminder").filter({ hasText: "Call the vendor" }).getByRole("button", { name: "Accept" })).toHaveCount(0);
 });
 
+test("a hand-over is one quiet line that opens to what it's doing", async ({ page }) => {
+  await openFresh(page);
+  await say(page, "hand the filing over");
+  const line = page.getByTestId("handoff-card");
+  await expect(line).toContainText("Organizer");
+  await expect(line).toContainText("File last week's PLM mail under PLM");
+  await expect(line).not.toHaveAttribute("data-state", "refused");
+  await line.getByRole("button", { expanded: false }).click();
+  await expect(line).toContainText("Every PLM thread from last week is in PLM");
+  await expect(line).toContainText(/#\d+ · \d+:\d\d · /);
+  await expect(line.getByRole("link", { name: "Team tasks" })).toBeVisible();
+  await noViolations(page);
+});
+
 test("sending mail shows the mail itself, and nothing goes without a yes", async ({ page }) => {
   await openFresh(page);
   await say(page, "send an email");

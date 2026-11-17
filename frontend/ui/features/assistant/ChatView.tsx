@@ -8,7 +8,7 @@ import { ApiRequestError, query } from "@/ui/client/api";
 import { useEvents } from "@/ui/client/events";
 import { useTimeOnly } from "@/ui/client/format";
 import { isManagedSession, useChatDraft, groupApprovals, takeFirstMessage, useAnswerSession, useApprovals, useChooseVersion, useModelCall, useRateMessage, useSession, useSetSessionModel, useStopSession } from "@/ui/client/sessions";
-import { useChannel, useCompactSession, useDismissChannel, useSessionContext, useSetContext } from "@/ui/client/work";
+import { useChannel, useCompactSession, useDismissChannel, useSessionContext, useSetContext, useTeamTasks } from "@/ui/client/work";
 import { Icon } from "@/ui/icons";
 import { useDateTime } from "@/ui/client/format";
 import { MessageSources } from "./MessageSources";
@@ -25,7 +25,8 @@ import { Skeleton } from "@/ui/primitives/Skeleton";
 import { useToast } from "@/ui/primitives/Toast";
 import { Tooltip } from "@/ui/primitives/Tooltip";
 import { t, type StringKey } from "@/ui/strings";
-import { AnsweredQuestion, ApprovalGroupCard, HandoffCard, MailCard, QuestionCard, ResultCard, TriageCard } from "./Cards";
+import { AnsweredQuestion, ApprovalGroupCard, MailCard, QuestionCard, ResultCard, TriageCard } from "./Cards";
+import { HandoffCard, TeamWorkingLine } from "./Handoff";
 import { AttachedChips, AttachMenu, ModelPicker, useAttachedReading, type Attached } from "./ChatControls";
 import { Composer } from "./Composer";
 import { Markdown } from "./Markdown";
@@ -89,6 +90,17 @@ function UserMessage({ message, onEdit }: { message: UIMessage; onEdit?: (text: 
   const { quote, rest } = splitQuote(text);
   const { origin } = factsOf(message);
   const source = origin ? ORIGIN_LABEL[origin] : undefined;
+  // Work handed out came back: the giver's wake-up is a quiet divider, not words the person typed.
+  if (origin === "task-report") {
+    return (
+      <div data-testid="team-report-divider" role="note" className="flex items-center gap-3 py-1 text-sm text-ink-faint">
+        <span className="h-px flex-1 bg-line-subtle" />
+        <span className="min-w-0 truncate">{text}</span>
+        <MessageTime value={timeOf(message)} />
+        <span className="h-px flex-1 bg-line-subtle" />
+      </div>
+    );
+  }
   return (
     <Rise as="article" data-testid="user-message" className="group flex flex-col items-end gap-1">
       <div className="max-w-full whitespace-pre-wrap break-words rounded-lg bg-surface-sunken px-3 py-2 text-md text-ink-primary">
@@ -297,6 +309,8 @@ export function FinalPrompt({ session }: { session: string }) {
 /** The one conversation view: the dock, the session page and setup all use it. */
 export function ChatView({ id, initial, active, footer }: { id: string; initial: UIMessage[]; active: boolean; footer?: React.ReactNode }) {
   const [acknowledged, setAcknowledged] = useChatDraft(`managed-warning:${id}`, false);
+  const openTasks = useTeamTasks(true).data?.tasks ?? [];
+  const handedOut = openTasks.filter((task) => task.assigner_session === id && ["queued", "working", "input_required"].includes(task.state));
   const transport = useMemo(
     () =>
       new DefaultChatTransport<UIMessage>({
@@ -455,6 +469,7 @@ export function ChatView({ id, initial, active, footer }: { id: string; initial:
       <div className="flex flex-col gap-2 p-3">
           {!managed ? <AttachedChips items={attached} reading={reading} onRemove={(ref) => setContext.mutate({ id, context: attached.filter((item) => item.ref !== ref).map((item) => item.ref) })} /> : null}
         {chat.error ? <ErrorState title={t("sessions.failed")} description={chat.error.message} /> : null}
+          <TeamWorkingLine tasks={handedOut} />
           <Composer
             value={text}
             onChange={setText}

@@ -1203,10 +1203,21 @@ class GetTeamTask(BaseModel):
     id: int
 
 
+class TaskStep(BaseModel):
+    """One tool call the agent doing a task made, for following the work as it happens."""
+
+    tool: str
+    input: dict[str, Any] = Field(default_factory=dict)
+    status: str
+    started: str
+
+
 class TeamTaskView(BaseModel):
     task: TeamTask
     messages: list[TeamMessage]
     children: list[TeamTask]
+    # The doing agent's latest steps on this task, oldest first.
+    steps: list[TaskStep] = Field(default_factory=list)
 
 
 class NoteOnTeamTask(BaseModel):

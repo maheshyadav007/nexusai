@@ -1053,3 +1053,20 @@ def test_a_call_for_another_agents_tool_shows_why_it_didnt_run(
     # Turned away before it ran, it still says why, instead of looking like it's working.
     assert call["state"] == "output-available"
     assert call["output"].startswith("Not run") and "organizer" in call["output"]
+
+
+def test_a_task_shows_the_steps_of_the_agent_doing_it(
+    client: TestClient, script: TeamScript
+) -> None:
+    session = post(client, "session.create")["id"]
+    script.say(
+        mail(),
+        [ToolCall("i", "team_inbox", {})],
+        [ToolCall("r", "team_close", {"task": 1, "action": "report", "outcome": "Filed."})],
+    )
+    script.say(lead(), [ToolCall("a", "team_assign", ASSIGN)], [TextChunk("Given.")])
+    chat(client, session, "Go")
+    wait(lambda: task_row(1)["state"] != "queued" and task_row(1)["state"] != "working" or None)
+    steps = post(client, "team.task", {"id": 1})["steps"]
+    assert [s["tool"] for s in steps] == ["team_inbox", "team_close"]
+    assert steps[1]["input"]["action"] == "report"

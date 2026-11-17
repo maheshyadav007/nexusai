@@ -12,6 +12,9 @@ const AGO_STEPS: readonly [Intl.RelativeTimeFormatUnit, number][] = [
 ];
 
 /** "2 hours ago", and after a month just the date. */
+/** A running time as m:ss, such as 0:42 or 12:05. */
+export const clockText = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.max(0, Math.floor(seconds)) % 60).padStart(2, "0")}`;
+
 export function useRelativeTime(): (value: string) => string {
   const short = useShortDate();
   const words = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });

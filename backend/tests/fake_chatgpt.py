@@ -156,6 +156,24 @@ def create_fake() -> FastAPI:
                         ),
                     },
                 )
+            elif "hand the filing over" in said:
+                yield event(
+                    "response.output_item.done",
+                    item={
+                        "type": "function_call",
+                        "call_id": f"handoff-{uuid.uuid4().hex}",
+                        "name": "team_assign",
+                        "arguments": json.dumps(
+                            {
+                                "to": "@organizer",
+                                "objective": "File last week's PLM mail under PLM",
+                                "expected_output": "The ids of the threads moved",
+                                "done_criteria": "Every PLM thread from last week is in PLM",
+                                "references": [],
+                            }
+                        ),
+                    },
+                )
             elif "add three tasks" in said:
                 for title in ("First task", "Second task", "Third task"):
                     yield event(

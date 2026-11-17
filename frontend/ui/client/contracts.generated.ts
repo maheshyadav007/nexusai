@@ -1458,8 +1458,12 @@ export type Untrusted3 = boolean;
 export type OpenOnly = boolean;
 export type Tasks = TeamTask[];
 export type Id66 = number;
+export type Tool1 = string;
+export type Status13 = string;
+export type Started = string;
 export type Messages6 = TeamMessage[];
 export type Children = TeamTask[];
+export type Steps = TaskStep[];
 export type Id67 = number;
 export type Text9 = string;
 export type Id68 = number;
@@ -1534,7 +1538,7 @@ export type Account2 = string | null;
 export type Sender11 = string | null;
 export type Topic2 = string | null;
 export type Instruction1 = string;
-export type Status13 = "proposed" | "active" | "declined" | "retired" | "expired";
+export type Status14 = "proposed" | "active" | "declined" | "retired" | "expired";
 export type Revision1 = number;
 export type Evidence2 = string[];
 export type ExpiresAt1 = string | null;
@@ -1547,7 +1551,7 @@ export type Account3 = string | null;
 export type Sender12 = string | null;
 export type Topic3 = string | null;
 export type Instruction2 = string;
-export type Status14 = "active" | "declined" | "retired";
+export type Status15 = "active" | "declined" | "retired";
 /**
  * @maxItems 100
  */
@@ -1585,7 +1589,7 @@ export type Account4 = string | null;
 export type Sender13 = string | null;
 export type Topic4 = string | null;
 export type Instruction3 = string;
-export type Status15 = "active" | "declined" | "retired";
+export type Status16 = "active" | "declined" | "retired";
 /**
  * @maxItems 100
  */
@@ -1598,7 +1602,7 @@ export type Instruction4 = string;
 export type Explanation = string;
 export type Id79 = number;
 export type Title16 = string;
-export type Status16 = string;
+export type Status17 = string;
 export type Time14 = string;
 export type Error4 = string | null;
 export type Session10 = string | null;
@@ -1619,7 +1623,7 @@ export type Account5 = string | null;
 export type Sender14 = string | null;
 export type Topic5 = string | null;
 export type Instruction5 = string;
-export type Status17 = "active" | "declined" | "retired";
+export type Status18 = "active" | "declined" | "retired";
 /**
  * @maxItems 100
  */
@@ -1652,7 +1656,7 @@ export type NeedsTools1 = string[];
 export type Source8 = string;
 export type Files2 = SkillFile[];
 export type Flags = string[];
-export type Status18 = "waiting" | "approved" | "rejected";
+export type Status19 = "waiting" | "approved" | "rejected";
 export type ProposedBy = string;
 export type Created5 = string;
 export type Skills = Skill[];
@@ -1686,7 +1690,7 @@ export type Id85 = string;
 export type Name39 = string;
 export type Agent9 = string | null;
 export type Time16 = string;
-export type Status19 = string | null;
+export type Status20 = string | null;
 export type Detail6 = string | null;
 export type Tokens1 = number;
 export type Children1 = RunSpan[];
@@ -1696,7 +1700,7 @@ export type Turn2 = number;
 export type Id86 = number;
 export type Title17 = string;
 export type Notes1 = string;
-export type Status20 = "todo" | "in_progress" | "done";
+export type Status21 = "todo" | "in_progress" | "done";
 export type Due3 = string | null;
 export type Thread9 = number | null;
 export type Source10 = "user" | "agent";
@@ -1709,7 +1713,7 @@ export type Tasks1 = Task[];
 export type Id87 = number | null;
 export type Title18 = string;
 export type Notes2 = string;
-export type Status21 = "todo" | "in_progress" | "done";
+export type Status22 = "todo" | "in_progress" | "done";
 export type Due4 = string | null;
 export type Thread10 = number | null;
 export type Proposed3 = boolean;
@@ -2243,6 +2247,7 @@ export interface Contracts {
   ListTeamTasks?: ListTeamTasks;
   TeamTaskList?: TeamTaskList;
   GetTeamTask?: GetTeamTask;
+  TaskStep?: TaskStep;
   TeamTaskView?: TeamTaskView;
   NoteOnTeamTask?: NoteOnTeamTask;
   CancelTeamTask?: CancelTeamTask;
@@ -5176,6 +5181,22 @@ export interface GetTeamTask {
   id: Id66;
 }
 /**
+ * One tool call the agent doing a task made, for following the work as it happens.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "TaskStep".
+ */
+export interface TaskStep {
+  tool: Tool1;
+  input?: Input;
+  status: Status13;
+  started: Started;
+  [k: string]: unknown;
+}
+export interface Input {
+  [k: string]: unknown;
+}
+/**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "TeamTaskView".
  */
@@ -5183,6 +5204,7 @@ export interface TeamTaskView {
   task: TeamTask;
   messages: Messages6;
   children: Children;
+  steps?: Steps;
   [k: string]: unknown;
 }
 /**
@@ -5398,7 +5420,7 @@ export interface Preference {
   sender?: Sender11;
   topic?: Topic2;
   instruction: Instruction1;
-  status: Status13;
+  status: Status14;
   revision: Revision1;
   evidence?: Evidence2;
   expires_at?: ExpiresAt1;
@@ -5418,7 +5440,7 @@ export interface SavePreference {
   sender?: Sender12;
   topic?: Topic3;
   instruction: Instruction2;
-  status?: Status14;
+  status?: Status15;
   evidence?: Evidence3;
   expires_at?: ExpiresAt2;
 }
@@ -5535,7 +5557,7 @@ export interface PreviewPreference {
   sender?: Sender13;
   topic?: Topic4;
   instruction: Instruction3;
-  status?: Status15;
+  status?: Status16;
   evidence?: Evidence5;
   expires_at?: ExpiresAt3;
 }
@@ -5558,7 +5580,7 @@ export interface PreferencePreview {
 export interface AgentQueueItem {
   id: Id79;
   title: Title16;
-  status: Status16;
+  status: Status17;
   time: Time14;
   error?: Error4;
   session?: Session10;
@@ -5614,7 +5636,7 @@ export interface SimulatePreference {
   sender?: Sender14;
   topic?: Topic5;
   instruction: Instruction5;
-  status?: Status17;
+  status?: Status18;
   evidence?: Evidence6;
   expires_at?: ExpiresAt5;
 }
@@ -5678,7 +5700,7 @@ export interface SkillProposal {
   source: Source8;
   files: Files2;
   flags: Flags;
-  status: Status18;
+  status: Status19;
   proposed_by: ProposedBy;
   created: Created5;
   [k: string]: unknown;
@@ -5785,7 +5807,7 @@ export interface RunSpan {
   name: Name39;
   agent?: Agent9;
   time: Time16;
-  status?: Status19;
+  status?: Status20;
   detail?: Detail6;
   tokens?: Tokens1;
   children?: Children1;
@@ -5828,7 +5850,7 @@ export interface Task {
   id: Id86;
   title: Title17;
   notes: Notes1;
-  status: Status20;
+  status: Status21;
   due: Due3;
   thread: Thread9;
   source: Source10;
@@ -5862,7 +5884,7 @@ export interface SaveTask {
   id?: Id87;
   title: Title18;
   notes?: Notes2;
-  status?: Status21;
+  status?: Status22;
   due?: Due4;
   thread?: Thread10;
   proposed?: Proposed3;
