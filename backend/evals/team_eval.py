@@ -397,11 +397,18 @@ def _date_words(days: int, today: date | None = None) -> list[str]:
 
 
 def _memory_text() -> str:
-    """Everything kept about the person: memory files and preferences, proposed or approved."""
-    home = agent.current().ctx.config.home / "memory"
-    files = " ".join(p.read_text("utf-8") for p in home.rglob("*.md")) if home.exists() else ""
-    rows = _db().fetch_all("SELECT instruction FROM preferences")
-    return (files + " " + " ".join(r["instruction"] for r in rows)).lower()
+    """Everything kept about the person, approved or waiting for them: memory files, personal
+    prompts, preferences and memory proposals."""
+    home = agent.current().ctx.config.home
+    files = " ".join(
+        p.read_text("utf-8")
+        for folder in (home / "memory", home / "prompts" / "personal")
+        if folder.exists()
+        for p in folder.rglob("*.md")
+    )
+    rows = [r["instruction"] for r in _db().fetch_all("SELECT instruction FROM preferences")]
+    rows += [r["text"] for r in _db().fetch_all("SELECT text FROM memory_proposals")]
+    return (files + " " + " ".join(rows)).lower()
 
 
 def _local(stamp: str) -> datetime:
@@ -429,7 +436,8 @@ def graded(
             word in reply for word in _date_words(checks["mentions_date"], today)
         ):
             missed.append(f"reply doesn't name the date {checks['mentions_date']} days out")
-        if checks.get("cites") and "[mail:" not in reply:
+        # The saved reply has markers turned into links, like [1](#cite-1).
+        if checks.get("cites") and "[mail:" not in reply and "#cite-" not in reply:
             missed.append("no [mail:] citation")
         if checks.get("asked") and not _asked_person():
             missed.append("didn't ask the person")

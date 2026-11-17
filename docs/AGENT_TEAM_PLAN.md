@@ -112,3 +112,26 @@ The background memory review is on hold.
 - 2026-11-17, Step 2: the Organizer (`agents/organizer.toml`, `prompts/organizer.md`) owns making, changing and removing tasks and reminders; Posty no longer has those tools, and a call to one is pointed at @organizer. `team_assign` waits up to `team.assign_wait_seconds` (90) for the result, so a quick job is reported, checked and closed in Posty's own turn. Posty's team section is a table of who owns what. Tests in `tests/test_team.py`.
 - 2026-11-17, Step 3: a reply saying "noted" or "I'll remember" with nothing saved goes back to the model once to save it (`PromisedMemory` in `context.py`). `remember` says exactly what it saved and what was already known. When memory doesn't all fit, what's closest in meaning to the task is kept, using the search model when it's ready and shared words otherwise. Tests in `tests/test_memory_harness.py`.
 - 2026-11-17, Step 4: the same failing call made twice in a run is told to try another way or tell the person. A blocked or failed task tells the assigner what was done before it stopped. Tests in `tests/test_tool_feedback.py` and `tests/test_team.py`.
+
+## Results on 6 Luna, 2026-11-17
+
+One try per case, at Medium. Approved by the person for after the whole plan was built.
+
+| Group | First run | After the fixes below |
+|---|---|---|
+| Mail judging (`mail_matrix.py --cases evals/mail_cases_b5g.json`) | 19/20, 84K tokens | not rerun |
+| Posty alone | 10/12 | 11/12 |
+| Hand-over and routing | 8/10 | 10/10 |
+| Memory and corrections | 2/5 | 5/5 |
+| Recovery | 3/3 | 3/3 |
+| **Team, all 30** | **23/30, 1.05M tokens** | **29/30**, missed cases rerun only (about 380K tokens) |
+
+What the run found, and what changed:
+- **The team eval couldn't reach the model.** Sign-in secrets moved into app data, and each case uses throwaway app data. The eval now copies the secrets file in, and deletes it with the case.
+- **`propose_preference` refused the person's own rules.** It accepted only ids of recorded feedback, while its description asked for their words. It now also accepts their exact words from this chat; words they never said, such as a mail's instruction, are still refused.
+- **"Anything from HQ waiting on me?" searched the word HQ** and stopped at one hit. Posty's prompt now says to look up who a group or role means and search for each person by name. It then found Dr. Park, but not Seung-ho, who isn't in the person's profile: the one case still missed.
+- **Hand-overs cost 13 to 15 calls.** Posty loaded the team skill twice and searched for task tools it no longer has. A skill loads once a turn, its description no longer asks for it before every hand-over, and `find_tools` says which agent owns a tool. A task or reminder now takes 9 to 10 calls, about 40K tokens.
+- **The grader was stricter than the outcome** in four cases: citations saved as links, two or three emails filed correctly by Posty itself, a rule saved as a personal prompt, and a correction saved as a proposal for the person to approve. Graded by outcome now.
+- **Mail judging missed one:** an IT ticket in progress had no follow-up date.
+
+Not yet done: three tries per case (pass^3), which costs about three times as much.

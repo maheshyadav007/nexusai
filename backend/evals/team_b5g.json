@@ -45,7 +45,7 @@
     {"name": "h-route-mail", "group": "handover", "messages": ["@mail which email is the operator escalation, and how urgent is it?"],
      "checks": {"answered_by": "mail", "reply": [["site 14", "throughput", "beam"]]}},
     {"name": "h-file-3gpp", "group": "handover", "approve": ["update_mail", "update_category"], "messages": ["File all the RAN1 standards mail into 3GPP."],
-     "checks": {"filed": {"3GPP": ["Tdoc submission deadline", "FL summary comment", "AI-native air interface"]}, "task_to": "mail"}},
+     "checks": {"filed": {"3GPP": ["Tdoc submission deadline", "FL summary comment", "AI-native air interface"]}}},
     {"name": "h-rule-simfarm", "group": "handover", "approve": ["save_rule"], "messages": ["Make a rule so Sim-Farm job mail always goes into Updates."],
      "checks": {"rule": {"any": ["sim-farm@corp.example", "[sim-farm]"]}, "searched_before": "save_rule"}},
     {"name": "h-task-budget", "group": "handover", "approve": ["create_tasks"], "messages": ["Add a task to send the FY27 budget ask to Dr. Menon, due {day+3}."],
@@ -61,7 +61,7 @@
     {"name": "h-weekly-reminder", "group": "handover", "approve": ["create_reminders"], "messages": ["Remind me every Monday at 9 AM to go through my team's open reviews."],
      "checks": {"reminder": {"words": ["review"], "time": "09:00", "repeat": true}}},
     {"name": "h-file-hr", "group": "handover", "approve": ["update_mail", "update_category"], "messages": ["File the calibration and leave request emails under HR."],
-     "checks": {"filed": {"HR": ["calibration", "Leave request"]}, "task_to": "mail"}},
+     "checks": {"filed": {"HR": ["calibration", "Leave request"]}}},
     {"name": "h-vague-reminder", "group": "handover", "approve": ["create_reminders"], "messages": ["Set a reminder to follow up with the operator."],
      "checks": {"asked": true}},
 

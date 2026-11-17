@@ -109,3 +109,22 @@ def test_the_same_failing_call_twice_is_pointed_elsewhere(
     assert "This same call has now failed 2 times. Don't make it again." in second
     # A different call is a new try, not a repeat.
     assert "failed 2 times" not in other
+
+
+def test_looking_for_another_agents_tool_says_who_to_hand_it_to(
+    client: TestClient, script: Script
+) -> None:
+    session = client.post("/api/commands/session.create", json={}).json()["id"]
+    script.replies = [
+        [ToolCall("a", "find_tools", {"query": "create a task with a due date"})],
+        [ToolCall("b", "load_skill", {"name": "working-with-the-team"})],
+        [ToolCall("c", "load_skill", {"name": "working-with-the-team"})],
+        [TextChunk("Done.")],
+    ]
+    with client.stream("POST", "/api/sessions/chat", json={"id": session, "text": "Go"}) as r:
+        list(r.iter_lines())
+    found, loaded, again = told(script)
+    assert found.startswith("create_tasks") and "are @organizer's, not yours" in found
+    assert loaded.startswith("Skill working-with-the-team loaded.")
+    # A second load in the same turn doesn't repeat the whole skill.
+    assert again.startswith("Skill working-with-the-team is already loaded above in this turn")

@@ -1,9 +1,9 @@
 ---
 name: working-with-the-team
-description: How to give another agent a task, ask about one, report one and check one. Load it before your first team_assign, or when a task you gave or got needs a decision.
+description: What to do when a task you gave or got needs a decision, such as a question back, a rejected report or a blocked task. A simple hand-over with team_assign doesn't need it.
 agents: all
 needs_tools: [team_inbox, team_close]
-version: 2
+version: 3
 ---
 # Working with the team
 

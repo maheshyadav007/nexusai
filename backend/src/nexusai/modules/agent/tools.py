@@ -709,7 +709,7 @@ class _PreferenceProposal(BaseModel):
     evidence: list[str] = Field(
         min_length=1,
         max_length=20,
-        description="Where they said it: their words quoted, or ids like [mail:123].",
+        description="Where they said it: their exact words from this chat, quoted, or ids from read_feedback.",
     )
     tool_call_id: Annotated[str, InjectedToolCallId]
 
@@ -1174,6 +1174,12 @@ def allowed_for(agent: str, origin: str, has_email: bool) -> frozenset[str] | No
     if origin in {REVIEW_ORIGIN, "person"}:
         allowed |= {"recommend_mail_change", "fold_suggested_categories", "recommend_priority"}
     return allowed - {"record_triage"}
+
+
+def _plain_words(text: str) -> str:
+    """Words alone, without a "User:" label, quote marks, case or punctuation."""
+    text = re.sub(r"^\s*(user|person|they said)\s*:\s*", "", text, flags=re.I)
+    return " ".join(re.findall(r"[\w@.-]+", text.casefold()))
 
 
 def _untrusted(text: str) -> str:
@@ -1856,8 +1862,25 @@ def build_tools(
             (account,),
         )
         valid = {row["id"] for row in rows}
-        if not evidence or not set(evidence) <= valid:
-            return "A preference needs genuine user-feedback evidence from this account. Use read_feedback first."
+        # The person's own messages in this chat count as evidence, quoted. Mail and tool output
+        # never do, so nothing read in an email can become a preference.
+        said = _plain_words(
+            " ".join(
+                row["text"]
+                for row in ctx.bus.db.fetch_all(
+                    "SELECT text FROM agent_turns WHERE session = ? AND origin = 'person'",
+                    (session,),
+                )
+            )
+        )
+        quoted = [item for item in evidence if item not in valid]
+        if not evidence or not all(
+            len(_plain_words(item)) >= 8 and _plain_words(item) in said for item in quoted
+        ):
+            return (
+                "Not saved: evidence must be the person's own words from this chat, quoted "
+                "exactly, or ids from read_feedback. For a fact rather than a rule, use remember."
+            )
         proposal = SavePreference.model_validate(
             dict(
                 purpose=purpose,
@@ -2052,7 +2075,20 @@ def build_tools(
     catalog: list[StructuredTool] = []
 
     def find_tools(query: str, tool_call_id: str) -> str:
-        return find(catalog, query)
+        found = find(catalog, query)
+        # A tool another agent owns isn't findable here, so say who to hand the job to.
+        owned = owners_of_withheld(ctx.bus.db, cards.engine(ctx.bus.db, _speaker()) or "")
+        words = {w.rstrip("s") for w in re.findall(r"[a-z]{3,}", query.lower())}
+        theirs = sorted(
+            name for name in owned if words & {w.rstrip("s") for w in name.split("_")[1:]}
+        )
+        if not theirs:
+            return found
+        owner = owned[theirs[0]]
+        return (
+            f"{', '.join(theirs)} are {owner}'s, not yours. Give the job to {owner} with "
+            f"team_assign; the result comes back to you.\n{found}"
+        )
 
     specs: list[tuple[Callable[..., str], type[BaseModel], str]] = [
         (

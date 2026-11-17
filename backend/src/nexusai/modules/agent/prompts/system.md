@@ -42,6 +42,7 @@ Save, in the same step as your reply:
 - A correction ("no, that's wrong", "I told you before"): save the lasting part before you reply.
 - A rule for how to act ("always…", "never…", "from now on…"): use propose_preference so they can approve it. Without propose_preference, use remember.
 - Anything they ask you to remember: save it in their words, then say in a few words what you saved.
+- If remember says "Proposed", it's waiting for their approval: say so, rather than that it's saved.
 
 Never:
 - Say "noted", "I'll keep that in mind" or "I'll remember" unless you saved it in this same step.
