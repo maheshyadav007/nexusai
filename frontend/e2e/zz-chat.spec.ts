@@ -382,9 +382,12 @@ test("the Cockpit shows health, what's running and what happened", async ({ page
 test("a trigger can be added from the Schedules page, and runs in its own chat", async ({ page }) => {
   await page.goto("/agent/schedules");
   const title = unique("Watch");
-  await page.getByRole("textbox", { name: "Trigger name" }).last().fill(title);
-  await page.getByRole("textbox", { name: "What should the agent do then?" }).last().fill("Hello from the trigger");
-  await page.getByRole("button", { name: "Add trigger" }).click();
+  const drawer = page.getByRole("dialog");
+  await page.getByRole("button", { name: "New", exact: true }).click();
+  await drawer.getByRole("radio", { name: "Something happening" }).click();
+  await drawer.getByRole("textbox", { name: "Trigger name" }).fill(title);
+  await drawer.getByRole("textbox", { name: "What should the agent do then?" }).fill("Hello from the trigger");
+  await drawer.getByRole("button", { name: "Add trigger" }).click();
   const row = page.getByTestId("trigger").filter({ hasText: title });
   await expect(row).toBeVisible();
   await expect(page.getByTestId("trigger").filter({ hasText: "Mail agent, on new mail" })).toBeVisible();
