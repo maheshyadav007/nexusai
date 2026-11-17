@@ -158,12 +158,17 @@ function WhyHere({ thread, reason }: { thread: number; reason: string }) {
   );
 }
 
-function MessageCard({ message, open: startsOpen, onReply, threadWhy }: { message: MessageView; open: boolean; onReply: (message: MessageView, replyAll: boolean) => void; threadWhy: string | null | undefined }) {
-  const [open, setOpen] = useState(startsOpen);
+function MessageCard({ message, open: startsOpen, cited = false, onReply, threadWhy }: { message: MessageView; open: boolean; cited?: boolean; onReply: (message: MessageView, replyAll: boolean) => void; threadWhy: string | null | undefined }) {
+  const [open, setOpen] = useState(startsOpen || cited);
   const format = useDateTime();
   const sender = message.from_name || message.from_addr;
+  // The message a citation points to is open, in view and marked, so it's clear what was meant.
+  const scrolled = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (cited) scrolled.current?.scrollIntoView({ block: "start" });
+  }, [cited]);
   return (
-    <article data-testid="message" className="border-b border-line-subtle last:border-b-0">
+    <article ref={scrolled} data-testid="message" data-cited={cited || undefined} className={`border-b border-line-subtle last:border-b-0 ${cited ? "rounded-md bg-surface-sunken px-2" : ""}`}>
       <Pressable aria-expanded={open} onClick={() => setOpen((current) => !current)} className="focus-ring flex w-full items-center gap-2 rounded-md py-3 text-left">
         <Avatar name={sender} />
         <span className="flex min-w-0 flex-1 flex-col">
@@ -204,7 +209,7 @@ function MessageCard({ message, open: startsOpen, onReply, threadWhy }: { messag
 
 const NO_CATEGORY = "none";
 
-export function ThreadScreen({ id, onLeave, folder: backTo }: { id: number; onLeave?: () => void; folder?: string }) {
+export function ThreadScreen({ id, onLeave, folder: backTo, cited }: { id: number; onLeave?: () => void; folder?: string; cited?: number | null }) {
   const toast = useToast();
   const router = useRouter();
   const pathname = usePathname();
@@ -317,7 +322,7 @@ export function ThreadScreen({ id, onLeave, folder: backTo }: { id: number; onLe
       </header>
       <div className="flex flex-col">
         {messages.map((message, index) => (
-          <MessageCard threadWhy={row.why} key={message.id} message={message} open={index === messages.length - 1} onReply={reply} />
+          <MessageCard threadWhy={row.why} key={message.id} message={message} open={index === messages.length - 1} cited={message.id === cited} onReply={reply} />
         ))}
       </div>
       {draftRequested && !composing ? <section ref={composer} className="rounded-lg border border-line-subtle bg-surface-raised p-4">{replyDraft.isPending ? <GenerationSurface phase="preparing" label={t("generation.reply")} placeholder /> : null}{replyDraft.error ? <ErrorState title={t("generation.replyFailed")} description={replyDraft.error.message} onRetry={draftReply} /> : null}</section> : null}

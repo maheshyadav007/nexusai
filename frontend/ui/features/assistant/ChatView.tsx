@@ -11,7 +11,7 @@ import { isManagedSession, useChatDraft, groupApprovals, takeFirstMessage, useAn
 import { useChannel, useCompactSession, useDismissChannel, useSessionContext, useSetContext } from "@/ui/client/work";
 import { Icon } from "@/ui/icons";
 import { useDateTime } from "@/ui/client/format";
-import { MessageSources, useOpenSource } from "./MessageSources";
+import { MessageSources } from "./MessageSources";
 import { ContextMenu } from "@/ui/primitives/ContextMenu";
 import { WavyDivider } from "@/ui/primitives/WavyDivider";
 import type { MenuItem } from "@/ui/primitives/Menu";
@@ -197,7 +197,6 @@ function AssistantMessage({ message, session, ownAgent, running, isLast, onFollo
   const failure = failureOf(message);
   const followUps = followUpsOf(message);
   const sources = sourcesOf(message);
-  const openSource = useOpenSource();
   const settled = !running || !isLast;
   const { turn, feedback, versions, thread, agent } = factsOf(message);
   const menu: MenuItem[] = [
@@ -209,7 +208,7 @@ function AssistantMessage({ message, session, ownAgent, running, isLast, onFollo
     <article data-testid="agent-message" className="group flex flex-col gap-3">
       {agent && ownAgent && agent !== ownAgent ? <Byline agent={agent} /> : null}
       {merged.map((block) => {
-        if (block.kind === "text") return <Markdown key={block.key} text={block.text} sources={sources} onOpenSource={openSource} />;
+        if (block.kind === "text") return <Markdown key={block.key} text={block.text} sources={sources} />;
         if (block.kind === "trace") return <ThinkingTrace key={block.key} steps={block.steps} running={running && isLast && block.key === blocks[blocks.length - 1]?.key} />;
         if (block.kind === "results") return <ResultCard key={block.key} parts={block.parts} />;
         const { part } = block;

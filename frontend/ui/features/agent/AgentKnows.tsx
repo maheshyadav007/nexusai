@@ -22,9 +22,10 @@ import { Select } from "@/ui/primitives/Select";
 import { SettingRow } from "@/ui/primitives/SettingRow";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { Switch } from "@/ui/primitives/Switch";
-import { TextLink } from "@/ui/primitives/TextLink";
 import { TextView } from "@/ui/primitives/TextView";
 import { t, tn, type StringKey } from "@/ui/strings";
+import { SourceChip } from "@/ui/features/sources/SourceChip";
+import { mailSource } from "@/ui/features/sources/kinds";
 
 // One grouped learning call at most for newly discovered groups on a manual click.
 const READ_MORE_BATCH = 30;
@@ -78,7 +79,7 @@ function Note({ note }: { note: LearnedNote }) {
         {expire.isError || confirm.isError || remove.isError ? <ErrorState title={t("knows.error")} /> : null}
       </div>
       <span className="flex shrink-0 items-center gap-1">
-        {note.thread ? <TextLink className="text-sm" href={`/mail/all/${note.thread}`}>{t("knows.note.source")}</TextLink> : null}
+        {note.thread ? <SourceChip source={mailSource(note.thread)} label={t("knows.note.source")} /> : null}
         {note.expires_at && new Date(note.expires_at).getTime() <= Date.now() ? <Badge>{t("knows.note.expired")}</Badge> : note.confirmed ? <Badge>{t("knows.note.confirmed")}</Badge> : <Button variant="quiet" loading={confirm.isPending} onClick={() => confirm.mutate(note.line)}>{t("knows.note.confirm")}</Button>}
         <Button variant="quiet" loading={remove.isPending} onClick={() => remove.mutate(note.line)}>{t("knows.note.remove")}</Button>
       </span>

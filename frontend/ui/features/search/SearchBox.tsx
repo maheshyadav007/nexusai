@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useDocuments } from "@/ui/client/documents";
 import { useSearch } from "@/ui/client/mail";
-import { usePreview } from "@/ui/features/documents/DocumentPreview";
+import { useOpenSource } from "@/ui/features/sources/context";
+import { documentSource } from "@/ui/features/sources/kinds";
 import { Highlight } from "./SearchFilters";
 import { Icon } from "@/ui/icons";
 import { Dialog } from "@/ui/primitives/Dialog";
@@ -45,7 +46,7 @@ interface Result {
 
 function Palette({ onClose }: { onClose: () => void }) {
   const router = useRouter();
-  const preview = usePreview();
+  const sources = useOpenSource();
   const [text, setText] = useState("");
   const [settled, setSettled] = useState("");
   const [index, setIndex] = useState(0);
@@ -62,7 +63,7 @@ function Palette({ onClose }: { onClose: () => void }) {
   };
   const openPage = () => router.push(`/search?q=${encodeURIComponent(text.trim())}`);
   const mailRows: Result[] = (mail.data?.hits ?? []).map((hit) => ({ id: `t${hit.thread.id}`, label: hit.thread.subject || t("mail.noSubject"), detail: hit.thread.sender_name ?? hit.thread.participants[0] ?? "", icon: "inbox", go: () => router.push(`/search/${hit.thread.id}?${new URLSearchParams({ q: settled, in: "mail" })}`) }));
-  const documentRows: Result[] = (documents.data?.documents ?? []).map((row) => ({ id: `d${row.key}`, label: row.name, detail: row.place ?? "", icon: "documents", go: () => preview.show({ key: row.key }) }));
+  const documentRows: Result[] = (documents.data?.documents ?? []).map((row) => ({ id: `d${row.key}`, label: row.name, detail: row.place ?? "", icon: "documents", go: () => sources.open(documentSource(row.key)) }));
   const recents: Result[] = text ? [] : recent().map((item) => ({ id: `r${item}`, label: item, detail: "", icon: "search", go: () => router.push(`/search?q=${encodeURIComponent(item)}`) }));
   const all = [...recents, ...mailRows, ...documentRows];
   const chosen = Math.min(index, Math.max(all.length - 1, 0));

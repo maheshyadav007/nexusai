@@ -75,7 +75,14 @@ test("new mail is judged, and reaches Today, the thread and the channel", async 
   await question.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByTestId("question-card").filter({ hasText: "Is this urgent for you?" })).toHaveCount(0);
 
+  // A click previews it over Today; Cmd or Ctrl and a click opens the email itself.
   await row.click();
+  const preview = page.getByTestId("thread-preview");
+  await expect(preview.getByRole("heading", { name: subject })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(preview).toHaveCount(0);
+  await row.click({ modifiers: ["ControlOrMeta"] });
+  await expect(page).toHaveURL(/\/mail\/all\/\d+$/);
   await expect(page.getByRole("heading", { name: subject })).toBeVisible();
   await page.getByRole("button", { name: "Details" }).click();
   await expect(page.getByTestId("triage-run").first()).toContainText("Someone needs a reply.");

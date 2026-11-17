@@ -603,6 +603,19 @@ def test_team_tools_refused_again_and_again_stop_the_run(
     script.say(lead(), [ToolCall("a", "team_assign", ASSIGN)], [TextChunk("ok")])
     chat(client, session, "Go")
     wait(lambda: task_row(1)["state"] not in {"queued", "working"} or None, "the task settled", 20)
+    # Any run the task woke has finished, so the replies below are this chat's.
+    db = agent.current().db
+    wait(
+        lambda: (
+            (
+                task_row(1)["wake"] is None
+                and not db.fetch_all("SELECT 1 FROM agent_turns WHERE closed = 0")
+            )
+            or None
+        ),
+        "nothing running",
+        20,
+    )
     # Only the agent doing the task can ask about it, so each of these is "Not sent".
     ask = {"task": 1, "kind": "ask", "text": "Which date?"}
     script.say(
@@ -613,11 +626,11 @@ def test_team_tools_refused_again_and_again_stop_the_run(
         [TextChunk("still going")],
     )
     chat(client, session, "Check it")
-    turns = agent.current().db.fetch_all(
+    turns = db.fetch_all(
         "SELECT failure FROM agent_turns WHERE session = ? ORDER BY id", (session,)
     )
     assert turns[-1]["failure"] == "refusals"
-    statuses = agent.current().db.fetch_all(
+    statuses = db.fetch_all(
         "SELECT status FROM tool_calls WHERE session = ? AND tool = 'team_message'", (session,)
     )
     assert [s["status"] for s in statuses] == ["refused"] * 3

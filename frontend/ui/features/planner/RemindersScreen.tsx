@@ -18,8 +18,8 @@ import { PageHeader } from "@/ui/primitives/PageHeader";
 import { BareInput, Pressable } from "@/ui/primitives/Pressable";
 import { Select } from "@/ui/primitives/Select";
 import { Skeleton } from "@/ui/primitives/Skeleton";
-import { TextLink } from "@/ui/primitives/TextLink";
 import { t, tn, type StringKey } from "@/ui/strings";
+import { SourceChip } from "@/ui/features/sources/SourceChip";
 
 const REPEATS = [
   { value: "none", label: t("reminders.repeat.none") },
@@ -129,7 +129,7 @@ function ReminderRow({ reminder }: { reminder: Reminder }) {
             {reminder.updated && reminder.updated !== reminder.created ? ` · ${t("tasks.changed", { when: relative(reminder.updated) })}` : ""}
           </p>
           <div className="flex items-center gap-1">
-            {reminder.thread ? <TextLink className="mr-2 text-sm" href={`/mail/all/${reminder.thread}`}>{t("channel.openSource")}</TextLink> : null}
+            {reminder.source_ref ? <span className="mr-2"><SourceChip source={reminder.source_ref} /></span> : null}
             <IconButton icon="trash" label={t("tasks.remove", { title: reminder.title })} onClick={() => remove.mutate(reminder.id)} />
           </div>
         </div>

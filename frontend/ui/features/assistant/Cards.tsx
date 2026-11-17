@@ -17,6 +17,8 @@ import { ApprovalPreviewView } from "@/ui/shell/ApprovalPreviewView";
 import { useAgentCards } from "@/ui/client/work";
 import { Mascot } from "@/ui/primitives/Mascot";
 import { isFinished, toolName, type ToolPart } from "./parts";
+import { SourceChip } from "@/ui/features/sources/SourceChip";
+import { mailSource } from "@/ui/features/sources/kinds";
 
 function Shell({ children, testid }: { children: ReactNode; testid?: string }) {
   return (
@@ -251,11 +253,7 @@ export function TriageCard({ part, thread }: { part: ToolPart; thread: number | 
       {input.summary ? <p className="break-words text-md text-ink-primary">{String(input.summary)}</p> : null}
       {input.reason ? <p className="break-words text-sm text-ink-muted">{String(input.reason)}</p> : null}
       {!isFinished(part) ? <p className="text-sm text-ink-muted">{t("chat.result.working")}</p> : null}
-      {thread ? (
-        <Link href={`/mail/thread/${thread}`} className="focus-ring self-start rounded-sm text-sm text-ink-secondary underline underline-offset-2 transition-colors duration-fast hover:text-ink-primary">
-          {t("chat.result.openMail")}
-        </Link>
-      ) : null}
+      {thread ? <div><SourceChip source={mailSource(Number(thread))} label={t("chat.result.openMail")} /></div> : null}
     </Shell>
   );
 }

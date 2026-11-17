@@ -153,6 +153,7 @@ from nexusai.contracts.agent import (
     SinceLastLook,
     SkillList,
     SkillName,
+    SourceRef,
     SummarizeThread,
     TeamTaskList,
     TeamTaskView,
@@ -212,6 +213,7 @@ from nexusai.modules.agent import (
 from nexusai.modules.connectors import module as connectors
 from nexusai.modules.mail import accounts, pst_search, pst_upload
 from nexusai.modules.mail import module as mail
+from nexusai.modules.mail.source import thread_source
 from nexusai.modules.semantic import module as semantic
 
 STARTER_PROMPTS = ("importance", "categories")
@@ -265,6 +267,7 @@ agent_module = Module(
         scheduler.RELIABILITY_MIGRATION,
         personalization.MIGRATION,
         briefs.MIGRATION,
+        briefs.SOURCES_MIGRATION,
         facts.MIGRATION,
         summaries.MIGRATION,
         cards.MIGRATION,
@@ -1629,6 +1632,11 @@ def today_view(query: GetToday, ctx: Context) -> TodayView:
     artifact = briefs.latest(ctx)
     prep_session = artifact["session"] if artifact else None
     prep_text = artifact["text"] if artifact else None
+    prep_sources = (
+        [SourceRef.model_validate(source) for source in json.loads(artifact["sources"] or "[]")]
+        if artifact
+        else []
+    )
     prep_at = artifact["created"] if artifact else None
     rating, comment = (artifact["rating"], artifact["comment"] or "") if artifact else (None, "")
     freshness = "none"
@@ -1654,6 +1662,7 @@ def today_view(query: GetToday, ctx: Context) -> TodayView:
         automated_count=automated,
         prep_session=prep_session,
         prep_text=prep_text,
+        prep_sources=prep_sources,
         prep_at=prep_at,
         prep_artifact=artifact["id"] if artifact else None,
         prep_freshness=freshness,
@@ -1705,43 +1714,43 @@ def _due_items(ctx: Context) -> list[DueItem]:
         "SELECT id, title, due, thread FROM tasks WHERE proposed = 0 AND status != 'done' AND due IS NOT NULL AND due <= ? ORDER BY due",
         (today,),
     ):
-        link = f"/mail/thread/{row['thread']}" if row["thread"] else "/planner/tasks"
         items.append(
             DueItem(
                 kind="task",
                 title=row["title"],
                 when=row["due"],
                 overdue=row["due"] < today,
-                link=link,
+                link="/planner/tasks",
                 task_id=row["id"],
+                source_ref=thread_source(db, row["thread"]),
             )
         )
     for row in db.fetch_all(
         "SELECT title, due_at, thread FROM reminders WHERE proposed = 0 AND fired = 0 AND due_at <= ? ORDER BY due_at",
         (f"{today}T23:59",),
     ):
-        link = f"/mail/thread/{row['thread']}" if row["thread"] else "/planner/reminders"
         items.append(
             DueItem(
                 kind="reminder",
                 title=row["title"],
                 when=row["due_at"],
                 overdue=row["due_at"][:10] < today,
-                link=link,
+                link="/planner/reminders",
+                source_ref=thread_source(db, row["thread"]),
             )
         )
     for row in db.fetch_all(
         "SELECT title, due, thread FROM work_board WHERE done = 0 AND kind = 'deadline' AND due IS NOT NULL AND due <= ? ORDER BY due",
         (today,),
     ):
-        link = f"/mail/thread/{row['thread']}" if row["thread"] else "/today"
         items.append(
             DueItem(
                 kind="deadline",
                 title=row["title"],
                 when=row["due"],
                 overdue=row["due"] < today,
-                link=link,
+                link="/today",
+                source_ref=thread_source(db, row["thread"]),
             )
         )
     items.sort(key=lambda item: (not item.overdue, item.when))

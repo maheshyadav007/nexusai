@@ -90,6 +90,12 @@
     "easing": "cubic-bezier(0.22, 1, 0.36, 1)",
     "generation": "4800ms"
   },
+  "layer": {
+    "raised": "10",
+    "dock": "30",
+    "dialog": "40",
+    "float": "50"
+  },
   "glass": {
     "opacity": "94%",
     "blur": "3px"

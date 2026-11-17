@@ -21,6 +21,7 @@ from nexusai.contracts.planner import (
 from nexusai.kernel import textmatch
 from nexusai.kernel.database import Database, Migration
 from nexusai.kernel.module import CommandError, Context, Module
+from nexusai.modules.mail.source import thread_source
 
 planner_module = Module(
     name="planner",
@@ -56,20 +57,22 @@ def _emit(ctx: Context, kind: str) -> None:
         work.emit(f"{kind}.changed", {}, source="planner", trace_id=ctx.trace_id)
 
 
-def _task(row: object) -> Task:
+def _task(db: Database, row: object) -> Task:
     data = dict(row)  # type: ignore[call-overload]
     return Task(
         **{
             **data,
             "proposed": bool(data["proposed"]),
             "updated": data["updated"] or data["created"],
+            "source_ref": thread_source(db, data["thread"]),
         }
     )
 
 
-def _reminder(row: object) -> Reminder:
+def _reminder(db: Database, row: object) -> Reminder:
     data = dict(row)  # type: ignore[call-overload]
     return Reminder(
+        source_ref=thread_source(db, data["thread"]),
         id=data["id"],
         title=data["title"],
         when=data["due_at"],
@@ -212,7 +215,7 @@ def list_tasks(query: ListTasks, ctx: Context) -> TaskList:
     rows = ctx.bus.db.fetch_all(
         f"SELECT * FROM tasks {where} ORDER BY proposed DESC, due IS NULL, due, id DESC"
     )  # noqa: S608
-    return TaskList(tasks=[_task(row) for row in rows])
+    return TaskList(tasks=[_task(ctx.bus.db, row) for row in rows])
 
 
 @planner_module.command("tasks.save")
@@ -255,7 +258,7 @@ def list_reminders(query: ListReminders, ctx: Context) -> ReminderList:
     rows = ctx.bus.db.fetch_all(
         "SELECT * FROM reminders WHERE fired = 0 ORDER BY proposed DESC, due_at"
     )
-    return ReminderList(reminders=[_reminder(row) for row in rows])
+    return ReminderList(reminders=[_reminder(ctx.bus.db, row) for row in rows])
 
 
 @planner_module.command("reminders.save")

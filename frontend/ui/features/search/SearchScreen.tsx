@@ -4,7 +4,9 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useDocuments } from "@/ui/client/documents";
 import { useCategories, useMailFolders, useSearch } from "@/ui/client/mail";
-import { useDocumentActions, usePreview } from "@/ui/features/documents/DocumentPreview";
+import { useDocumentActions } from "@/ui/features/documents/DocumentPreview";
+import { useOpenSource } from "@/ui/features/sources/context";
+import { documentSource, type PreviewSource } from "@/ui/features/sources/kinds";
 import { sizeOf } from "@/ui/features/documents/sizes";
 import { ThreadRowView } from "@/ui/features/mail/ThreadRowView";
 import { ThreadScreen } from "@/ui/features/mail/ThreadScreen";
@@ -171,13 +173,13 @@ export function SearchThread({ id }: { id: number }) {
   );
 }
 
-function DocumentHit({ row, words, list }: { row: DocumentRow; words: string; list: readonly { key: string }[] }) {
-  const preview = usePreview();
+function DocumentHit({ row, words, list }: { row: DocumentRow; words: string; list: readonly PreviewSource[] }) {
+  const sources = useOpenSource();
   const actions = useDocumentActions(row, [], list);
   return (
     <li data-testid="search-document">
       <ContextMenu items={actions}>
-        <Pressable onClick={() => preview.show({ key: row.key }, list)} className="focus-ring flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors duration-fast hover:bg-surface-sunken">
+        <Pressable onClick={() => sources.open(documentSource(row.key), list)} className="focus-ring flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors duration-fast hover:bg-surface-sunken">
           <Icon name={row.source === "email" ? "fromEmail" : "documents"} className="h-4 w-4 shrink-0 text-ink-muted" />
           <span className="min-w-0 flex-1 truncate text-md text-ink-primary"><Highlight text={row.name} words={words} /></span>
           {row.place ? <Badge>{row.place}</Badge> : null}
@@ -193,7 +195,7 @@ function DocumentResults({ text, chosen, onChange }: { text: string; chosen: Cho
   const who = sender ?? chosen.sender;
   const library = useDocuments({ query: words, limit: DOCUMENT_LIMIT, ...(who ? { sender: who } : {}), ...datesOf(chosen), ...(chosen.fileType ? { file_type: chosen.fileType as FileType } : {}) });
   const rows = library.data?.documents ?? [];
-  const list = useMemo(() => rows.map((row) => ({ key: row.key })), [rows]);
+  const list = useMemo(() => rows.map((row) => documentSource(row.key)), [rows]);
   const types: FilterOption[] = FILE_TYPES.map((item) => ({ value: item.value, label: t(item.label) }));
   return (
     <>

@@ -167,3 +167,77 @@ def test_compacting_is_recorded_where_it_happened(client: TestClient, script: Sc
     assert marks[0]["after_tokens"] < marks[0]["before_tokens"]
     last = view(client, session)["messages"][-1]["metadata"]["turn"]
     assert marks[0]["after_turn"] == last
+
+
+LONG = (
+    "The budget is approved for the next quarter, and Priya wants the final numbers by Friday so "
+    "the review can go ahead as planned with the whole team, and the room is booked for it."
+)
+
+
+def test_a_reply_drawn_from_mail_that_cites_nothing_goes_back_once(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    connect(client, fake)
+    fake.state.deliver(make_mail(subject="Budget numbers"))
+    thread = triaged(client, "Budget numbers")["id"]
+    wait(lambda: status(client, "mail-agent") == "done", "triage")
+    script.replies = [
+        [ToolCall("r1", "read_thread", {"thread_ids": [thread]})],
+        [TextChunk(LONG)],
+        [TextChunk(f"{LONG} [mail:{thread}]")],
+    ]
+    session = new_session(client)
+    chat(client, session, "What about the budget?")
+    wait(lambda: status(client, session) == "done", "the answer")
+    answer = view(client, session)["messages"][-1]
+    words = "".join(p["text"] for p in answer["parts"] if p["type"] == "text")
+    assert "[1](#cite-1)" in words
+    told = script.requests[-1].messages[-1].text
+    assert "cited none" in told
+
+    # Once a run: in the next run, a reply that still cites nothing after being asked stands.
+    script.replies = [
+        [ToolCall("r2", "read_thread", {"thread_ids": [thread]})],
+        [TextChunk(LONG)],
+        [TextChunk(LONG + " Still uncited.")],
+        [TextChunk("Never asked for.")],
+    ]
+    chat(client, session, "And again?")
+    wait(lambda: status(client, session) == "done", "the second answer")
+    second = view(client, session)["messages"][-1]
+    words = "".join(p["text"] for p in second["parts"] if p["type"] == "text")
+    assert words.endswith("Still uncited.")
+    nudges = [r for r in script.requests if "cited none" in r.messages[-1].text]
+    assert len(nudges) == 2
+
+
+def test_a_short_reply_or_one_from_no_mail_isnt_sent_back(
+    client: TestClient, script: Script
+) -> None:
+    script.replies = [[TextChunk(LONG)]]
+    session = new_session(client)
+    chat(client, session, "Tell me something")
+    wait(lambda: status(client, session) == "done", "the answer")
+    assert len(script.requests) == 1
+
+
+def test_mail_a_tool_only_listed_can_be_cited_down_to_one_message(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    connect(client, fake)
+    fake.state.deliver(make_mail(subject="Venue booking"))
+    thread = triaged(client, "Venue booking")["id"]
+    wait(lambda: status(client, "mail-agent") == "done", "triage")
+    script.replies = [
+        [ToolCall("s1", "search_mail", {"query": "venue"})],
+        [TextChunk(f"The venue is booked [mail:{thread}#m77].")],
+    ]
+    session = new_session(client)
+    chat(client, session, "Is the venue booked?")
+    wait(lambda: status(client, session) == "done", "the answer")
+    shown = script.requests[-1].messages[-1].text
+    assert f"[mail:{thread}]" in shown
+    answer = view(client, session)["messages"][-1]
+    sources = next(p for p in answer["parts"] if p["type"] == "data-sources")["data"]["sources"]
+    assert [(s["n"], s["title"], s["message"]) for s in sources] == [(1, "Venue booking", 77)]

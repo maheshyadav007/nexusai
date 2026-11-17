@@ -32,6 +32,7 @@ const config: Config = {
     transitionDuration: vars("motion", durations),
     transitionTimingFunction: { DEFAULT: "var(--motion-easing)" },
     maxWidth: { none: "none", full: "100%", ...layout },
+    zIndex: { auto: "auto", ...vars("layer", light.layer) },
     extend: {
       inset: layout,
       width: layout,

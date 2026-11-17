@@ -2,7 +2,9 @@
 
 import type { DocumentRow } from "@/ui/client/contracts.generated";
 import { ContextMenu } from "@/ui/primitives/ContextMenu";
-import { useDocumentActions, usePreview } from "./DocumentPreview";
+import { useOpenSource } from "@/ui/features/sources/context";
+import { documentSource, type PreviewSource } from "@/ui/features/sources/kinds";
+import { useDocumentActions } from "./DocumentPreview";
 import { sizeOf } from "./sizes";
 import { useRouter } from "next/navigation";
 import { useRef, useState, type DragEvent, useMemo } from "react";
@@ -191,7 +193,7 @@ export function DocumentsScreen({ view }: { view: DocumentView }) {
   return <Library view={view} />;
 }
 
-function LibraryRow({ document, list, onOpen, format }: { document: DocumentRow; list: readonly { key: string }[]; onOpen: () => void; format: (value: string) => string }) {
+function LibraryRow({ document, list, onOpen, format }: { document: DocumentRow; list: readonly PreviewSource[]; onOpen: () => void; format: (value: string) => string }) {
   const actions = useDocumentActions(document, [], list);
   return (
     <li>
@@ -221,12 +223,12 @@ function Library({ view }: { view: Exclude<DocumentView, "home"> }) {
   const config = VIEWS[view];
   const [query, setQuery] = useState("");
   const [folder, setFolder] = useState(ALL_FOLDERS);
-  const preview = usePreview();
+  const sources = useOpenSource();
   const format = useDateTime();
   const library = useDocuments({ query, ...(config.source ? { source: config.source } : {}), ...(folder === ALL_FOLDERS ? {} : { folder }) });
   const documents = library.data?.documents ?? [];
   const folders = library.data?.folders ?? [];
-  const list = useMemo(() => documents.map((row) => ({ key: row.key })), [documents]);
+  const list = useMemo(() => documents.map((row) => documentSource(row.key)), [documents]);
   return (
     <div className="mx-auto flex max-w-page flex-col gap-4 p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -248,7 +250,7 @@ function Library({ view }: { view: Exclude<DocumentView, "home"> }) {
           {library.isError ? <ErrorState title={t("documents.error")} onRetry={() => void library.refetch()} /> : null}
           {library.isSuccess && documents.length === 0 ? <EmptyState icon="documents" title={t(query ? "documents.none" : "documents.empty")} /> : null}
           <ul aria-label={t(config.title)} className="flex flex-col gap-px">
-            {documents.map((document) => <LibraryRow key={document.key} document={document} list={list} onOpen={() => preview.show({ key: document.key }, list)} format={format} />)}
+            {documents.map((document) => <LibraryRow key={document.key} document={document} list={list} onOpen={() => sources.open(documentSource(document.key), list)} format={format} />)}
           </ul>
       </section>
     </div>

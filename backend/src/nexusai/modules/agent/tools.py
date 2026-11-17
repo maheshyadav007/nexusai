@@ -364,6 +364,7 @@ def record_call(
     ctx: Context, session: str, call_id: str, tool: str, args: dict[str, Any], result: str, ms: int
 ) -> None:
     """For tools that don't go through approval. Those that do are already recorded."""
+    citations.shown_in_session(ctx.bus.db, session, result)
     if not call_id or ctx.bus.db.fetch_all(
         "SELECT 1 FROM tool_calls WHERE session = ? AND tool_call_id = ?", (session, call_id)
     ):
@@ -1528,7 +1529,7 @@ def build_tools(
             for hit in found.hits:
                 citations.note(ctx.bus.db, session, citations.MAIL, str(hit.thread.id))
             lines = [
-                f"[thread {h.thread.id}] {h.thread.last_date[:10]} | {h.thread.subject}"
+                f"{citations.mark(citations.MAIL, h.thread.id)} {h.thread.last_date[:10]} | {h.thread.subject}"
                 f" | {', '.join(h.thread.participants[:3])}"
                 f"{' | ' + h.thread.category if h.thread.category else ''}"
                 f"{' | related in meaning, not these words' if h.matched_by == 'meaning' else ''}"
@@ -1610,12 +1611,14 @@ def build_tools(
                 if attachments
                 else ""
             )
-            head = f"Conversation {thread_id}\nSubject: {view.thread.subject}\n{manifest}"
+            head = f"Conversation {citations.mark(citations.MAIL, thread_id)}\nSubject: {view.thread.subject}\n{manifest}"
             # The newest messages matter most, so when space runs out the oldest go first.
             kept: list[str] = []
             room = budget - len(head)
             for message in reversed(recent):
-                text = f"From {message.from_name} <{message.from_addr}> on {message.date}\n{message.own_text}"
+                # Each message has its own marker, so a statement can point to the one it came from.
+                cite = citations.mark(citations.MAIL, f"{thread_id}#m{message.id}")
+                text = f"{cite} From {message.from_name} <{message.from_addr}> on {message.date}\n{message.own_text}"
                 if kept and len(text) > room:
                     break
                 kept.insert(0, text[: max(room, 0)])
@@ -1699,7 +1702,9 @@ def build_tools(
         items = channel.board(ctx.bus.db).items
         return (
             "\n".join(
-                f"{i.kind}: {i.title} (thread {i.thread}, due {i.due}, by {i.by})" for i in items
+                f"{i.kind}: {i.title} ({citations.mark(citations.MAIL, i.thread) + ', ' if i.thread else ''}"
+                f"due {i.due}, by {i.by})"
+                for i in items
             )
             or "The board is empty."
         )
@@ -2032,7 +2037,7 @@ def build_tools(
                 citations.note(ctx.bus.db, session, citations.DOCUMENT, document.key)
             return _untrusted(
                 "\n".join(
-                    f"[{d.key}] {d.name} | {d.date[:10]}"
+                    f"{citations.mark(citations.DOCUMENT, d.key)} {d.name} | {d.date[:10]}"
                     f"{' | from ' + d.sender if d.sender else ''}"
                     f"{' | ' + d.place if d.place else ''}"
                     for d in found

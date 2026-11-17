@@ -3,10 +3,10 @@
 import re
 from typing import Any
 
-from nexusai.contracts.documents import GetDocument
 from nexusai.kernel.database import Database, Migration
-from nexusai.kernel.module import CommandError, Context
-from nexusai.modules.documents import module as documents
+from nexusai.kernel.module import Context
+from nexusai.modules.agent import sources as source_names
+from nexusai.modules.agent.sources import DOCUMENT, MAIL
 
 MIGRATION = Migration(
     "agent_citations_001",
@@ -16,10 +16,12 @@ CREATE TABLE agent_turn_sources (
   PRIMARY KEY (turn, kind, ref));
 """,
 )
+# A message in a thread is cited as a page of the thread: [mail:123#m456].
+MESSAGE = re.compile(r"^m(\d+)$")
 MARKER = re.compile(r"\[(mail|doc):([^\]\s#]{1,200})(?:#([^\]\s]{1,40}))?\]")
 # The start of a marker that may finish in the next chunk of a stream.
 PARTIAL = re.compile(r"\[(?:m|ma|mai|mail|d|do|doc|(?:mail|doc):[^\]\s]{0,240})?$")
-MAIL, DOCUMENT = "mail", "doc"
+__all__ = ["DOCUMENT", "MAIL", "Citations", "note"]
 
 
 def note(db: Database, session: str, kind: str, ref: str, *, opened: bool = False) -> None:
@@ -38,6 +40,46 @@ def note(db: Database, session: str, kind: str, ref: str, *, opened: bool = Fals
         )
 
 
+def mark(kind: str, ref: object) -> str:
+    """How a tool shows an email or a document, so the model cites it by copying it as written."""
+    return f"[{kind}:{ref}]"
+
+
+def shown(tx: Any, turn: int, text: str | None) -> None:
+    """Every marker the model was shown in a turn, in its task or a tool's result, can be cited."""
+    found = {(m.group(1), m.group(2)) for m in MARKER.finditer(text or "")}
+    for kind, ref in found:
+        tx.execute(
+            "INSERT INTO agent_turn_sources (turn, kind, ref) VALUES (?, ?, ?)"
+            " ON CONFLICT (turn, kind, ref) DO NOTHING",
+            (turn, kind, ref),
+        )
+
+
+def shown_in_session(db: Database, session: str, text: str | None) -> None:
+    """The same for the session's open turn, for a tool's result."""
+    if not text or not MARKER.search(text):
+        return
+    rows = db.fetch_all(
+        "SELECT id FROM agent_turns WHERE session = ? AND closed = 0 ORDER BY id DESC LIMIT 1",
+        (session,),
+    )
+    if rows:
+        with db.transaction() as tx:
+            shown(tx, rows[0]["id"], text)
+
+
+def used_in_session(db: Database, session: str) -> bool:
+    """Whether the session's open turn was shown any email or document."""
+    return bool(
+        db.fetch_all(
+            "SELECT 1 FROM agent_turn_sources s JOIN agent_turns t ON t.id = s.turn"
+            " WHERE t.session = ? AND t.closed = 0 LIMIT 1",
+            (session,),
+        )
+    )
+
+
 class Citations:
     """Numbers markers in the order they appear. One for something unread just disappears."""
 
@@ -46,6 +88,7 @@ class Citations:
         self.turn = turn
         self.numbers: dict[tuple[str, str], int] = {}
         self.pages: dict[tuple[str, str], str] = {}
+        self.messages: dict[tuple[str, str], int] = {}
 
     def _was_read(self, kind: str, ref: str) -> bool:
         return bool(
@@ -60,7 +103,10 @@ class Citations:
         if not self._was_read(kind, ref):
             return ""
         number = self.numbers.setdefault((kind, ref), len(self.numbers) + 1)
-        if page:
+        message = MESSAGE.match(page or "") if kind == MAIL else None
+        if message:
+            self.messages.setdefault((kind, ref), int(message.group(1)))
+        elif page:
             self.pages.setdefault((kind, ref), page)
         return f"[{number}](#cite-{number})"
 
@@ -79,36 +125,16 @@ class Citations:
             # Search results only count once they were opened or cited.
             if number is None and not row["opened"]:
                 continue
-            found = describe(self.ctx, row["kind"], row["ref"])
+            found = source_names.describe(
+                self.ctx,
+                row["kind"],
+                row["ref"],
+                message=self.messages.get(key),
+                page=self.pages.get(key),
+            )
             if found is not None:
-                sources.append({**found, "n": number, "page": self.pages.get(key)})
+                sources.append({**found.model_dump(), "n": number})
         if not sources:
             return []
         sources.sort(key=lambda source: (source["n"] is None, source["n"] or 0))
         return [{"type": "data-sources", "data": {"sources": sources}}]
-
-
-def describe(ctx: Context, kind: str, ref: str) -> dict[str, Any] | None:
-    """Title and detail from the database, so nothing a model wrote is shown as a source's name."""
-    if kind == MAIL:
-        rows = ctx.bus.db.fetch_all(
-            "SELECT t.subject, t.last_date, (SELECT COALESCE(NULLIF(m.from_name, ''), m.from_addr)"
-            " FROM messages m WHERE m.thread_id = t.id ORDER BY m.date DESC LIMIT 1) AS sender"
-            " FROM threads t WHERE t.id = ?",
-            (ref,),
-        )
-        if not rows:
-            return None
-        return {
-            "kind": MAIL,
-            "ref": ref,
-            "title": rows[0]["subject"] or "No subject",
-            "detail": rows[0]["sender"] or "",
-            "date": rows[0]["last_date"],
-        }
-    try:
-        found = documents.get_document(GetDocument(key=ref), ctx)
-    except CommandError:
-        return None
-    row = found.document  # type: ignore[attr-defined]
-    return {"kind": DOCUMENT, "ref": ref, "title": row.name, "detail": row.source, "date": row.date}

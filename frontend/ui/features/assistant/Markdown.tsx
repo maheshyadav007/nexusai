@@ -8,6 +8,8 @@ import { Icon } from "@/ui/icons";
 import { t } from "@/ui/strings";
 import { CitationMark } from "@/ui/primitives/Citation";
 import { Pressable } from "@/ui/primitives/Pressable";
+import { useOpenSource } from "@/ui/features/sources/context";
+import { fullHref } from "@/ui/features/sources/kinds";
 import type { MessageSource } from "./parts";
 
 function CodeBlock({ language, children }: { language: string; children: string }) {
@@ -36,12 +38,15 @@ const COPIED_MS = 1500;
 const textOf = (node: ReactNode): string => (Array.isArray(node) ? node.map(textOf).join("") : typeof node === "string" ? node : "");
 
 const CITE = "#cite-";
-const CitedSources = createContext<{ sources: readonly MessageSource[]; open: (source: MessageSource) => void } | null>(null);
+const CitedSources = createContext<readonly MessageSource[]>([]);
 
 function Cited({ number }: { number: string }) {
-  const known = use(CitedSources);
-  const source = known?.sources.find((item) => String(item.n) === number);
-  return <CitationMark number={number} title={source?.title} label={t("chat.citation", { number })} onOpen={source && known ? () => known.open(source) : undefined} />;
+  const sources = use(CitedSources);
+  const preview = useOpenSource();
+  const source = sources.find((item) => String(item.n) === number);
+  if (!source) return <CitationMark number={number} label={t("chat.citation", { number })} />;
+  const cited = sources.filter((item) => item.n);
+  return <CitationMark number={number} title={source.title} label={t("chat.citation", { number })} href={fullHref(source)} onOpen={() => preview.open(source, cited)} onOpenFull={() => preview.openFull(source)} />;
 }
 
 const COMPONENTS: Components = {
@@ -84,9 +89,9 @@ const COMPONENTS: Components = {
 };
 
 /** The model's words. Raw HTML in them is shown as text, never run. */
-export function Markdown({ text, sources = [], onOpenSource }: { text: string; sources?: readonly MessageSource[]; onOpenSource?: (source: MessageSource) => void }) {
+export function Markdown({ text, sources = [] }: { text: string; sources?: readonly MessageSource[] }) {
   return (
-    <CitedSources value={{ sources, open: onOpenSource ?? (() => undefined) }}>
+    <CitedSources value={sources}>
       <div className="break-words text-md text-ink-primary">
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>
           {text}

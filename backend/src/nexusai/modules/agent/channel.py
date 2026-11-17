@@ -16,6 +16,7 @@ from nexusai.contracts.agent import (
 from nexusai.contracts.notifications import NotificationRequested
 from nexusai.kernel.database import Database, Migration
 from nexusai.kernel.module import CommandError, Context
+from nexusai.modules.mail.source import thread_source
 
 MIGRATION = Migration(
     "agent_channel_001",
@@ -173,11 +174,12 @@ def messages(db: Database) -> ChannelList:
     rows = db.fetch_all(
         "SELECT * FROM channel_messages WHERE status = 'open' ORDER BY urgent DESC, id DESC LIMIT 200"
     )
-    return ChannelList(messages=[_message(row) for row in rows])
+    return ChannelList(messages=[_message(db, row) for row in rows])
 
 
-def _message(row: Any) -> ChannelMessage:
+def _message(db: Database, row: Any) -> ChannelMessage:
     return ChannelMessage(
+        source_ref=thread_source(db, row["thread"]),
         id=row["id"],
         kind=row["kind"],
         agent=row["agent"],

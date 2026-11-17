@@ -1,4 +1,5 @@
 import type { UIMessage } from "ai";
+import type { SourceRef } from "@/ui/client/contracts.generated";
 
 export interface ToolPart {
   type: string;
@@ -75,15 +76,8 @@ export function mergeResults(blocks: readonly Block[], pending: ReadonlyMap<stri
   return shown;
 }
 
-export interface MessageSource {
-  kind: "mail" | "doc";
-  ref: string;
-  title: string;
-  detail: string;
-  date?: string | null;
-  n?: number | null;
-  page?: string | null;
-}
+/** A source an answer drew on, numbered when it was cited. */
+export type MessageSource = SourceRef & { n?: number | null };
 
 export const sourcesOf = (message: UIMessage): MessageSource[] => {
   const part = message.parts.find((item) => item.type === "data-sources") as { data?: { sources?: MessageSource[] } } | undefined;

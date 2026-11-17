@@ -5,11 +5,12 @@ import { useState } from "react";
 import { command, query } from "@/ui/client/api";
 import type { Importance, MergeCategories } from "@/ui/client/contracts.generated";
 import { useHomeReady, useLeadName } from "@/ui/client/home";
+import { mailSource } from "@/ui/features/sources/kinds";
+import { SourceChip } from "@/ui/features/sources/SourceChip";
 import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Select } from "@/ui/primitives/Select";
-import { TextLink } from "@/ui/primitives/TextLink";
 import { t } from "@/ui/strings";
 
 /** One review for new uncertainty; cached sender groups do not ask again. Every guess is shown
@@ -53,7 +54,7 @@ export function MailOrganizationCard() {
       {data.missed.length ? <section className="flex flex-col gap-2">
         <h3 className="text-md font-medium text-ink-primary">{t("mail.organization.missed.title")}</h3>
         <p className="text-sm text-ink-muted">{t("mail.organization.missed.intro", { count: data.missed.length })}</p>
-        <details><summary className="focus-ring w-fit cursor-pointer rounded-md text-sm text-accent-primary">{t("mail.organization.missed.show")}</summary><ul className="mt-2 flex flex-col gap-1">{data.missed.map((thread) => <li key={thread.id}><TextLink href={`/mail/thread/${thread.id}`}>{thread.subject}</TextLink></li>)}</ul></details>
+        <details><summary className="focus-ring w-fit cursor-pointer rounded-md text-sm text-accent-primary">{t("mail.organization.missed.show")}</summary><ul className="mt-2 flex flex-col gap-1">{data.missed.map((thread) => <li key={thread.id}><SourceChip source={{ ...mailSource(thread.id), title: thread.subject }} /></li>)}</ul></details>
       </section> : null}
       {data.merges.length ? <section className="flex flex-col gap-2">
         <h3 className="text-md font-medium text-ink-primary">{t("mail.organization.merges.title")}</h3>

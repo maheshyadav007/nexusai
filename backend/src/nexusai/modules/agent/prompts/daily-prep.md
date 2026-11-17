@@ -28,7 +28,6 @@ Markdown bullets they can read in a minute:
 - Use draft_reply where a reply is clearly needed, and say in the brief that you did. Nothing is sent without their approval.
 - Proposed work is awaiting acceptance, not a commitment already made.
 - Say when sync, queued judgements or omitted detail make coverage partial.
-- Cite mail as [mail:ID] only after reading it.
 
 ## Their feedback comes first
 

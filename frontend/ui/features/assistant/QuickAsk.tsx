@@ -6,7 +6,7 @@ import { desktopApi } from "@/ui/client/desktop";
 import { useHomeReady, useHomeStatus, useLeadName } from "@/ui/client/home";
 import { leaveFirstMessage, useCreateSession } from "@/ui/client/sessions";
 import { useAgentCards } from "@/ui/client/work";
-import { PreviewInApp } from "@/ui/features/documents/DocumentPreview";
+import { PreviewInApp } from "@/ui/features/sources/context";
 import { Icon } from "@/ui/icons";
 import { Button } from "@/ui/primitives/Button";
 import { ErrorState } from "@/ui/primitives/ErrorState";

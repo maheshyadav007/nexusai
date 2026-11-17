@@ -307,6 +307,22 @@ The same chip in Tasks, Reminders, cards in chat, team reports in the channel, A
 - Every reference on Today, Tasks and Reminders opens the same preview without closing the chat.
 - No direct mail links remain outside the registry.
 
+## Part B, what was built
+
+| Step | What | Where |
+|---|---|---|
+| B1 | `SourceRef` contract (kind, ref, message, page, title, detail, date, n). Named `SourceRef` because `Source` was taken in the generated types. One resolver: `agent/sources.describe`; the thread half lives in `mail/source.thread_source` so the planner can use it without importing the agent module. `source_ref` on `DueItem` (its `link` now points to the planner, never to mail), `ChannelMessage`, `Task`, `Reminder`; `prep_sources` on `TodayView` | `contracts/agent.py`, `contracts/planner.py`, `agent/sources.py`, `mail/source.py` |
+| B2 | `ui/features/sources/`: `kinds.ts` (kinds, icons, `fullHref`, the only place that builds a mail or document link), `context.tsx` (`useOpenSource`, `PreviewInApp`), `PreviewFrame.tsx`, `MailPreview.tsx`, `SourcePreviewProvider.tsx` (the registry: one line per kind), `SourceChip.tsx`. Primitive `ui/primitives/SourceRef.tsx` with `quickLook`: click previews, Cmd/Ctrl-click opens the full page, Space previews. `CitationMark` uses the same. A cited message opens expanded, scrolled to and marked; a cited PDF page opens on that page | as listed |
+| B3 | `setNeedsRoom` removed. The chat closes for room in one place: the `NEEDS_ROOM` rules in `AssistantProvider` (opening an email from any list or search). Theme layer tokens `raised`, `dock`, `dialog`, `float` replace every `z-*` number, so the preview sits over the chat by design | `AssistantProvider.tsx`, theme JSON, `schema.ts`, `css.ts`, `tailwind.config.ts` |
+| B4 | Tools print `[mail:N]`, `[mail:N#mID]` per message, and `[doc:KEY]` (search, read_thread, list_mail, plate, digest, tasks, reminders, work board, documents, search by meaning). Anything a tool printed, or the turn's task showed, is citable: `citations.shown` reads the markers, so a new tool is citable just by printing them. `## Cite what you say` in `system.md`. `UncitedReply` sends a reply back once per run when it drew on mail or documents and cites nothing (person-facing runs only). `update_brief` refuses once when a bullet names a plate thread by subject with no marker, giving the marker to copy. The brief is stored with its citations and sources | `citations.py`, `tools.py`, `work_tools.py`, `mail_agent.py`, `context.py`, `briefs.py` |
+| B5 | Today: thread rows preview (arrows go through the list), the brief shows citation numbers and "N sources", questions, due items and proposed tasks and reminders carry a source chip, the organisation card's missed mail too | `TodayScreen.tsx`, `MailOrganizationCard.tsx` |
+| B6 | Tasks, Reminders, the triage card in chat, Agent knowledge, Preferences: the same chip. A guard test fails on any direct `/mail/all/` or `/mail/thread/` link outside `sources/` and Mail's own screens | `tests/sources.test.ts` |
+
+Not done:
+- Tasks and reminders can't yet point to a document, only to a thread: no tool writes one yet, so the column would sit unused. Add `document` with the first tool that needs it.
+- Memory notes ending in `[mail:123]` still show as text; the note's own `thread` gets the chip.
+- B7's real checks: a 6 Luna run and a real brief on Gmail. Ask first.
+
 ## Order of work
 
 1. **Part A:** commit A1–A11, then A12–A15 as the person decides.

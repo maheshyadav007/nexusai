@@ -24,6 +24,7 @@ from nexusai.modules.agent import (
     cards,
     category_names,
     channel,
+    citations,
     feedback,
     gateway,
     guard,
@@ -565,7 +566,7 @@ def to_chase(ctx: Context) -> list[Any]:
 
 def _plate_lines(rows: list[Any]) -> str:
     return "\n".join(
-        f"- [thread {r['id']}] {r['importance']}, {r['next_action'] or 'no action set'}:"
+        f"- {citations.mark(citations.MAIL, r['id'])} {r['importance']}, {r['next_action'] or 'no action set'}:"
         f" {r['subject']}: {r['why'] or ''}"
         for r in rows
     )
@@ -773,7 +774,7 @@ def digest_turn(ctx: Context, after: int) -> tuple[TurnRequest, int] | None:
         return None
     latest = {r["thread"]: r for r in rows}
     lines = "\n".join(
-        f"- [thread {r['thread']}] {r['importance']}: {r['subject']}: {r['summary']}"
+        f"- {citations.mark(citations.MAIL, r['thread'])} {r['importance']}: {r['subject']}: {r['summary']}"
         for r in latest.values()
     )
     plate = on_the_plate(ctx)
