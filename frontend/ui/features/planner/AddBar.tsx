@@ -53,6 +53,8 @@ export const REPEATS = [
   { value: "none", label: t("reminders.repeat.none") },
   { value: "day", label: t("reminders.repeat.day") },
   { value: "week", label: t("reminders.repeat.week") },
+  { value: "month", label: t("reminders.repeat.month") },
+  { value: "year", label: t("reminders.repeat.year") },
 ];
 
 /** One line to add something: an icon, what it is, one quiet button for when, and Add. */

@@ -10,7 +10,8 @@ import time
 from collections.abc import Callable, Iterable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any, Literal, cast
+from functools import partial
+from typing import Annotated, Any, Literal, cast, get_args
 
 from langchain_core.tools import InjectedToolCallId
 from pydantic import BaseModel, Field, ValidationError, model_validator
@@ -129,7 +130,7 @@ class _ListTasks(_Call):
 class _ReminderItem(BaseModel):
     title: str = Field(description="What to remind the person about.")
     when: str = Field(description="YYYY-MM-DDTHH:MM, in the person's local time.")
-    repeat: str = Field(default="none", description="none, day or week.")
+    repeat: str = Field(default="none", description="none, day, week, month or year.")
     thread_id: int | None = Field(default=None, description="The related conversation, if any.")
 
 
@@ -141,7 +142,7 @@ class _ReminderChange(BaseModel):
     reminder_id: int = Field(description="From list_reminders.")
     title: str | None = None
     when: str | None = Field(default=None, description="YYYY-MM-DDTHH:MM.")
-    repeat: str | None = Field(default=None, description="none, day or week.")
+    repeat: str | None = Field(default=None, description="none, day, week, month or year.")
     snooze_minutes: int | None = Field(default=None, description="Push it back this far from now.")
     accept: bool = Field(default=False, description="Accept a reminder that was only suggested.")
 
@@ -473,9 +474,23 @@ def specs(
         subject = str(rows[0]["subject"]) if rows else ""
         return f"“{subject}”" if subject else f"conversation {thread_id}"
 
+    def _refused(checks: list[Callable[[], object]]) -> str | None:
+        """Checked before anything is saved or asked, so a value the app can't use is never
+        saved as if it worked. The agent hears what to use instead and can fix it."""
+        for check in checks:
+            try:
+                check()
+            except CommandError as error:
+                return f"Not done: {error.message}"
+        return None
+
     # Tasks
 
     def create_tasks(tasks: list[_TaskItem], tool_call_id: str) -> str:
+        refused = _refused([partial(planner.due_of, t.due) for t in tasks])
+        if refused:
+            return refused
+
         def work() -> str:
             made = [
                 f"{planner.add_task(ctx, t.title, t.due, t.thread_id, 'agent', False, t.notes)}: {t.title}"
@@ -488,6 +503,13 @@ def specs(
         return guard(tool_call_id, "create_tasks", "data", summary, _lines(titles), work)
 
     def update_tasks(changes: list[_TaskChange], tool_call_id: str) -> str:
+        refused = _refused(
+            [partial(planner.status_of, c.status) for c in changes if c.status is not None]
+            + [partial(planner.due_of, c.due) for c in changes if c.due is not None]
+        )
+        if refused:
+            return refused
+
         def work() -> str:
             for change in changes:
                 values: dict[str, Any] = {}
@@ -542,19 +564,34 @@ def specs(
     # Reminders
 
     def create_reminders(reminders: list[_ReminderItem], tool_call_id: str) -> str:
+        refused = _refused(
+            [partial(planner.repeat_of, item.repeat) for item in reminders]
+            + [partial(planner.when_of, item.when) for item in reminders]
+        )
+        if refused:
+            return refused
+
         def work() -> str:
             for item in reminders:
                 planner.add_reminder(
                     ctx,
                     item.title,
-                    item.when[:16],
-                    item.repeat,
+                    planner.when_of(item.when),
+                    planner.repeat_of(item.repeat),
                     item.thread_id,
                     None,
                     "agent",
                     False,
                 )
-            return "Reminders set:\n" + "\n".join(f"{r.when[:16]}: {r.title}" for r in reminders)
+            return "Reminders set:\n" + "\n".join(
+                f"{r.when[:16]}: {r.title}"
+                + (
+                    f", every {planner.repeat_of(r.repeat)}"
+                    if planner.repeat_of(r.repeat) != "none"
+                    else ""
+                )
+                for r in reminders
+            )
 
         titles = [item.title for item in reminders]
         summary = f"Remind you: {_brief(titles)}"
@@ -562,6 +599,13 @@ def specs(
         return guard(tool_call_id, "create_reminders", "data", summary, detail, work)
 
     def update_reminders(changes: list[_ReminderChange], tool_call_id: str) -> str:
+        refused = _refused(
+            [partial(planner.repeat_of, c.repeat) for c in changes if c.repeat is not None]
+            + [partial(planner.when_of, c.when) for c in changes if c.when is not None]
+        )
+        if refused:
+            return refused
+
         def work() -> str:
             for change in changes:
                 values: dict[str, Any] = {}
@@ -654,6 +698,10 @@ def specs(
     ) -> str:
         if move_to is not None and move_to not in MOVABLE:
             return "Not done: move_to can be archive or inbox. Use trash_mail to delete."
+        # Checked once up front, so a bad status can't stop a change halfway through the list.
+        statuses = get_args(SetThreadStatus.model_fields["status"].annotation)
+        if status is not None and status not in statuses:
+            return f"Not done: a conversation's status can be one of: {', '.join(statuses)}."
 
         def work() -> str:
             for thread in thread_ids:

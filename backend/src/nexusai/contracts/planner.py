@@ -51,11 +51,14 @@ class TaskAction(BaseModel):
     id: int
 
 
+Repeat = Literal["none", "day", "week", "month", "year"]
+
+
 class Reminder(BaseModel):
     id: int
     title: str
     when: str
-    repeat: Literal["none", "day", "week"]
+    repeat: Repeat
     thread: int | None
     task: int | None
     source: Literal["user", "agent"]
@@ -80,7 +83,7 @@ class SaveReminder(BaseModel):
     id: int | None = None
     title: str = Field(min_length=1, max_length=500)
     when: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}")
-    repeat: Literal["none", "day", "week"] = "none"
+    repeat: Repeat = "none"
     thread: int | None = None
     task: int | None = None
     proposed: bool = False

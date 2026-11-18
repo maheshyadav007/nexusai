@@ -319,6 +319,85 @@ def test_changing_a_task_records_when_and_reopening_clears_completed(client: Tes
     assert tasks_of(client)[0]["completed"] is None
 
 
+def test_reminders_repeat_monthly_and_yearly_and_an_unknown_repeat_is_refused_out_loud(
+    client: TestClient, script: Script
+) -> None:
+    made = {
+        "reminders": [
+            {"title": "Rent", "when": "2031-01-31T09:00", "repeat": "monthly"},
+            {"title": "Renewal", "when": "2031-02-28T09:00", "repeat": "year"},
+        ]
+    }
+    said = use_tool(client, script, ToolCall("a", "create_reminders", made))
+    assert "every month" in said and "every year" in said
+    rows = {r["title"]: r for r in client.post("/api/queries/reminders.list").json()["reminders"]}
+    assert (rows["Rent"]["repeat"], rows["Renewal"]["repeat"]) == ("month", "year")
+    # A word it doesn't know isn't saved, and the agent is told what to use.
+    odd = {"reminders": [{"title": "Odd", "when": "2031-01-01T09:00", "repeat": "fortnightly"}]}
+    said = use_tool(client, script, ToolCall("b", "create_reminders", odd))
+    assert said.startswith("Not done") and "month" in said
+    titles = {r["title"] for r in client.post("/api/queries/reminders.list").json()["reminders"]}
+    assert "Odd" not in titles
+    change = {"changes": [{"reminder_id": rows["Rent"]["id"], "repeat": "hourly"}]}
+    said = use_tool(client, script, ToolCall("c", "update_reminders", change))
+    assert said.startswith("Not done")
+
+
+def test_a_reminder_with_a_repeat_the_app_doesnt_know_doesnt_break_the_list(
+    client: TestClient,
+) -> None:
+    client.post("/api/commands/reminders.save", json={"title": "Fine", "when": "2031-01-01T09:00"})
+    with agent_module.current().db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO reminders (title, due_at, repeat, source, created) VALUES"
+            " ('Old', '2031-01-02T09:00', 'fortnightly', 'agent', '2031-01-01T00:00')"
+        )
+    rows = client.post("/api/queries/reminders.list").json()["reminders"]
+    assert {(r["title"], r["repeat"]) for r in rows} == {("Fine", "none"), ("Old", "none")}
+
+
+def test_values_the_app_cant_use_are_refused_out_loud_and_never_saved(
+    client: TestClient, script: Script
+) -> None:
+    def tasks() -> dict[str, Any]:
+        return {t["title"]: t for t in tasks_of(client, include_done=True)}
+
+    made = {"tasks": [{"title": "File it", "due": "2031-05-01"}]}
+    use_tool(client, script, ToolCall("a", "create_tasks", made))
+    task = tasks()["File it"]
+    # Its own words for done become done; a word the app doesn't know is refused.
+    change = {"changes": [{"task_id": task["id"], "status": "completed"}]}
+    use_tool(client, script, ToolCall("b", "update_tasks", change))
+    assert tasks()["File it"]["status"] == "done"
+    odd = {"changes": [{"task_id": task["id"], "status": "parked"}]}
+    assert use_tool(client, script, ToolCall("c", "update_tasks", odd)).startswith("Not done")
+    late = {"tasks": [{"title": "Later", "due": "next week"}]}
+    assert use_tool(client, script, ToolCall("d", "create_tasks", late)).startswith("Not done")
+    assert "Later" not in tasks()
+    vague = {"reminders": [{"title": "Call", "when": "tomorrow morning"}]}
+    said = use_tool(client, script, ToolCall("e", "create_reminders", vague))
+    assert said.startswith("Not done") and "YYYY-MM-DDTHH:MM" in said
+    spaced = {"reminders": [{"title": "Call", "when": "2031-05-01 09:00:00"}]}
+    use_tool(client, script, ToolCall("f", "create_reminders", spaced))
+    reminders = client.post("/api/queries/reminders.list").json()["reminders"]
+    assert [(r["title"], r["when"]) for r in reminders] == [("Call", "2031-05-01T09:00")]
+
+
+def test_monthly_reminders_keep_their_day_through_short_months() -> None:
+    from datetime import datetime
+
+    from nexusai.modules.planner.module import next_due
+
+    due = datetime(2031, 1, 31, 9, 0)
+    steps = []
+    for _ in range(3):
+        due = next_due(due, "month", 31)
+        steps.append(due.date().isoformat())
+    assert steps == ["2031-02-28", "2031-03-31", "2031-04-30"]
+    assert next_due(datetime(2032, 2, 29, 9), "year", 29).date().isoformat() == "2033-02-28"
+    assert next_due(datetime(2031, 12, 15, 9), "month", 15).date().isoformat() == "2032-01-15"
+
+
 def test_reminders_change_snooze_and_go_in_bulk_and_record_their_times(
     client: TestClient, script: Script
 ) -> None:
