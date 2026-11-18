@@ -392,6 +392,57 @@ def test_assign_report_verify_runs_end_to_end(client: TestClient, script: TeamSc
     assert [m["kind"] for m in shown["messages"]] == ["assign", "report", "verify"]
 
 
+def test_a_report_citing_mail_never_sends_the_lead_back_to_do_the_work_again(
+    client: TestClient, script: TeamScript
+) -> None:
+    """A report's evidence names mail, so the lead's summary is asked for its markers. That ask
+    once read as "reply again", and a small model redid the work and handed it over again."""
+    session = post(client, "session.create")["id"]
+    summary = "The brief is updated with the security items first, then the overdue ones. " * 3
+    script.say(
+        lead(),
+        [ToolCall("a", "team_assign", ASSIGN)],
+        [TextChunk("Asked the mail agent.")],
+        [ToolCall("v", "team_close", {"task": 1, "action": "verify", "outcome": "Checked"})],
+        [TextChunk(summary)],
+        [TextChunk("Updated, with the security items first [mail:1].")],
+    )
+    script.say(
+        mail(),
+        [
+            ToolCall(
+                "r",
+                "team_close",
+                {"task": 1, "action": "report", "outcome": "Updated.", "evidence": ["mail:1"]},
+            )
+        ],
+        [TextChunk("Reported.")],
+    )
+    chat(client, session, "Update my brief")
+    wait(lambda: task_row(1)["state"] == "verified" or None, "verified", 20)
+    wait(lambda: any("[mail:1]" in t for t in script.told(lead())) or None, "the report", 20)
+    db = agent.current().db
+    wait(
+        lambda: (
+            not db.fetch_all(
+                "SELECT 1 FROM agent_turns WHERE session = ? AND closed = 0", (session,)
+            )
+            or None
+        ),
+        "the lead's run to end",
+        20,
+    )
+    asked = [
+        request
+        for speaker, request in script.requests
+        if speaker == lead() and "cited none" in request.messages[-1].text
+    ]
+    # Asked once to add the markers, and given no tools, so it can only rewrite its reply.
+    assert len(asked) == 1 and asked[0].tools == []
+    assert "Don't" in asked[0].messages[-1].text
+    assert len(db.fetch_all("SELECT * FROM team_tasks")) == 1
+
+
 def test_the_owner_can_never_verify_its_own_work(client: TestClient, script: TeamScript) -> None:
     session = post(client, "session.create")["id"]
     script.say(lead(), [ToolCall("a", "team_assign", ASSIGN)], [TextChunk("ok")])

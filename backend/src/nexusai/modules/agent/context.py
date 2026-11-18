@@ -378,13 +378,22 @@ class UncitedReply(AgentMiddleware):
             return None
         nudge = HumanMessage(
             content=(
-                "You used mail or documents but cited none. Add their markers, such as [mail:123], "
-                "straight after the statements they support, copied as the tools showed them. "
-                "Then reply again."
+                "You used mail or documents but cited none. Write your last reply out again, "
+                "word for word, with their markers, such as [mail:123], straight after the "
+                "statements they support, copied as the tools showed them. Don't call any "
+                "tools or do any of the work again: it's done."
             ),
             id=f"{CITE_NUDGE}{uuid.uuid4().hex}",
         )
         return {"messages": [nudge], "jump_to": "model"}
+
+    def wrap_model_call(self, request: ModelRequest, handler: Callable[[ModelRequest], Any]) -> Any:
+        """The rewrite gets no tools, so a small model reading the ask as "do it again" can't."""
+        messages = list(request.messages)
+        last = messages[-1] if messages else None
+        if isinstance(last, HumanMessage) and str(last.id or "").startswith(CITE_NUDGE):
+            return handler(request.override(tools=[]))
+        return handler(request)
 
 
 class Placeholders(AgentMiddleware):
