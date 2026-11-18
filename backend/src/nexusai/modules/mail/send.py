@@ -2,10 +2,12 @@
 
 import smtplib
 import ssl
+from collections.abc import Sequence
 from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid
 
 from nexusai.contracts.mail import Draft, MailProfile, Recipient
+from nexusai.modules.mail.outgoing import Outgoing
 
 IMPLICIT_TLS_PORT = 465
 HELLO_NAME = "[127.0.0.1]"
@@ -27,6 +29,7 @@ def build_message(
     references: list[str],
     *,
     draft_marker: str | None = None,
+    files: Sequence[Outgoing] = (),
 ) -> EmailMessage:
     message = EmailMessage()
     address = profile.address or profile.auth.user
@@ -44,6 +47,11 @@ def build_message(
     if draft_marker:
         message["X-NexusAI-Draft"] = draft_marker
     message.set_content(draft.body)
+    for file in files:
+        main, _, sub = file.content_type.partition("/")
+        message.add_attachment(
+            file.data, maintype=main, subtype=sub or "octet-stream", filename=file.name
+        )
     return message
 
 

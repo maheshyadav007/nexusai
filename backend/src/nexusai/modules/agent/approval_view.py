@@ -32,6 +32,7 @@ FILE_TOOLS = {"write_file", "edit_file", "move_file", "delete_file"}
 MAIL_TOOLS = {
     "send_mail",
     "draft_reply",
+    "draft_forward",
     "trash_mail",
     "delete_drafts",
     "update_mail",

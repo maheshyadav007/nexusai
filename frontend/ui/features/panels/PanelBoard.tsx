@@ -39,7 +39,8 @@ function PanelResults({ panel }: { panel: Panel }) {
   const documents = results.data.documents ?? [];
   if (!threads.length && !documents.length) return <p className="text-md text-ink-muted">{t("panels.empty")}</p>;
   return (
-    <ul className="flex max-h-popover flex-col gap-px overflow-y-auto">
+    // It scrolls, so it takes focus: a list of documents has nothing else to reach by keyboard.
+    <ul tabIndex={0} aria-label={panel.title} className="focus-ring flex max-h-popover flex-col gap-px overflow-y-auto rounded-sm">
       {threads.map((thread) => (
         <li key={thread.id}>
           <ThreadRowView thread={thread} />

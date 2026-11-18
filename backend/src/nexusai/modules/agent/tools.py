@@ -25,7 +25,14 @@ from langgraph.types import interrupt
 from pydantic import BaseModel, ConfigDict, Field
 
 from nexusai.contracts.documents import DocumentLibrary, DocumentPreview, GetDocument, ListDocuments
-from nexusai.contracts.mail import FolderRole, SearchMail, SearchResults
+from nexusai.contracts.mail import (
+    Draft,
+    DraftAttachment,
+    FolderRole,
+    Recipient,
+    SearchMail,
+    SearchResults,
+)
 from nexusai.kernel.database import Migration
 from nexusai.kernel.home import scratch_folder
 from nexusai.kernel.module import CommandError, Context
@@ -50,7 +57,7 @@ from nexusai.modules.agent.prompt_data import untrusted
 from nexusai.modules.connectors import module as connectors
 from nexusai.modules.documents.module import get_document as _get_document
 from nexusai.modules.documents.module import list_documents as _list_documents
-from nexusai.modules.mail import accounts, store
+from nexusai.modules.mail import accounts, outgoing, store
 from nexusai.modules.mail.module import run_search
 from nexusai.modules.planner import module as planner
 from nexusai.modules.semantic import module as semantic
@@ -745,6 +752,18 @@ class _ReminderProposal(BaseModel):
 class _DraftReply(BaseModel):
     thread_id: int = Field(description="The conversation to reply in.")
     body: str = Field(description="The reply, as plain text.")
+    attachments: list[str] = Field(
+        default_factory=list,
+        description="Files to attach, by key: an email's attachment as read_thread lists it, "
+        "such as m:123:2, or a document's key from search_documents.",
+    )
+    tool_call_id: Annotated[str, InjectedToolCallId]
+
+
+class _DraftForward(BaseModel):
+    thread_id: int = Field(description="The conversation whose latest email to forward.")
+    to: list[str] = Field(min_length=1, description="Email addresses to forward it to.")
+    note: str = Field(default="", description="A short note above the forwarded email.")
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
@@ -942,6 +961,7 @@ MAIL_AGENT_TOOLS = frozenset(
         "propose_reminder",
         "remember",
         "draft_reply",
+        "draft_forward",
         "suggest",
         "tell",
         "notify_person",
@@ -1062,14 +1082,15 @@ ALWAYS_SHOWN = frozenset({"ask_user", "remember", "list_memory", "load_skill"})
 # the work board, documents, and every list it checks before making something.
 LEAD_SHOWN = ALWAYS_SHOWN | {
     "read_work_board", "search_mail", "semantic_search", "search_documents", "read_thread",
-    "list_mail", "update_mail", "draft_reply", "list_drafts",
+    "list_mail", "update_mail", "draft_reply", "draft_forward", "list_drafts",
     "list_tasks", "list_reminders", "list_categories",
     "list_rules", "list_schedules", "list_panels", "propose_preference",
     "team_assign", "team_inbox", "team_message", "team_close",
 }  # fmt: skip
 MAIL_SHOWN = ALWAYS_SHOWN | {
     "search_mail", "semantic_search", "read_thread", "read_recipients", "list_mail",
-    "read_work_board", "update_mail", "draft_reply", "propose_task", "propose_reminder",
+    "read_work_board", "update_mail", "draft_reply", "draft_forward", "propose_task",
+    "propose_reminder",
     "team_inbox", "team_message", "team_close", "tell",
 }  # fmt: skip
 FOUND_SHOWN = 5
@@ -1605,7 +1626,7 @@ def build_tools(
                 if a.kind in {"attachment", "calendar"}
             ]
             manifest = (
-                "Attachments (use read_document to read their extracted contents):\n"
+                "Attachments (read_document reads them; draft_reply and draft_forward attach them by key):\n"
                 + "\n".join(attachments)
                 + "\n\n"
                 if attachments
@@ -1943,7 +1964,28 @@ def build_tools(
         planner.add_reminder(ctx, title, when[:16], "none", thread_id, None, "agent", True)
         return "Proposed. The person accepts it in Reminders."
 
-    def draft_reply(thread_id: int, body: str, tool_call_id: str) -> str:
+    def _keep_draft(draft: Draft) -> None:
+        with ctx.bus.unit_of_work() as work:
+            work.tx.execute(
+                "INSERT INTO mail_drafts (body, updated) VALUES (?, ?)",
+                (draft.model_dump_json(exclude={"id"}), datetime.now(UTC).isoformat()),
+            )
+            work.emit("drafts.changed", {}, source="agent", trace_id=ctx.trace_id)
+
+    def _attached(keys: list[str]) -> tuple[list[DraftAttachment], str]:
+        found, missing = outgoing.attachments_from_keys(ctx, keys)
+        note = (
+            f" These couldn't be attached, so check the keys: {', '.join(missing)}."
+            if missing
+            else ""
+        )
+        if found:
+            note = f" Attached: {', '.join(item.name for item in found)}.{note}"
+        return found, note
+
+    def draft_reply(
+        thread_id: int, body: str, tool_call_id: str, attachments: list[str] | None = None
+    ) -> str:
         rows = ctx.bus.db.fetch_all(
             "SELECT id, from_addr, subject FROM messages WHERE thread_id = ? ORDER BY date DESC LIMIT 1",
             (thread_id,),
@@ -1951,23 +1993,53 @@ def build_tools(
         if not rows:
             return "That conversation no longer exists."
         subject = rows[0]["subject"]
-        draft = {
-            "thread_id": thread_id,
-            "reply_to_message_id": rows[0]["id"],
-            "to": [{"name": "", "address": rows[0]["from_addr"]}],
-            "cc": [],
-            "bcc": [],
-            "subject": subject if subject.lower().startswith("re:") else f"Re: {subject}",
-            "body": body,
-            "source": "agent",
-        }
-        with ctx.bus.unit_of_work() as work:
-            work.tx.execute(
-                "INSERT INTO mail_drafts (body, updated) VALUES (?, ?)",
-                (json.dumps(draft), datetime.now(UTC).isoformat()),
+        files, note = _attached(attachments or [])
+        try:
+            to = [Recipient(address=rows[0]["from_addr"])]
+        except ValueError:
+            to = []
+        _keep_draft(
+            Draft(
+                thread_id=thread_id,
+                reply_to_message_id=rows[0]["id"],
+                to=to,
+                subject=subject if subject.lower().startswith("re:") else f"Re: {subject}",
+                body=outgoing.with_signature(ctx, body),
+                source="agent",
+                attachments=files,
             )
-            work.emit("drafts.changed", {}, source="agent", trace_id=ctx.trace_id)
-        return "Saved as a draft. Nothing was sent. The person reviews it in Drafts."
+        )
+        return f"Saved as a draft. Nothing was sent. The person reviews it in Drafts.{note}"
+
+    def draft_forward(thread_id: int, to: list[str], tool_call_id: str, note: str = "") -> str:
+        rows = ctx.bus.db.fetch_all(
+            "SELECT id FROM messages WHERE thread_id = ? ORDER BY date DESC LIMIT 1", (thread_id,)
+        )
+        if not rows:
+            return "That conversation no longer exists."
+        people, bad = [], []
+        for address in to:
+            try:
+                people.append(Recipient(address=address.strip()))
+            except ValueError:
+                bad.append(address)
+        if bad or not people:
+            return f"Not saved: these aren't email addresses: {', '.join(bad) or 'none given'}."
+        forwarded = outgoing.forward(ctx, rows[0]["id"])
+        body = outgoing.with_signature(ctx, note.strip()) if note.strip() else ""
+        _keep_draft(
+            forwarded.model_copy(
+                update={"to": people, "body": f"{body}{forwarded.body}", "source": "agent"}
+            )
+        )
+        files = (
+            f" Its attachments go with it: {', '.join(a.name for a in forwarded.attachments)}."
+            if forwarded.attachments
+            else ""
+        )
+        return (
+            f"Saved as a draft forward. Nothing was sent. The person reviews it in Drafts.{files}"
+        )
 
     def save_personal_prompt(name: str, content: str, tool_call_id: str, mode: str = "add") -> str:
         if not name.replace("-", "").isalnum():
@@ -2270,8 +2342,14 @@ def build_tools(
         (
             draft_reply,
             _DraftReply,
-            "Save a reply to a conversation as a draft for the person to check. It never sends, "
-            "and it doesn't need approval.",
+            "Save a reply to a conversation as a draft for the person to check, with files "
+            "attached if asked. It never sends, and it doesn't need approval.",
+        ),
+        (
+            draft_forward,
+            _DraftForward,
+            "Save a forward of a conversation's latest email, with its attachments, as a draft "
+            "for the person to check. It never sends, and it doesn't need approval.",
         ),
         (
             save_personal_prompt,

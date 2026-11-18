@@ -25,6 +25,7 @@ from nexusai.contracts.mail import (
     Draft,
     DraftList,
     FindPst,
+    ForwardContext,
     GetMailAccounts,
     GetMailPresets,
     GetMailStatus,
@@ -63,6 +64,7 @@ from nexusai.contracts.mail import (
     PstSearchStatus,
     PstUploadStarted,
     Recipient,
+    RecipientSuggestions,
     RemoveDraft,
     RemoveMailAccount,
     ReorderCategories,
@@ -90,6 +92,7 @@ from nexusai.contracts.mail import (
     SortCategory,
     StartPstUpload,
     StopHistory,
+    SuggestRecipients,
     TestMailAccount,
     ThreadList,
     ThreadUpdated,
@@ -97,7 +100,7 @@ from nexusai.contracts.mail import (
     UpdateCategory,
 )
 from nexusai.kernel.module import CommandError, Context, Module
-from nexusai.modules.mail import accounts, pst, pst_search, pst_upload, rules, send, store
+from nexusai.modules.mail import accounts, outgoing, pst, pst_search, pst_upload, rules, send, store
 from nexusai.modules.mail.imap import DELETING_ROLES, Folder, distinct_total, test_imap
 from nexusai.modules.mail.parse import normalize_subject, parse_message
 from nexusai.modules.mail.pop3 import test_pop3
@@ -1935,7 +1938,13 @@ def save_draft(command: Draft, ctx: Context) -> Draft:
         marker = str(saved.id)
         in_reply_to, references = _threading_headers(ctx, saved)
         raw = send.build_message(
-            saved, profile, _sender_name(ctx), in_reply_to, references, draft_marker=marker
+            saved,
+            profile,
+            _sender_name(ctx),
+            in_reply_to,
+            references,
+            draft_marker=marker,
+            files=outgoing.files_of(ctx, saved),
         ).as_bytes()
         # The server keeps one copy of each draft: the old one goes before the new one lands. With
         # deleting refused, old copies would pile up there, so drafts stay on this computer.
@@ -1952,6 +1961,11 @@ def save_draft(command: Draft, ctx: Context) -> Draft:
 def remove_draft(command: RemoveDraft, ctx: Context) -> MailDone:
     active = _account(ctx)
     with ctx.bus.unit_of_work() as work:
+        saved = work.tx.execute(
+            "SELECT body FROM mail_drafts WHERE id = ?", (command.id,)
+        ).fetchone()
+        if saved:
+            outgoing.forget_uploads(work.tx, Draft.model_validate_json(saved["body"]))
         work.tx.execute("DELETE FROM mail_drafts WHERE id = ?", (command.id,))
         _outbox(work.tx, active, "delete_drafts", {"draft": str(command.id)})
         work.emit("drafts.changed", {"id": command.id}, source="mail", trace_id=ctx.trace_id)
@@ -2001,6 +2015,23 @@ def reply_draft(query: ReplyContext, ctx: Context) -> ReplyDraft:
     )
 
 
+@mail_module.query("mail.forwardDraft")
+def forward_draft(query: ForwardContext, ctx: Context) -> ReplyDraft:
+    return ReplyDraft(draft=outgoing.forward(ctx, query.message_id), dropped=[])
+
+
+@mail_module.query("mail.suggestRecipients")
+def suggest_recipients(query: SuggestRecipients, ctx: Context) -> RecipientSuggestions:
+    _, profiles = accounts.read_accounts(ctx.config)
+    own = {
+        address
+        for profile in profiles.values()
+        for address in ((profile.address or "").lower(), profile.auth.user.lower())
+        if "@" in address
+    }
+    return outgoing.suggest(ctx, _account(ctx), own, query.text)
+
+
 def _send_checks(ctx: Context) -> SendCheckSettings:
     rows = ctx.bus.db.fetch_all("SELECT value FROM settings WHERE key = 'send_checks'")
     return SendCheckSettings.model_validate_json(rows[0]["value"]) if rows else SendCheckSettings()
@@ -2047,7 +2078,7 @@ def _problems(
                 settings.external_recipient,
                 f"This internal conversation would go outside: {', '.join(outside)}.",
             )
-    if ATTACHED_WORDS.search(draft.body):
+    if ATTACHED_WORDS.search(draft.body) and not draft.attachments:
         add(
             "missing_attachment",
             settings.missing_attachment,
@@ -2113,13 +2144,21 @@ def send_mail(command: SendDraft, ctx: Context) -> MailDone:
     if blocked:
         raise CommandError("mail.send_blocked", blocked[0].message, 422)
     in_reply_to, references = _threading_headers(ctx, draft)
-    message = send.build_message(draft, profile, _sender_name(ctx), in_reply_to, references)
+    message = send.build_message(
+        draft,
+        profile,
+        _sender_name(ctx),
+        in_reply_to,
+        references,
+        files=outgoing.files_of(ctx, draft),
+    )
     try:
         send.send(message, draft, profile, password, ctx.config.mail.connect_timeout_seconds)
     except send.SendFailed as error:
         raise CommandError("mail.send_failed", str(error), 502) from error
     log.info("mail_sent", recipients=len(draft.to) + len(draft.cc) + len(draft.bcc))
     with ctx.bus.unit_of_work() as work:
+        outgoing.forget_uploads(work.tx, draft)
         if draft.id is not None:
             work.tx.execute("DELETE FROM mail_drafts WHERE id = ?", (draft.id,))
             _outbox(work.tx, active, "delete_drafts", {"draft": str(draft.id)})

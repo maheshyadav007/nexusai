@@ -36,7 +36,7 @@ from nexusai.contracts.home import (
     RestoreBackup,
     UnlockHome,
 )
-from nexusai.contracts.mail import PstUploadStatus
+from nexusai.contracts.mail import DraftAttachment, PstUploadStatus
 from nexusai.contracts.notifications import NotificationRequested
 from nexusai.kernel import backups, vault
 from nexusai.kernel import home as homes
@@ -53,7 +53,7 @@ from nexusai.modules.agent.module import agent_module
 from nexusai.modules.connectors.module import connectors_module
 from nexusai.modules.documents import module as documents
 from nexusai.modules.documents.module import documents_module
-from nexusai.modules.mail import pst_upload
+from nexusai.modules.mail import outgoing, pst_upload
 from nexusai.modules.mail import store as mail_store
 from nexusai.modules.mail.module import KINDS_SORTED, mail_module
 from nexusai.modules.models.module import models_module, reset_login
@@ -482,6 +482,23 @@ def create_app(config: Config | None = None) -> FastAPI:
             return _error(413, "document.too_large", "That file is too large to add.")
         try:
             return await asyncio.to_thread(documents.save_upload, ctx, name, data)
+        except CommandError as error:
+            return _error(error.status, error.code, error.message)
+
+    @app.post("/api/mail/draft-attachment", response_model=None)
+    async def upload_draft_attachment(
+        request: Request, name: str
+    ) -> DraftAttachment | JSONResponse:
+        """A file added in the composer. It's held here until the draft is sent or dropped."""
+        ctx = bare_context()
+        if ctx is None:
+            return _error(409, "home.not_ready", "Choose a NexusAI Home first.")
+        most = ctx.config.mail.most_attached_bytes
+        if int(request.headers.get("content-length") or 0) > most:
+            return _error(413, "draft.attachment_too_large", outgoing.too_large(ctx))
+        data = await request.body()
+        try:
+            return await asyncio.to_thread(outgoing.save_upload, ctx, name, data)
         except CommandError as error:
             return _error(error.status, error.code, error.message)
 

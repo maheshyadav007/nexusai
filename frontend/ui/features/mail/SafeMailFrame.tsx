@@ -43,7 +43,17 @@ export function SafeMailFrame({ html, title, showImages = true, sender }: { html
     watcher.current?.disconnect();
     watcher.current = new ResizeObserver(fit);
     watcher.current.observe(inside.documentElement);
-    for (const image of inside.images) image.addEventListener("load", fit);
+    for (const image of inside.images) {
+      // A picture that fails, such as a dead link, goes instead of showing a broken icon.
+      // Blocked ones keep their place, so showing them later doesn't move the text.
+      const hide = () => {
+        if (image.dataset.blockedSrc === undefined) image.style.display = "none";
+        fit();
+      };
+      if (image.complete && image.naturalWidth === 0) hide();
+      image.addEventListener("error", hide);
+      image.addEventListener("load", fit);
+    }
   };
   return (
     <div className="flex flex-col gap-2">

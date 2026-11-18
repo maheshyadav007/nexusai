@@ -1,8 +1,8 @@
 "use client";
 
 import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { command, query } from "./api";
-import type { Importance, Draft, ListThreads, MailProfile, MoveThread, RuleSet, SaveCategory, SearchMail, SetThreadStatus, UpdateCategory } from "./contracts.generated";
+import { ApiRequestError, command, query } from "./api";
+import type { ApiError, Importance, Draft, DraftAttachment, ListThreads, MailProfile, MoveThread, RuleSet, SaveCategory, SearchMail, SetThreadStatus, UpdateCategory } from "./contracts.generated";
 import { useHomeReady } from "./home";
 
 export type FolderRole = NonNullable<ListThreads["folder"]>;
@@ -156,6 +156,24 @@ export function useRemoveDraft() {
 
 export const useReplyDraft = () =>
   useMutation({ mutationFn: (input: { message_id: number; reply_all: boolean }) => query("mail.replyDraft", input) });
+
+export const useForwardDraft = () => useMutation({ mutationFn: (input: { message_id: number }) => query("mail.forwardDraft", input) });
+
+/** A file added in the composer. The app keeps it until the draft is sent or thrown away. */
+export const useAttachFile = () =>
+  useMutation({
+    mutationFn: async (file: File): Promise<DraftAttachment> => {
+      const response = await fetch(`/api/mail/draft-attachment?name=${encodeURIComponent(file.name)}`, { method: "POST", body: file });
+      if (!response.ok) throw new ApiRequestError((await response.json()) as ApiError);
+      return (await response.json()) as DraftAttachment;
+    },
+  });
+
+export function useRecipientSuggestions(text: string) {
+  const ready = useHomeReady();
+  const wanted = text.trim();
+  return useQuery({ queryKey: ["recipient-suggestions", wanted], queryFn: () => query("mail.suggestRecipients", { text: wanted }), enabled: ready && wanted.length >= 2, staleTime: 30_000 });
+}
 
 export function useSendMail() {
   const client = useQueryClient();

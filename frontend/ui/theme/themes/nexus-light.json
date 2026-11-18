@@ -122,7 +122,9 @@
     "reading": "760px",
     "mailList": "380px",
     "quick": "720px",
-    "quickHeight": "460px"
+    "quickHeight": "460px",
+    "thumb": "112px",
+    "thumbWide": "240px"
   },
   "scale": {
     "density": {

@@ -203,6 +203,9 @@ import type {
   RemoveDraft,
   RemoveMailAccount,
   ReplyContext,
+  ForwardContext,
+  SuggestRecipients,
+  RecipientSuggestions,
   ReplyDraft,
   RuleSet,
   SaveMailAccount,
@@ -425,6 +428,8 @@ interface Queries {
   "rules.get": [GetRules, RuleSet];
   "drafts.list": [ListDrafts, DraftList];
   "mail.replyDraft": [ReplyContext, ReplyDraft];
+  "mail.forwardDraft": [ForwardContext, ReplyDraft];
+  "mail.suggestRecipients": [SuggestRecipients, RecipientSuggestions];
   "search.run": [SearchMail, SearchResults];
   "semantic.status": [GetSemanticStatus, SemanticStatus];
   "documents.list": [ListDocuments, DocumentLibrary];

@@ -35,6 +35,7 @@ class MailConfig:
     reconnect_max_seconds: float
     signature_max_bytes: int
     signature_repeat_count: int
+    most_attached_bytes: int
     presets: list[dict[str, Any]] = field(default_factory=list)
 
 
