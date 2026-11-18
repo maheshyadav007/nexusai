@@ -1307,6 +1307,7 @@ export type Enabled4 = boolean;
 export type Start = string;
 export type End = string;
 export type ChannelDailyLimit = number;
+export type TokenAlerts = boolean;
 export type Mode3 = "trim" | "auto_compact";
 export type KeepMessages2 = number;
 export type TrimSavedHistory = boolean;
@@ -4800,6 +4801,7 @@ export interface QuietHours {
   start?: Start;
   end?: End;
   channel_daily_limit?: ChannelDailyLimit;
+  token_alerts?: TokenAlerts;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema

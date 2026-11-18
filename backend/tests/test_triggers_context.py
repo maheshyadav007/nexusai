@@ -149,6 +149,16 @@ def set_mode(client: TestClient, mode: str) -> None:
     assert client.post("/api/commands/mailAgent.save", json={"mode": mode}).is_success
 
 
+def test_by_default_it_judges_each_email_with_no_hourly_run(client: TestClient) -> None:
+    from nexusai.modules.agent import module as agent_module
+
+    assert client.post("/api/queries/mailAgent.get", json={}).json()["mode"] == "each"
+    rows = agent_module.current().db.fetch_all(
+        "SELECT enabled FROM schedules WHERE kind = 'mail-hourly'"
+    )
+    assert [row["enabled"] for row in rows] == [0]
+
+
 def test_every_hour_holds_mail_until_the_run(
     client: TestClient, script: Script, fake: FakeMail
 ) -> None:

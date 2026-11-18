@@ -833,6 +833,8 @@ class QuietHours(BaseModel):
     start: str = Field(default="22:00", pattern=r"^\d{2}:\d{2}$")
     end: str = Field(default="07:00", pattern=r"^\d{2}:\d{2}$")
     channel_daily_limit: int = Field(default=20, ge=0, le=500)
+    # Token spikes and daily caps stay on the agent map. Off, they don't fill the notifications.
+    token_alerts: bool = False
 
 
 class GetQuietHours(BaseModel):
@@ -887,7 +889,7 @@ MailMode = Literal["each", "hourly", "both"]
 class MailAgentSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    mode: MailMode = "both"
+    mode: MailMode = "each"
     # How many past emails the rule engine didn't catch it reads before going live.
     learn_emails: int | None = Field(default=None, ge=0, le=5000)
     # Filled in when read, to say how that's going.

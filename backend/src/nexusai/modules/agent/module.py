@@ -309,9 +309,9 @@ def _startup(ctx: Context) -> None:
         _triggers.start()
         # Completion/hold listeners must exist before recovered workers can finish.
         _runtime.resume_after_restart()
-        # By default it runs on each email and on the hour. Choosing otherwise is remembered.
-        if mail_agent.mode(ctx) != "each":
-            scheduler.set_hourly(ctx, True)
+        # By default it runs on each email. The hourly run follows the chosen mode, so a Home
+        # that was on the old default of "both" stops running it.
+        scheduler.set_hourly(ctx, mail_agent.mode(ctx) != "each")
         scheduler.start_built_ins(ctx)
         _scheduler = scheduler.Scheduler(ctx)
         _scheduler.start()

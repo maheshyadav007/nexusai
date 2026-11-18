@@ -120,11 +120,15 @@ def test_review_registry_uses_its_own_turn_in_shared_chat(client: TestClient) ->
     )
 
 
-def test_new_home_enables_the_hourly_mail_check(client: TestClient) -> None:
-    rows: list[Any] = current().ctx.bus.db.fetch_all(
-        "SELECT enabled, next_run FROM schedules WHERE kind = 'mail-hourly'"
-    )
-    assert rows[0]["enabled"] and rows[0]["next_run"]
+def test_new_home_has_no_hourly_mail_check_until_one_is_chosen(client: TestClient) -> None:
+    def hourly() -> Any:
+        return current().ctx.bus.db.fetch_all(
+            "SELECT enabled, next_run FROM schedules WHERE kind = 'mail-hourly'"
+        )[0]
+
+    assert not hourly()["enabled"] and not hourly()["next_run"]
+    assert client.post("/api/commands/mailAgent.save", json={"mode": "both"}).is_success
+    assert hourly()["enabled"] and hourly()["next_run"]
 
 
 def test_managed_chat_can_approve_an_explicit_action(client: TestClient, script: Script) -> None:
