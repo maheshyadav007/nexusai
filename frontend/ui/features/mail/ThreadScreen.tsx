@@ -8,7 +8,7 @@ import { ApiRequestError } from "@/ui/client/api";
 import type { Importance, Draft, MessageView } from "@/ui/client/contracts.generated";
 import { useDateTime } from "@/ui/client/format";
 import type { GenerationPhase } from "@/ui/client/generation";
-import { useCategories, useMoveThread, useReplyDraft, useSetCategory, useSetImportance, useSetFlag, useSetRead, useSetStatus, useThread, type ThreadStatus } from "@/ui/client/mail";
+import { useCategories, useForwardDraft, useMoveThread, useReplyDraft, useSetCategory, useSetImportance, useSetFlag, useSetRead, useSetStatus, useThread, type ThreadStatus } from "@/ui/client/mail";
 import { useDraftReply, useSummarize, useThreadRuns, useThreadSummary, useRecordInteraction } from "@/ui/client/work";
 import { AskAgent } from "@/ui/features/agent/AskAgent";
 import { Icon } from "@/ui/icons";
@@ -52,11 +52,29 @@ const toLine = (people: readonly string[]) =>
 
 const sizeOf = (bytes: number) => new Intl.NumberFormat(undefined, { style: "unit", unit: bytes < 1024 ** 2 ? "kilobyte" : "megabyte", maximumFractionDigits: 1 }).format(bytes < 1024 ** 2 ? bytes / 1024 : bytes / 1024 ** 2);
 
+// Pictures sent as attachments are shown small under the mail, the way Outlook does.
+const PICTURE = /\.(png|jpe?g|gif|webp)$/i;
+
 function Attachments({ message }: { message: MessageView }) {
   const [showHidden, setShowHidden] = useState(false);
   const shown = message.attachments.filter((item) => showHidden || item.kind !== "signature");
+  const pictures = shown.filter((item) => item.kind === "attachment" && PICTURE.test(item.filename));
   return (
     <div className="flex flex-col items-start gap-2">
+      {pictures.length > 0 ? (
+        <ul aria-label={t("mail.imageAttachments")} className="flex flex-wrap gap-2">
+          {pictures.map((item) => {
+            const address = `/api/documents/file?key=${encodeURIComponent(`m:${message.id}:${item.index}`)}&inline=true`;
+            return (
+              <li key={item.index}>
+                <a href={address} target="_blank" rel="noreferrer" className="focus-ring block overflow-hidden rounded-md border border-line-subtle">
+                  <img src={address} alt={item.filename} data-testid="picture-attachment" loading="lazy" className="block h-thumb w-auto max-w-thumb-wide object-cover" onError={(event) => { event.currentTarget.closest("li")?.setAttribute("hidden", ""); }} />
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
       {shown.length > 0 ? (
         <ul className="flex flex-wrap gap-2">
           {shown.map((item) => (
@@ -158,7 +176,7 @@ function WhyHere({ thread, reason }: { thread: number; reason: string }) {
   );
 }
 
-function MessageCard({ message, open: startsOpen, cited = false, onReply, threadWhy }: { message: MessageView; open: boolean; cited?: boolean; onReply: (message: MessageView, replyAll: boolean) => void; threadWhy: string | null | undefined }) {
+function MessageCard({ message, open: startsOpen, cited = false, onReply, onForward, threadWhy }: { message: MessageView; open: boolean; cited?: boolean; onReply: (message: MessageView, replyAll: boolean) => void; onForward: (message: MessageView) => void; threadWhy: string | null | undefined }) {
   const [open, setOpen] = useState(startsOpen || cited);
   const format = useDateTime();
   const sender = message.from_name || message.from_addr;
@@ -191,7 +209,7 @@ function MessageCard({ message, open: startsOpen, cited = false, onReply, thread
           {message.why && message.why !== threadWhy ? <p className="text-sm text-ink-muted">{t("mail.why", { reason: message.why })}</p> : null}
           <Body message={message} />
           <Attachments message={message} />
-          <div className="flex gap-1">
+          <div className="flex flex-wrap gap-1">
             <Button onClick={() => onReply(message, false)}>
               <Icon name="reply" />
               {t("mail.reply")}
@@ -199,6 +217,10 @@ function MessageCard({ message, open: startsOpen, cited = false, onReply, thread
             <Button variant="quiet" onClick={() => onReply(message, true)}>
               <Icon name="replyAll" />
               {t("mail.replyAll")}
+            </Button>
+            <Button variant="quiet" onClick={() => onForward(message)}>
+              <Icon name="forward" />
+              {t("mail.forward")}
             </Button>
           </div>
         </div>
@@ -231,6 +253,7 @@ export function ThreadScreen({ id, onLeave, folder: backTo, cited }: { id: numbe
   const setImportance = useSetImportance();
   const categories = useCategories();
   const replyDraft = useReplyDraft();
+  const forwardDraft = useForwardDraft();
   const writeReply = useDraftReply();
   const summarize = useSummarize();
   const [composing, setComposing] = useState<{ draft: Draft; dropped: string[] } | null>(null);
@@ -287,6 +310,7 @@ export function ThreadScreen({ id, onLeave, folder: backTo, cited }: { id: numbe
     return <div className="mx-auto max-w-reading p-6"><ErrorState title={t("mail.thread.error")} onRetry={() => void thread.refetch()} /></div>;
   }
   const { thread: row, messages } = thread.data;
+  const forward = (message: MessageView) => forwardDraft.mutate({ message_id: message.id }, { onSuccess: (result) => setComposing({ draft: result.draft, dropped: [] }), onError: (error) => toast({ title: t("mail.forwardFailed"), description: error.message, tone: "danger" }) });
   const reply = (message: MessageView, replyAll: boolean) => replyDraft.mutate({ message_id: message.id, reply_all: replyAll }, { onSuccess: (result) => setComposing({ draft: result.draft, dropped: result.dropped }) });
   const names = (categories.data?.categories ?? []).filter((item) => !item.proposed).map((item) => item.name);
   const categoryOptions = [{ value: NO_CATEGORY, label: t("mail.category.none") }, ...[...new Set([...names, ...(row.category ? [row.category] : [])])].map((name) => ({ value: name, label: name }))];
@@ -322,13 +346,13 @@ export function ThreadScreen({ id, onLeave, folder: backTo, cited }: { id: numbe
       </header>
       <div className="flex flex-col">
         {messages.map((message, index) => (
-          <MessageCard threadWhy={row.why} key={message.id} message={message} open={index === messages.length - 1} cited={message.id === cited} onReply={reply} />
+          <MessageCard threadWhy={row.why} key={message.id} message={message} open={index === messages.length - 1} cited={message.id === cited} onReply={reply} onForward={forward} />
         ))}
       </div>
       {draftRequested && !composing ? <section ref={composer} className="rounded-lg border border-line-subtle bg-surface-raised p-4">{replyDraft.isPending ? <GenerationSurface phase="preparing" label={t("generation.reply")} placeholder /> : null}{replyDraft.error ? <ErrorState title={t("generation.replyFailed")} description={replyDraft.error.message} onRetry={draftReply} /> : null}</section> : null}
       {composing ? (
         <section ref={composer} className="rounded-lg border border-line-subtle bg-surface-raised p-4">
-          <Composer initial={composing.draft} dropped={composing.dropped} generation={writeReply.isPending ? writeReply.phase : undefined} generated={generated} generationFailed={draftRequested && writeReply.isError} onDone={() => { setComposing(null); setDraftRequested(false); setGenerated(null); }} />
+          <Composer key={`${composing.draft.reply_to_message_id ?? "new"}-${composing.draft.subject}`} initial={composing.draft} dropped={composing.dropped} generation={writeReply.isPending ? writeReply.phase : undefined} generated={generated} generationFailed={draftRequested && writeReply.isError} onDone={() => { setComposing(null); setDraftRequested(false); setGenerated(null); }} />
           {draftRequested && writeReply.error ? <ErrorState title={t("generation.replyFailed")} description={writeReply.error.message} onRetry={draftReply} /> : null}
         </section>
       ) : null}

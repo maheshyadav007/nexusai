@@ -293,11 +293,11 @@ test("replying goes out with the right people and joins the conversation", async
 
   await page.getByRole("button", { name: "Reply", exact: true }).click();
   await expect(page.getByText("This reply leaves out")).toContainText("sam@example.com");
-  await expect(page.getByRole("textbox", { name: "To", exact: true })).toHaveValue("priya@example.com");
+  await expect(page.getByRole("combobox", { name: "To", exact: true })).toHaveValue("priya@example.com");
   await page.getByRole("button", { name: "Discard" }).click();
 
   await page.getByRole("button", { name: "Reply all" }).click();
-  await expect(page.getByRole("textbox", { name: "Cc", exact: true })).toHaveValue("sam@example.com, lee@example.com");
+  await expect(page.getByRole("combobox", { name: "Cc", exact: true })).toHaveValue("sam@example.com, lee@example.com");
   await page.getByRole("textbox", { name: "Message" }).fill("Numbers confirmed.");
   await page.getByRole("button", { name: "Send", exact: true }).click();
   // There's a short window to undo before it goes.
@@ -310,15 +310,63 @@ test("replying goes out with the right people and joins the conversation", async
   await expect(page.getByTestId("message")).toHaveCount(2, { timeout: 15_000 });
 });
 
+// A real picture, so its preview loads. Padded past the size below which images count as logos.
+// Random padding, so a rerun's picture isn't taken for a logo seen many times.
+const PIXEL = Buffer.concat([Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64"), Buffer.from(Array.from({ length: 40_000 }, () => Math.floor(Math.random() * 256)))]).toString("base64");
+
+test("a forward keeps the files, takes a suggested address, a new file and the signature", async ({ page }) => {
+  const profile = (await (await page.request.post("/api/queries/profile.get", { data: {} })).json()) as Record<string, unknown>;
+  await page.request.post("/api/commands/profile.update", { data: { ...profile, signature: "Asha Rao\nAudit lead" } });
+  const subject = unique("Site photos");
+  await deliver(page, { subject, sender: "Priyanka Das <priyanka@example.com>", body: "Photos and the report attached.", attachments: [["site.png", "image/png", PIXEL], ["report.pdf", "application/pdf", Buffer.from("%PDF-1.4 report").toString("base64")]] });
+  await page.goto("/mail/all");
+  await page.getByTestId("thread-row").filter({ hasText: subject }).getByRole("link").click();
+
+  // A picture sent as an attachment shows small under the mail.
+  const preview = page.getByTestId("picture-attachment");
+  await expect(preview).toBeVisible();
+  await expect.poll(() => preview.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
+
+  await page.getByRole("button", { name: "Forward" }).click();
+  await expect(page.getByRole("textbox", { name: "Subject" })).toHaveValue(`Fwd: ${subject}`);
+  const files = page.getByTestId("draft-attachment");
+  await expect(files).toHaveCount(2);
+  const body = page.getByRole("textbox", { name: "Message" });
+  await expect(body).toHaveValue(/-- \nAsha Rao\nAudit lead\n\n---------- Forwarded message/);
+
+  const to = page.getByRole("combobox", { name: "To", exact: true });
+  await to.fill("priyan");
+  await expect(page.getByTestId("recipient-suggestion").first()).toContainText("priyanka@example.com");
+  await to.press("Enter");
+  await expect(to).toHaveValue("priyanka@example.com, ");
+
+  await page.getByTestId("mail-attach-input").setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("Checked on site.") });
+  await expect(files).toHaveCount(3);
+  await page.getByRole("button", { name: "Remove report.pdf" }).click();
+  await expect(files).toHaveCount(2);
+  await noViolations(page);
+
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.getByText("Message sent").first()).toBeVisible({ timeout: 15_000 });
+  const sent = (await (await page.request.get(CONTROL)).json()) as { to: string[]; raw: string }[];
+  const mine = sent.find((item) => item.raw.includes(`Fwd: ${subject}`));
+  expect(mine?.to).toEqual(["priyanka@example.com"]);
+  expect(mine?.raw).toContain('filename="site.png"');
+  expect(mine?.raw).toContain('filename="notes.txt"');
+  expect(mine?.raw).not.toContain('filename="report.pdf"');
+  expect(mine?.raw).toContain("Audit lead");
+  await page.request.post("/api/commands/profile.update", { data: { ...profile } });
+});
+
 test("a bad address blocks sending, and a saved draft can be reopened", async ({ page }) => {
   await page.goto("/mail/all");
   await page.getByRole("button", { name: "New message" }).click();
-  await page.getByRole("textbox", { name: "To", exact: true }).fill("not-an-address");
+  await page.getByRole("combobox", { name: "To", exact: true }).fill("not-an-address");
   await expect(page.getByText("isn't a valid address")).toBeVisible();
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
 
   const subject = unique("Draft for later");
-  await page.getByRole("textbox", { name: "To", exact: true }).fill("someone@example.com");
+  await page.getByRole("combobox", { name: "To", exact: true }).fill("someone@example.com");
   await page.getByRole("textbox", { name: "Subject" }).fill(subject);
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Draft saved").first()).toBeVisible();

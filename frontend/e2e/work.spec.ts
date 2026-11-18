@@ -309,7 +309,7 @@ test("a send warns about a missing attachment, and can be undone", async ({ page
 
   await page.goto("/mail/all");
   await page.getByRole("button", { name: "New message" }).click();
-  await page.getByRole("textbox", { name: "To", exact: true }).fill("someone@example.com");
+  await page.getByRole("combobox", { name: "To", exact: true }).fill("someone@example.com");
   await page.getByRole("textbox", { name: "Subject" }).fill(unique("Report"));
   await page.getByRole("textbox", { name: "Message" }).fill("See the attached report.");
   await page.getByRole("button", { name: "Send", exact: true }).click();

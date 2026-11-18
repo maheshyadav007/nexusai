@@ -42,9 +42,20 @@ function elapsed(task: TeamTask) {
   return clockText((end - new Date(task.created).getTime()) / 1000);
 }
 
+// Which hand-overs the person opened. The chat redraws its messages when the task changes, and
+// a card that closed itself then would hide what they were reading.
+const OPENED = new Set<string>();
+
 /** A hand-over as one quiet line that shows it's alive, opening to what it's doing. */
 export function HandoffCard({ part }: { part: ToolPart }) {
-  const [open, setOpen] = useState(false);
+  const [open, setShown] = useState(() => OPENED.has(part.toolCallId));
+  const setOpen = (change: (value: boolean) => boolean) =>
+    setShown((value) => {
+      const next = change(value);
+      if (next) OPENED.add(part.toolCallId);
+      else OPENED.delete(part.toolCallId);
+      return next;
+    });
   const assistant = useAssistant();
   const cards = useAgentCards().data?.cards ?? [];
   const input = part.input ?? {};

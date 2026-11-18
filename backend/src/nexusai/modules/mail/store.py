@@ -6,8 +6,11 @@ import re
 import sqlite3
 import unicodedata
 import zlib
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+
+import structlog
 
 from nexusai.contracts.mail import (
     AttachmentView,
@@ -31,6 +34,10 @@ from nexusai.modules.mail.parse import (
 )
 from nexusai.modules.mail.rules import WORTH_A_LOOK, RuleMatch
 from nexusai.modules.mail.safe_html import sanitize
+
+log = structlog.get_logger()
+# Pictures in one email read for showing it. More than this is a newsletter's sprite sheet.
+INLINE_PARTS_READ = 60
 
 
 def sync_settings(db: Database, account: str) -> sqlite3.Row | None:
@@ -243,6 +250,14 @@ UPDATE threads SET latest_rule = (SELECT rule FROM messages WHERE thread_id = th
         "mail_outbox_failures_001",
         "ALTER TABLE mail_outbox ADD COLUMN failed_at TEXT;"
         "ALTER TABLE mail_outbox ADD COLUMN error TEXT;",
+    ),
+    Migration(
+        "mail_draft_uploads_001",
+        """
+CREATE TABLE mail_draft_uploads (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, content_type TEXT NOT NULL, size INTEGER NOT NULL,
+  data BLOB NOT NULL, created TEXT NOT NULL);
+""",
     ),
 ]
 ATTACHMENTS_FROM_PARTS = (
@@ -836,8 +851,12 @@ def raw_of(db: Database, message: int) -> bytes | None:
 def _safe_html(db: Database, row: sqlite3.Row) -> str | None:
     if not row["html"]:
         return None
+    # Pictures can be linked by Content-ID or by file name, and can come without an image type.
     parts = db.fetch_all(
-        "SELECT * FROM message_parts WHERE message = ? AND content_id IS NOT NULL", (row["id"],)
+        "SELECT * FROM message_parts WHERE message = ? AND (content_id IS NOT NULL"
+        " OR content_type LIKE 'image/%' OR content_type = 'application/octet-stream')"
+        " ORDER BY part_index LIMIT ?",
+        (row["id"], INLINE_PARTS_READ),
     )
     inline: list[tuple[Part, bytes]] = []
     raw = raw_of(db, row["id"]) if parts else None
@@ -852,7 +871,18 @@ def _safe_html(db: Database, row: sqlite3.Row) -> str | None:
                     found[0],
                 )
             )  # fmt: skip
-    return sanitize(row["html"], inline)
+    missing: list[str] = []
+    shown = sanitize(row["html"], inline, missing)
+    if missing:
+        # Why, never what: the reasons say nothing about the mail itself.
+        log.info(
+            "mail_images_missing",
+            message=row["id"],
+            stored=raw is not None,
+            parts=len(parts),
+            reasons=dict(Counter(missing)),
+        )
+    return shown
 
 
 def show_images(db: Database, sender: str, default: str) -> bool:

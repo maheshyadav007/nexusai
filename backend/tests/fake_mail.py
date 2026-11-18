@@ -1,5 +1,6 @@
 """Fake IMAP and SMTP servers that speak the real protocols, so tests use the real clients."""
 
+import base64
 import json
 import os
 import re
@@ -441,6 +442,11 @@ def serve_with_control(control_port: int, imap_port: int, smtp_port: int) -> Non
     class Control(BaseHTTPRequestHandler):
         def do_POST(self) -> None:
             body = json.loads(self.rfile.read(int(self.headers["content-length"])) or b"{}")
+            # Files come as [name, type, base64], since JSON can't carry bytes.
+            if body.get("attachments"):
+                body["attachments"] = [
+                    (name, kind, base64.b64decode(data)) for name, kind, data in body["attachments"]
+                ]
             fake.state.deliver(make_mail(**body))
             self.send_response(200)
             self.end_headers()

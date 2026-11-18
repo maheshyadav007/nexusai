@@ -3,17 +3,23 @@
 import { useEffect, useRef, useState } from "react";
 import type { GenerationPhase } from "@/ui/client/generation";
 import { ApiRequestError } from "@/ui/client/api";
-import type { Draft, Recipient } from "@/ui/client/contracts.generated";
+import type { Draft, DraftAttachment, Recipient } from "@/ui/client/contracts.generated";
 import { query } from "@/ui/client/api";
-import { useRemoveDraft, useSaveDraft, useSendMail } from "@/ui/client/mail";
+import { useAttachFile, useRemoveDraft, useSaveDraft, useSendMail } from "@/ui/client/mail";
+import { useProfile } from "@/ui/client/onboarding";
 import type { SendProblem } from "@/ui/client/contracts.generated";
+import { sizeOf } from "@/ui/features/documents/sizes";
+import { Icon } from "@/ui/icons";
 import { Button } from "@/ui/primitives/Button";
+import { IconButton } from "@/ui/primitives/IconButton";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Field } from "@/ui/primitives/Field";
 import { GenerationSurface } from "@/ui/primitives/GenerationSurface";
 import { Input, Textarea } from "@/ui/primitives/Input";
+import { BareInput } from "@/ui/primitives/Pressable";
 import { useToast } from "@/ui/primitives/Toast";
 import { t } from "@/ui/strings";
+import { RecipientField } from "./RecipientField";
 
 const ADDRESS = /^[^@\s<>]+@[^@\s<>]+$/;
 
@@ -22,6 +28,18 @@ const format = (people: readonly Recipient[] | undefined) => (people ?? []).map(
 function parse(text: string): { people: Recipient[]; bad: string[] } {
   const parts = text.split(/[,;\s]+/).filter(Boolean);
   return { people: parts.filter((part) => ADDRESS.test(part)).map((address) => ({ address })), bad: parts.filter((part) => !ADDRESS.test(part)) };
+}
+
+// The usual line above a signature, so mail programs can tell it from the message.
+const SIGNATURE_LINE = "-- ";
+const FORWARDED = "\n\n---------- Forwarded message";
+
+/** Their signature under what they write, once. In a forward it sits above the forwarded mail. */
+export function signed(body: string, signature: string): string {
+  if (!signature || body.includes(signature)) return body;
+  const block = `${SIGNATURE_LINE}\n${signature}`;
+  if (body.startsWith(FORWARDED)) return `\n\n${block}${body}`;
+  return body.trim() ? `${body.trimEnd()}\n\n${block}` : `\n\n${block}`;
 }
 
 const messageOf = (error: unknown) => (error instanceof ApiRequestError ? error.detail.message : t("settings.models.error"));
@@ -33,14 +51,28 @@ export function Composer({ initial, dropped = [], onDone, generation, generated,
   const [bcc, setBcc] = useState(format(initial.bcc));
   const [subject, setSubject] = useState(initial.subject ?? "");
   const [body, setBody] = useState(initial.body ?? "");
+  const [files, setFiles] = useState<DraftAttachment[]>(initial.attachments ?? []);
+  const attach = useAttachFile();
+  const picker = useRef<HTMLInputElement>(null);
+  const profile = useProfile();
+  const signature = profile.data?.signature?.trim() ?? "";
+  const signedOnce = useRef(false);
+  // A new mail, reply or forward starts with the signature. A saved draft already has its own.
+  useEffect(() => {
+    if (signedOnce.current || initial.id || !profile.data) return;
+    signedOnce.current = true;
+    setBody((current) => signed(current, signature));
+  }, [initial.id, profile.data, signature]);
   const save = useSaveDraft();
   const send = useSendMail();
   const remove = useRemoveDraft();
   const [id, setId] = useState(initial.id ?? null);
   useEffect(() => {
     if (!generated) return;
-    setBody(generated.body);
+    setBody(signed(generated.body, signature));
     if (generated.id !== null) setId(generated.id);
+    // The signature is read when the reply arrives, not again each time it changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generated]);
   const generating = generation !== undefined;
   const [problems, setProblems] = useState<SendProblem[]>([]);
@@ -51,7 +83,18 @@ export function Composer({ initial, dropped = [], onDone, generation, generated,
   const parsed = { to: parse(to), cc: parse(cc), bcc: parse(bcc) };
   const bad = [...parsed.to.bad, ...parsed.cc.bad, ...parsed.bcc.bad];
   const noRecipients = parsed.to.people.length + parsed.cc.people.length + parsed.bcc.people.length === 0;
-  const draft = (): Draft => ({ ...initial, id, to: parsed.to.people, cc: parsed.cc.people, bcc: parsed.bcc.people, subject, body });
+  const draft = (): Draft => ({ ...initial, id, to: parsed.to.people, cc: parsed.cc.people, bcc: parsed.bcc.people, subject, body, attachments: files });
+  const addFiles = async (picked: FileList | null) => {
+    for (const file of Array.from(picked ?? [])) {
+      try {
+        const added = await attach.mutateAsync(file);
+        setFiles((current) => [...current, added]);
+      } catch (error) {
+        toast({ title: t("mail.attachFailed", { name: file.name }), description: messageOf(error), tone: "danger" });
+      }
+    }
+    if (picker.current) picker.current.value = "";
+  };
 
   const deliver = () =>
     send.mutate(draft(), {
@@ -106,14 +149,26 @@ export function Composer({ initial, dropped = [], onDone, generation, generated,
     >
       {dropped.length > 0 ? <p className="text-md text-status-warning">{t("mail.dropped", { people: dropped.join(", ") })}</p> : null}
       <Field label={t("mail.to")} {...(bad.length ? { error: t("mail.badAddress", { address: bad[0] ?? "" }) } : {})}>
-        {({ invalid, ...control }) => <Input invalid={invalid} spellCheck={false} value={to} onChange={(event) => setTo(event.target.value)} {...control} />}
+        {({ invalid, ...control }) => <RecipientField invalid={invalid} value={to} onChange={setTo} {...control} />}
       </Field>
       <div className="grid gap-3 md:grid-cols-2">
-        <Field label={t("mail.cc")}>{({ invalid, ...control }) => <Input invalid={invalid} spellCheck={false} value={cc} onChange={(event) => setCc(event.target.value)} {...control} />}</Field>
-        <Field label={t("mail.bcc")}>{({ invalid, ...control }) => <Input invalid={invalid} spellCheck={false} value={bcc} onChange={(event) => setBcc(event.target.value)} {...control} />}</Field>
+        <Field label={t("mail.cc")}>{({ invalid, ...control }) => <RecipientField invalid={invalid} value={cc} onChange={setCc} {...control} />}</Field>
+        <Field label={t("mail.bcc")}>{({ invalid, ...control }) => <RecipientField invalid={invalid} value={bcc} onChange={setBcc} {...control} />}</Field>
       </div>
       <Field label={t("mail.subject")}>{({ invalid, ...control }) => <Input invalid={invalid} value={subject} onChange={(event) => setSubject(event.target.value)} {...control} />}</Field>
       {generating ? <div className="flex flex-col gap-2"><p className="text-md text-ink-primary">{t("mail.body")}</p><GenerationSurface phase={generation} label={t("generation.reply")} placeholder /></div> : <Field label={t("mail.body")}>{({ invalid, ...control }) => <Textarea invalid={invalid} rows={8} value={body} onChange={(event) => setBody(event.target.value)} {...control} />}</Field>}
+      {files.length ? (
+        <ul aria-label={t("mail.attachments")} className="flex flex-wrap gap-2">
+          {files.map((file, index) => (
+            <li key={`${file.upload ?? file.key ?? file.name}-${index}`} data-testid="draft-attachment" className="flex min-w-0 items-center gap-2 rounded-md border border-line-subtle py-px pl-3 pr-1 text-sm text-ink-secondary">
+              <Icon name="attachment" className="h-3 w-3 shrink-0" />
+              <span className="min-w-0 truncate text-ink-primary">{file.name}</span>
+              {file.size ? <span className="shrink-0 tabular-nums text-ink-muted">{sizeOf(file.size)}</span> : null}
+              <IconButton icon="close" label={t("mail.attachment.remove", { name: file.name })} className="p-1" onClick={() => setFiles((current) => current.filter((_, at) => at !== index))} />
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {problems.length ? (
         <div role="alert" data-testid="send-checks" className="flex flex-col items-start gap-2 rounded-md border border-status-warning p-3">
           {problems.map((problem) => <p key={problem.check} className="text-md text-ink-primary">{problem.message}</p>)}
@@ -131,6 +186,11 @@ export function Composer({ initial, dropped = [], onDone, generation, generated,
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" variant="primary" loading={send.isPending} disabled={generating || generationFailed || noRecipients || bad.length > 0 || countdown !== null}>
           {t("mail.send")}
+        </Button>
+        <BareInput ref={picker} data-testid="mail-attach-input" type="file" multiple aria-label={t("mail.attach")} className="sr-only" onChange={(event) => void addFiles(event.target.files)} />
+        <Button loading={attach.isPending} disabled={generating} onClick={() => picker.current?.click()}>
+          <Icon name="attachment" className="h-4 w-4" />
+          {t("mail.attach")}
         </Button>
         <Button
           loading={save.isPending}

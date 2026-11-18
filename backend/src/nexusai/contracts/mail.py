@@ -525,6 +525,19 @@ class Recipient(BaseModel):
     address: str = Field(max_length=320, pattern=r"^[^@\s<>]+@[^@\s<>]+$")
 
 
+class DraftAttachment(BaseModel):
+    """A file going out with a draft: one added in the composer, or one already in NexusAI."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(max_length=500)
+    size: int = Field(default=0, ge=0)
+    # A file added in the composer, kept until the draft is sent or thrown away.
+    upload: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+    # Or a document, or an email's attachment such as m:123:2, read when the mail goes.
+    key: str | None = Field(default=None, max_length=300)
+
+
 class Draft(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -537,6 +550,7 @@ class Draft(BaseModel):
     subject: str = Field(default="", max_length=1000)
     body: str = Field(default="", max_length=2_000_000)
     source: Literal["user", "agent"] = "user"
+    attachments: list[DraftAttachment] = Field(default_factory=list, max_length=50)
 
 
 class SendDraft(BaseModel):
@@ -566,6 +580,22 @@ class ReplyContext(BaseModel):
 
     message_id: int
     reply_all: bool = True
+
+
+class ForwardContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    message_id: int
+
+
+class SuggestRecipients(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(max_length=200)
+
+
+class RecipientSuggestions(BaseModel):
+    people: list[Recipient]
 
 
 class ReplyDraft(BaseModel):

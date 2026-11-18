@@ -435,6 +435,7 @@ def test_every_powerful_tool_has_a_row_in_settings(client: TestClient) -> None:
         "propose_task",
         "propose_reminder",
         "draft_reply",
+        "draft_forward",
     }
     assert built - catalog == talking
     # It isn't offered until its model has been downloaded.

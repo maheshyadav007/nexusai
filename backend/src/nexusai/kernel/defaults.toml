@@ -59,6 +59,9 @@ reconnect_min_seconds = 2
 reconnect_max_seconds = 300
 signature_max_bytes = 30000
 signature_repeat_count = 3
+# Files on one outgoing email, before encoding. Encoding adds about a third, and Gmail's limit
+# for the whole message is 25 MB, so this stays under it.
+most_attached_bytes = 18874368
 
 # Known servers, matched on the part of the username after the @. Add the company's server here,
 # so people there only need a username and password. A preset with domain = "*" applies to a
