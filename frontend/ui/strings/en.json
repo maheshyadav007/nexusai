@@ -866,6 +866,8 @@
   "usage.cap.hint": "0 means no limit.",
   "notifications.allowed": "Browser notifications are on",
   "notifications.blocked": "Your browser blocked notifications",
+  "notifications.tokenAlerts": "Token usage alerts",
+  "notifications.tokenAlerts.description": "When an agent uses far more than usual, or reaches its daily limit. They're always on the agent map.",
   "quiet.description": "During quiet hours, only urgent items notify you.",
   "quiet.enabled": "Quiet hours",
   "quiet.start": "From",

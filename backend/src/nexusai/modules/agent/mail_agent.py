@@ -108,7 +108,8 @@ def enabled(ctx: Context) -> bool:
 
 def mode(ctx: Context) -> MailMode:
     rows = ctx.bus.db.fetch_all("SELECT value FROM agent_defaults WHERE key = 'mail_mode'")
-    return "both" if not rows else rows[0]["value"]
+    # Judging each email is the default. An hourly digest is only wanted by those who choose it.
+    return "each" if not rows else rows[0]["value"]
 
 
 def enqueue(

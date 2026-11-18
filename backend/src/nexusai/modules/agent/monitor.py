@@ -23,6 +23,8 @@ CREATE INDEX monitor_alerts_time ON monitor_alerts (seen, id);
 """,
 )
 # Where each kind of alert takes the person.
+# About usage, not something to act on now, so they only notify when the person asks for them.
+TOKEN_ALERTS = frozenset({"spike", "cap"})
 LINKS = {
     "spike": "/agent/channel?tab=team",
     "silence": "/agent/channel?tab=tasks",
@@ -43,6 +45,7 @@ def raise_alert(
     task: int | None = None,
 ) -> bool:
     """Saves the alert and tells the person, once per key. False when it was already raised."""
+    tell = kind not in TOKEN_ALERTS or channel.load_quiet(ctx.bus.db).token_alerts
     with ctx.bus.unit_of_work() as work:
         cursor = work.tx.execute(
             "INSERT OR IGNORE INTO monitor_alerts (kind, agent, task, detail, key, time)"
@@ -51,7 +54,8 @@ def raise_alert(
         )
         if not cursor.rowcount:
             return False
-        channel.notify(ctx, work, detail, "", LINKS.get(kind, "/agent/channel"), "agent", False)
+        if tell:
+            channel.notify(ctx, work, detail, "", LINKS.get(kind, "/agent/channel"), "agent", False)
         work.emit("monitor.alerted", {"kind": kind}, source="agent", trace_id=ctx.trace_id)
     return True
 

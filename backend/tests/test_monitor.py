@@ -45,7 +45,7 @@ def spend(agent_id: str, tokens: int, when: datetime, session: str = "s") -> Non
         )
 
 
-def test_a_spike_raises_one_alert_and_tells_the_person(client: TestClient) -> None:
+def test_a_spike_raises_one_alert_and_only_notifies_when_asked(client: TestClient) -> None:
     now = datetime.now(UTC)
     spend("mail", 1000, now - timedelta(days=2))
     spend("mail", 80_000, now)
@@ -55,8 +55,16 @@ def test_a_spike_raises_one_alert_and_tells_the_person(client: TestClient) -> No
     alerts = query(client, "agents.map")["alerts"]
     spikes = [a for a in alerts if a["kind"] == "spike"]
     assert len(spikes) == 1 and "80,000 tokens" in spikes[0]["detail"]
+    # Usage alerts stay on the map, out of the notifications, unless the person turns them on.
+    items = query(client, "notifications.list")["items"]
+    assert not any("80,000" in n["title"] for n in items)
+    quiet = query(client, "quietHours.get")
+    client.post("/api/commands/quietHours.save", json={**quiet, "token_alerts": True})
+    spend("organizer", 1000, now - timedelta(days=2))
+    spend("organizer", 90_000, now)
+    monitor.check(ctx, agent.current())
     wait(
-        lambda: any("80,000" in n["title"] for n in query(client, "notifications.list")["items"]),
+        lambda: any("90,000" in n["title"] for n in query(client, "notifications.list")["items"]),
         "the person told",
     )
 

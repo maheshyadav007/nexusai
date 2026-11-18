@@ -309,6 +309,9 @@ export function NotificationSettings() {
       <SettingRow label={t("quiet.limit")}>
         <Input className="py-1" aria-label={t("quiet.limit")} type="number" min={0} value={value.channel_daily_limit ?? 20} onChange={(event) => update({ channel_daily_limit: Number(event.target.value) })} />
       </SettingRow>
+      <SettingRow label={t("notifications.tokenAlerts")} description={t("notifications.tokenAlerts.description")}>
+        <div className="flex justify-end"><Switch label={t("notifications.tokenAlerts")} hideLabel checked={value.token_alerts ?? false} onChange={(token_alerts) => update({ token_alerts })} /></div>
+      </SettingRow>
       <SoundSettings />
       <SettingRow label={t("notifications.browser")} description={t("notifications.browser.description")}>
         <div className="flex justify-end"><Button onClick={allow}>{t("notifications.test")}</Button></div>
