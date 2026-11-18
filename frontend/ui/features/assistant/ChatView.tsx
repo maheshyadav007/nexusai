@@ -486,7 +486,7 @@ export function ChatView({ id, initial, active, footer }: { id: string; initial:
             trailing={!managed ? <ModelPicker value={session.data?.session.model ?? null} onChange={(model) => setModel.mutate({ id, model })} /> : null}
             notice={managed && !asking ? <div data-testid="managed-chat-notice" className="flex items-start justify-between gap-3 px-1">
             <p className="text-sm text-ink-muted">{t(acknowledged ? "chat.managed.unlocked" : "chat.managed.warning")}</p>
-            <Button variant="quiet" className="shrink-0 py-px" onClick={() => { setAcknowledged(!acknowledged); if (!acknowledged) requestAnimationFrame(() => editor.current?.focus()); }}>{t(acknowledged ? "chat.managed.lock" : "chat.managed.proceed")}</Button>
+            <Button variant="quiet" className="shrink-0 py-px" disabled={!acknowledged} onClick={() => { setAcknowledged(!acknowledged); if (!acknowledged) requestAnimationFrame(() => editor.current?.focus()); }}>{t(acknowledged ? "chat.managed.lock" : "chat.managed.proceed")}</Button>
           </div> : null}
           />
 

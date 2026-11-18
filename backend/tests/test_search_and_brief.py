@@ -272,7 +272,7 @@ def test_only_the_brief_agent_can_update_the_brief(client: TestClient) -> None: 
     assert allowed is not None and "team_close" in allowed and "ask_user" not in allowed
 
 
-def test_a_brief_cites_the_plate_and_is_sent_back_once_when_it_doesnt(
+def test_a_brief_without_markers_is_saved_with_a_note_naming_them(
     client: TestClient,  # noqa: F811
     script: Script,  # noqa: F811
     fake: FakeMail,  # noqa: F811
@@ -300,8 +300,11 @@ def test_a_brief_cites_the_plate_and_is_sent_back_once_when_it_doesnt(
     current().dispatch(TurnRequest(session_id, "Brief me", "schedule"))
     wait(lambda: post(client, "today.view").json()["prep_text"], "brief")
     wait(lambda: status(client, session_id) == "done", "brief run finished")
-    refused = script.requests[-2].messages[-1].text
-    assert refused.startswith("Not saved") and f"[mail:{thread}]" in refused
+    noted = script.requests[-2].messages[-1].text
+    assert noted.startswith("Saved") and f"[mail:{thread}]" in noted
+    assert "this brief cites nothing" in noted
+    # The fixed brief cites, so no note comes back.
+    assert "Note:" not in script.requests[-1].messages[-1].text
     today = post(client, "today.view").json()
     assert "[1](#cite-1)" in today["prep_text"] and "987654" not in today["prep_text"]
     assert [(s["n"], s["title"]) for s in today["prep_sources"]] == [

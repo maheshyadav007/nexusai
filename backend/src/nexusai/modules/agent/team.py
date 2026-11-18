@@ -757,6 +757,14 @@ def contract_text(db: Database, row: Any) -> str:
     return untrusted(text) if row["untrusted"] else text
 
 
+# Evidence often names an email as mail:123. Written as a marker, the assigner can cite it too.
+BARE_MARKER = re.compile(r"(?<!\[)\b(mail|doc):([^\s,\]]{1,200})")
+
+
+def _as_markers(evidence: list[str]) -> list[str]:
+    return [BARE_MARKER.sub(r"[\1:\2]", item) for item in evidence]
+
+
 def report_text(db: Database, row: Any) -> str:
     """What the assigner is told when it wakes for this task."""
     owner = cards.name(db, row["owner"])
@@ -771,7 +779,7 @@ def report_text(db: Database, row: Any) -> str:
             f"Objective: {row['objective']}",
             f"Done when: {row['done_criteria']}",
             f"Outcome: {row['outcome'] or 'none yet'}",
-            f"Evidence: {', '.join(json.loads(row['evidence'])) or 'none'}",
+            f"Evidence: {', '.join(_as_markers(json.loads(row['evidence']))) or 'none'}",
             _done_before_stopping(db, row) if row["state"] in {"blocked", "failed"} else "",
             _thread(db, row["id"]),
         ]

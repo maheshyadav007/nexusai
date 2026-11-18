@@ -3,7 +3,7 @@
 import { newId } from "@/ui/client/browser";
 import { useEffect, useState } from "react";
 import { Preferences } from "./Preferences";
-import { AgentKnows, AgentSees } from "./AgentKnows";
+import { AgentKnows, AgentSees, layerTitle } from "./AgentKnows";
 import type { MemoryFile, PromptFile } from "@/ui/client/contracts.generated";
 import { useDecideMemory, useMemory, usePrompts, useRemoveMemory, useSaveMemory, useSavePrompt, usePromptHistory, useRestorePrompt } from "@/ui/client/work";
 import { Button } from "@/ui/primitives/Button";
@@ -19,6 +19,28 @@ import { Skeleton } from "@/ui/primitives/Skeleton";
 import { Tabs } from "@/ui/primitives/Tabs";
 import { useToast } from "@/ui/primitives/Toast";
 import { t } from "@/ui/strings";
+
+/** Everything the agent is sent, in order, as a run builds it. Only your part below is edited. */
+function PromptParts({ prompt }: { prompt: PromptFile }) {
+  return (
+    <section className="flex flex-col gap-2">
+      <h3 className="text-md font-medium text-ink-primary">{t("prompts.full")}</h3>
+      <p className="text-sm text-ink-muted">{t("prompts.full.description")}</p>
+      <ol aria-label={t("prompts.full.label", { title: prompt.title })} className="flex flex-col gap-2">
+        {(prompt.layers ?? []).map((layer, index) => {
+          const title = layerTitle(layer.name, prompt.title);
+          return (
+            <li key={layer.name}>
+              <ExpandRow label={t("prompts.open", { title })} testid="prompt-part" title={`${index + 1}. ${title}`} meta={t("knows.layer.size", { count: layer.text.length })}>
+                <TextView title={title} text={layer.text} />
+              </ExpandRow>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
 
 function PromptEditor({ prompt, startsOpen }: { prompt: PromptFile; startsOpen: boolean }) {
   const toast = useToast();
@@ -42,12 +64,13 @@ function PromptEditor({ prompt, startsOpen }: { prompt: PromptFile; startsOpen: 
           {history.data?.versions.map(version => <div key={version.id} className="my-3 border-t border-line-subtle pt-3"><TextView title={version.time} text={version.content} /><Button loading={restore.isPending} onClick={() => restore.mutate({kind:prompt.kind,name:prompt.name,version:version.id})}>{t("prompts.restore")}</Button></div>)}
           {history.isError || restore.isError ? <ErrorState title={t("prompts.error")} /> : null}
         </details>
-        {prompt.base ? (
+        {prompt.layers?.length ? <PromptParts prompt={prompt} /> : prompt.base ? (
           <details className="text-sm text-ink-secondary">
             <summary className="focus-ring cursor-pointer rounded-sm">{t("prompts.base")}</summary>
             <div className="mt-2"><TextView title={t("prompts.base")} text={prompt.base} /></div>
           </details>
         ) : null}
+        {prompt.kind === "agent" ? <p className="text-sm text-ink-muted">{t("prompts.yours.description")}</p> : null}
         <TextEditor label={prompt.title} rows={10} value={content} onChange={setContent} />
         <div><Button type="submit" loading={save.isPending} disabled={content === prompt.content}>{t("settings.save")}</Button></div>
       </form>
@@ -60,9 +83,21 @@ export function PromptsEditor({ only }: { only?: readonly string[] }) {
   if (prompts.isPending) return <Skeleton className="h-6 w-full" />;
   if (prompts.isError) return <ErrorState title={t("prompts.error")} onRetry={() => void prompts.refetch()} />;
   const shown = prompts.data.prompts.filter((prompt) => !only || only.includes(prompt.name));
+  const row = (prompt: PromptFile) => <PromptEditor key={`${prompt.kind}-${prompt.name}`} prompt={prompt} startsOpen={Boolean(only)} />;
+  if (only) return <div className="flex flex-col gap-2">{shown.map(row)}</div>;
+  const groups = [
+    { key: "agents", title: t("prompts.group.agents"), rows: shown.filter((prompt) => prompt.group === "agents") },
+    { key: "schedules", title: t("prompts.group.schedules"), rows: shown.filter((prompt) => prompt.group === "schedules") },
+    { key: "personal", title: t("prompts.group.personal"), rows: shown.filter((prompt) => prompt.kind === "personal") },
+  ];
   return (
-    <div className="flex flex-col gap-2">
-      {shown.map((prompt) => <PromptEditor key={`${prompt.kind}-${prompt.name}`} prompt={prompt} startsOpen={Boolean(only)} />)}
+    <div className="flex flex-col gap-6">
+      {groups.filter((group) => group.rows.length).map((group) => (
+        <section key={group.key} aria-label={group.title} className="flex flex-col gap-2">
+          <h2 className="text-lg font-medium text-ink-primary">{group.title}</h2>
+          {group.rows.map(row)}
+        </section>
+      ))}
     </div>
   );
 }

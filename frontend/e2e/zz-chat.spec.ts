@@ -349,11 +349,9 @@ test("new mail appears live in the Mail agent's chat, as a message and a judgeme
   await expect(message.getByTestId("message-origin")).toContainText("From new mail");
   await expect(page.getByTestId("triage-card").last()).toBeVisible();
   await noViolations(page);
-  await page.getByRole("button", { name: "Still proceed" }).click();
-  await page.getByRole("textbox", { name: "Message the agent" }).fill("Hello mail agent");
-  await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByTestId("user-message").last()).toContainText("Hello mail agent");
-  await expect(page.getByTestId("agent-message").last()).toContainText("Hello from");
+  // It stays locked: writing here by mistake would change the agent's later runs.
+  await expect(page.getByRole("button", { name: "Still proceed" })).toBeDisabled();
+  await expect(page.getByRole("textbox", { name: "Message the agent" })).toBeDisabled();
 });
 
 test("Today leads with the day, and has one line on how the app is doing", async ({ page }) => {

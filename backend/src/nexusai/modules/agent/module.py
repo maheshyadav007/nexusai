@@ -108,6 +108,7 @@ from nexusai.contracts.agent import (
     PreviewPreference,
     PromptFile,
     PromptHistory,
+    PromptLayer,
     PromptList,
     PromptVersion,
     PromptVersions,
@@ -877,9 +878,18 @@ def _personal_files(ctx: Context) -> list[PromptFile]:
 def list_prompts(query: ListPrompts, ctx: Context) -> PromptList:
     agents = []
     folder = ctx.config.home / "prompts" / "agents"
-    for name in AGENT_PROMPTS:
+    for name in (*AGENT_PROMPTS, triggers.CUSTOM_AGENT):
         title = cards.name(ctx.bus.db, name)
         path = folder / f"{name}.md"
+        # The same parts a run would send, with the tools the agent has when you message it.
+        layers = knowledge.layers_for(
+            ctx,
+            name,
+            "",
+            "",
+            tools=tools.allowed_for(name, "person", False),
+            scratch="your scratch folder",
+        )
         agents.append(
             PromptFile(
                 name=name,
@@ -887,6 +897,8 @@ def list_prompts(query: ListPrompts, ctx: Context) -> PromptList:
                 kind="agent",
                 content=path.read_text("utf-8") if path.exists() else "",
                 base=prompts_builder.packaged(f"{name}.md"),
+                layers=[PromptLayer(name=layer.name, text=layer.text) for layer in layers],
+                group="schedules" if name == triggers.CUSTOM_AGENT else "agents",
             )
         )
     return PromptList(prompts=[*_personal_files(ctx), *agents])

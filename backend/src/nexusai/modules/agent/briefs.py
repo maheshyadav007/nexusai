@@ -102,14 +102,7 @@ def save(ctx: Context, session: str, text: str) -> str:
     if not turns:
         return "There's no run to save this brief from."
     turn = turns[0]["id"]
-    if not _refused_in(ctx, session, turn):
-        missing = uncited(ctx, text)
-        if missing:
-            return (
-                "Not saved: these bullets are about mail on the plate but have no marker. Add each "
-                "marker straight after what it supports, then call update_brief again:\n"
-                + "\n".join(missing)
-            )
+    missing = uncited(ctx, text)
     cited = citations.Citations(ctx, turn)
     shown = cited.rewrite(text.strip())
     part = cited.part()
@@ -142,7 +135,15 @@ def save(ctx: Context, session: str, text: str) -> str:
             ),
         )
         work.emit("brief.ready", {"turn": turn}, source="agent", trace_id=ctx.trace_id)
-    return "Saved. It's at the top of their Today page now."
+    saved = "Saved. It's at the top of their Today page now."
+    if not missing:
+        return saved
+    # Saved anyway, so a brief is never lost to a missing marker. One more call fixes it.
+    return (
+        f"{saved}\n\nNote: these bullets are about mail on the plate but have no marker. Add each "
+        "marker straight after what it supports, then call update_brief again with the whole brief:\n"
+        + "\n".join(missing)
+    )
 
 
 def uncited(ctx: Context, text: str) -> list[str]:
@@ -164,17 +165,6 @@ def uncited(ctx: Context, text: str) -> list[str]:
                 )
                 break
     return missing
-
-
-def _refused_in(ctx: Context, session: str, turn: int) -> bool:
-    """Asked once already in this run, so the next try is saved whatever it says."""
-    return bool(
-        ctx.bus.db.fetch_all(
-            "SELECT 1 FROM tool_calls c JOIN agent_turns t ON t.id = ? WHERE c.session = ?"
-            " AND c.tool = 'update_brief' AND c.result LIKE 'Not saved:%' AND c.started >= t.created",
-            (turn, session),
-        )
-    )
 
 
 def saved_in(ctx: Context, turn: int) -> bool:

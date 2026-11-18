@@ -67,6 +67,13 @@ def test_a_marker_for_something_unread_disappears() -> None:
     assert stream(["Made up [mail:999] claim."], {"12"}) == "Made up  claim."
 
 
+def test_two_messages_of_one_thread_side_by_side_get_one_number() -> None:
+    from nexusai.modules.agent.citations import REPEATED
+
+    text = "Apply soon. [3](#cite-3) [3](#cite-3) Then [4](#cite-4)[3](#cite-3)."
+    assert REPEATED.sub(r"\1", text) == "Apply soon. [3](#cite-3) Then [4](#cite-4)[3](#cite-3)."
+
+
 def test_ordinary_brackets_are_left_alone() -> None:
     assert stream(["See [the docs](http://x) and [1] and a[0]."], set()) == (
         "See [the docs](http://x) and [1] and a[0]."
@@ -241,3 +248,14 @@ def test_mail_a_tool_only_listed_can_be_cited_down_to_one_message(
     answer = view(client, session)["messages"][-1]
     sources = next(p for p in answer["parts"] if p["type"] == "data-sources")["data"]["sources"]
     assert [(s["n"], s["title"], s["message"]) for s in sources] == [(1, "Venue booking", 77)]
+
+
+def test_a_team_report_names_its_mail_as_markers_the_lead_can_cite() -> None:
+    from nexusai.modules.agent.team import _as_markers
+
+    assert _as_markers(["mail:15937", "[mail:12]", "task:3", "thread 291 moved"]) == [
+        "[mail:15937]",
+        "[mail:12]",
+        "task:3",
+        "thread 291 moved",
+    ]

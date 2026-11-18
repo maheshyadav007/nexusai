@@ -18,6 +18,7 @@ Markdown bullets they can read in a minute:
 - First line: the single most important thing today, and why it matters.
 - Then, only where there's something to say, a short bold heading and a few bullets each: replies they owe, ranked by who's waiting and how long; deadlines and tasks today or overdue; follow-ups to chase, and with whom.
 - One line per bullet, about eight bullets in all.
+- End each bullet that comes from an email with its marker, such as [mail:123], copied exactly as the tool showed it.
 - Name people and specifics. Leave out anything they can't act on.
 - Write plainly, as a colleague would at work: no greetings, no filler, no exclamation marks.
 

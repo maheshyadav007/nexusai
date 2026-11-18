@@ -109,7 +109,8 @@ export function TeamMap() {
   return (
     <div className="flex flex-col gap-4">
       <p className="text-md text-ink-secondary">{t("map.description")}</p>
-      <Drawing cards={cards} edges={edges} />
+      {/* Schedules show here only while they're part of a task, so the map stays the team. */}
+      <Drawing cards={cards.filter((card) => card.kind !== "yours" || edges.some((edge) => edge.source === card.id || edge.target === card.id))} edges={edges} />
       {cycles.length ? (
         <p role="alert" className="text-md text-status-danger">{t("map.cycle", { agents: cycles.map((loop) => loop.map(who).join(" → ")).join("; ") })}</p>
       ) : null}

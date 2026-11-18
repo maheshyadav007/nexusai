@@ -32,6 +32,7 @@ from nexusai.kernel.database import Database
 from nexusai.modules.agent.guard import DAMAGED_KEY
 from nexusai.modules.agent.model import is_summary
 from nexusai.modules.agent.prompts_builder import packaged
+from nexusai.modules.agent.tool_checks import ToolChecks
 from nexusai.modules.agent.tool_errors import ToolFeedback
 
 log = structlog.get_logger()
@@ -469,6 +470,7 @@ def middleware(
     # Inside the log, so what the agent was told is what's recorded.
     if tool_names is not None:
         chain.append(ToolFeedback(tool_names, owners))
+    chain.append(ToolChecks())
     chain.append(Placeholders())
     if profile.mode == "auto_compact":
         trigger = ("tokens", settings.compact.trigger_tokens)
