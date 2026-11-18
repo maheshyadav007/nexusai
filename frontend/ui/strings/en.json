@@ -1922,7 +1922,7 @@
   "chat.mail.check": "Check before sending",
   "team.yours": "Yours",
   "team.schedules.title": "Schedules",
-  "team.schedules.role": "Agents you set up to run on a schedule or when something happens. Each one is on the Schedules page.",
+  "team.schedules.role": "Agents you set up to run on a schedule or when something happens.",
   "team.schedules.count.one": "{count} schedule",
   "team.schedules.count.other": "{count} schedules",
   "team.schedules.countNext.one": "{count} schedule \u00b7 next run {when}",

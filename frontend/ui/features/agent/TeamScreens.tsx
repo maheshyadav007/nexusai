@@ -144,7 +144,10 @@ function AgentDetail({ card }: { card: AgentCard }) {
   const assistant = useAssistant();
   const mascot = useSetMascot();
   const usage = usageOf(card);
-  const gives = card.may_assign_to.map((id) => name(id)).filter(Boolean);
+  // The person's schedules are one card on the team, so they're one entry here too.
+  const yours = new Set((useAgentCards().data?.cards ?? []).filter((item) => item.kind === "yours").map((item) => item.id));
+  const scheduled = card.may_assign_to.filter((id) => yours.has(id)).length;
+  const gives = [...card.may_assign_to.filter((id) => !yours.has(id)).map((id) => name(id)).filter(Boolean), ...(scheduled ? [tn("team.schedules.count", scheduled)] : [])];
   const talkable = card.accepts.includes("person");
   return (
     <aside aria-label={t("team.detail", { agent: card.name })} data-testid="agent-detail" className="flex flex-col gap-5 rounded-lg border border-line-subtle bg-surface-raised p-5">
