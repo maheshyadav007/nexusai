@@ -411,6 +411,11 @@ class DecideMemoryProposal(BaseModel):
     accept: bool
 
 
+class PromptLayer(BaseModel):
+    name: str
+    text: str
+
+
 class PromptFile(BaseModel):
     name: str
     title: str
@@ -419,6 +424,10 @@ class PromptFile(BaseModel):
     base: str | None = None
     # What it was filled with to begin with, so an edit can be told from an untouched starter.
     starter: str | None = None
+    # An agent's whole prompt as a run sends it, part by part, with real names filled in.
+    layers: list[PromptLayer] = Field(default_factory=list)
+    # Schedules all share one agent's prompt, so they're listed apart from the team.
+    group: Literal["agents", "schedules"] | None = None
 
 
 class ListPrompts(BaseModel):

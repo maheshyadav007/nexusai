@@ -1,9 +1,10 @@
 "use client";
 
+import NextLink from "next/link";
 import { useState } from "react";
 import type { AgentCard, TeamTask } from "@/ui/client/contracts.generated";
-import { useRelativeTime } from "@/ui/client/format";
-import { useAgentCards, useAgentName, useCancelTask, useNoteOnTask, useRenameAgent, useResetAgentName, useRetryTask, useSetMascot, useTeamTask, useTeamTasks } from "@/ui/client/work";
+import { useDateTime, useRelativeTime } from "@/ui/client/format";
+import { useAgentCards, useAgentName, useSchedules, useCancelTask, useNoteOnTask, useRenameAgent, useResetAgentName, useRetryTask, useSetMascot, useTeamTask, useTeamTasks } from "@/ui/client/work";
 import { useAssistant } from "@/ui/features/assistant/AssistantProvider";
 import { Badge } from "@/ui/primitives/Badge";
 import { Button } from "@/ui/primitives/Button";
@@ -20,7 +21,7 @@ import { LiveDot } from "@/ui/primitives/LiveDot";
 import { Pressable } from "@/ui/primitives/Pressable";
 import { TextLink } from "@/ui/primitives/TextLink";
 import { Icon } from "@/ui/icons";
-import { t, type StringKey } from "@/ui/strings";
+import { t, tn, type StringKey } from "@/ui/strings";
 
 const NOW_TONE = { idle: "idle", working: "running", waiting: "waiting", blocked: "failed", off: "idle" } as const;
 const TASK_TONE: Readonly<Record<string, "neutral" | "accent" | "success" | "warning" | "danger">> = {
@@ -192,9 +193,33 @@ function AgentDetail({ card }: { card: AgentCard }) {
   );
 }
 
+/** Every schedule the person made runs as an agent of its own. Here they're one card, so the
+ * team stays the team however many there are. */
+function SchedulesCard({ count }: { count: number }) {
+  const schedules = useSchedules();
+  const format = useDateTime();
+  const next = (schedules.data?.schedules ?? []).flatMap((row) => (row.kind === "prompt" && row.enabled !== false && row.next_run ? [row.next_run] : [])).sort()[0];
+  return (
+    <li data-testid="schedules-card" className="flex flex-col overflow-hidden rounded-lg border border-line-subtle bg-surface-raised transition-colors duration-fast hover:border-line-strong">
+      <NextLink href="/agent/schedules" className="focus-ring flex flex-1 flex-col gap-3 rounded-lg p-4 text-left">
+        <span className="flex items-center gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-surface-sunken text-ink-muted"><Icon name="schedules" className="h-5 w-5" /></span>
+          <span className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className="truncate text-lg font-medium text-ink-primary">{t("team.schedules.title")}</span>
+            <span className="truncate text-sm tabular-nums text-ink-muted">{next ? tn("team.schedules.countNext", count, { when: format(next) }) : tn("team.schedules.count", count)}</span>
+          </span>
+        </span>
+        <span className="line-clamp-2 text-md text-ink-secondary">{t("team.schedules.role")}</span>
+      </NextLink>
+    </li>
+  );
+}
+
 export function TeamCards() {
   const cards = useAgentCards();
-  const rows = cards.data?.cards ?? [];
+  const all = cards.data?.cards ?? [];
+  const rows = all.filter((card) => card.kind !== "yours");
+  const yours = all.length - rows.length;
   const [chosen, setChosen] = useState<string | null>(null);
   if (cards.isPending) return <Skeleton className="h-6 w-full" />;
   if (cards.isError) return <ErrorState title={t("team.error")} onRetry={() => void cards.refetch()} />;
@@ -209,6 +234,7 @@ export function TeamCards() {
       <div className="team-layout">
         <ul aria-label={t("team.title")} className="team-cards grid min-w-0 gap-3">
           {rows.map((card) => <ProfileCard key={card.id} card={card} selected={card.id === selected?.id} onSelect={() => setChosen(card.id)} />)}
+          {yours ? <SchedulesCard count={yours} /> : null}
         </ul>
         {selected ? <AgentDetail card={selected} /> : null}
       </div>

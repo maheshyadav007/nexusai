@@ -508,6 +508,14 @@ def test_prompts_join_every_run_and_outside_edits_are_picked_up(
     listed = {p["name"]: p for p in client.post("/api/queries/prompts.list").json()["prompts"]}
     assert listed["about-me"]["content"] == "I lead audit now."
     assert listed["mail"]["base"]
+    # Each agent shows the whole prompt a run sends, part by part, with names filled in.
+    parts = {layer["name"]: layer["text"] for layer in listed["session"]["layers"]}
+    assert list(parts)[:3] == ["System prompt", "Who you are", "Agent prompt"]
+    assert "their chief of staff" in parts["System prompt"]
+    assert "{{" not in parts["System prompt"]
+    mail = {layer["name"]: layer["text"] for layer in listed["mail"]["layers"]}
+    assert "chief of staff for email" not in mail["Agent prompt"]
+    assert listed["scheduled"]["group"] == "schedules" and listed["mail"]["group"] == "agents"
 
 
 def test_starter_priorities_fill_in_but_never_overwrite(client: TestClient, config: Config) -> None:

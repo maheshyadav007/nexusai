@@ -696,7 +696,7 @@ class _TeamClose(BaseModel):
     evidence: list[str] = Field(
         default_factory=list,
         max_length=20,
-        description="Ids that prove it, such as 'thread 291 moved to PLM'.",
+        description="Ids that prove it, such as [mail:291] for an email, or 'thread 291 moved to PLM'.",
     )
     tool_call_id: Annotated[str, InjectedToolCallId]
 

@@ -43,7 +43,7 @@ const LAYER_LABEL: Record<string, StringKey> = {
   Memory: "knows.layer.memory",
 };
 
-function layerTitle(name: string, agent: string): string {
+export function layerTitle(name: string, agent: string): string {
   const key = LAYER_LABEL[name];
   return key ? t(key, { agent }) : name;
 }

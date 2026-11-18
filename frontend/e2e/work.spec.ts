@@ -225,7 +225,7 @@ test("what the agent knows, and is told, can be seen and it asks before moving m
   const layers = page.getByRole("list", { name: "Everything it's told, in order" });
   await expect(layers.getByTestId("knowledge-layer").first()).toContainText("System prompt");
   await layers.getByRole("button", { name: "Open Mail agent's instructions" }).click();
-  await expect(layers.getByText("chief of staff")).toBeVisible();
+  await expect(layers.getByText("You look after the person's email")).toBeVisible();
   await noViolations(page);
   await page.getByRole("switch", { name: "Your brief" }).click();
   await expect(page.getByRole("switch", { name: "Your brief" })).not.toBeChecked();

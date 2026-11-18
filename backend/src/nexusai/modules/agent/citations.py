@@ -21,6 +21,7 @@ MESSAGE = re.compile(r"^m(\d+)$")
 MARKER = re.compile(r"\[(mail|doc):([^\]\s#]{1,200})(?:#([^\]\s]{1,40}))?\]")
 # The start of a marker that may finish in the next chunk of a stream.
 PARTIAL = re.compile(r"\[(?:m|ma|mai|mail|d|do|doc|(?:mail|doc):[^\]\s]{0,240})?$")
+REPEATED = re.compile(r"(\[(\d+)\]\(#cite-\2\))(?:\s*\[\2\]\(#cite-\2\))+")
 __all__ = ["DOCUMENT", "MAIL", "Citations", "note"]
 
 
@@ -111,7 +112,8 @@ class Citations:
         return f"[{number}](#cite-{number})"
 
     def rewrite(self, text: str) -> str:
-        return MARKER.sub(self._replace, text)
+        # Two messages of one thread cited side by side are one source, so one number.
+        return REPEATED.sub(r"\1", MARKER.sub(self._replace, text))
 
     def part(self) -> list[dict[str, Any]]:
         """Everything this turn drew on, cited first, as one part for the message."""
