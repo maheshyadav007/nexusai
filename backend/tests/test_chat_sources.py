@@ -182,9 +182,10 @@ LONG = (
 )
 
 
-def test_a_reply_drawn_from_mail_that_cites_nothing_goes_back_once(
+def test_a_reply_drawn_from_mail_that_cites_nothing_is_shown_as_written(
     client: TestClient, script: Script, fake: FakeMail
 ) -> None:
+    """Citing is the prompt's job. Nothing sends the reply back, so it's one answer, once."""
     connect(client, fake)
     fake.state.deliver(make_mail(subject="Budget numbers"))
     thread = triaged(client, "Budget numbers")["id"]
@@ -192,31 +193,16 @@ def test_a_reply_drawn_from_mail_that_cites_nothing_goes_back_once(
     script.replies = [
         [ToolCall("r1", "read_thread", {"thread_ids": [thread]})],
         [TextChunk(LONG)],
-        [TextChunk(f"{LONG} [mail:{thread}]")],
+        [TextChunk("Never asked for.")],
     ]
     session = new_session(client)
+    before = len(script.requests)
     chat(client, session, "What about the budget?")
     wait(lambda: status(client, session) == "done", "the answer")
     answer = view(client, session)["messages"][-1]
     words = "".join(p["text"] for p in answer["parts"] if p["type"] == "text")
-    assert "[1](#cite-1)" in words
-    told = script.requests[-1].messages[-1].text
-    assert "cited none" in told
-
-    # Once a run: in the next run, a reply that still cites nothing after being asked stands.
-    script.replies = [
-        [ToolCall("r2", "read_thread", {"thread_ids": [thread]})],
-        [TextChunk(LONG)],
-        [TextChunk(LONG + " Still uncited.")],
-        [TextChunk("Never asked for.")],
-    ]
-    chat(client, session, "And again?")
-    wait(lambda: status(client, session) == "done", "the second answer")
-    second = view(client, session)["messages"][-1]
-    words = "".join(p["text"] for p in second["parts"] if p["type"] == "text")
-    assert words.endswith("Still uncited.")
-    nudges = [r for r in script.requests if "cited none" in r.messages[-1].text]
-    assert len(nudges) == 2
+    assert words == LONG
+    assert len(script.requests) - before == 2
 
 
 def test_a_short_reply_or_one_from_no_mail_isnt_sent_back(

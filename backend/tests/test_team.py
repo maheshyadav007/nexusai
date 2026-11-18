@@ -395,8 +395,8 @@ def test_assign_report_verify_runs_end_to_end(client: TestClient, script: TeamSc
 def test_a_report_citing_mail_never_sends_the_lead_back_to_do_the_work_again(
     client: TestClient, script: TeamScript
 ) -> None:
-    """A report's evidence names mail, so the lead's summary is asked for its markers. That ask
-    once read as "reply again", and a small model redid the work and handed it over again."""
+    """A report's evidence names mail. The lead's summary once got sent back for its markers,
+    and a small model read that as doing the work again and handed it over again."""
     session = post(client, "session.create")["id"]
     summary = "The brief is updated with the security items first, then the overdue ones. " * 3
     script.say(
@@ -405,7 +405,7 @@ def test_a_report_citing_mail_never_sends_the_lead_back_to_do_the_work_again(
         [TextChunk("Asked the mail agent.")],
         [ToolCall("v", "team_close", {"task": 1, "action": "verify", "outcome": "Checked"})],
         [TextChunk(summary)],
-        [TextChunk("Updated, with the security items first [mail:1].")],
+        [ToolCall("again", "team_assign", ASSIGN)],
     )
     script.say(
         mail(),
@@ -420,7 +420,6 @@ def test_a_report_citing_mail_never_sends_the_lead_back_to_do_the_work_again(
     )
     chat(client, session, "Update my brief")
     wait(lambda: task_row(1)["state"] == "verified" or None, "verified", 20)
-    wait(lambda: any("[mail:1]" in t for t in script.told(lead())) or None, "the report", 20)
     db = agent.current().db
     wait(
         lambda: (
@@ -432,14 +431,8 @@ def test_a_report_citing_mail_never_sends_the_lead_back_to_do_the_work_again(
         "the lead's run to end",
         20,
     )
-    asked = [
-        request
-        for speaker, request in script.requests
-        if speaker == lead() and "cited none" in request.messages[-1].text
-    ]
-    # Asked once to add the markers, and given no tools, so it can only rewrite its reply.
-    assert len(asked) == 1 and asked[0].tools == []
-    assert "Don't" in asked[0].messages[-1].text
+    assert any("[mail:1]" in t for t in script.told(lead()))
+    assert len([1 for speaker, _ in script.requests if speaker == lead()]) == 4
     assert len(db.fetch_all("SELECT * FROM team_tasks")) == 1
 
 

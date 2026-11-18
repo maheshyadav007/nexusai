@@ -45,10 +45,9 @@ KEEP_RESULTS_OF = ("record_triage", "find_tools")
 # An id rather than a name, because a name would be sent on to the model.
 TASK_NOTE = "task-note-"
 MEMORY_NUDGE = "memory-nudge-"
+# Older chats still hold a citation nudge, which the app no longer sends.
 CITE_NUDGE = "cite-nudge-"
 # Longer than a sentence or two. "Done, it's filed." needs no citation.
-CITED_FROM = 160
-CITED = re.compile(r"\[(?:mail|doc):[^\]\s]")
 SAVES_MEMORY = frozenset({"remember", "propose_preference", "save_personal_prompt"})
 # A reply that says something was kept: "Noted", "I'll remember", "I'll keep that in mind".
 PROMISED = re.compile(
@@ -351,51 +350,6 @@ class PromisedMemory(AgentMiddleware):
         return {"messages": [nudge], "jump_to": "model"}
 
 
-class UncitedReply(AgentMiddleware):
-    """A reply drawn from mail or documents that cites none goes back once to add the markers.
-
-    Small models often leave them out, and then the person can't check where anything came from."""
-
-    def __init__(self, used_sources: Callable[[], bool]) -> None:
-        super().__init__()
-        self.used_sources = used_sources
-
-    @hook_config(can_jump_to=["model"])
-    def after_model(self, state: Any, runtime: Any) -> dict[str, Any] | None:
-        messages = state["messages"]
-        last = messages[-1] if messages else None
-        if not isinstance(last, AIMessage) or last.tool_calls:
-            return None
-        text = _text(last)
-        if len(text) < CITED_FROM or CITED.search(text):
-            return None
-        for message in reversed(messages[:-1]):
-            if isinstance(message, HumanMessage) and str(message.id or "").startswith(CITE_NUDGE):
-                return None
-            if _starts_run(message):
-                break
-        if not self.used_sources():
-            return None
-        nudge = HumanMessage(
-            content=(
-                "You used mail or documents but cited none. Write your last reply out again, "
-                "word for word, with their markers, such as [mail:123], straight after the "
-                "statements they support, copied as the tools showed them. Don't call any "
-                "tools or do any of the work again: it's done."
-            ),
-            id=f"{CITE_NUDGE}{uuid.uuid4().hex}",
-        )
-        return {"messages": [nudge], "jump_to": "model"}
-
-    def wrap_model_call(self, request: ModelRequest, handler: Callable[[ModelRequest], Any]) -> Any:
-        """The rewrite gets no tools, so a small model reading the ask as "do it again" can't."""
-        messages = list(request.messages)
-        last = messages[-1] if messages else None
-        if isinstance(last, HumanMessage) and str(last.id or "").startswith(CITE_NUDGE):
-            return handler(request.override(tools=[]))
-        return handler(request)
-
-
 class Placeholders(AgentMiddleware):
     """A call holding a value the model wasn't given never runs. The model is told, and tries
     again, instead of the whole run failing."""
@@ -471,7 +425,6 @@ def middleware(
     tool_names: list[str] | None = None,
     owners: dict[str, str] | None = None,
     task_over: Callable[[], bool] | None = None,
-    used_sources: Callable[[], bool] | None = None,
 ) -> list[Any]:
     chain: list[Any] = [ToolSearch(shown_tools, always_shown_prefix)]
     if log_tool is not None:
@@ -494,8 +447,6 @@ def middleware(
         chain.append(TaskNotes(notes))
     if tool_names is not None and "remember" in tool_names:
         chain.append(PromisedMemory())
-    if used_sources is not None:
-        chain.append(UncitedReply(used_sources))
     if task:
         chain.append(TaskContent(task))
     chain.append(

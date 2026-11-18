@@ -70,17 +70,6 @@ def shown_in_session(db: Database, session: str, text: str | None) -> None:
             shown(tx, rows[0]["id"], text)
 
 
-def used_in_session(db: Database, session: str) -> bool:
-    """Whether the session's open turn was shown any email or document."""
-    return bool(
-        db.fetch_all(
-            "SELECT 1 FROM agent_turn_sources s JOIN agent_turns t ON t.id = s.turn"
-            " WHERE t.session = ? AND t.closed = 0 LIMIT 1",
-            (session,),
-        )
-    )
-
-
 class Citations:
     """Numbers markers in the order they appear. One for something unread just disappears."""
 

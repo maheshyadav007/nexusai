@@ -134,7 +134,6 @@ ORIGIN_NOTES = {
 }
 RESUMABLE = {"queued", "running"}
 # Runs whose reply the person reads, so what it says from mail or documents is cited.
-WRITES_FOR_PERSON = {PERSON, "task-report", "schedule", "event"}
 # Bumped when the harness changes how runs are put together, and recorded on every run.
 HARNESS_VERSION = "2026.11.5"
 KEEPALIVE_SECONDS = 15
@@ -775,11 +774,6 @@ class SessionRuntime:
                 on_compacted=lambda before, after: self._auto_compacted(session, before, after),
                 notes=lambda: team.take_notes(self.ctx, session),
                 task_over=lambda: team.run_should_end(self.db, session),
-                used_sources=(
-                    (lambda: citations.used_in_session(self.db, session))
-                    if origin in WRITES_FOR_PERSON
-                    else None
-                ),
                 log_tool=lambda call, tool, args, result, ms: tools.record_call(
                     self.ctx, session, call, tool, args, result, ms
                 ),
