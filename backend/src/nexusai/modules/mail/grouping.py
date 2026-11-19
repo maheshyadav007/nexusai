@@ -19,7 +19,12 @@ from email.utils import getaddresses
 from pathlib import Path
 from typing import Literal
 
-from nexusai.modules.mail.parse import ParsedMessage, normalize_subject, parse_message
+from nexusai.modules.mail.parse import (
+    SUBJECT_PREFIX,
+    ParsedMessage,
+    normalize_subject,
+    parse_message,
+)
 
 Section = Literal["automated", "calendar", "people", "too_few"]
 SMART: dict[Section, bool] = {
@@ -29,9 +34,14 @@ SMART: dict[Section, bool] = {
     "too_few": True,
 }
 # A subject seen this often from one sender is a template, not something typed again.
-REPEATS = 3
+REPEATS = 2
 # Fewer emails than this give no pattern to go by, unless the headers say outright it's bulk mail.
 ENOUGH = 20
+# When the subject repeats and nobody answers or writes to the address, this many are enough:
+# two when only a number changes between them, a few when the words are the same each time.
+SMALL = 2
+FEW = 5
+REPEATING = "The same few subjects again and again"
 # A sender's mail counts as having a trait when this share of it does.
 MOSTLY = 0.75
 # Outlook's conversation mark only tells people from tools where most people's mail carries it.
@@ -62,6 +72,10 @@ class Mail:
     marked: bool
     bulk: bool
     named: bool
+    # Part of a conversation: a Re: or Fwd: subject, or answering earlier mail. Tools don't.
+    reply: bool
+    # Opens by greeting the person by name, like "Hi Sam,".
+    greeted: bool
     thread: str = ""
 
 
@@ -195,6 +209,21 @@ def _addressed(names: _Names, subject: str, text: str) -> bool:
     return any(names.address.search(line) for line in said)
 
 
+def _greeting_of(name: str) -> re.Pattern[str] | None:
+    """The person greeted by name on a line of its own: "Hi Sam,", "Sam," or "Dear Sam Lee,"."""
+    words = name.split()
+    if not words:
+        return None
+    full = r"\s+".join(re.escape(word) for word in words[1:])
+    named = re.escape(words[0]) + (rf"(?:\s+{full})?" if full else "")
+    return re.compile(rf"^\W*(?:\w+\s+)?{named}\s*[,!:.]?\s*$", re.IGNORECASE)
+
+
+def _opens_with(greeting: re.Pattern[str], text: str) -> bool:
+    first = next((line for line in _visible(text).splitlines() if line.strip()), "")
+    return bool(greeting.match(first.strip()))
+
+
 def _mention(owner: str, name: str) -> _Names:
     local = owner.split("@")[0]
     words = [re.escape(word) for word in name.split() if word]
@@ -289,6 +318,7 @@ def group_mailbox(raws: Iterable[tuple[str, bytes]]) -> Report:
     owner, owner_name = _owner([parsed for _, _, parsed in loaded])
     own_domain = owner.partition("@")[2]
     mention = _mention(owner, owner_name) if owner else None
+    greeting = _greeting_of(owner_name)
     mails: list[Mail] = []
     for key, raw, parsed in loaded:
         pattern, repeat_key = pattern_of(parsed.subject)
@@ -304,6 +334,8 @@ def group_mailbox(raws: Iterable[tuple[str, bytes]]) -> Report:
                 marked="thread-index" in parsed.headers,
                 bulk=_bulk(parsed.headers),
                 named=bool(mention and _addressed(mention, parsed.subject, parsed.own)),
+                reply=bool(SUBJECT_PREFIX.match(parsed.subject) or parsed.in_reply_to),
+                greeted=bool(greeting and _opens_with(greeting, parsed.own)),
             )
         )
 
@@ -323,9 +355,24 @@ def group_mailbox(raws: Iterable[tuple[str, bytes]]) -> Report:
     marks_usable = _share(mails, lambda m: m.marked) >= MARKED_MAILBOX
     # Who the person writes to is only known when the mailbox holds their own sent mail.
     endings = _endings({mail.sender.partition("@")[2] for mail in mails})
-    sent = [mail for mail in mails if mail.sender == owner]
+
+    def to_others(mail: Mail) -> bool:
+        return any(address != owner for address in {*mail.parsed.to, *mail.parsed.cc})
+
+    # What the person wrote to others. Mail from them to themselves, like a forwarding rule's,
+    # is grouped like anyone's.
+    sent = [mail for mail in mails if mail.sender == owner and to_others(mail)]
+    # Addresses someone else wrote to: people in conversations, never a tool's own address.
+    written_by_others = {
+        address
+        for mail in mails
+        for address in {*mail.parsed.to, *mail.parsed.cc}
+        if address != mail.sender and address != owner
+    }
     sent_known = len(sent) >= ENOUGH
-    written_to = {address for mail in sent for address in {*mail.parsed.to, *mail.parsed.cc}}
+    written_to = {address for mail in sent for address in {*mail.parsed.to, *mail.parsed.cc}} - {
+        owner
+    }
 
     def answers_people(sender: str, items: list[Mail]) -> bool:
         """A tool never replies to someone else's message; people do."""
@@ -337,6 +384,7 @@ def group_mailbox(raws: Iterable[tuple[str, bytes]]) -> Report:
 
     def evidence(items: list[Mail]) -> list[str]:
         reasons: list[str] = []
+        unanswered = _share(items, lambda m: writers[m.thread] == {m.sender}) >= MOSTLY
         if marks_usable and _share(items, lambda m: not m.marked) >= MOSTLY:
             reasons.append("Sent by an app, not a mail program")
         if _share(items, lambda m: m.bulk) >= MOSTLY:
@@ -346,6 +394,9 @@ def group_mailbox(raws: Iterable[tuple[str, bytes]]) -> Report:
         alone = _share(items, lambda m: writers[m.thread] == {m.sender}) >= MOSTLY
         if same_ending and alone:
             reasons.append("Every email ends the same way, and nobody writes back")
+        # Works on any server: people get written to in conversations; a tool's address doesn't.
+        if unanswered and not any(item.sender in written_by_others for item in items):
+            reasons.append("Nobody writes back, and nobody ever writes to it")
         return reasons
 
     def one_way(sender: str, items: list[Mail]) -> list[str]:
@@ -397,8 +448,11 @@ def group_mailbox(raws: Iterable[tuple[str, bytes]]) -> Report:
 
     by_sender: dict[str, list[Mail]] = defaultdict(list)
     for mail in mails:
-        # The person's own mail is theirs to judge, never a group.
-        if not mail.calendar and mail.sender != owner:
+        # What the person wrote to others is theirs to judge, never a group. Nor is mail from
+        # inside their company that greets them by name: a colleague wrote that to them. Mass
+        # mail greets everyone too, but comes from outside with bulk headers.
+        personal = mail.greeted and mail.sender.partition("@")[2] == own_domain and not mail.bulk
+        if not mail.calendar and not personal and not (mail.sender == owner and to_others(mail)):
             by_sender[mail.sender].append(mail)
     machine: dict[str, list[Mail]] = defaultdict(list)
     machine_reasons: dict[str, list[str]] = defaultdict(list)
@@ -411,15 +465,25 @@ def group_mailbox(raws: Iterable[tuple[str, bytes]]) -> Report:
             chosen, reasons = items, ["Bulk mail from outside the company"]
         else:
             keys = Counter(item.repeat_key for item in items)
-            repeated = [item for item in items if keys[item.repeat_key] >= REPEATS]
+            # A blank subject is no pattern, however often it comes.
+            repeated = [
+                item for item in items if item.repeat_key and keys[item.repeat_key] >= REPEATS
+            ]
             unmarked = [item for item in items if not item.marked] if marks_usable else []
             # Repeated subjects, or failing that, mail no person's program sent that looks alike.
             candidates: list[tuple[list[Mail], list[str]]] = []
             if repeated and (found := evidence(repeated)):
-                candidates.append((repeated, ["The same few subjects again and again", *found]))
-            if len(unmarked) >= ENOUGH and len(found_unmarked := evidence(unmarked)) >= 2:
+                candidates.append((repeated, [REPEATING, *found]))
+            # The person's mail to themselves, like a forwarding rule's, is only a tool's when
+            # its subjects repeat; their notes to themselves are theirs.
+            yourself = sender == owner
+            if (
+                not yourself
+                and len(unmarked) >= ENOUGH
+                and len(found_unmarked := evidence(unmarked)) >= 2
+            ):
                 candidates.append((unmarked, found_unmarked))
-            if found_one_way := one_way(sender, items):
+            if not yourself and (found_one_way := one_way(sender, items)):
                 candidates.append((items, found_one_way))
             chosen, reasons = max(candidates, key=lambda c: len(c[0]), default=([], []))
             rest = [item for item in items if item not in chosen]
@@ -430,18 +494,37 @@ def group_mailbox(raws: Iterable[tuple[str, bytes]]) -> Report:
                 and _share(chosen, lambda m: not m.marked) >= MOSTLY
             )
             answered = _share(rest, lambda m: writers[m.thread] != {m.sender}) > 1 - MOSTLY
+            # Mail that ends like the tool's does is the tool's; a person's signature isn't.
+            closings = Counter(item.ending for item in chosen).most_common(1)
+            usual = closings[0][0] if closings else None
+            alike = bool(rest) and sum(m.ending == usual for m in rest) / len(rest) >= MOSTLY
             share = len(chosen) / len(items) if items else 0.0
             # Only a sender that is a tool for at least half its mail; a few look-alike emails
             # from a person, like dated notes, never pull in the rest.
+            # A handful of look-alike emails can't decide the rest of a sender's mail.
             if (
-                chosen
+                len(chosen) >= FEW
                 and rest
-                and (share >= MOSTLY or (share >= HALF and not split and not answered))
+                and (share >= MOSTLY or (share >= HALF and alike and not split and not answered))
             ):
                 chosen = items
-            if chosen and len(chosen) < ENOUGH and not any("bulk" in r for r in reasons):
-                # Mail from a person's program needs a real pattern before anyone calls it a tool.
-                if not (marks_usable and _share(chosen, lambda m: m.marked) >= MOSTLY):
+            from_program = marks_usable and _share(chosen, lambda m: m.marked) >= MOSTLY
+            # A repeating subject nobody answers is enough on a few emails; the other signs, or
+            # mail from a person's program, need more before anyone calls it a tool.
+            written_to_it = sender in written_by_others
+            conversation = any(item.reply for item in chosen)
+            small = REPEATING in reasons and not (
+                from_program or written_to_it or yourself or conversation
+            )
+            # Subjects that differ only by a number, like order or build ids, are a template
+            # after two; the same words again could be a person repeating themselves.
+            same: dict[str, set[str]] = defaultdict(set)
+            for item in chosen:
+                same[item.pattern].add(normalize_subject(item.parsed.subject))
+            numbered = any(len(subjects) > 1 for subjects in same.values())
+            needed = (SMALL if numbered else FEW) if small else ENOUGH
+            if chosen and len(chosen) < needed and not any("bulk" in r for r in reasons):
+                if not (from_program or yourself or conversation):
                     add("too_few", f"few:{sender}", chosen, ["Too few emails to be sure", *reasons])
                 continue
         if chosen:

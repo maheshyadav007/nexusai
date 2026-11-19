@@ -68,19 +68,19 @@ class Server:
 
 
 class GroupFeedback(BaseModel):
+    """What the person settled for one group: its category name, and whether the AI reads it."""
+
     id: str
     name: str = Field(default="", max_length=200)
-    section: str = Field(default="", max_length=40)
     smart: bool | None = None
-    verdict: Literal["", "right", "wrong", "unsure"] = ""
-    note: str = Field(default="", max_length=2000)
-    not_belonging: list[str] = Field(default_factory=list)
 
 
 class MissFeedback(BaseModel):
+    """A sender left in no group that the person put in a category or kept from the AI."""
+
     sender: str = Field(max_length=320)
-    verdict: Literal["", "tool", "right", "unsure"] = ""
-    note: str = Field(default="", max_length=2000)
+    name: str = Field(default="", max_length=200)
+    smart: bool = True
 
 
 class Finish(BaseModel):
@@ -264,43 +264,36 @@ def describe(lab: Lab) -> dict[str, Any]:
 
 
 def save(lab: Lab, finish: Finish) -> Path:
-    """The names and feedback, and with details, each group's senders and subject patterns."""
+    """Each category's name and whether the AI reads it, beside what the engine chose. With
+    details, also each one's senders and subject patterns, to improve the engine."""
     found = lab.found
     engine = {group["id"]: group for group in found.get("groups", [])}
-    groups = []
+    categories = []
     for number, item in enumerate(finish.groups, 1):
         group = engine.get(item.id, {})
+        smart = group.get("smart", True) if item.smart is None else item.smart
         row: dict[str, Any] = {
             # The engine's id holds a sender's address, so without details it's just a number.
             "id": item.id if finish.details else f"group-{number}",
+            "name": item.name.strip() or group.get("label", ""),
             "engine_name": group.get("label", ""),
-            "name": item.name or group.get("label", ""),
+            "ai_reads": smart,
+            "engine_ai_reads": group.get("smart", True),
             "engine_section": group.get("section", ""),
-            "section": item.section or group.get("section", ""),
-            "smart": group.get("smart") if item.smart is None else item.smart,
             "count": group.get("count", 0),
-            "verdict": item.verdict,
-            "note": item.note,
-            "not_belonging": len(item.not_belonging),
         }
         if finish.details:
-            row |= {
-                "senders": group.get("senders", []),
-                "patterns": group.get("patterns", []),
-                "reasons": group.get("reasons", []),
-                "mentions": group.get("mentions", 0),
-                "not_belonging_subjects": [
-                    email["subject"]
-                    for email in group.get("emails", [])
-                    if email["key"] in set(item.not_belonging)
-                ],
-            }
-        groups.append(row)
-    misses = [
-        {"verdict": miss.verdict, "note": miss.note, "count": _missed_count(found, miss.sender)}
+            row |= {key: group.get(key, []) for key in ("senders", "patterns", "reasons")}
+        categories.append(row)
+    added = [
+        {
+            "name": miss.name.strip(),
+            "ai_reads": miss.smart,
+            "count": _missed_count(found, miss.sender),
+        }
         | ({"sender": miss.sender} if finish.details else {})
         for miss in finish.misses
-        if miss.verdict or miss.note
+        if miss.name.strip() or not miss.smart
     ]
     sections: Counter[str] = Counter()
     for group in found.get("groups", []):
@@ -311,8 +304,8 @@ def save(lab: Lab, finish: Finish) -> Path:
         "reached_ai": found.get("reach_ai", 0),
         "ungrouped": found.get("ungrouped", 0),
         "engine_sections": dict(sections),
-        "groups": groups,
-        "missed_senders": misses,
+        "categories": categories,
+        "added_from_ungrouped": added,
     }
     lab.results.mkdir(parents=True, exist_ok=True)
     path = lab.results / f"sort-lab-{datetime.now():%Y%m%d-%H%M%S}.json"
