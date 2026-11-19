@@ -214,3 +214,35 @@ def test_notes_to_yourself_are_never_grouped_and_a_blank_subject_is_no_pattern()
     blank = [_mail("kim@else.example", "", f"Thought {n}") for n in range(8)]
     report = _box(notes, blank)
     assert all(d.group is None for d in report.decisions.values())
+
+
+def test_two_alike_emails_from_an_address_nobody_writes_to_are_enough_but_a_conversation_is_not() -> (
+    None
+):
+    tool = [_mail("orders@shop.example", f"Order {n} confirmed", "Thanks.\nShop") for n in (11, 12)]
+    asked = _mail("ari@firm.example", "Lunch?", "Free at 1?")
+    again = _mail("ari@firm.example", "Re: Lunch?", "Still on?")
+    report = _box(tool, [asked, again])
+    assert {report.decisions[str(n)].section for n in (0, 1)} == {"automated"}
+    assert report.decisions["2"].group is None and report.decisions["3"].group is None
+
+
+def test_two_emails_are_enough_only_when_just_a_number_changes() -> None:
+    numbered = [_mail("jobs@firm.example", f"Build {n} passed", "Done.\nCI") for n in (7, 8)]
+    same = [
+        _mail("ari@firm.example", "Need your sign-off", "Please approve.\nAri") for _ in range(2)
+    ]
+    report = _box(numbered, same)
+    assert {report.decisions[str(n)].section for n in (0, 1)} == {"automated"}
+    # The same words twice could be a person repeating themselves: too few to be sure.
+    assert all(report.decisions[str(n)].section == "too_few" for n in (2, 3))
+    assert all(report.decisions[str(n)].reaches_ai for n in (2, 3))
+
+
+def test_company_mail_that_greets_the_person_by_name_is_never_grouped() -> None:
+    names = _mail("kim@firm.example", "Hello", "Hi", to=f"Sam Lee <{OWNER}>")
+    asks = [_mail("boss@firm.example", f"Decision {n} needed", "Hi Sam,\nPlease decide.") for n in range(30)]  # fmt: skip
+    offers = [_mail("deals@shop.example", f"Deal {n}", "Hi Sam,\nOffers.", List_Unsubscribe="<https://x>") for n in range(30)]  # fmt: skip
+    report = _box([names], asks, offers)
+    assert all(report.decisions[str(n)].group is None for n in range(1, 31))
+    assert {report.decisions[str(n)].section for n in range(31, 61)} == {"automated"}
