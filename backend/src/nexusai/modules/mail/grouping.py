@@ -19,9 +19,6 @@ from email.utils import getaddresses
 from pathlib import Path
 from typing import Literal
 
-from nexusai.kernel import vault
-from nexusai.kernel.database import connect_raw
-from nexusai.kernel.secrets import secret_store
 from nexusai.modules.mail.parse import ParsedMessage, normalize_subject, parse_message
 
 Section = Literal["automated", "calendar", "people", "too_few"]
@@ -480,6 +477,11 @@ def read_folder(folder: Path) -> list[tuple[str, bytes]]:
 def read_home(home: Path, account: str | None = None) -> list[tuple[str, bytes]]:
     """Every kept email of one account in a Home, opened read-only. It never creates a key,
     so a Home without one is refused rather than changed."""
+    # Imported here, so tools that only group mail don't need the database or the keychain.
+    from nexusai.kernel import vault
+    from nexusai.kernel.database import connect_raw
+    from nexusai.kernel.secrets import secret_store
+
     sealed = vault._read(home)
     key = secret_store(None).get(vault._key_name(sealed["id"])) if sealed else None
     if key is None:

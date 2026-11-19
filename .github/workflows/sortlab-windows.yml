@@ -1,0 +1,57 @@
+name: Sort lab for Windows
+
+# Builds NexusAI-SortLab.exe, a double-click tool for trying the mail grouping on a real mailbox.
+# A sortlab/<version> tag also publishes it as a release download.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'sortlab/**'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install only what the lab uses, at the lockfile's versions
+        run: |
+          python -m pip install uv==0.11.3
+          # The lockfile pins every version; the database and model libraries the lab
+          # doesn't use are never installed.
+          uv export --frozen --no-dev --no-hashes --no-emit-project -o constraints.txt
+          uv pip install --system -c constraints.txt fastapi uvicorn imapclient pydantic structlog psutil pyinstaller==6.11.1
+      - name: Build NexusAI-SortLab.exe
+        run: |
+          python -m PyInstaller --noconfirm --onefile --name NexusAI-SortLab `
+            --add-data "src/nexusai/sortlab/page.html:nexusai/sortlab" `
+            --collect-submodules uvicorn --paths src src/nexusai/sortlab/__main__.py
+      - name: Check the built exe starts and serves its page
+        run: |
+          .\dist\NexusAI-SortLab.exe --selftest
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v7
+        with:
+          name: NexusAI-SortLab
+          path: backend/dist/NexusAI-SortLab.exe
+          retention-days: 14
+      - name: Publish the download
+        if: startsWith(github.ref, 'refs/tags/sortlab/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = ($env:GITHUB_REF_NAME -split '/')[1]
+          $notes = "Double-click NexusAI-SortLab.exe. It opens a page in your browser to sign in to your mail and see how NexusAI would group it. It runs only on your computer, uses no AI and never changes the mail server. Finishing saves the group names and your feedback in Documents\NexusAI Sort Lab and deletes the downloaded mail. Windows may warn that the file is from an unknown publisher, because it isn't signed yet."
+          gh release create $env:GITHUB_REF_NAME dist/NexusAI-SortLab.exe --repo $env:GITHUB_REPOSITORY --title "Sort lab $version" --notes $notes

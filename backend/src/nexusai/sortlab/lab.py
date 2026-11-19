@@ -10,6 +10,8 @@ import json
 import os
 import secrets
 import shutil
+import subprocess
+import sys
 import threading
 from collections import Counter
 from dataclasses import dataclass, field
@@ -87,6 +89,8 @@ class Lab:
     error: str = ""
     report: grouping.Report | None = None
     found: dict[str, Any] = field(default_factory=dict)
+    # Show the results folder when an experiment finishes, so the file is easy to send.
+    reveal: bool = False
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def forget_mail(self) -> int:
@@ -333,6 +337,8 @@ def create_app(lab: Lab, token: str) -> FastAPI:
         path = save(lab, body)
         deleted = lab.forget_mail()
         lab.state = "finished"
+        if lab.reveal:
+            show_folder(path.parent)
         return {"saved": str(path), "deleted": deleted}
 
     @app.post("/api/discard")
@@ -347,6 +353,17 @@ def create_app(lab: Lab, token: str) -> FastAPI:
     return app
 
 
+def show_folder(folder: Path) -> None:
+    with contextlib.suppress(Exception):
+        if sys.platform == "win32":
+            os.startfile(folder)  # type: ignore[attr-defined]  # noqa: S606
+        elif sys.platform == "darwin":
+            subprocess.run(["open", str(folder)], check=False)  # noqa: S603, S607
+
+
 def default_lab() -> Lab:
-    base = app_data_dir() / "sort-lab"
-    return Lab(folder=base / "mail", results=base / "results")
+    """Mail goes in the app's data folder, results in Documents where people find them."""
+    return Lab(
+        folder=app_data_dir() / "sort-lab" / "mail",
+        results=Path.home() / "Documents" / "NexusAI Sort Lab",
+    )
