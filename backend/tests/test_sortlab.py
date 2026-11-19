@@ -83,35 +83,44 @@ def test_an_experiment_groups_saves_feedback_and_deletes_the_mail(lab: Any) -> N
     assert report["owner"] == corp_mail.OWNER[1] and report["total"] == 1000
     first = report["groups"][0]
     assert first["emails"] and first["section"] == "automated"
+    missed = report["missed"][0]
     finish = {
-        "groups": [{"id": first["id"], "name": "Parts system", "verdict": "right"}],
-        "misses": [{"sender": report["missed"][0]["sender"], "verdict": "right"}]
-        if report["missed"]
-        else [],
+        "groups": [{"id": first["id"], "name": "Parts system", "smart": True}],
+        "misses": [{"sender": missed["sender"], "name": "Reviews", "smart": False}],
         "details": False,
     }
     done = client.post("/api/finish", json=finish).json()
     assert done["deleted"] == 1000
     assert not state.folder.exists()
     saved = json.loads(Path(done["saved"]).read_text())
-    assert saved["groups"][0]["name"] == "Parts system"
-    assert saved["groups"][0]["engine_name"] == first["label"]
+    category = saved["categories"][0]
+    assert (category["name"], category["engine_name"]) == ("Parts system", first["label"])
+    # The person's choice is kept beside the engine's, so the difference shows what to fix.
+    assert (category["ai_reads"], category["engine_ai_reads"]) == (True, False)
+    assert saved["added_from_ungrouped"] == [
+        {"name": "Reviews", "ai_reads": False, "count": missed["count"]}
+    ]
     # Without details, no sender or subject leaves the computer in the file.
-    text = json.dumps(saved)
-    assert "@" not in text and "senders" not in saved["groups"][0]
+    assert "@" not in json.dumps(saved) and "senders" not in category
 
 
 def test_details_keep_senders_and_patterns_for_improving_the_engine(lab: Any) -> None:
     _, _, client = lab
     client.post("/api/start", json=SIGN_IN)
     _ready(client)
-    first = client.get("/api/report").json()["groups"][0]
-    wrong = first["emails"][0]["key"]
-    body = {"groups": [{"id": first["id"], "not_belonging": [wrong]}], "details": True}
+    report = client.get("/api/report").json()
+    first, missed = report["groups"][0], report["missed"][0]
+    body = {
+        "groups": [{"id": first["id"]}],
+        "misses": [{"sender": missed["sender"], "smart": False}, {"sender": "untouched@x.example"}],
+        "details": True,
+    }
     saved = json.loads(Path(client.post("/api/finish", json=body).json()["saved"]).read_text())
-    group = saved["groups"][0]
-    assert group["senders"] == first["senders"] and group["patterns"]
-    assert group["not_belonging_subjects"] == [first["emails"][0]["subject"]]
+    category = saved["categories"][0]
+    assert category["senders"] == first["senders"] and category["patterns"]
+    assert category["name"] == first["label"]
+    # Only senders the person changed are kept.
+    assert [row["sender"] for row in saved["added_from_ungrouped"]] == [missed["sender"]]
 
 
 def test_discarding_deletes_the_mail_and_saves_nothing(lab: Any) -> None:

@@ -18,12 +18,18 @@ ENGINE = Path(grouping.__file__)
 
 # Several seeds, because one arrangement of the same mail can hide a rule that only works by
 # luck: seeds 1 and 99 once caught a person's dated notes pulling all their mail into Automated.
-@pytest.fixture(scope="module", params=[7, 1, 99])
+# Plain is a server without Outlook's marks, where most tools were once missed.
+@pytest.fixture(
+    scope="module",
+    params=[(7, True), (1, True), (99, True), (7, False), (99, False)],
+    ids=["marks-7", "marks-1", "marks-99", "plain-7", "plain-99"],
+)
 def mailbox(
     request: pytest.FixtureRequest, tmp_path_factory: pytest.TempPathFactory
 ) -> tuple[list[dict[str, Any]], grouping.Report]:
     folder = tmp_path_factory.mktemp("corp")
-    corp_mail.build(folder, seed=request.param)
+    seed, marks = request.param
+    corp_mail.build(folder, seed=seed, marks=marks)
     labels = json.loads((folder / "labels.json").read_text())
     return labels, grouping.group_mailbox(grouping.read_folder(folder))
 
@@ -66,9 +72,14 @@ def test_mail_people_write_is_never_filed_as_automated(mailbox: Any) -> None:
     assert not score(*mailbox)["people_in_automated"]
 
 
-def test_most_tool_and_calendar_mail_is_caught(mailbox: Any) -> None:
+def test_most_tool_and_calendar_mail_is_caught(
+    mailbox: Any, request: pytest.FixtureRequest
+) -> None:
     result = score(*mailbox)
-    assert result["tool_caught"] >= 0.95, result["tool_not_caught"]
+    # Without Outlook's marks a wiki whose subjects never repeat looks like a person: a known
+    # miss, kept rather than risk hiding announcements that look the same.
+    plain = "plain" in request.node.callspec.id
+    assert result["tool_caught"] >= (0.9 if plain else 0.95), result["tool_not_caught"]
     assert result["calendar_caught"] >= 0.95
 
 
@@ -171,3 +182,35 @@ def test_domain_endings_are_learned_from_the_mailbox() -> None:
     assert endings == {"bank.example"}
     assert grouping._site("alerts.one.bank.example", endings) == "one"
     assert grouping._site("mail.vendor.example", endings) == "vendor"
+
+
+def test_mail_from_the_person_to_themselves_is_grouped_but_what_they_write_to_others_is_not() -> (
+    None
+):
+    forwarded = [_mail(OWNER, f"[3GPP] RAN1 #{n} meeting report", "Forwarded by rule.") for n in range(30)]  # fmt: skip
+    written = [_mail(OWNER, f"[3GPP] RAN1 #{n} our comments", "My view.", to="kim@else.example") for n in range(30)]  # fmt: skip
+    others = [_mail("ari@firm.example", f"Lunch {n}?", "Free?") for n in range(10)]
+    report = _box(forwarded, written, others)
+    sections = [d.section for key, d in report.decisions.items() if int(key) < 30]
+    assert set(sections) == {"automated"}
+    assert all(report.decisions[str(n)].group is None for n in range(30, 60))
+
+
+def test_five_repeating_unanswered_emails_are_enough_only_from_an_address_nobody_writes_to() -> (
+    None
+):
+    tool = [_mail("alerts@firm.example", f"Job {n} finished", "Done.\nAlerts") for n in range(6)]
+    colleague = [_mail("ari@firm.example", f"Status week {n}", "All fine.\nAri") for n in range(6)]
+    mentions = [_mail("kim@firm.example", "Plans", "Talk soon", to=f"{OWNER}, ari@firm.example")]
+    report = _box(tool, colleague, mentions)
+    assert {report.decisions[str(n)].section for n in range(6)} == {"automated"}
+    assert "automated" not in {report.decisions[str(n)].section for n in range(6, 12)}
+
+
+def test_notes_to_yourself_are_never_grouped_and_a_blank_subject_is_no_pattern() -> None:
+    notes = [
+        _mail(OWNER, "" if n % 2 else f"note {chr(97 + n)}", "See attached.") for n in range(40)
+    ]
+    blank = [_mail("kim@else.example", "", f"Thought {n}") for n in range(8)]
+    report = _box(notes, blank)
+    assert all(d.group is None for d in report.decisions.values())

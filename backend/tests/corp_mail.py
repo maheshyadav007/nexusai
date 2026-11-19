@@ -79,8 +79,10 @@ def signature(name: str, title: str) -> str:
 
 
 class Mailbox:
-    def __init__(self, seed: int) -> None:
+    def __init__(self, seed: int, marks: bool = True) -> None:
         self.random = random.Random(seed)
+        # A plain server, or mail read through one, carries none of Outlook's marks.
+        self.marks = marks
         self.items: list[tuple[EmailMessage, Label]] = []
 
     # Building blocks
@@ -126,7 +128,7 @@ class Mailbox:
                 for part in (str(parent["References"] or ""), str(parent["Message-ID"]))
                 if part
             )
-        if outlook:
+        if outlook and self.marks:
             message["Thread-Index"] = self.thread_index(parent)
             message["Thread-Topic"] = subject.split(": ", 1)[-1] if parent is not None else subject
             message["X-MS-Has-Attach"] = ""
@@ -515,9 +517,9 @@ LEADERSHIP = [
 ]  # fmt: skip
 
 
-def build(directory: Path, seed: int = 7) -> list[Label]:
+def build(directory: Path, seed: int = 7, marks: bool = True) -> list[Label]:
     """Writes 1,000 .eml files and labels.json into directory, and returns the labels."""
-    box = Mailbox(seed)
+    box = Mailbox(seed, marks)
     box.plm(110, 10)
     box.swarm(90, 10)
     box.ro_bot(70, 5)
