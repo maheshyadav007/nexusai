@@ -9,6 +9,7 @@ person names and confirms the groups.
 import json
 import re
 import sys
+import unicodedata
 import zlib
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable
@@ -38,10 +39,16 @@ ENOUGH = 20
 MOSTLY = 0.75
 # Outlook's conversation mark only tells people from tools where most people's mail carries it.
 MARKED_MAILBOX = 0.2
+# A sender is a tool for all its mail only when at least this share of it looks like a tool's.
+HALF = 0.5
 # Mentions mean nothing in a group that names the person in most of its mail, like a team report.
 NAMES_EVERYONE = 0.5
 TAGS = re.compile(r"^\s*(\[[^\]]{1,40}\])")
 HAS_DIGIT = re.compile(r"\S*\d\S*")
+# A link, or an address hidden in one: it says where to click, not who the mail is about.
+LINK = re.compile(r"\S*(?:://|%40|www\.)\S*", re.IGNORECASE)
+# Bulk mail ends with who it was sent to; those lines name the person only to deliver it.
+FOOTER_LINES = 3
 FIRST_TAG = re.compile(r"^\s*(?:(?:re|fwd?|aw|sv)\s*:\s*)*\[([^\]]{1,40})\]", re.IGNORECASE)
 BULK_PRECEDENCE = {"bulk", "list", "junk"}
 
@@ -108,8 +115,13 @@ def pattern_of(subject: str) -> tuple[str, str]:
     return pattern, tags[0] if tags else pattern
 
 
+def _visible(text: str) -> str:
+    """Without the invisible characters some senders pad mail with, such as zero-width spaces."""
+    return "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
+
+
 def _ending(text: str) -> str:
-    lines = [line.strip().lower() for line in text.splitlines() if line.strip()]
+    lines = [" ".join(line.split()).lower() for line in _visible(text).splitlines() if line.strip()]
     return HAS_DIGIT.sub("#", " / ".join(lines[-2:]))
 
 
@@ -156,13 +168,45 @@ def _owner(parsed: list[ParsedMessage]) -> tuple[str, str]:
     return owner, " ".join(re.split(r"[._-]+", owner.split("@")[0])).strip().title()
 
 
-def _mention(owner: str, name: str) -> re.Pattern[str]:
+def _greeting(found: re.Match[str], line: str) -> bool:
+    """Not something said to the person: "Name, ..." or "Hi Name!" (at most one word before,
+    and a comma, ! or : after), or the name alone on its line, as in an address block."""
+    before, after = line[: found.start()].split(), line[found.end() :].strip()
+    if not before and not re.sub(r"\W", "", after):
+        return True
+    return len(before) <= 1 and after[:1] != "" and after[:1] in ",!:"
+
+
+@dataclass
+class _Names:
+    """How the person is named: their name, and their address or handle."""
+
+    name: re.Pattern[str] | None
+    address: re.Pattern[str]
+
+
+def _addressed(names: _Names, subject: str, text: str) -> bool:
+    """Named in what the mail says. A greeting ("Hi Name,") is where mass mail puts everyone's
+    name, and links and the last lines carry the address only to deliver the mail, so none of
+    those count."""
+    lines = [LINK.sub(" ", line) for line in _visible(text).splitlines() if line.strip()]
+    if names.name is not None:
+        for line in [subject, *lines]:
+            if any(not _greeting(found, line) for found in names.name.finditer(line)):
+                return True
+    said = [LINK.sub(" ", subject), *lines[: max(len(lines) - FOOTER_LINES, 0)]]
+    return any(names.address.search(line) for line in said)
+
+
+def _mention(owner: str, name: str) -> _Names:
     local = owner.split("@")[0]
     words = [re.escape(word) for word in name.split() if word]
-    choices = [re.escape(owner), rf"(?<![\w.]){re.escape(local)}(?![\w])"]
-    if len(words) >= 2:
-        choices.append(r"\b" + r"[\s.]+".join(words) + r"\b")
-    return re.compile("|".join(choices), re.IGNORECASE)
+    address = re.compile(rf"{re.escape(owner)}|(?<![\w.]){re.escape(local)}(?![\w])", re.IGNORECASE)
+    if len(words) < 2:
+        return _Names(None, address)
+    # Words on their own, so the name inside an address like first.last@ doesn't count.
+    name = r"(?<![\w.@])" + r"\s+".join(words) + r"(?![\w@]|\.\w)"
+    return _Names(re.compile(name, re.IGNORECASE), address)
 
 
 class _Threads:
@@ -195,15 +239,31 @@ def _first_tag(subject: str) -> str:
     return re.sub(r"[\s#:_-]*\d[\w-]*", "", found.group(1)).strip(" -_:#")
 
 
-def _site(domain: str) -> str:
+def _endings(domains: set[str]) -> set[str]:
+    """Domain endings learned from the mailbox: one that several different senders sit under
+    and that never sends mail itself, like a country's bank or company ending."""
+    under: dict[str, set[str]] = defaultdict(set)
+    for domain in domains:
+        labels = domain.split(".")
+        if len(labels) >= 3:
+            under[".".join(labels[-2:])].add(labels[-3])
+    return {ending for ending, names in under.items() if len(names) >= 2 and ending not in domains}
+
+
+def _site(domain: str, endings: set[str]) -> str:
     """The name a domain is registered under: mail.vendor.com and vendor.co.uk give vendor."""
-    labels = domain.split(".")[:-1]
-    while len(labels) > 1 and len(labels[-1]) <= 3:
-        labels.pop()
+    labels = domain.split(".")
+    if ".".join(labels[-2:]) in endings:
+        labels = labels[:-2]
+    else:
+        # An ending seen only once can't be learned; a short part before the last is one.
+        labels = labels[:-1]
+        while len(labels) > 1 and len(labels[-1]) <= 3:
+            labels.pop()
     return labels[-1] if labels else domain
 
 
-def _label(items: list[Mail], own_domain: str) -> str:
+def _label(items: list[Mail], own_domain: str, endings: set[str]) -> str:
     """A name the person can change, by a fixed rule: the first tag most emails start with, else
     the sender (its address before the @ inside the company, its domain outside), else nothing
     when many people send the group."""
@@ -214,7 +274,7 @@ def _label(items: list[Mail], own_domain: str) -> str:
     senders = sorted({item.sender for item in items})
     domains = {sender.partition("@")[2] for sender in senders}
     if len(domains) == 1 and (domain := next(iter(domains))) != own_domain:
-        return _site(domain)
+        return _site(domain, endings)
     if len(senders) == 1:
         return senders[0].partition("@")[0]
     stem = _stem(senders[0])
@@ -246,7 +306,7 @@ def group_mailbox(raws: Iterable[tuple[str, bytes]]) -> Report:
                 calendar=_calendar(raw, parsed),
                 marked="thread-index" in parsed.headers,
                 bulk=_bulk(parsed.headers),
-                named=bool(mention and mention.search(f"{parsed.subject}\n{parsed.own}")),
+                named=bool(mention and _addressed(mention, parsed.subject, parsed.own)),
             )
         )
 
@@ -264,6 +324,11 @@ def group_mailbox(raws: Iterable[tuple[str, bytes]]) -> Report:
         mail.thread = threads.find(mail.parsed.message_id)
         writers[mail.thread].add(mail.sender)
     marks_usable = _share(mails, lambda m: m.marked) >= MARKED_MAILBOX
+    # Who the person writes to is only known when the mailbox holds their own sent mail.
+    endings = _endings({mail.sender.partition("@")[2] for mail in mails})
+    sent = [mail for mail in mails if mail.sender == owner]
+    sent_known = len(sent) >= ENOUGH
+    written_to = {address for mail in sent for address in {*mail.parsed.to, *mail.parsed.cc}}
 
     def answers_people(sender: str, items: list[Mail]) -> bool:
         """A tool never replies to someone else's message; people do."""
@@ -286,6 +351,18 @@ def group_mailbox(raws: Iterable[tuple[str, bytes]]) -> Report:
             reasons.append("Every email ends the same way, and nobody writes back")
         return reasons
 
+    def one_way(sender: str, items: list[Mail]) -> list[str]:
+        """Many emails nobody has ever answered. People don't keep writing to someone who never
+        writes back; tools do. Needs either the person's sent mail or Outlook's marks to rule
+        out a colleague whose announcements nobody answers."""
+        if len(items) < ENOUGH or any(writers[item.thread] != {sender} for item in items):
+            return []
+        if sent_known and sender not in written_to:
+            return ["Many emails, nobody ever writes back, and you never wrote to them"]
+        if not sent_known and marks_usable and _share(items, lambda m: not m.marked) >= MOSTLY:
+            return ["Many emails from an app, and nobody ever writes back"]
+        return []
+
     groups: list[Group] = []
     decided: dict[str, tuple[str | None, Section]] = {}
 
@@ -296,7 +373,7 @@ def group_mailbox(raws: Iterable[tuple[str, bytes]]) -> Report:
             Group(
                 id=gid,
                 section=section,
-                label=_label(items, own_domain),
+                label=_label(items, own_domain, endings),
                 senders=sorted({item.sender for item in items}),
                 count=len(items),
                 subjects=len(patterns),
@@ -323,12 +400,14 @@ def group_mailbox(raws: Iterable[tuple[str, bytes]]) -> Report:
 
     by_sender: dict[str, list[Mail]] = defaultdict(list)
     for mail in mails:
-        if not mail.calendar:
+        # The person's own mail is theirs to judge, never a group.
+        if not mail.calendar and mail.sender != owner:
             by_sender[mail.sender].append(mail)
     machine: dict[str, list[Mail]] = defaultdict(list)
     machine_reasons: dict[str, list[str]] = defaultdict(list)
     for sender, items in by_sender.items():
-        if answers_people(sender, items):
+        # Someone the person writes to, or who answers others, is a person.
+        if answers_people(sender, items) or (sent_known and sender in written_to):
             continue
         external = sender.partition("@")[2] != own_domain
         if external and _share(items, lambda m: m.bulk) >= MOSTLY:
@@ -343,9 +422,25 @@ def group_mailbox(raws: Iterable[tuple[str, bytes]]) -> Report:
                 candidates.append((repeated, ["The same few subjects again and again", *found]))
             if len(unmarked) >= ENOUGH and len(found_unmarked := evidence(unmarked)) >= 2:
                 candidates.append((unmarked, found_unmarked))
+            if found_one_way := one_way(sender, items):
+                candidates.append((items, found_one_way))
             chosen, reasons = max(candidates, key=lambda c: len(c[0]), default=([], []))
-            # A sender that is a tool for nearly all its mail is a tool for the rest too.
-            if chosen and len(chosen) / len(items) >= MOSTLY:
+            rest = [item for item in items if item not in chosen]
+            # The rest of a tool's mail is the tool's too, unless it looks like a person's:
+            # written in a mail program while the tool part isn't, or answered.
+            split = marks_usable and (
+                _share(rest, lambda m: m.marked) >= MOSTLY
+                and _share(chosen, lambda m: not m.marked) >= MOSTLY
+            )
+            answered = _share(rest, lambda m: writers[m.thread] != {m.sender}) > 1 - MOSTLY
+            share = len(chosen) / len(items) if items else 0.0
+            # Only a sender that is a tool for at least half its mail; a few look-alike emails
+            # from a person, like dated notes, never pull in the rest.
+            if (
+                chosen
+                and rest
+                and (share >= MOSTLY or (share >= HALF and not split and not answered))
+            ):
                 chosen = items
             if chosen and len(chosen) < ENOUGH and not any("bulk" in r for r in reasons):
                 # Mail from a person's program needs a real pattern before anyone calls it a tool.
