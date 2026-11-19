@@ -392,6 +392,50 @@ def test_assign_report_verify_runs_end_to_end(client: TestClient, script: TeamSc
     assert [m["kind"] for m in shown["messages"]] == ["assign", "report", "verify"]
 
 
+def test_a_report_citing_mail_never_sends_the_lead_back_to_do_the_work_again(
+    client: TestClient, script: TeamScript
+) -> None:
+    """A report's evidence names mail. The lead's summary once got sent back for its markers,
+    and a small model read that as doing the work again and handed it over again."""
+    session = post(client, "session.create")["id"]
+    summary = "The brief is updated with the security items first, then the overdue ones. " * 3
+    script.say(
+        lead(),
+        [ToolCall("a", "team_assign", ASSIGN)],
+        [TextChunk("Asked the mail agent.")],
+        [ToolCall("v", "team_close", {"task": 1, "action": "verify", "outcome": "Checked"})],
+        [TextChunk(summary)],
+        [ToolCall("again", "team_assign", ASSIGN)],
+    )
+    script.say(
+        mail(),
+        [
+            ToolCall(
+                "r",
+                "team_close",
+                {"task": 1, "action": "report", "outcome": "Updated.", "evidence": ["mail:1"]},
+            )
+        ],
+        [TextChunk("Reported.")],
+    )
+    chat(client, session, "Update my brief")
+    wait(lambda: task_row(1)["state"] == "verified" or None, "verified", 20)
+    db = agent.current().db
+    wait(
+        lambda: (
+            not db.fetch_all(
+                "SELECT 1 FROM agent_turns WHERE session = ? AND closed = 0", (session,)
+            )
+            or None
+        ),
+        "the lead's run to end",
+        20,
+    )
+    assert any("[mail:1]" in t for t in script.told(lead()))
+    assert len([1 for speaker, _ in script.requests if speaker == lead()]) == 4
+    assert len(db.fetch_all("SELECT * FROM team_tasks")) == 1
+
+
 def test_the_owner_can_never_verify_its_own_work(client: TestClient, script: TeamScript) -> None:
     session = post(client, "session.create")["id"]
     script.say(lead(), [ToolCall("a", "team_assign", ASSIGN)], [TextChunk("ok")])

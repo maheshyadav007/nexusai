@@ -711,6 +711,8 @@
   "reminders.repeat.none": "Doesn't repeat",
   "reminders.repeat.day": "Every day",
   "reminders.repeat.week": "Every week",
+  "reminders.repeat.month": "Every month",
+  "reminders.repeat.year": "Every year",
   "reminders.what": "Remind me to",
   "reminders.when": "When",
   "reminders.repeat": "Repeat",

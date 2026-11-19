@@ -416,6 +416,22 @@ def test_same_obligation_does_not_become_both_task_and_reminder(ctx: Context) ->
     assert not ctx.bus.db.fetch_all("SELECT * FROM reminders")
 
 
+def test_a_day_that_doesnt_exist_is_dropped_and_the_rest_still_proposed(ctx: Context) -> None:
+    first = add(ctx, "Please send the report")
+    mail_agent.Triage(ctx)._proposals(
+        first.thread,
+        {
+            "tasks": [{"title": "Send the report", "due": "2099-11-31"}],
+            "reminders": [{"title": "Book the room", "when": "2099-02-30T09:00"}],
+            "draft": "Will do.",
+        },
+        "Please send the report",
+    )
+    assert [r["due"] for r in ctx.bus.db.fetch_all("SELECT due FROM tasks")] == [None]
+    assert not ctx.bus.db.fetch_all("SELECT * FROM reminders")
+    assert ctx.bus.db.fetch_all("SELECT * FROM mail_drafts")
+
+
 def test_scheduled_run_clock_uses_its_saved_timezone(
     ctx: Context, monkeypatch: pytest.MonkeyPatch
 ) -> None:

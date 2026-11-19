@@ -65,7 +65,7 @@ function ReminderRow({ reminder }: { reminder: Reminder }) {
         meta={(() => {
           const bits = [
             reminder.proposed ? <span key="proposed" className="text-accent-default">{t("tasks.proposed")}</span> : null,
-            reminder.repeat !== "none" ? <span key="repeat" className="flex items-center gap-1"><Icon name="repeat" className="h-3 w-3" />{t(reminder.repeat === "day" ? "reminders.repeat.day" : "reminders.repeat.week")}</span> : null,
+            reminder.repeat !== "none" ? <span key="repeat" className="flex items-center gap-1"><Icon name="repeat" className="h-3 w-3" />{t(`reminders.repeat.${reminder.repeat}` as StringKey)}</span> : null,
             reminder.source_ref ? <SourceChip key="source" source={reminder.source_ref} look="inline" /> : null,
             reminder.source === "agent" && !reminder.proposed ? <span key="agent">{t("reminders.byAgent")}</span> : null,
           ].filter(Boolean);

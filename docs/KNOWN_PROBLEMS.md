@@ -2,7 +2,7 @@
 
 Problems found while testing on the real mailbox and model, and how we plan to solve each one. Remove a row once it's fixed and proven on the real account.
 
-Last reviewed: 2026-11-04. See [implementation evidence and limits](EMAIL_AGENT_IMPLEMENTATION.md). Rows requiring real-account proof stay open.
+Last reviewed: 2026-11-18. See [implementation evidence and limits](EMAIL_AGENT_IMPLEMENTATION.md). Rows requiring real-account proof stay open.
 
 ## Security
 
@@ -85,6 +85,8 @@ The app has connected to the real company servers, and the first feedback came f
 | It ignores pending decisions | It can say "your plate is quiet" while 8 decisions wait on Today | Implemented: the brief now receives pending approvals, questions, mail suggestions and category proposals. Regression tested; confirm on the next real brief. |
 | Learning only uses what's typed | It only learns from like, dislike and comments, and most days people give none | Implemented: actor/account/version-scoped opens, task outcomes, sends and explicit reactions are recorded. Read flags remain marked-read counts; ignored/inactive is not inferred dislike. Prompt preferences require approval. Validate usefulness with real user feedback. |
 | Reactions apply to the whole brief | One bad line counts against all of it | Add a like and dislike for each item |
+| A brief updated through Posty still includes what the feedback asked to leave out | Seen 2026-11-18 on the company setup. After "Tell it what to change", the person asked Posty to update the brief. The brief agent said it found the feedback and took it into account, yet the item was still in the brief. The feedback does reach every brief run, morning or handed over: "How they want the brief" and "The brief on Today now" (with "They said: …") are built the same way for both (`runtime.py` → `knowledge.layers_for`) | First confirm on that run: Agent channel → Tasks → the brief task → Open its run → View final prompt, and check both parts carry the comment. Suspects: `daily-prep.md` says "A reaction is about the brief it was given to, not this one", which a small model can read as "ignore it"; and Posty's hand-over objective can ask for things the feedback rules out. Then reword that rule so the newest request applies to this brief, pass the newest comment in the hand-over, and add a deterministic check that bullets matching a "leave out" request are named back to the agent before saving |
+| The agent sometimes runs again and repeats work | Seen around the 2026-11-17/18 citation changes. One cause is confirmed and removed: a reply that cited nothing was sent back to "reply again", and once a report's evidence became citable, Posty read that as redoing the work and handed the brief over again, two or three times. That ask is gone; citing is now only the prompt's job, checked by tools such as `update_brief`. One path remains: `update_brief`'s "cites nothing" note comes back on every call with no once-per-run limit | Watch for repeated `update_brief` calls in one run. If seen, give the note once per run |
 | Feedback isn't consolidated | It keeps only the last 10 reactions, so older requests drop off | Mail review can propose evidence-backed scoped instructions for explicit approval; approved instructions persist with expiry/version/restore. Recent brief reactions remain bounded. Measure consolidation on real usage; no automatic permanent rule from one rating. |
 
 ## Needs you
