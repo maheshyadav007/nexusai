@@ -13,12 +13,7 @@ from nexusai.modules.mail.imap import Fetched, Folder
 from nexusai.sortlab import lab as sortlab
 
 TOKEN = "test-token"
-SIGN_IN = {
-    "address": corp_mail.OWNER[1],
-    "password": "secret",
-    "host": "mail.korvia.example",
-    "port": 993,
-}
+SIGN_IN = {"username": corp_mail.OWNER[1], "password": "secret"}
 
 
 class FakeServer:
@@ -57,7 +52,11 @@ def lab(
 ) -> tuple[sortlab.Lab, FakeServer, TestClient]:
     corp_mail.build(tmp_path / "source")
     server = FakeServer(tmp_path / "source")
-    monkeypatch.setattr(sortlab, "open_session", lambda sign_in: server)
+    monkeypatch.setattr(sortlab, "open_session", lambda sign_in, settings: server)
+    (tmp_path / "sortlab.env").write_text(
+        "NEXUSAI_MAIL_HOST=mail.korvia.example\nNEXUSAI_MAIL_DOMAIN=korvia.example\n"
+    )
+    monkeypatch.setattr(sortlab, "settings_files", lambda: [tmp_path / "sortlab.env"])
     state = sortlab.Lab(folder=tmp_path / "mail", results=tmp_path / "results")
     client = TestClient(sortlab.create_app(state, TOKEN), headers={"X-Lab-Token": TOKEN})
     return state, server, client
@@ -129,3 +128,44 @@ def test_only_this_runs_page_can_use_it(lab: Any) -> None:
     assert client.get("/api/status", headers=stranger).status_code == 403
     assert client.post("/api/start", json=SIGN_IN, headers=stranger).status_code == 403
     assert client.get("/").status_code == 200
+
+
+def test_the_page_asks_only_for_a_username_and_password(lab: Any) -> None:
+    _, _, client = lab
+    page = client.get("/").text
+    assert 'id="username"' in page and 'id="password"' in page
+    assert not any(field in page for field in ('id="host"', 'id="port"', 'id="protocol"'))
+    assert client.get("/api/setup").json() == {
+        "ready": True,
+        "domain": "korvia.example",
+        "settings_file": client.get("/api/setup").json()["settings_file"],
+    }
+    assert "host" not in client.get("/api/setup").json()
+
+
+def test_without_a_server_in_the_settings_nothing_starts(
+    lab: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _, _, client = lab
+    monkeypatch.setattr(sortlab, "settings_files", lambda: [tmp_path / "missing.env"])
+    assert client.get("/api/setup").json()["ready"] is False
+    refused = client.post("/api/start", json=SIGN_IN)
+    assert refused.status_code == 422 and "sortlab.env" in refused.text
+
+
+def test_settings_come_from_the_file_and_a_plain_login_gets_the_company_domain(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    settings = tmp_path / "sortlab.env"
+    settings.write_text(
+        "# company server\nNEXUSAI_MAIL_HOST=pop.firm.example\nNEXUSAI_MAIL_PROTOCOL=pop3\n"
+        "NEXUSAI_MAIL_VERIFY_CERT=false\nNEXUSAI_MAIL_DOMAIN=@firm.example\nNEXUSAI_SORTLAB_LIMIT=500\n"
+    )
+    monkeypatch.setattr(sortlab, "settings_files", lambda: [tmp_path / "missing.env", settings])
+    server = sortlab.server_settings()
+    assert server is not None
+    assert (server.host, server.protocol, server.port, server.verify_cert, server.limit) == (
+        "pop.firm.example", "pop3", 995, False, 500
+    )  # fmt: skip
+    assert sortlab.address_for("sam.lee", server.domain) == "sam.lee@firm.example"
+    assert sortlab.address_for("sam@else.example", server.domain) == "sam@else.example"

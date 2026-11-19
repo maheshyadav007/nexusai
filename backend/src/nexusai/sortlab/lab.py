@@ -17,7 +17,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, cast
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import HTMLResponse
@@ -31,6 +31,9 @@ from nexusai.modules.mail.parse import parse_message
 from nexusai.modules.mail.pop3 import Pop3Session
 
 BATCH = 50
+SETTINGS_FILE = "sortlab.env"
+# How many of the newest emails to read, unless NEXUSAI_SORTLAB_LIMIT says otherwise.
+LIMIT = 15000
 SKIPPED_ROLES = {"trash", "junk", "drafts"}
 SAMPLES = 10
 MISSED_SENDERS = 40
@@ -46,15 +49,22 @@ class Session(Protocol):
 
 
 class SignIn(BaseModel):
-    address: str = Field(min_length=3, max_length=320)
-    user: str = Field(default="", max_length=320)
+    """All a person types. Everything about the server comes from the settings file."""
+
+    username: str = Field(min_length=1, max_length=320)
     password: str = Field(min_length=1, max_length=1000)
-    host: str = Field(min_length=1, max_length=255)
-    port: int = Field(ge=1, le=65535)
-    protocol: Literal["imap", "pop3"] = "imap"
-    secure: bool = True
-    verify_cert: bool = True
-    limit: int = Field(default=15000, ge=1, le=100000)
+
+
+@dataclass(frozen=True)
+class Server:
+    host: str
+    port: int
+    protocol: Literal["imap", "pop3"]
+    secure: bool
+    verify_cert: bool
+    domain: str
+    limit: int
+    source: str
 
 
 class GroupFeedback(BaseModel):
@@ -101,48 +111,73 @@ class Lab:
         return count
 
 
-def company_defaults() -> dict[str, Any]:
-    """The company server, from the settings files the app reads, for the form to start with."""
-    candidates = [os.environ.get("NEXUSAI_ENV_FILE", "")]
+def _beside_program() -> Path:
+    """The folder of the double-clicked exe, or where the lab was started from."""
+    return Path(sys.executable).parent if getattr(sys, "frozen", False) else Path.cwd()
+
+
+def settings_files() -> list[Path]:
+    """Where the server settings may be, first found first used: a sortlab.env beside the lab,
+    a file named by NEXUSAI_ENV_FILE, then the NexusAI app's own company settings."""
+    found = [_beside_program() / SETTINGS_FILE]
+    if named := os.environ.get("NEXUSAI_ENV_FILE"):
+        found.append(Path(named))
     base = app_data_dir().parent
-    candidates += [str(base / name / "company.env") for name in ("NexusAI", "NexusAI Pilot")]
-    candidates.append(str(Path(__file__).resolve().parents[3] / ".env"))
-    values: dict[str, str] = {}
-    for candidate in candidates:
-        path = Path(candidate) if candidate else None
-        if path is None or not path.is_file():
+    found += [base / name / "company.env" for name in ("NexusAI", "NexusAI Pilot")]
+    return found
+
+
+def server_settings() -> Server | None:
+    """The company server, or None when no settings file names one."""
+    for path in settings_files():
+        if not path.is_file():
             continue
+        values: dict[str, str] = {}
         for line in path.read_text(encoding="utf-8-sig").splitlines():
             key, equals, value = line.strip().removeprefix("export ").partition("=")
-            if equals and key.strip().startswith("NEXUSAI_MAIL_"):
-                values.setdefault(key.strip(), value.strip().strip("\"'"))
-    on = {"1", "true", "yes", "on"}
-    protocol = values.get("NEXUSAI_MAIL_PROTOCOL", "imap").lower()
-    return {
-        "host": values.get("NEXUSAI_MAIL_HOST", ""),
-        "port": int(values.get("NEXUSAI_MAIL_PORT", "995" if protocol == "pop3" else "993")),
-        "protocol": protocol if protocol in {"imap", "pop3"} else "imap",
-        "secure": values.get("NEXUSAI_MAIL_SECURE", "true").lower() in on,
-        "verify_cert": values.get("NEXUSAI_MAIL_VERIFY_CERT", "true").lower() in on,
-        "domain": values.get("NEXUSAI_MAIL_DOMAIN", ""),
-    }
+            if equals and not key.strip().startswith("#"):
+                values[key.strip()] = value.strip().strip("\"'")
+        host = values.get("NEXUSAI_MAIL_HOST", "")
+        if not host:
+            continue
+        on = {"1", "true", "yes", "on"}
+        protocol = values.get("NEXUSAI_MAIL_PROTOCOL", "imap").strip().lower()
+        protocol = protocol if protocol in {"imap", "pop3"} else "imap"
+        return Server(
+            host=host,
+            port=int(values.get("NEXUSAI_MAIL_PORT", "995" if protocol == "pop3" else "993")),
+            protocol=cast(Literal["imap", "pop3"], protocol),
+            secure=values.get("NEXUSAI_MAIL_SECURE", "true").lower() in on,
+            verify_cert=values.get("NEXUSAI_MAIL_VERIFY_CERT", "true").lower() in on,
+            domain=values.get("NEXUSAI_MAIL_DOMAIN", "").strip().lstrip("@"),
+            limit=int(values.get("NEXUSAI_SORTLAB_LIMIT", str(LIMIT))),
+            source=str(path),
+        )
+    return None
 
 
-def open_session(sign_in: SignIn) -> Session:
+def address_for(login: str, domain: str) -> str:
+    """A login that isn't an address gets the company's domain."""
+    return login if "@" in login or not domain else f"{login}@{domain}"
+
+
+def open_session(sign_in: SignIn, server: Server) -> Session:
+    login = sign_in.username.strip()
+    address = address_for(login, server.domain)
     profile = MailProfile(
         label="Sort lab",
-        protocol=sign_in.protocol,
+        protocol=server.protocol,
         imap=ServerSettings(
-            host=sign_in.host,
-            port=sign_in.port,
-            secure=sign_in.secure,
-            verify_cert=sign_in.verify_cert,
+            host=server.host,
+            port=server.port,
+            secure=server.secure,
+            verify_cert=server.verify_cert,
         ),
-        smtp=ServerSettings(host=sign_in.host, port=465),
-        auth=MailAuth(user=sign_in.user or sign_in.address),
-        address=sign_in.address,
+        smtp=ServerSettings(host=server.host, port=465),
+        auth=MailAuth(user=login),
+        address=address,
     )
-    if sign_in.protocol == "pop3":
+    if server.protocol == "pop3":
         numbers: dict[str, int] = {}
 
         def uids(names: list[str]) -> dict[str, int]:
@@ -154,14 +189,14 @@ def open_session(sign_in: SignIn) -> Session:
     return ImapSession(profile, sign_in.password, 60, never_delete=True)
 
 
-def download(lab: Lab, sign_in: SignIn) -> None:
+def download(lab: Lab, sign_in: SignIn, server: Server) -> None:
     """Newest mail first, from every folder but trash, junk and drafts, up to the limit."""
     session: Session | None = None
     try:
         lab.state = "connecting"
-        session = open_session(sign_in)
+        session = open_session(sign_in, server)
         plan: list[tuple[str, list[int]]] = []
-        wanted = sign_in.limit
+        wanted = server.limit
         for folder in synced_folders(session.folders()):
             if folder.role in SKIPPED_ROLES or wanted <= 0:
                 continue
@@ -301,20 +336,29 @@ def create_app(lab: Lab, token: str) -> FastAPI:
     def page() -> str:
         return PAGE.read_text(encoding="utf-8")
 
-    @app.get("/api/defaults")
-    def defaults(x_lab_token: str | None = Header(default=None)) -> dict[str, Any]:
+    @app.get("/api/setup")
+    def setup(x_lab_token: str | None = Header(default=None)) -> dict[str, Any]:
         check(x_lab_token)
-        return company_defaults()
+        server = server_settings()
+        # Only whether it's set and the domain to hint at; the page never shows the server.
+        return {
+            "ready": server is not None,
+            "domain": server.domain if server else "",
+            "settings_file": str(settings_files()[0]),
+        }
 
     @app.post("/api/start")
     def start(sign_in: SignIn, x_lab_token: str | None = Header(default=None)) -> dict[str, str]:
         check(x_lab_token)
+        server = server_settings()
+        if server is None:
+            raise HTTPException(422, f"No mail server is set. Put {SETTINGS_FILE} beside the lab.")
         with lab.lock:
             if lab.state in {"connecting", "downloading", "grouping"}:
                 raise HTTPException(409, "Already running.")
             lab.forget_mail()
             lab.state, lab.error, lab.done, lab.total = "connecting", "", 0, 0
-            threading.Thread(target=download, args=(lab, sign_in), daemon=True).start()
+            threading.Thread(target=download, args=(lab, sign_in, server), daemon=True).start()
         return {"state": lab.state}
 
     @app.get("/api/status")

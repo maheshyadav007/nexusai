@@ -69,22 +69,11 @@ button.link { border: 0; background: none; color: var(--accent); padding: 4px 0;
   <section id="signin" class="card" hidden>
     <h1>Sort lab</h1>
     <p class="muted">Try the mail grouping on your own mailbox. It runs only on this computer and uses no AI. It reads mail without marking it read and never changes anything on the mail server. When you finish, it keeps the group names and your feedback and deletes every downloaded email from this computer.</p>
+    <p id="not-set" class="error" hidden></p>
     <form id="form" class="grid2">
-      <label class="field">Email address <input id="address" type="email" required autocomplete="username"></label>
+      <label class="field">Username <input id="username" type="text" required autocomplete="username" autocapitalize="off" spellcheck="false"></label>
       <label class="field">Password <input id="password" type="password" required autocomplete="current-password"></label>
-      <label class="field">Username, if it isn't your address <input id="user" type="text"></label>
-      <label class="field">How many recent emails <input id="limit" type="number" min="1" max="100000" value="15000"></label>
-      <details id="server" style="grid-column: 1 / -1">
-        <summary>Mail server</summary>
-        <div class="grid2" style="margin-top: 10px">
-          <label class="field">Server <input id="host" type="text" required></label>
-          <label class="field">Port <input id="port" type="number" min="1" max="65535" required></label>
-          <label class="field">Protocol <select id="protocol"><option value="imap">IMAP</option><option value="pop3">POP3</option></select></label>
-          <label class="field">Encrypted connection <select id="secure"><option value="true">Yes</option><option value="false">No</option></select></label>
-          <label class="field">Check the server's certificate <select id="verify"><option value="true">Yes</option><option value="false">No</option></select></label>
-        </div>
-      </details>
-      <div class="row" style="grid-column: 1 / -1"><button class="primary" type="submit" id="go">Download and group</button></div>
+      <div class="row" style="grid-column: 1 / -1"><button class="primary" type="submit" id="go">Connect</button></div>
     </form>
     <div id="progress" hidden>
       <p id="progress-text">Connecting…</p>
@@ -177,13 +166,14 @@ async function boot() {
   const status = await api("/api/status");
   if (status.state === "ready") return loadResults();
   show("signin");
-  const defaults = await api("/api/defaults");
-  document.getElementById("host").value = defaults.host;
-  document.getElementById("port").value = defaults.port;
-  document.getElementById("protocol").value = defaults.protocol;
-  document.getElementById("secure").value = String(defaults.secure);
-  document.getElementById("verify").value = String(defaults.verify_cert);
-  document.getElementById("server").open = !defaults.host;
+  const setup = await api("/api/setup");
+  if (setup.domain) document.getElementById("username").placeholder = `you or you@${setup.domain}`;
+  if (!setup.ready) {
+    const notSet = document.getElementById("not-set");
+    notSet.textContent = `This copy of the Sort lab doesn't know your mail server yet. Put the sortlab.env file you were given in the same folder as the lab (${setup.settings_file}), then start it again.`;
+    notSet.hidden = false;
+    document.getElementById("go").disabled = true;
+  }
   if (["connecting", "downloading", "grouping"].includes(status.state)) watch();
 }
 
@@ -193,11 +183,7 @@ document.getElementById("form").addEventListener("submit", async (event) => {
   const error = document.getElementById("signin-error");
   error.hidden = true;
   try {
-    await api("/api/start", {
-      address: value("address").trim(), user: value("user").trim(), password: value("password"),
-      host: value("host").trim(), port: Number(value("port")), protocol: value("protocol"),
-      secure: value("secure") === "true", verify_cert: value("verify") === "true", limit: Number(value("limit")),
-    });
+    await api("/api/start", { username: value("username").trim(), password: value("password") });
     document.getElementById("password").value = "";
     watch();
   } catch (problem) { error.textContent = problem.message; error.hidden = false; }
