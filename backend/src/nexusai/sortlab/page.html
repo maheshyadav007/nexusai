@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sort lab</title>
+<style>
+:root {
+  --page: #F3EEE5; --raised: #FFFDF9; --sunken: #E8E0D3; --ink: #191714; --ink-2: #3E372F;
+  --muted: #5F564C; --line: #D9D1C3; --line-strong: #8F7D6C; --accent: #A8441F; --on-accent: #FCF3EE;
+  --good: #3B5C33; --bad: #A83226; --warn: #7A5410;
+  --sans: "Segoe UI", system-ui, -apple-system, sans-serif; --mono: ui-monospace, Consolas, "SF Mono", monospace;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --page: #121010; --raised: #201C18; --sunken: #0C0B0A; --ink: #EFE9DE; --ink-2: #DACBBF;
+  --muted: #B5A99B; --line: #3A3128; --line-strong: #6E5A4C; --accent: #E0784F; --on-accent: #191714;
+  --good: #8FBF80; --bad: #EB8074; --warn: #D9A94A; color-scheme: dark } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.5 var(--sans); }
+main { max-width: 980px; margin: 0 auto; padding: 32px 16px 120px; display: flex; flex-direction: column; gap: 24px; }
+h1 { font-size: 26px; margin: 0; }
+h2 { font-size: 18px; margin: 0; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.card { background: var(--raised); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+label.field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+input[type=text], input[type=email], input[type=password], input[type=number], select, textarea {
+  font: 14px var(--sans); color: var(--ink); background: var(--raised); border: 1px solid var(--line-strong);
+  border-radius: 6px; padding: 8px; min-width: 0; }
+textarea { min-height: 38px; resize: vertical; }
+button { font: 600 13px var(--sans); border-radius: 8px; padding: 9px 14px; cursor: pointer; min-height: 38px;
+  border: 1px solid var(--line-strong); background: var(--raised); color: var(--ink); }
+button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: default; }
+button.link { border: 0; background: none; color: var(--accent); padding: 4px 0; min-height: 0; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.stat b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+.bar { height: 8px; background: var(--sunken); border-radius: 99px; overflow: hidden; }
+.bar > div { height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+.chip { font-size: 12px; background: var(--sunken); color: var(--ink-2); border-radius: 99px; padding: 2px 9px; }
+.mono { font-family: var(--mono); font-size: 12.5px; }
+.patterns { background: var(--sunken); border-radius: 6px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+.patterns div { display: flex; justify-content: space-between; gap: 12px; min-width: 0; }
+.patterns span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.verdict { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; }
+.verdict label { padding: 6px 12px; cursor: pointer; font-size: 13px; border-right: 1px solid var(--line); }
+.verdict label:last-child { border-right: 0; }
+.verdict input { position: absolute; opacity: 0; pointer-events: none; }
+.verdict input:checked + span { font-weight: 700; }
+.verdict label:has(input:checked) { background: var(--sunken); }
+.verdict label:has(input:focus-visible) { outline: 2px solid var(--accent); }
+.emails { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.emails label { display: flex; gap: 10px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 13px; min-width: 0; }
+.emails .subject { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.emails .sender { color: var(--muted); font-family: var(--mono); font-size: 12px; flex: 0 1 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.section-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.footer { position: fixed; left: 0; right: 0; bottom: 0; background: var(--raised); border-top: 1px solid var(--line); padding: 12px 16px; }
+.footer .inner { max-width: 980px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+.error { color: var(--bad); }
+.good { color: var(--good); }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <section id="signin" class="card" hidden>
+    <h1>Sort lab</h1>
+    <p class="muted">Try the mail grouping on your own mailbox. It runs only on this computer and uses no AI. It reads mail without marking it read and never changes anything on the mail server. When you finish, it keeps the group names and your feedback and deletes every downloaded email from this computer.</p>
+    <form id="form" class="grid2">
+      <label class="field">Email address <input id="address" type="email" required autocomplete="username"></label>
+      <label class="field">Password <input id="password" type="password" required autocomplete="current-password"></label>
+      <label class="field">Username, if it isn't your address <input id="user" type="text"></label>
+      <label class="field">How many recent emails <input id="limit" type="number" min="1" max="100000" value="15000"></label>
+      <details id="server" style="grid-column: 1 / -1">
+        <summary>Mail server</summary>
+        <div class="grid2" style="margin-top: 10px">
+          <label class="field">Server <input id="host" type="text" required></label>
+          <label class="field">Port <input id="port" type="number" min="1" max="65535" required></label>
+          <label class="field">Protocol <select id="protocol"><option value="imap">IMAP</option><option value="pop3">POP3</option></select></label>
+          <label class="field">Encrypted connection <select id="secure"><option value="true">Yes</option><option value="false">No</option></select></label>
+          <label class="field">Check the server's certificate <select id="verify"><option value="true">Yes</option><option value="false">No</option></select></label>
+        </div>
+      </details>
+      <div class="row" style="grid-column: 1 / -1"><button class="primary" type="submit" id="go">Download and group</button></div>
+    </form>
+    <div id="progress" hidden>
+      <p id="progress-text">Connecting…</p>
+      <div class="bar"><div id="progress-bar"></div></div>
+    </div>
+    <p id="signin-error" class="error" hidden></p>
+  </section>
+
+  <section id="results" hidden>
+    <div style="display: flex; flex-direction: column; gap: 24px">
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <h1>How your mail was grouped</h1>
+        <p class="muted" id="owner"></p>
+        <p class="muted">For each group: is it right? Rename it, move it to another section, untick Smart, or mark emails that don't belong. Then check the senders that were left in no group: any tool there was missed.</p>
+      </div>
+      <div class="stats" id="stats"></div>
+      <div id="sections" style="display: flex; flex-direction: column; gap: 28px"></div>
+      <div style="display: flex; flex-direction: column; gap: 12px">
+        <div class="section-head"><h2>Left in no group, so the AI reads them</h2><span class="muted" id="missed-count"></span></div>
+        <p class="muted">The biggest senders the engine didn't group. Mark the ones that are really tools.</p>
+        <div id="missed" style="display: flex; flex-direction: column; gap: 10px"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="done" class="card" hidden>
+    <h1>Experiment finished</h1>
+    <p class="good" id="done-text"></p>
+    <p class="muted">Send the saved file back to improve the engine. You can close this tab; stop the lab with Ctrl+C in its window.</p>
+    <div class="row"><button type="button" id="again">Start another experiment</button></div>
+  </section>
+</main>
+
+<div class="footer" id="footer" hidden>
+  <div class="inner">
+    <label class="row" style="gap: 8px"><input type="checkbox" id="details" checked> Save senders and subject patterns too, so the engine can be improved</label>
+    <div class="row">
+      <span id="confirm-text" class="muted" hidden></span>
+      <button type="button" id="discard">Discard</button>
+      <button type="button" class="primary" id="finish">Finish experiment</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const token = location.hash.slice(1);
+const SECTIONS = [
+  { id: "automated", title: "Automated", note: "Kept out of the AI unless a mail names you." },
+  { id: "calendar", title: "Calendar", note: "Invitations and their answers, kept out of the AI." },
+  { id: "people", title: "Written by people, sent to many", note: "The AI still reads these." },
+  { id: "too_few", title: "Too few to tell", note: "Look like tools but have too few emails; the AI still reads them." },
+];
+const SHOWN = 25;
+const feedback = {};
+const misses = {};
+let report = null;
+let confirming = null;
+
+function h(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs)) {
+    if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
+    else if (value === true) node.setAttribute(key, "");
+    else if (value !== false && value != null) node.setAttribute(key, String(value));
+  }
+  for (const child of children.flat()) if (child != null) node.append(child instanceof Node ? child : String(child));
+  return node;
+}
+
+async function api(path, body) {
+  const response = await fetch(path, {
+    method: body === undefined ? "GET" : "POST",
+    headers: { "X-Lab-Token": token, "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || response.statusText);
+  return response.json();
+}
+
+function show(id) {
+  for (const name of ["signin", "results", "done"]) document.getElementById(name).hidden = name !== id;
+  document.getElementById("footer").hidden = id !== "results";
+}
+
+const fmt = (n) => Number(n).toLocaleString();
+
+async function boot() {
+  if (!token) { document.body.textContent = "Open the link the sort lab printed in its window."; return; }
+  const status = await api("/api/status");
+  if (status.state === "ready") return loadResults();
+  show("signin");
+  const defaults = await api("/api/defaults");
+  document.getElementById("host").value = defaults.host;
+  document.getElementById("port").value = defaults.port;
+  document.getElementById("protocol").value = defaults.protocol;
+  document.getElementById("secure").value = String(defaults.secure);
+  document.getElementById("verify").value = String(defaults.verify_cert);
+  document.getElementById("server").open = !defaults.host;
+  if (["connecting", "downloading", "grouping"].includes(status.state)) watch();
+}
+
+document.getElementById("form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const value = (id) => document.getElementById(id).value;
+  const error = document.getElementById("signin-error");
+  error.hidden = true;
+  try {
+    await api("/api/start", {
+      address: value("address").trim(), user: value("user").trim(), password: value("password"),
+      host: value("host").trim(), port: Number(value("port")), protocol: value("protocol"),
+      secure: value("secure") === "true", verify_cert: value("verify") === "true", limit: Number(value("limit")),
+    });
+    document.getElementById("password").value = "";
+    watch();
+  } catch (problem) { error.textContent = problem.message; error.hidden = false; }
+});
+
+async function watch() {
+  document.getElementById("go").disabled = true;
+  document.getElementById("progress").hidden = false;
+  const text = document.getElementById("progress-text");
+  const bar = document.getElementById("progress-bar");
+  for (;;) {
+    const status = await api("/api/status");
+    if (status.state === "connecting") text.textContent = "Connecting to the mail server…";
+    if (status.state === "downloading") text.textContent = `Downloading ${fmt(status.done)} of ${fmt(status.total)} emails…`;
+    if (status.state === "grouping") text.textContent = `Grouping ${fmt(status.total)} emails. This takes about a minute for 15,000.`;
+    bar.style.width = status.total ? `${Math.round((status.done / status.total) * 100)}%` : "4%";
+    if (status.state === "ready") return loadResults();
+    if (status.state === "failed") {
+      const error = document.getElementById("signin-error");
+      error.textContent = status.error; error.hidden = false;
+      document.getElementById("go").disabled = false;
+      document.getElementById("progress").hidden = true;
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 800));
+  }
+}
+
+async function loadResults() {
+  report = await api("/api/report");
+  show("results");
+  document.getElementById("owner").textContent = `Mailbox of ${report.owner_name} <${report.owner}>, found from the mail itself.`;
+  const kept = report.total - report.reach_ai;
+  document.getElementById("stats").replaceChildren(
+    stat("Emails", report.total), stat("Kept out of the AI", kept), stat("Reach the AI", report.reach_ai),
+    stat("In no group", report.ungrouped), stat("Groups", report.groups.length),
+  );
+  const sections = document.getElementById("sections");
+  sections.replaceChildren();
+  for (const section of SECTIONS) {
+    const groups = report.groups.filter((g) => g.section === section.id);
+    if (!groups.length) continue;
+    const list = h("div", { style: "display: flex; flex-direction: column; gap: 10px" });
+    const total = groups.reduce((n, g) => n + g.count, 0);
+    sections.append(h("div", { style: "display: flex; flex-direction: column; gap: 10px" },
+      h("div", { class: "section-head" }, h("h2", {}, section.title), h("span", { class: "muted" }, `${fmt(total)} emails in ${fmt(groups.length)} groups`)),
+      h("p", { class: "muted" }, section.note), list));
+    renderGroups(list, groups, SHOWN);
+  }
+  const missed = document.getElementById("missed");
+  document.getElementById("missed-count").textContent = `${fmt(report.ungrouped)} emails`;
+  missed.replaceChildren(...report.missed.map(missCard));
+}
+
+function stat(label, value) {
+  return h("div", { class: "card stat" }, h("span", { class: "muted" }, label), h("b", {}, fmt(value)));
+}
+
+function renderGroups(list, groups, count) {
+  list.replaceChildren(...groups.slice(0, count).map(groupCard));
+  if (groups.length > count) {
+    const rest = groups.slice(count).reduce((n, g) => n + g.count, 0);
+    list.append(h("button", { type: "button", onclick: () => renderGroups(list, groups, groups.length) },
+      `Show ${fmt(groups.length - count)} smaller groups · ${fmt(rest)} emails`));
+  }
+}
+
+function verdictControl(name, options, current, onChange) {
+  return h("div", { class: "verdict", role: "radiogroup" }, options.map(([value, text]) =>
+    h("label", {}, h("input", { type: "radio", name, value, checked: current === value, onchange: () => onChange(value) }), h("span", {}, text))));
+}
+
+function groupCard(group) {
+  const state = feedback[group.id] ??= { id: group.id, name: group.label || group.reasons[0] || "", section: group.section, smart: group.smart, verdict: "", note: "", not_belonging: [] };
+  const key = group.id.replace(/[^a-z0-9]+/gi, "-");
+  const emails = h("div", { class: "emails", hidden: true }, group.emails.map((email) =>
+    h("label", {}, h("input", { type: "checkbox", checked: state.not_belonging.includes(email.key), onchange: (e) => {
+      state.not_belonging = e.target.checked ? [...state.not_belonging, email.key] : state.not_belonging.filter((k) => k !== email.key);
+    } }), h("span", { class: "subject" }, email.subject || "(no subject)"), h("span", { class: "sender" }, email.sender))));
+  const senders = group.senders.length > 3 ? `${fmt(group.senders.length)} senders` : group.senders.join(", ");
+  const mentions = group.mentions ? (group.mentions_ignored ? `Names you in ${fmt(group.mentions)} of ${fmt(group.count)}, like a list of everyone, so ignored` : `${fmt(group.mentions)} name you, so the AI still reads those`) : null;
+  return h("div", { class: "card" },
+    h("div", { class: "row" },
+      h("input", { type: "text", "aria-label": "Group name", value: state.name, style: "font-weight: 700; flex: 1 1 220px", oninput: (e) => { state.name = e.target.value; } }),
+      h("span", { class: "mono muted" }, senders)),
+    h("div", { class: "row muted" }, h("span", {}, h("b", {}, fmt(group.count)), " emails"), h("span", {}, h("b", {}, fmt(group.subjects)), " different subjects")),
+    group.patterns.length ? h("div", { class: "patterns mono" }, group.patterns.map(([text, n]) => h("div", {}, h("span", {}, text || "(no subject)"), h("span", {}, fmt(n))))) : null,
+    h("div", { class: "row" }, group.reasons.map((reason) => h("span", { class: "chip" }, reason))),
+    mentions ? h("p", { class: "muted" }, mentions) : null,
+    h("div", { class: "row" },
+      verdictControl(`v-${key}`, [["right", "Right"], ["wrong", "Wrong"], ["unsure", "Not sure"]], state.verdict, (v) => { state.verdict = v; }),
+      h("label", { class: "row", style: "gap: 6px" }, "Section",
+        h("select", { onchange: (e) => { state.section = e.target.value; } }, SECTIONS.map((s) => h("option", { value: s.id, selected: s.id === state.section }, s.title)))),
+      h("label", { class: "row", style: "gap: 6px" }, h("input", { type: "checkbox", checked: state.smart, onchange: (e) => { state.smart = e.target.checked; } }), "Smart: the AI reads it")),
+    h("textarea", { placeholder: "Note, if anything is off", "aria-label": "Note", oninput: (e) => { state.note = e.target.value; } }, state.note),
+    h("button", { type: "button", class: "link", onclick: (e) => { emails.hidden = !emails.hidden; e.target.textContent = emails.hidden ? `Show ${group.emails.length} emails and tick any that don't belong` : "Hide emails"; } },
+      `Show ${group.emails.length} emails and tick any that don't belong`),
+    emails);
+}
+
+function missCard(miss) {
+  const state = misses[miss.sender] ??= { sender: miss.sender, verdict: "", note: "" };
+  const key = miss.sender.replace(/[^a-z0-9]+/gi, "-");
+  const emails = h("div", { class: "emails", hidden: true }, miss.emails.map((email) =>
+    h("label", {}, h("span", { class: "subject" }, email.subject || "(no subject)"))));
+  return h("div", { class: "card" },
+    h("div", { class: "row" }, h("b", { class: "mono" }, miss.sender), h("span", { class: "muted" }, `${fmt(miss.count)} emails`)),
+    h("div", { class: "row" },
+      verdictControl(`m-${key}`, [["tool", "Should be grouped"], ["right", "Right to leave"], ["unsure", "Not sure"]], state.verdict, (v) => { state.verdict = v; }),
+      h("input", { type: "text", placeholder: "Note", "aria-label": "Note", style: "flex: 1 1 200px", oninput: (e) => { state.note = e.target.value; } })),
+    h("button", { type: "button", class: "link", onclick: (e) => { emails.hidden = !emails.hidden; e.target.textContent = emails.hidden ? "Show emails" : "Hide emails"; } }, "Show emails"),
+    emails);
+}
+
+const LABELS = { finish: "Finish experiment", discard: "Discard" };
+function ask(button, text, action) {
+  // The first click says what will happen; only a second click on the same button does it.
+  const label = document.getElementById("confirm-text");
+  if (confirming !== button.id) {
+    confirming = button.id;
+    for (const [id, words] of Object.entries(LABELS)) document.getElementById(id).textContent = words;
+    label.textContent = text; label.hidden = false;
+    button.textContent = "Yes, " + LABELS[button.id].toLowerCase();
+    return;
+  }
+  confirming = null;
+  label.hidden = true;
+  action().catch((problem) => { label.textContent = problem.message; label.hidden = false; });
+}
+
+document.getElementById("finish").addEventListener("click", (event) => ask(event.target,
+  `Saves names and feedback, then deletes all ${fmt(report.total)} downloaded emails from this computer.`, async () => {
+    const result = await api("/api/finish", { groups: Object.values(feedback), misses: Object.values(misses), details: document.getElementById("details").checked });
+    document.getElementById("done-text").textContent = `Saved to ${result.saved}. Deleted ${fmt(result.deleted)} downloaded emails from this computer. Nothing was changed on the mail server.`;
+    show("done");
+  }));
+
+document.getElementById("discard").addEventListener("click", (event) => ask(event.target,
+  `Deletes all ${fmt(report.total)} downloaded emails and your feedback, saving nothing.`, async () => {
+    const result = await api("/api/discard", {});
+    document.getElementById("done-text").textContent = `Deleted ${fmt(result.deleted)} downloaded emails. Nothing was saved.`;
+    show("done");
+  }));
+
+document.getElementById("again").addEventListener("click", () => location.reload());
+
+boot().catch((problem) => { document.body.textContent = problem.message; });
+</script>
+</body>
+</html>
