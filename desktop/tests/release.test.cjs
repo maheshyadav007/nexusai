@@ -64,15 +64,26 @@ test('readiness waits for a listening service and rejects a dead child', async (
   } finally { await new Promise((resolve) => server.close(resolve)); }
 });
 
-test('the frontend origin remains stable across launches and a collision is actionable', async () => {
+test('the frontend origin stays the same across launches and a taken port is replaced', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'nexusai-origin-'));
+  const file = path.join(directory, 'frontend-port');
   let server;
   try {
     const first = await persistentFrontendPort(directory);
+    assert.ok(first >= 20000 && first < 32000, `${first} is outside the range systems reserve`);
     assert.equal(await persistentFrontendPort(directory), first);
+    // Taken or reserved after a restart: a new one is chosen and kept, and the log says why.
     server = http.createServer();
     await new Promise((resolve) => server.listen(first, '127.0.0.1', resolve));
-    await assert.rejects(persistentFrontendPort(directory), /saved local port.*in use/);
+    const said = [];
+    const second = await persistentFrontendPort(directory, (line) => said.push(line));
+    assert.notEqual(second, first);
+    assert.equal(Number(await fs.readFile(file, 'utf8')), second);
+    assert.match(said.join('\n'), new RegExp(`${first} can't be used`));
+    // A damaged file doesn't stop the app either.
+    await fs.writeFile(file, 'garbage');
+    const third = await persistentFrontendPort(directory);
+    assert.ok(Number.isInteger(third) && third >= 1024);
   } finally {
     if (server) await new Promise((resolve) => server.close(resolve));
     await fs.rm(directory, { recursive: true, force: true });

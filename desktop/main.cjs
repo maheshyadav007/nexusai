@@ -451,7 +451,7 @@ async function start() {
     log(`Attached to ${origin}`);
   } else {
     await startupStage('Preparing your local services…');
-    const frontendPort = await persistentFrontendPort(dataDir);
+    const frontendPort = await persistentFrontendPort(dataDir, log);
     let backendPort = await freePort();
     while (frontendPort === backendPort) backendPort = await freePort();
     backendUrl = `http://127.0.0.1:${backendPort}`;

@@ -16,21 +16,44 @@ function freePort() {
   });
 }
 
-async function persistentFrontendPort(directory) {
-  const file = path.join(directory, 'frontend-port');
-  let port;
-  try { port = Number((await fs.readFile(file, 'utf8')).trim()); }
-  catch (error) { if (error.code !== 'ENOENT') throw error; }
-  if (port === undefined) {
-    port = await freePort();
-    await fs.writeFile(file, String(port), { mode: 0o600 });
-  }
-  if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Invalid saved frontend port. Inspect frontend-port in the app-data directory.');
-  await new Promise((resolve, reject) => {
+// Below the range systems hand out on their own (49152+ on Windows, 32768+ on Linux), where
+// Hyper-V, WSL and Docker reserve random blocks at boot, so a restart can't take this one away.
+const STABLE_PORTS = [20000, 32000];
+
+function canListen(port) {
+  return new Promise((resolve) => {
     const server = net.createServer();
-    server.once('error', () => reject(new Error(`NexusAI's saved local port ${port} is in use. Close the other instance/application or restart Windows. The port is preserved to keep browser storage available.`)));
-    server.listen(port, '127.0.0.1', () => server.close(resolve));
+    server.once('error', (error) => resolve(error.code || 'error'));
+    server.listen(port, '127.0.0.1', () => server.close(() => resolve(null)));
   });
+}
+
+async function stablePort(attempts = 50) {
+  const [low, high] = STABLE_PORTS;
+  for (let i = 0; i < attempts; i += 1) {
+    const port = low + Math.floor(Math.random() * (high - low));
+    if (!(await canListen(port))) return port;
+  }
+  return freePort();
+}
+
+/** The same port every launch keeps browser storage, but only conveniences live there (panel
+ * state, recent searches, theme), so a port that's taken or reserved is replaced, not fatal. */
+async function persistentFrontendPort(directory, log = () => {}) {
+  const file = path.join(directory, 'frontend-port');
+  let saved;
+  try { saved = Number((await fs.readFile(file, 'utf8')).trim()); }
+  catch (error) { if (error.code !== 'ENOENT') log(`Couldn't read the saved local port: ${error.code}`); }
+  if (Number.isInteger(saved) && saved >= 1024 && saved <= 65535) {
+    const refused = await canListen(saved);
+    if (!refused) return saved;
+    log(`Saved local port ${saved} can't be used (${refused}); choosing another. Panel state, recent searches and theme start fresh.`);
+  } else if (saved !== undefined) {
+    log('The saved local port was unreadable; choosing another.');
+  }
+  const port = await stablePort();
+  try { await fs.writeFile(file, String(port), { mode: 0o600 }); }
+  catch (error) { log(`Couldn't save the local port: ${error.code}. A new one is chosen next launch.`); }
   return port;
 }
 
