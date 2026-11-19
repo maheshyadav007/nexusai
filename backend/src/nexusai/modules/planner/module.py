@@ -421,15 +421,17 @@ def save_reminder(command: SaveReminder, ctx: Context) -> PlannerDone:
             False,
         )
         return PlannerDone()
+    # Seconds or an offset would make it come due a minute late, so it's stored like a new one.
+    when = when_of(command.when)
     with ctx.bus.unit_of_work() as work:
         work.tx.execute(
             "UPDATE reminders SET title = ?, due_at = ?, repeat = ?, repeat_day = ?, thread = ?,"
             " task = ?, proposed = ?, fired = 0, updated = ? WHERE id = ?",
             (
                 command.title,
-                command.when,
+                when,
                 command.repeat,
-                _day_for(command.repeat, command.when),
+                _day_for(command.repeat, when),
                 command.thread,
                 command.task,
                 int(command.proposed),

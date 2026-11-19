@@ -343,6 +343,22 @@ def test_reminders_repeat_monthly_and_yearly_and_an_unknown_repeat_is_refused_ou
     assert said.startswith("Not done")
 
 
+def test_a_proposal_with_a_day_that_doesnt_exist_is_refused_out_loud(
+    client: TestClient, script: Script
+) -> None:
+    # They're the Mail agent's tools.
+    def propose(call: ToolCall) -> str:
+        script.replies = [[call], [TextChunk("Done.")]]
+        chat(client, new_session(client), "@mail Do it")
+        return last_result(script)
+
+    said = propose(ToolCall("a", "propose_task", {"title": "X", "due": "2031-11-31"}))
+    assert said.startswith("Not proposed") and "YYYY-MM-DD" in said
+    said = propose(ToolCall("b", "propose_reminder", {"title": "Y", "when": "2031-02-30T09:00"}))
+    assert said.startswith("Not proposed")
+    assert client.post("/api/queries/reminders.list").json()["reminders"] == []
+
+
 def test_a_reminder_with_a_repeat_the_app_doesnt_know_doesnt_break_the_list(
     client: TestClient,
 ) -> None:

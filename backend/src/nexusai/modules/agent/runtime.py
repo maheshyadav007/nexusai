@@ -133,9 +133,8 @@ ORIGIN_NOTES = {
     "task-report": "Work you handed out, or a question about it, needs you now. The person may not be looking, so check it and say what matters in your reply.",
 }
 RESUMABLE = {"queued", "running"}
-# Runs whose reply the person reads, so what it says from mail or documents is cited.
 # Bumped when the harness changes how runs are put together, and recorded on every run.
-HARNESS_VERSION = "2026.11.5"
+HARNESS_VERSION = "2026.11.6"
 KEEPALIVE_SECONDS = 15
 TITLE_LENGTH = 60
 

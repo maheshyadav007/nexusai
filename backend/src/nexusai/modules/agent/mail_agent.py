@@ -1290,12 +1290,25 @@ class Triage:
 
 
 def _valid_date(value: Any) -> str | None:
+    """A real calendar day, so "2026-11-31" is dropped instead of stopping the rest."""
     text = str(value or "")
-    return text if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text) else None
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+        return None
+    try:
+        return planner.due_of(text)
+    except CommandError:
+        return None
 
 
 def _valid_moment(value: Any) -> bool:
-    return bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}.*", str(value or "")))
+    text = str(value or "")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}.*", text):
+        return False
+    try:
+        planner.when_of(text[:16])
+    except CommandError:
+        return False
+    return True
 
 
 def thread_runs(ctx: Context, thread: int) -> ThreadRuns:

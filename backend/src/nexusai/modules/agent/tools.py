@@ -1955,13 +1955,19 @@ def build_tools(
     ) -> str:
         if planner.has_task(ctx.bus.db, title, thread_id):
             return "Not proposed: a task about this already exists. Check list_tasks."
-        planner.add_task(ctx, title, due, thread_id, "agent", True)
+        try:
+            planner.add_task(ctx, title, due, thread_id, "agent", True)
+        except CommandError as error:
+            return f"Not proposed: {error.message}"
         return "Proposed. The person accepts it in Tasks."
 
     def propose_reminder(
         title: str, when: str, tool_call_id: str, thread_id: int | None = None
     ) -> str:
-        planner.add_reminder(ctx, title, when[:16], "none", thread_id, None, "agent", True)
+        try:
+            planner.add_reminder(ctx, title, when, "none", thread_id, None, "agent", True)
+        except CommandError as error:
+            return f"Not proposed: {error.message}"
         return "Proposed. The person accepts it in Reminders."
 
     def _keep_draft(draft: Draft) -> None:

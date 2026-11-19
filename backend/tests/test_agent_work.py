@@ -788,6 +788,19 @@ def test_tasks_and_reminders_work_by_hand(client: TestClient) -> None:
         json={"title": "Call", "when": "2099-01-01T09:00", "repeat": "week"},
     )
     reminder = client.post("/api/queries/reminders.list").json()["reminders"][0]
+    # An edit is stored like a new one, so seconds can't make it come due a minute late.
+    client.post(
+        "/api/commands/reminders.save",
+        json={
+            "id": reminder["id"],
+            "title": "Call",
+            "when": "2099-01-01T09:00:00",
+            "repeat": "week",
+        },
+    )
+    assert client.post("/api/queries/reminders.list").json()["reminders"][0]["when"] == (
+        "2099-01-01T09:00"
+    )
     client.post("/api/commands/reminders.snooze", json={"id": reminder["id"], "minutes": 30})
     assert client.post("/api/queries/reminders.list").json()["reminders"][0]["when"] < "2099"
     client.post("/api/commands/reminders.remove", json={"id": reminder["id"]})
