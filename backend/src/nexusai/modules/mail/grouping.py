@@ -314,111 +314,127 @@ def _share(items: list[Mail], test: Callable[[Mail], bool]) -> float:
     return sum(1 for item in items if test(item)) / len(items) if items else 0.0
 
 
-def group_mailbox(raws: Iterable[tuple[str, bytes]]) -> Report:
-    loaded = [(key, raw, parse_message(raw)) for key, raw in raws]
-    owner, owner_name = _owner([parsed for _, _, parsed in loaded])
-    own_domain = owner.partition("@")[2]
-    mention = _mention(owner, owner_name) if owner else None
-    greeting = _greeting_of(owner_name)
-    mails: list[Mail] = []
-    for key, raw, parsed in loaded:
-        pattern, repeat_key = pattern_of(parsed.subject)
-        mails.append(
-            Mail(
-                key=key,
-                parsed=parsed,
-                sender=parsed.from_addr,
-                pattern=pattern,
-                repeat_key=repeat_key,
-                ending=_ending(parsed.text),
-                calendar=_calendar(raw, parsed),
-                marked="thread-index" in parsed.headers,
-                bulk=_bulk(parsed.headers),
-                named=bool(mention and _addressed(mention, parsed.subject, parsed.own)),
-                reply=bool(SUBJECT_PREFIX.match(parsed.subject) or parsed.in_reply_to),
-                greeted=bool(greeting and _opens_with(greeting, parsed.own)),
+class _Box:
+    """What the whole mailbox says: whose it is, its conversations, who writes to whom, and the
+    signs that tell a tool from a person. Grouping and per-sender scores both start here."""
+
+    def __init__(self, raws: Iterable[tuple[str, bytes]]) -> None:
+        loaded = [(key, raw, parse_message(raw)) for key, raw in raws]
+        self.owner, self.owner_name = _owner([parsed for _, _, parsed in loaded])
+        owner = self.owner
+        self.own_domain = owner.partition("@")[2]
+        mention = _mention(owner, self.owner_name) if owner else None
+        greeting = _greeting_of(self.owner_name)
+        self.mails: list[Mail] = []
+        for key, raw, parsed in loaded:
+            pattern, repeat_key = pattern_of(parsed.subject)
+            self.mails.append(
+                Mail(
+                    key=key,
+                    parsed=parsed,
+                    sender=parsed.from_addr,
+                    pattern=pattern,
+                    repeat_key=repeat_key,
+                    ending=_ending(parsed.text),
+                    calendar=_calendar(raw, parsed),
+                    marked="thread-index" in parsed.headers,
+                    bulk=_bulk(parsed.headers),
+                    named=bool(mention and _addressed(mention, parsed.subject, parsed.own)),
+                    reply=bool(SUBJECT_PREFIX.match(parsed.subject) or parsed.in_reply_to),
+                    greeted=bool(greeting and _opens_with(greeting, parsed.own)),
+                )
             )
+        mails = self.mails
+        threads = _Threads()
+        self.by_id = {mail.parsed.message_id: mail for mail in mails}
+        for mail in mails:
+            threads.find(mail.parsed.message_id)
+            for ref in [mail.parsed.in_reply_to, *mail.parsed.references]:
+                if ref:
+                    threads.join(mail.parsed.message_id, ref)
+            if mail.parsed.thread_index_root:
+                threads.join(mail.parsed.message_id, f"ti:{mail.parsed.thread_index_root}")
+        self.writers: dict[str, set[str]] = defaultdict(set)
+        for mail in mails:
+            mail.thread = threads.find(mail.parsed.message_id)
+            self.writers[mail.thread].add(mail.sender)
+        self.marks_usable = _share(mails, lambda m: m.marked) >= MARKED_MAILBOX
+        self.endings = _endings({mail.sender.partition("@")[2] for mail in mails})
+        # What the person wrote to others. Mail from them to themselves, like a forwarding
+        # rule's, is grouped like anyone's.
+        sent = [mail for mail in mails if mail.sender == owner and self.to_others(mail)]
+        # Addresses someone else wrote to: people in conversations, never a tool's own address.
+        self.written_by_others = {
+            address
+            for mail in mails
+            for address in {*mail.parsed.to, *mail.parsed.cc}
+            if address != mail.sender and address != owner
+        }
+        # Who the person writes to is only known when the mailbox holds their own sent mail.
+        self.sent_known = len(sent) >= ENOUGH
+        # Bulk mail names its unsubscribe address; mail sent there unsubscribes, it isn't writing.
+        unsubscribe = {
+            found.lower()
+            for mail in mails
+            for found in UNSUBSCRIBE.findall(mail.parsed.headers.get("list-unsubscribe", ""))
+        }
+        self.written_to = (
+            {address for mail in sent for address in {*mail.parsed.to, *mail.parsed.cc}}
+            - {owner}
+            - unsubscribe
         )
 
-    threads = _Threads()
-    by_id = {mail.parsed.message_id: mail for mail in mails}
-    for mail in mails:
-        threads.find(mail.parsed.message_id)
-        for ref in [mail.parsed.in_reply_to, *mail.parsed.references]:
-            if ref:
-                threads.join(mail.parsed.message_id, ref)
-        if mail.parsed.thread_index_root:
-            threads.join(mail.parsed.message_id, f"ti:{mail.parsed.thread_index_root}")
-    writers: dict[str, set[str]] = defaultdict(set)
-    for mail in mails:
-        mail.thread = threads.find(mail.parsed.message_id)
-        writers[mail.thread].add(mail.sender)
-    marks_usable = _share(mails, lambda m: m.marked) >= MARKED_MAILBOX
-    # Who the person writes to is only known when the mailbox holds their own sent mail.
-    endings = _endings({mail.sender.partition("@")[2] for mail in mails})
+    def to_others(self, mail: Mail) -> bool:
+        return any(address != self.owner for address in {*mail.parsed.to, *mail.parsed.cc})
 
-    def to_others(mail: Mail) -> bool:
-        return any(address != owner for address in {*mail.parsed.to, *mail.parsed.cc})
-
-    # What the person wrote to others. Mail from them to themselves, like a forwarding rule's,
-    # is grouped like anyone's.
-    sent = [mail for mail in mails if mail.sender == owner and to_others(mail)]
-    # Addresses someone else wrote to: people in conversations, never a tool's own address.
-    written_by_others = {
-        address
-        for mail in mails
-        for address in {*mail.parsed.to, *mail.parsed.cc}
-        if address != mail.sender and address != owner
-    }
-    sent_known = len(sent) >= ENOUGH
-    # Bulk mail names its unsubscribe address; mail sent there unsubscribes, it isn't writing.
-    unsubscribe = {
-        found.lower()
-        for mail in mails
-        for found in UNSUBSCRIBE.findall(mail.parsed.headers.get("list-unsubscribe", ""))
-    }
-    written_to = (
-        {address for mail in sent for address in {*mail.parsed.to, *mail.parsed.cc}}
-        - {owner}
-        - unsubscribe
-    )
-
-    def answers_people(sender: str, items: list[Mail]) -> bool:
+    def answers_people(self, sender: str, items: list[Mail]) -> bool:
         """A tool never replies to someone else's message; people do."""
         for item in items:
-            parent = by_id.get(item.parsed.in_reply_to or "")
+            parent = self.by_id.get(item.parsed.in_reply_to or "")
             if parent is not None and parent.sender != sender:
                 return True
         return False
 
-    def evidence(items: list[Mail]) -> list[str]:
+    def evidence(self, items: list[Mail]) -> list[str]:
+        writers = self.writers
         reasons: list[str] = []
         unanswered = _share(items, lambda m: writers[m.thread] == {m.sender}) >= MOSTLY
-        if marks_usable and _share(items, lambda m: not m.marked) >= MOSTLY:
+        if self.marks_usable and _share(items, lambda m: not m.marked) >= MOSTLY:
             reasons.append("Sent by an app, not a mail program")
         if _share(items, lambda m: m.bulk) >= MOSTLY:
             reasons.append("Its headers mark it as bulk or automatic")
-        endings = Counter(item.ending for item in items)
-        same_ending = bool(endings) and endings.most_common(1)[0][1] / len(items) >= MOSTLY
+        closings = Counter(item.ending for item in items)
+        same_ending = bool(closings) and closings.most_common(1)[0][1] / len(items) >= MOSTLY
         alone = _share(items, lambda m: writers[m.thread] == {m.sender}) >= MOSTLY
         if same_ending and alone:
             reasons.append("Every email ends the same way, and nobody writes back")
         # Works on any server: people get written to in conversations; a tool's address doesn't.
-        if unanswered and not any(item.sender in written_by_others for item in items):
+        if unanswered and not any(item.sender in self.written_by_others for item in items):
             reasons.append("Nobody writes back, and nobody ever writes to it")
         return reasons
 
-    def one_way(sender: str, items: list[Mail]) -> list[str]:
+    def one_way(self, sender: str, items: list[Mail]) -> list[str]:
         """Many emails nobody has ever answered. People don't keep writing to someone who never
         writes back; tools do. Needs either the person's sent mail or Outlook's marks to rule
         out a colleague whose announcements nobody answers."""
-        if len(items) < ENOUGH or any(writers[item.thread] != {sender} for item in items):
+        if len(items) < ENOUGH or any(self.writers[item.thread] != {sender} for item in items):
             return []
-        if sent_known and sender not in written_to:
+        if self.sent_known and sender not in self.written_to:
             return ["Many emails, nobody ever writes back, and you never wrote to them"]
-        if not sent_known and marks_usable and _share(items, lambda m: not m.marked) >= MOSTLY:
+        unmarked = _share(items, lambda m: not m.marked) >= MOSTLY
+        if not self.sent_known and self.marks_usable and unmarked:
             return ["Many emails from an app, and nobody ever writes back"]
         return []
+
+
+def group_mailbox(raws: Iterable[tuple[str, bytes]]) -> Report:
+    box = _Box(raws)
+    mails, owner, owner_name = box.mails, box.owner, box.owner_name
+    own_domain, writers = box.own_domain, box.writers
+    marks_usable, endings, sent_known = box.marks_usable, box.endings, box.sent_known
+    written_to, written_by_others = box.written_to, box.written_by_others
+    to_others, answers_people = box.to_others, box.answers_people
+    evidence, one_way = box.evidence, box.one_way
 
     groups: list[Group] = []
     decided: dict[str, tuple[str | None, Section]] = {}
@@ -646,3 +662,118 @@ if __name__ == "__main__":
         mail = read_folder(Path(arguments[0]))
     found = group_mailbox(mail)
     print(to_json(found) if "--json" in sys.argv else describe(found))
+
+
+# One list, one number per sender
+
+
+# A sender at or above this score is kept from the AI.
+THRESHOLD = 0.5
+
+
+@dataclass
+class SenderScore:
+    sender: str
+    label: str
+    count: int
+    # Different subjects among the emails that start something, rather than answer it.
+    subjects: int
+    # The three signs, each from 0 to 1, and the score: the strongest of them.
+    repeats: float
+    bulk: float
+    one_way: bool
+    score: float
+    side: Literal["reads", "ignores"]
+    # Why it stays with the AI whatever its score, if it does.
+    kept: str
+    # How many would still reach the AI if it's ignored, whichever side it starts on: they
+    # name the person, or a person replied in that conversation.
+    reach: int
+    examples: list[tuple[str, int]]
+    members: list[str] = field(repr=False)
+    through: list[str] = field(default_factory=list, repr=False)
+
+
+@dataclass
+class SenderReport:
+    owner: str
+    owner_name: str
+    total: int
+    reach_ai: int
+    senders: list[SenderScore]
+    calendar: list[str] = field(repr=False)
+    # Every email kept from the AI: calendar mail, and the ignored side's mail that neither
+    # names the person nor has a person's reply in its conversation.
+    quiet: set[str] = field(default_factory=set, repr=False)
+
+
+def score_senders(raws: Iterable[tuple[str, bytes]]) -> SenderReport:
+    """Every sender, biggest first, with how automated it looks and which side it starts on."""
+    box = _Box(raws)
+    owner = box.owner
+    calendar = [mail.key for mail in box.mails if mail.calendar]
+    by_sender: dict[str, list[Mail]] = defaultdict(list)
+    for mail in box.mails:
+        # What the person wrote to others is theirs to judge, and so is a colleague's mail that
+        # greets them by name; mass mail greets everyone too, but comes with bulk headers.
+        personal = (
+            mail.greeted and mail.sender.partition("@")[2] == box.own_domain and not mail.bulk
+        )
+        if mail.calendar or personal or (mail.sender == owner and box.to_others(mail)):
+            continue
+        by_sender[mail.sender].append(mail)
+    scored: list[SenderScore] = []
+    quiet = set(calendar)
+    for sender, items in by_sender.items():
+        starts = [item for item in items if not item.reply] or items
+        # A blank subject is no pattern, so each counts as different.
+        patterns = Counter(item.pattern or f"blank:{item.key}" for item in starts)
+        repeats = 1 - len(patterns) / len(starts) if len(starts) > 1 else 0.0
+        bulk = _share(items, lambda m: m.bulk)
+        one_way = bool(box.one_way(sender, items)) and sender != owner
+        score = max(repeats, bulk, 1.0 if one_way else 0.0)
+        kept = ""
+        if len(items) == 1:
+            kept = "A new sender"
+        elif box.answers_people(sender, items):
+            kept = "Answers people in conversations"
+        elif box.sent_known and sender in box.written_to:
+            kept = "You write to them"
+        elif sender in box.written_by_others and bulk < MOSTLY:
+            kept = "Other people write to them"
+        elif sender == owner and len(items) < ENOUGH:
+            kept = "Your own notes"
+        side: Literal["reads", "ignores"] = (
+            "ignores" if score >= THRESHOLD and not kept else "reads"
+        )
+        named = sum(item.named for item in items)
+        names_everyone = named / len(items) > NAMES_EVERYONE
+        passes = {
+            item.key
+            for item in items
+            if (item.named and not names_everyone) or (box.writers[item.thread] - {sender, owner})
+        }
+        through = len(passes)
+        if side == "ignores":
+            quiet |= {item.key for item in items} - passes
+        scored.append(
+            SenderScore(
+                sender=sender,
+                label=_label(items, box.own_domain, box.endings),
+                count=len(items),
+                subjects=len(patterns),
+                repeats=round(repeats, 2),
+                bulk=round(bulk, 2),
+                one_way=one_way,
+                score=round(score, 2),
+                side=side,
+                kept=kept,
+                reach=through,
+                examples=Counter(item.pattern for item in items).most_common(3),
+                members=[item.key for item in items],
+                through=sorted(passes),
+            )
+        )
+    scored.sort(key=lambda row: (-row.count, row.sender))
+    reach = len(box.mails) - len(quiet)
+    return SenderReport(owner, box.owner_name, len(box.mails), reach, scored, calendar, quiet)
