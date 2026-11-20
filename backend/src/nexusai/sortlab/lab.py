@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 
 from nexusai.contracts.mail import MailAuth, MailProfile, ServerSettings
 from nexusai.kernel.home import app_data_dir
-from nexusai.modules.mail import grouping, sorting
+from nexusai.modules.mail import grouping, sort_view
 from nexusai.modules.mail.imap import Fetched, Folder, ImapSession, SignInFailed, synced_folders
 from nexusai.modules.mail.pop3 import Pop3Session
 
@@ -241,7 +241,7 @@ def download(lab: Lab, sign_in: SignIn, server: Server) -> None:
 def describe(lab: Lab) -> dict[str, Any]:
     """What the page shows, the same as the app's sorting page shows."""
     assert lab.report is not None
-    found, _ = sorting.describe(lab.report, lambda key: (lab.folder / key).read_bytes())
+    found, _ = sort_view.describe(lab.report, lambda key: (lab.folder / key).read_bytes())
     return found
 
 
