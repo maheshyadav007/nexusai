@@ -588,6 +588,13 @@ def learn_when_history_finished(event: AppEvent, ctx: Context) -> None:
         _triggers.consider_learning(history_finished=True)
 
 
+@agent_module.on("mail.sorted", "agent.learn_after_sorting")
+def learn_after_sorting(event: AppEvent, ctx: Context) -> None:
+    """Sorted or skipped, the wait is over: learning starts on what the AI may read."""
+    if _triggers:
+        _triggers.consider_learning(history_finished=True)
+
+
 @agent_module.on("pst.progress", "agent.learn_from_pst")
 def learn_from_pst(event: AppEvent, ctx: Context) -> None:
     if _triggers and event.payload.get("status") == "done":

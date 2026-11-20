@@ -138,8 +138,17 @@ def place_of(text: str, chunk: int, most: int) -> str | None:
     return found[-1] if found else None
 
 
-# Spam and Trash stay in their own folders, so they're never found by meaning.
-KEPT_MAIL = "folder_role NOT IN ('junk', 'trash')"
+# Spam and Trash stay in their own folders, so they're never found by meaning, and nor is mail
+# filed where the person keeps it from the AI. Keyword search still finds that.
+KEPT_MAIL = (
+    "folder_role NOT IN ('junk', 'trash') AND NOT EXISTS (SELECT 1 FROM threads kept_t"
+    " JOIN mail_categories kept_c ON kept_c.name = kept_t.category"
+    " WHERE kept_t.id = messages.thread_id AND kept_c.ai_reads = 0)"
+)
+# The same, for queries that name messages m: its attachments are left out with it.
+KEPT_MAIL_M = KEPT_MAIL.replace("folder_role", "m.folder_role").replace(
+    "messages.thread_id", "m.thread_id"
+)
 
 
 class Engine:
@@ -252,7 +261,9 @@ class Engine:
         rows = self.db.fetch_all(
             "SELECT (SELECT COUNT(*) FROM documents)"
             " + (SELECT COUNT(*) FROM home_files)"
-            " + (SELECT COUNT(*) FROM message_parts p JOIN messages m ON m.id = p.message WHERE p.kind = 'attachment' AND p.text IS NOT NULL AND p.text != '' AND m.folder_role NOT IN ('junk', 'trash'))"
+            " + (SELECT COUNT(*) FROM message_parts p JOIN messages m ON m.id = p.message WHERE p.kind = 'attachment' AND p.text IS NOT NULL AND p.text != '' AND "
+            + KEPT_MAIL_M
+            + ")"
             " AS n"
         )
         return int(rows[0]["n"])
@@ -401,7 +412,7 @@ class Engine:
         rows = self.db.fetch_all(
             "SELECT p.message, p.part_index FROM message_parts p JOIN messages m ON m.id = p.message"
             " WHERE p.kind = 'attachment' AND p.text IS NOT NULL AND p.text != ''"
-            " AND m.folder_role NOT IN ('junk', 'trash') ORDER BY p.message DESC"
+            f" AND {KEPT_MAIL_M} ORDER BY p.message DESC"
         )
         for row in rows:
             ref = f"m:{row['message']}:{row['part_index']}"

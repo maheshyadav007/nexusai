@@ -182,6 +182,10 @@ export type SkipAgent = boolean;
 export type ReadReplies = boolean;
 export type Notify = boolean;
 export type Tag = string | null;
+/**
+ * @maxItems 4
+ */
+export type Mentions = [] | [string] | [string, string] | [string, string, string] | [string, string, string, string];
 export type Name7 = string;
 export type Enabled = boolean;
 /**
@@ -590,23 +594,56 @@ export type Confirm = boolean;
 export type Conversations = number;
 export type EstimatedTokens = number;
 export type Queued = number;
+export type Subject9 = string;
+export type Sender5 = string;
+export type SenderName1 = string;
+export type When = string;
+export type Snippet1 = string;
+export type NamesYou = boolean;
+export type Id18 = string;
+export type Label3 = string;
+export type Folder6 = "inbox" | "automated" | "calendar";
+export type Count2 = number;
+export type Senders1 = string[];
+export type Reason2 = string;
+export type NamesYou1 = number;
+export type Emails1 = SortEmail[];
+export type Unsorted = boolean;
+export type State4 = "none" | "preparing" | "ready" | "failed" | "done" | "skipped";
+export type Done2 = number;
+export type Total6 = number;
+export type Error1 = string;
+export type OwnerName = string;
+export type Emails2 = number;
+export type ReachAi = number;
+export type Conversations1 = number;
+export type Groups1 = SortGroup[];
+export type Id19 = string;
+export type Name21 = string;
+export type Folder7 = "inbox" | "automated" | "calendar";
+export type MergedInto = string;
+/**
+ * @maxItems 5000
+ */
+export type Choices = SortChoice[];
+export type Moved = number;
 export type FileType = ("pdf" | "word" | "sheet" | "slides" | "image" | "other") | null;
-export type Sender5 = string | null;
+export type Sender6 = string | null;
 export type DateFrom1 = string | null;
 export type DateTo1 = string | null;
 export type Source3 = ("upload" | "email" | "home") | null;
-export type Folder6 = string | null;
+export type Folder8 = string | null;
 export type Tag1 = string | null;
 export type Query1 = string;
 export type Limit2 = number;
-export type Sender6 = string | null;
+export type Sender7 = string | null;
 export type Key1 = string;
-export type Name21 = string;
+export type Name22 = string;
 export type ContentType1 = string;
 export type Size5 = number;
 export type Date1 = string;
 export type Source4 = "upload" | "email" | "home";
-export type Folder7 = string | null;
+export type Folder9 = string | null;
 export type Tags = string[];
 export type ThreadId3 = number | null;
 export type Risky = boolean;
@@ -619,8 +656,8 @@ export type Folders2 = string[];
 export type Tags1 = string[];
 export type Key2 = string;
 export type Path4 = string;
-export type Name22 = string;
-export type Label3 = string;
+export type Name23 = string;
+export type Label4 = string;
 export type Path5 = string;
 export type IsFolder = boolean;
 export type Size6 = number;
@@ -629,7 +666,7 @@ export type Path6 = string;
 export type Entries = HomeEntry[];
 export type Key3 = string | null;
 export type Path7 = string | null;
-export type Name23 = string;
+export type Name24 = string;
 export type Kind1 = "pdf" | "image" | "markdown" | "code" | "table" | "html" | "document" | "other";
 export type Text2 = string;
 export type Status4 = string;
@@ -639,7 +676,7 @@ export type Key4 = string | null;
 export type Html1 = string | null;
 export type Text3 = string;
 export type Key5 = string;
-export type Folder8 = string | null;
+export type Folder10 = string | null;
 /**
  * @maxItems 32
  */
@@ -651,15 +688,15 @@ export type Key6 = string;
 export type Folders3 = string[];
 export type Key7 = string;
 export type Ok3 = boolean;
-export type Sender7 = string | null;
-export type Subject9 = string | null;
+export type Sender8 = string | null;
+export type Subject10 = string | null;
 export type Category6 = string | null;
 export type Status5 = string | null;
 export type UnreadOnly = boolean;
 export type FlaggedOnly = boolean;
 export type Query2 = string | null;
-export type Folder9 = string | null;
-export type Id18 = string;
+export type Folder11 = string | null;
+export type Id20 = string;
 export type Title = string;
 export type Source5 = "threads" | "documents" | "tasks" | "reminders";
 export type Size7 = "small" | "medium" | "large";
@@ -676,7 +713,7 @@ export type CallId = number;
 export type TraceId1 = string | null;
 export type Session1 = string | null;
 export type Phase = "idle" | "queued" | "generating" | "done" | "failed" | "stopped";
-export type Name24 = string;
+export type Name25 = string;
 export type Kind2 = string;
 export type Pattern = string;
 export type Action = "mask" | "block";
@@ -696,10 +733,10 @@ export type Action1 = "mask" | "block";
 export type Masked = string;
 export type Findings = GuardFinding[];
 export type Errors = string[];
-export type Name25 = string;
+export type Name26 = string;
 export type Real = string;
 export type Masked1 = string;
-export type Id19 = number;
+export type Id21 = number;
 export type Time = string;
 export type Session2 = string | null;
 export type Agent = string;
@@ -709,8 +746,8 @@ export type InputTokens = number;
 export type OutputTokens = number;
 export type Layers = PromptLayerView[];
 export type Status6 = string;
-export type Error1 = string | null;
-export type Id20 = number | null;
+export type Error2 = string | null;
+export type Id22 = number | null;
 export type Session3 = string | null;
 export type Agent1 = string;
 export type InputTokens1 = number;
@@ -722,7 +759,7 @@ export type DailyCap = number;
 export type NearCap = boolean;
 export type DailyCap1 = number;
 export type Kind3 = string;
-export type Id21 = string | number | null;
+export type Id23 = string | number | null;
 export type Title1 = string | null;
 /**
  * @maxItems 20
@@ -862,12 +899,12 @@ export type Context =
     ];
 export type Agent2 = "session" | "interview";
 export type Model1 = string | null;
-export type Id22 = string;
+export type Id24 = string;
 export type Title2 = string;
 export type Agent3 = string;
 export type Status7 = "queued" | "running" | "waiting" | "done" | "failed" | "stopped";
 export type Step = string | null;
-export type Error2 = string | null;
+export type Error3 = string | null;
 export type Untrusted = boolean;
 export type InputTokens2 = number;
 export type OutputTokens2 = number;
@@ -881,12 +918,12 @@ export type Archived1 = boolean;
 export type Sessions = SessionRow[];
 export type Running = number;
 export type Limit4 = number;
-export type Id23 = string;
-export type Id24 = string;
-export type Title3 = string;
 export type Id25 = string;
-export type Model3 = string | null;
 export type Id26 = string;
+export type Title3 = string;
+export type Id27 = string;
+export type Model3 = string | null;
+export type Id28 = string;
 export type Turn = number;
 export type Turn1 = number;
 export type Value4 = ("up" | "down") | null;
@@ -905,13 +942,13 @@ export type Summary = string;
 export type Language = string;
 export type Content = string;
 export type Location3 = string | null;
-export type Id27 = number;
+export type Id29 = number;
 export type Session4 = string;
 export type SessionTitle = string;
 export type ToolCallId = string;
 export type Tool = string;
 export type Summary1 = string;
-export type Reason2 = string;
+export type Reason3 = string;
 export type Detail1 = string;
 export type Undoable = boolean;
 export type Status8 = "pending" | "approved" | "denied";
@@ -919,7 +956,7 @@ export type Time2 = string;
 export type ToolLabel = string;
 export type CanRemember = boolean;
 export type Approvals = ToolApproval[];
-export type Id28 = number;
+export type Id30 = number;
 export type Choice = "once" | "session" | "deny";
 /**
  * @maxItems 500
@@ -940,53 +977,53 @@ export type Data = "off" | "ask" | "allow";
  */
 export type Folders4 = string[];
 export type FullComputerAccess = boolean;
-export type Name26 = string;
+export type Name27 = string;
 export type Group = string;
-export type Label4 = string;
+export type Label5 = string;
 export type Description3 = string;
 export type Level1 = "off" | "ask" | "allow";
 export type CanAllow = boolean;
 export type Tools1 = ToolInfo[];
-export type Id29 = string;
+export type Id31 = string;
 export type Answer = string;
-export type Id30 = number;
+export type Id32 = number;
 export type Time3 = string;
 export type Session5 = string | null;
 export type Summary2 = string;
 export type Undoable1 = boolean;
 export type Undone = boolean;
 export type Items = ActivityRow[];
-export type Id31 = number;
-export type Id32 = string;
+export type Id33 = number;
+export type Id34 = string;
 export type Text4 = string;
 export type Retry = boolean;
 export type AcknowledgeManaged = boolean;
 export type Path8 = string;
 export type Level2 = "user" | "agent";
 export type Agent4 = string | null;
-export type Name27 = string;
+export type Name28 = string;
 export type Content1 = string;
 export type Source6 = string | null;
 export type Updated2 = string;
 export type Query4 = string;
 export type Files = MemoryFile[];
-export type Id33 = number;
+export type Id35 = number;
 export type Agent5 = string;
 export type Text5 = string;
 export type Source7 = string | null;
 export type Time4 = string;
 export type Proposals = MemoryProposal[];
 export type Path9 = string | null;
-export type Name28 = string;
+export type Name29 = string;
 export type Level3 = "user" | "agent";
 export type Agent6 = string | null;
 export type Content2 = string;
 export type Path10 = string;
-export type Id34 = number;
+export type Id36 = number;
 export type Accept2 = boolean;
-export type Name29 = string;
-export type Text6 = string;
 export type Name30 = string;
+export type Text6 = string;
+export type Name31 = string;
 export type Title4 = string;
 export type Kind5 = "personal" | "agent";
 export type Content3 = string;
@@ -996,7 +1033,7 @@ export type Layers1 = PromptLayer[];
 export type Group1 = ("agents" | "schedules") | null;
 export type Prompts = PromptFile[];
 export type Kind6 = "personal" | "agent";
-export type Name31 = string;
+export type Name32 = string;
 export type Content4 = string;
 export type Kind7 = "mail" | "doc";
 export type Ref = string;
@@ -1006,7 +1043,7 @@ export type Title5 = string;
 export type Detail2 = string;
 export type Date2 = string | null;
 export type N = number | null;
-export type Id35 = number;
+export type Id37 = number;
 export type Kind8 = "ask" | "suggest" | "tell";
 export type Agent7 = string;
 export type Session6 = string | null;
@@ -1018,27 +1055,27 @@ export type Status9 = "open" | "answered" | "dismissed";
 export type Answer1 = string | null;
 export type Time5 = string;
 export type Urgent = boolean;
-export type Count2 = number;
+export type Count3 = number;
 export type Messages4 = ChannelMessage[];
-export type Id36 = number;
-export type Answer2 = string;
-export type Id37 = number;
 export type Id38 = number;
+export type Answer2 = string;
+export type Id39 = number;
+export type Id40 = number;
 export type Kind9 = string;
 export type Title6 = string;
 export type Thread1 = number | null;
 export type Due = string | null;
 export type By1 = string;
 export type Updated3 = string;
-export type Done2 = boolean;
+export type Done3 = boolean;
 export type Items1 = BoardItem[];
 export type Purpose = string | null;
 export type ExpectedOutput = string | null;
-export type State4 = string;
+export type State5 = string;
 export type Outcome = string | null;
 export type Evidence = string[];
-export type Id39 = number;
-export type Sender8 = string;
+export type Id41 = number;
+export type Sender9 = string;
 export type Recipient2 = string | null;
 export type Topic = string | null;
 export type Text8 = string;
@@ -1048,17 +1085,17 @@ export type Messages5 = AgentChannelMessage[];
 export type Muted = string[];
 export type Topic1 = string;
 export type Muted1 = boolean;
-export type Id40 = number;
+export type Id42 = number;
 export type Message4 = number;
 export type Thread2 = number;
 export type Time7 = string;
 export type Status10 = "done" | "failed";
 export type Summary3 = string | null;
-export type Reason3 = string | null;
+export type Reason4 = string | null;
 export type Facts = string[];
 export type SuggestedAction = string | null;
 export type Provisional = boolean;
-export type Error3 = string | null;
+export type Error4 = string | null;
 export type CallId1 = number | null;
 export type Thread3 = number;
 export type Runs = TriageRun[];
@@ -1066,8 +1103,8 @@ export type Confirm1 = boolean;
 export type Untriaged = number;
 export type Queued1 = number;
 export type ApproxTokens = number;
-export type Id41 = number;
-export type Id42 = number;
+export type Id43 = number;
+export type Id44 = number;
 export type Body1 = string;
 export type DraftId = number | null;
 export type Partial = boolean;
@@ -1077,7 +1114,7 @@ export type Text9 = string | null;
 export type Covered = number;
 export type NewMessages = number;
 export type Updated4 = string | null;
-export type Id43 = string;
+export type Id45 = string;
 export type Kind10 =
   | "sync"
   | "pst"
@@ -1093,14 +1130,14 @@ export type Kind10 =
 export type Title7 = string;
 export type Status11 = string;
 export type Progress = number | null;
-export type Total6 = number | null;
+export type Total7 = number | null;
 export type Link = string | null;
-export type Label5 = string;
+export type Label6 = string;
 export type Value5 = string;
-export type Id44 = string;
+export type Id46 = string;
 export type Title8 = string;
 export type Cadence = string;
-export type State5 = "running" | "waiting" | "stopped" | "problem";
+export type State6 = "running" | "waiting" | "stopped" | "problem";
 export type Message5 = string | null;
 export type Facts1 = PipelineFact[];
 export type LastRun = string | null;
@@ -1110,21 +1147,21 @@ export type HistoryOpen = boolean;
 export type Left = number;
 export type Link1 = string | null;
 export type Pipelines = Pipeline[];
-export type Id45 = string;
-export type Paused = boolean;
-export type Id46 = string;
 export type Id47 = string;
-export type Count3 = number | null;
-export type Id48 = number;
-export type Title9 = string;
-export type When = string;
+export type Paused = boolean;
+export type Id48 = string;
 export type Id49 = string;
-export type Label6 = string;
-export type State6 = "ok" | "working" | "problem" | "off";
+export type Count4 = number | null;
+export type Id50 = number;
+export type Title9 = string;
+export type When1 = string;
+export type Id51 = string;
+export type Label7 = string;
+export type State7 = "ok" | "working" | "problem" | "off";
 export type Detail3 = string;
 export type Link2 = string | null;
-export type When1 = string | null;
-export type Id50 = string;
+export type When2 = string | null;
+export type Id52 = string;
 export type Title10 = string;
 export type Kind11 = "mail" | "custom";
 export type Event = string;
@@ -1135,10 +1172,10 @@ export type ContextMode = ("trim" | "auto_compact") | null;
 export type KeepMessages = number | null;
 export type Session7 = string | null;
 export type Event1 = string;
-export type Label7 = string;
+export type Label8 = string;
 export type Triggers = Trigger[];
 export type Events = TriggerChoice[];
-export type Id51 = string | null;
+export type Id53 = string | null;
 export type Title11 = string;
 export type Event2 = "mail.received" | "mail.urgent";
 export type Prompt1 = string;
@@ -1146,7 +1183,7 @@ export type Enabled3 = boolean;
 export type TokenLimit1 = number;
 export type ContextMode1 = ("trim" | "auto_compact") | null;
 export type KeepMessages1 = number | null;
-export type Id52 = string;
+export type Id54 = string;
 export type Jobs = Job[];
 export type Upcoming = UpcomingRun[];
 export type Health = HealthItem[];
@@ -1163,7 +1200,7 @@ export type Link3 = string | null;
 export type Problem = boolean;
 export type Events1 = CockpitEvent[];
 export type Jobs1 = Job[];
-export type Id53 = string;
+export type Id55 = string;
 /**
  * @maxItems 20
  */
@@ -1301,7 +1338,7 @@ export type Context1 =
       string
     ];
 export type Ref1 = string;
-export type Label8 = string;
+export type Label9 = string;
 export type Items2 = ContextItem[];
 export type Enabled4 = boolean;
 export type Start = string;
@@ -1327,7 +1364,7 @@ export type MorningBrief = boolean | null;
 export type InboxReview = boolean | null;
 export type Outcome1 = "started" | "nothing";
 export type Timezone = string | null;
-export type Id54 = number | null;
+export type Id56 = number | null;
 export type Title13 = string;
 export type Prompt2 = string;
 export type Kind12 = "prompt" | "daily-prep" | "mail-hourly" | "mail-brief" | "mail-review";
@@ -1343,7 +1380,7 @@ export type TokenLimit2 = number;
 export type ContextMode2 = ("trim" | "auto_compact") | null;
 export type KeepMessages4 = number | null;
 export type Timezone1 = string | null;
-export type Id55 = number | null;
+export type Id57 = number | null;
 export type Title14 = string;
 export type Prompt3 = string;
 export type Kind13 = "prompt" | "daily-prep" | "mail-hourly" | "mail-brief" | "mail-review";
@@ -1366,12 +1403,12 @@ export type Updated5 = string | null;
 export type Schedules = ScheduleRow[];
 export type TimeCheckEnabled = boolean;
 export type LiveMailEnabled = boolean;
-export type Id56 = number;
-export type Id57 = number;
+export type Id58 = number;
+export type Id59 = number;
 export type TimeCheckEnabled1 = boolean | null;
 export type LiveMailEnabled1 = boolean | null;
-export type Id58 = number;
-export type Subject10 = string;
+export type Id60 = number;
+export type Subject11 = string;
 export type People1 = string[];
 export type Importance4 = string;
 export type Status12 = string;
@@ -1383,7 +1420,7 @@ export type NextAction = string | null;
 export type FollowUpOn = string | null;
 export type Kind14 = "task" | "reminder" | "deadline";
 export type Title15 = string;
-export type When2 = string;
+export type When3 = string;
 export type Overdue = boolean;
 export type Link4 = string;
 export type TaskId = number | null;
@@ -1402,11 +1439,11 @@ export type Rating1 = string | null;
 export type Comment1 = string;
 export type Rating2 = string | null;
 export type Comment2 = string;
-export type Id59 = string;
-export type Name32 = string;
+export type Id61 = string;
+export type Name33 = string;
 export type Does = string;
-export type State7 = "running" | "active" | "finished" | "off" | "past" | "failed";
-export type When3 = string;
+export type State8 = "running" | "active" | "finished" | "off" | "past" | "failed";
+export type When4 = string;
 export type NextRun2 = string | null;
 export type NextCondition = string | null;
 export type LastRun2 = string | null;
@@ -1415,11 +1452,11 @@ export type Tokens = number;
 export type Agents = AgentEntry[];
 export type Style = string;
 export type Seed = string;
-export type State8 = "idle" | "working" | "waiting" | "blocked" | "off";
+export type State9 = "idle" | "working" | "waiting" | "blocked" | "off";
 export type TaskId1 = number | null;
 export type WaitingOn = string | null;
 export type Since1 = string | null;
-export type Reason4 = string | null;
+export type Reason5 = string | null;
 export type TokensToday = number;
 export type TokensWeek = number;
 export type TokensUsualDay = number;
@@ -1427,8 +1464,8 @@ export type MessagesToday = number;
 export type TasksVerified = number;
 export type TasksRejected = number;
 export type TasksBlocked = number;
-export type Id60 = string;
-export type Name33 = string;
+export type Id62 = string;
+export type Name34 = string;
 export type Handle = string;
 export type Role3 = string;
 export type CanDo = string[];
@@ -1441,20 +1478,20 @@ export type Renamed = boolean;
 export type Kind15 = "built_in" | "yours";
 export type Tools2 = string[];
 export type Cards = AgentCard[];
-export type Id61 = string;
-export type Name34 = string;
-export type Handle1 = string;
-export type Id62 = string;
 export type Id63 = string;
+export type Name35 = string;
+export type Handle1 = string;
+export type Id64 = string;
+export type Id65 = string;
 export type Seed1 = string;
-export type Id64 = number;
+export type Id66 = number;
 export type Objective = string;
 export type ExpectedOutput1 = string;
 export type DoneCriteria = string;
 export type References = string[];
 export type Assigner = string;
 export type Owner = string;
-export type State9 =
+export type State10 =
   "queued" | "working" | "input_required" | "blocked" | "reported" | "verified" | "rejected" | "failed" | "canceled";
 export type Outcome2 = string | null;
 export type Evidence1 = string[];
@@ -1470,27 +1507,27 @@ export type OwnerSession = string | null;
 export type AssignerSession = string | null;
 export type Created3 = string;
 export type Updated6 = string;
-export type Id65 = number;
+export type Id67 = number;
 export type TaskId2 = number | null;
 export type Kind16 = string;
-export type Sender9 = string;
+export type Sender10 = string;
 export type Recipient3 = string | null;
 export type Text10 = string;
 export type Time11 = string;
 export type Untrusted3 = boolean;
 export type OpenOnly = boolean;
 export type Tasks = TeamTask[];
-export type Id66 = number;
+export type Id68 = number;
 export type Tool1 = string;
 export type Status13 = string;
 export type Started = string;
 export type Messages6 = TeamMessage[];
 export type Children = TeamTask[];
 export type Steps = TaskStep[];
-export type Id67 = number;
-export type Text11 = string;
-export type Id68 = number;
 export type Id69 = number;
+export type Text11 = string;
+export type Id70 = number;
+export type Id71 = number;
 export type Brief = string;
 export type NeedsYou = TodayThread[];
 export type FollowUps = TodayThread[];
@@ -1505,22 +1542,22 @@ export type PrepFreshness = "fresh" | "stale" | "partial" | "failed" | "none";
 export type PrepRating = string | null;
 export type PrepComment = string;
 export type Due2 = DueItem[];
-export type Id70 = number;
+export type Id72 = number;
 export type Category8 = string;
-export type Senders1 = string[];
-export type Reason5 = string;
+export type Senders2 = string[];
+export type Reason6 = string;
 export type Quiet = boolean;
-export type Emails1 = number;
+export type Emails3 = number;
 export type Opened = number;
 export type Replied = number;
 export type ToArchive = number;
 export type Suggestions1 = MailSuggestion[];
-export type Id71 = number;
+export type Id73 = number;
 export type Accept3 = boolean;
 export type Address3 = string;
 export type Written = number;
 export type Last = string;
-export type Sender10 = string;
+export type Sender11 = string;
 export type Field2 = string;
 export type Value6 = string;
 export type Said = string;
@@ -1535,7 +1572,7 @@ export type Text12 = string;
 export type Section = string;
 export type Thread5 = number | null;
 export type Confirmed = boolean;
-export type Name35 = string;
+export type Name36 = string;
 export type Text13 = string;
 export type Trust = string;
 export type BriefReactions = BriefReaction[];
@@ -1554,11 +1591,11 @@ export type Given = string;
 export type Instruction = string;
 export type ApproxTokens1 = number;
 export type Line1 = string;
-export type Count4 = number;
-export type Id72 = number;
+export type Count5 = number;
+export type Id74 = number;
 export type Purpose1 = "all" | "mail" | "draft" | "brief";
 export type Account2 = string | null;
-export type Sender11 = string | null;
+export type Sender12 = string | null;
 export type Topic2 = string | null;
 export type Instruction1 = string;
 export type Status14 = "proposed" | "active" | "declined" | "retired" | "expired";
@@ -1567,11 +1604,11 @@ export type Evidence2 = string[];
 export type ExpiresAt1 = string | null;
 export type Created4 = string;
 export type Updated7 = string;
-export type Id73 = number | null;
+export type Id75 = number | null;
 export type Revision2 = number | null;
 export type Purpose2 = "all" | "mail" | "draft" | "brief";
 export type Account3 = string | null;
-export type Sender12 = string | null;
+export type Sender13 = string | null;
 export type Topic3 = string | null;
 export type Instruction2 = string;
 export type Status15 = "active" | "declined" | "retired";
@@ -1581,7 +1618,7 @@ export type Status15 = "active" | "declined" | "retired";
 export type Evidence3 = string[];
 export type ExpiresAt2 = string | null;
 export type Preferences = Preference[];
-export type Id74 = number;
+export type Id76 = number;
 export type Time12 = string;
 export type Action2 = string;
 export type Artifact1 = string;
@@ -1590,26 +1627,26 @@ export type OldValue1 = string | null;
 export type NewValue = string | null;
 export type Versions = Preference[];
 export type Evidence4 = PreferenceEvidence[];
-export type Id75 = number;
+export type Id77 = number;
 export type Revision3 = number;
 export type RestoreRevision = number;
-export type Id76 = string;
+export type Id78 = string;
 export type Thread7 = number;
 export type Action3 = "opened";
 export type Kind17 = "personal" | "agent";
-export type Name36 = string;
-export type Id77 = number;
+export type Name37 = string;
+export type Id79 = number;
 export type Content5 = string;
 export type Time13 = string;
 export type Versions1 = PromptVersion[];
 export type Kind18 = "personal" | "agent";
-export type Name37 = string;
+export type Name38 = string;
 export type Version1 = number;
-export type Id78 = number | null;
+export type Id80 = number | null;
 export type Revision4 = number | null;
 export type Purpose3 = "all" | "mail" | "draft" | "brief";
 export type Account4 = string | null;
-export type Sender13 = string | null;
+export type Sender14 = string | null;
 export type Topic4 = string | null;
 export type Instruction3 = string;
 export type Status16 = "active" | "declined" | "retired";
@@ -1619,31 +1656,31 @@ export type Status16 = "active" | "declined" | "retired";
 export type Evidence5 = string[];
 export type ExpiresAt3 = string | null;
 export type Matched = number;
-export type Total7 = number;
+export type Total8 = number;
 export type Examples = string[];
 export type Instruction4 = string;
 export type Explanation = string;
-export type Id79 = number;
+export type Id81 = number;
 export type Title16 = string;
 export type Status17 = string;
 export type Time14 = string;
-export type Error4 = string | null;
+export type Error5 = string | null;
 export type Session10 = string | null;
 export type Pending = number;
 export type Running1 = number;
 export type Failed1 = number;
 export type OldestPending = string | null;
 export type Items3 = AgentQueueItem[];
-export type Id80 = number;
+export type Id82 = number;
 export type Action4 = "retry" | "cancel";
 export type Line2 = string;
 export type Revision5 = number;
 export type ExpiresAt4 = string | null;
-export type Id81 = number | null;
+export type Id83 = number | null;
 export type Revision6 = number | null;
 export type Purpose4 = "all" | "mail" | "draft" | "brief";
 export type Account5 = string | null;
-export type Sender14 = string | null;
+export type Sender15 = string | null;
 export type Topic5 = string | null;
 export type Instruction5 = string;
 export type Status18 = "active" | "declined" | "retired";
@@ -1653,14 +1690,14 @@ export type Status18 = "active" | "declined" | "retired";
 export type Evidence6 = string[];
 export type ExpiresAt5 = string | null;
 export type Thread8 = number;
-export type Subject11 = string;
+export type Subject12 = string;
 export type Before2 = string;
 export type After = string;
-export type Reason6 = string;
+export type Reason7 = string;
 export type Decisions = PreferenceDecision[];
 export type Path11 = string;
 export type Text14 = string;
-export type Name38 = string;
+export type Name39 = string;
 export type Description4 = string;
 export type Origin = "built_in" | "yours";
 export type Active2 = boolean;
@@ -1671,8 +1708,8 @@ export type Files1 = string[];
 export type Body2 = string;
 export type Loads = number;
 export type LastLoaded = string | null;
-export type Id82 = number;
-export type Name39 = string;
+export type Id84 = number;
+export type Name40 = string;
 export type Description5 = string;
 export type Agents2 = string[];
 export type NeedsTools1 = string[];
@@ -1686,10 +1723,10 @@ export type Skills = Skill[];
 export type Proposals1 = SkillProposal[];
 export type Url1 = string | null;
 export type Text15 = string | null;
-export type Id83 = number;
+export type Id85 = number;
 export type Approve = boolean;
-export type Name40 = string;
-export type Id84 = number;
+export type Name41 = string;
+export type Id86 = number;
 export type Kind19 = string;
 export type Agent8 = string | null;
 export type TaskId3 = number | null;
@@ -1699,7 +1736,7 @@ export type Seen = boolean;
 export type TaskId4 = number;
 export type Source9 = string;
 export type Target = string;
-export type State10 = string;
+export type State11 = string;
 export type Objective1 = string;
 export type Messages7 = number;
 export type Waiting1 = string;
@@ -1709,8 +1746,8 @@ export type Edges = MapEdge[];
 export type Cycles = string[][];
 export type Alerts = MonitorAlert[];
 export type Kind20 = "run" | "model" | "tool" | "skill" | "message";
-export type Id85 = string;
-export type Name41 = string;
+export type Id87 = string;
+export type Name42 = string;
 export type Agent9 = string | null;
 export type Time16 = string;
 export type Status20 = string | null;
@@ -1720,7 +1757,7 @@ export type Children1 = RunSpan[];
 export type Limit6 = number;
 export type Runs1 = RunSpan[];
 export type Turn2 = number;
-export type Id86 = number;
+export type Id88 = number;
 export type Title17 = string;
 export type Notes1 = string;
 export type Status21 = "todo" | "in_progress" | "done";
@@ -1733,17 +1770,17 @@ export type Updated8 = string | null;
 export type Completed = string | null;
 export type IncludeDone = boolean;
 export type Tasks1 = Task[];
-export type Id87 = number | null;
+export type Id89 = number | null;
 export type Title18 = string;
 export type Notes2 = string;
 export type Status22 = "todo" | "in_progress" | "done";
 export type Due4 = string | null;
 export type Thread10 = number | null;
 export type Proposed3 = boolean;
-export type Id88 = number;
-export type Id89 = number;
+export type Id90 = number;
+export type Id91 = number;
 export type Title19 = string;
-export type When4 = string;
+export type When5 = string;
 export type Repeat = "none" | "day" | "week" | "month" | "year";
 export type Thread11 = number | null;
 export type Task1 = number | null;
@@ -1753,29 +1790,29 @@ export type Fired = boolean;
 export type Created7 = string | null;
 export type Updated9 = string | null;
 export type Reminders = Reminder[];
-export type Id90 = number | null;
+export type Id92 = number | null;
 export type Title20 = string;
-export type When5 = string;
+export type When6 = string;
 export type Repeat1 = "none" | "day" | "week" | "month" | "year";
 export type Thread12 = number | null;
 export type Task2 = number | null;
 export type Proposed5 = boolean;
-export type Id91 = number;
+export type Id93 = number;
 export type Minutes = number;
-export type Id92 = number;
+export type Id94 = number;
 export type Ok5 = boolean;
-export type Id93 = string;
-export type Label9 = string;
+export type Id95 = string;
+export type Label10 = string;
 export type Description6 = string;
 export type SizeBytes = number;
-export type State11 = "missing" | "downloading" | "ready" | "failed";
+export type State12 = "missing" | "downloading" | "ready" | "failed";
 export type DownloadedBytes = number;
-export type Error5 = string | null;
+export type Error6 = string | null;
 export type Active3 = boolean;
 export type Kind21 = "mail" | "document";
-export type State12 = "off" | "current" | "partial" | "out_of_date";
+export type State13 = "off" | "current" | "partial" | "out_of_date";
 export type Indexed = number;
-export type Total8 = number;
+export type Total9 = number;
 export type Stale = number;
 export type Fingerprint = string;
 export type Built = string | null;
@@ -1784,37 +1821,37 @@ export type Active4 = string;
 export type Ready = boolean;
 export type Mirror = string | null;
 export type Indexed1 = number;
-export type Total9 = number;
+export type Total10 = number;
 export type Indexing = boolean;
 export type Indexes = IndexInfo[];
 export type OnThisComputer = string[];
 export type Recommended = string;
-export type Reason7 = "already_here" | "small_computer" | "best";
+export type Reason8 = "already_here" | "small_computer" | "best";
 export type Reachable = boolean;
 export type MemoryBytes = number;
 export type FreeBytes = number;
 export type Cores = number;
 export type Kind22 = "mail" | "document";
-export type Id94 = string | null;
-export type Id95 = string;
+export type Id96 = string | null;
+export type Id97 = string;
 export type Mirror1 = string | null;
-export type Id96 = string;
-export type Folder10 = string;
+export type Id98 = string;
+export type Folder12 = string;
 export type Kind23 = "mail" | "document";
 export type Ref2 = string;
 export type Score = number;
 export type Excerpt1 = string;
 export type Place2 = string | null;
-export type Id97 = string;
-export type Name42 = string;
-export type Description7 = string;
-export type Id98 = string;
+export type Id99 = string;
 export type Name43 = string;
+export type Description7 = string;
+export type Id100 = string;
+export type Name44 = string;
 export type Kind24 = "email" | "mcp";
 export type Url2 = string | null;
 export type Audience = ("internal" | "public") | null;
 export type Enabled7 = boolean;
-export type State13 = "ok" | "failed" | "changed" | "off";
+export type State14 = "ok" | "failed" | "changed" | "off";
 export type Detail7 = string | null;
 export type Tools3 = ConnectorTool[];
 export type HasToken = boolean;
@@ -1822,19 +1859,19 @@ export type Connectors1 = Connector[];
 export type Url3 = string;
 export type Token = string | null;
 export type Ok6 = boolean;
-export type Error6 = string | null;
+export type Error7 = string | null;
 export type Tools4 = ConnectorTool[];
-export type Name44 = string;
+export type Name45 = string;
 export type Url4 = string;
 export type Token1 = string | null;
 export type Audience1 = "internal" | "public";
-export type Id99 = string;
-export type Id100 = string;
+export type Id101 = string;
+export type Id102 = string;
 export type Enabled8 = boolean;
 export type Code = string;
 export type Message6 = string;
 export type TraceId2 = string | null;
-export type Id101 = string;
+export type Id103 = string;
 export type Seq1 = number;
 export type Type2 = string;
 export type Version2 = number;
@@ -1847,7 +1884,7 @@ export type Events2 = AppEvent[];
 export type Listener = string;
 export type EventSeq = number;
 export type EventType = string;
-export type Error7 = string;
+export type Error8 = string;
 export type Time18 = string;
 export type Failed2 = FailedEvent[];
 export type Since2 = number;
@@ -1871,8 +1908,8 @@ export type TimeFormat1 = ("system" | "12" | "24") | null;
 export type RemoteImages1 = ("load" | "block") | null;
 export type SoundMuted1 = boolean | null;
 export type SoundOff1 = string[] | null;
-export type Id102 = string;
-export type Name45 = string;
+export type Id104 = string;
+export type Name46 = string;
 export type Models1 = AvailableModel[];
 export type BaseUrl = string;
 export type ApiKey = string | null;
@@ -1886,10 +1923,10 @@ export type BaseUrl2 = string | null;
 export type ApiKey1 = string | null;
 export type Model5 = string | null;
 export type SupportsTools1 = boolean;
-export type State14 = "idle" | "waiting" | "failed";
+export type State15 = "idle" | "waiting" | "failed";
 export type UserCode = string | null;
 export type VerificationUrl = string | null;
-export type Error8 = string | null;
+export type Error9 = string | null;
 export type Model6 = string;
 export type Text16 = string;
 export type Change = "login_started" | "login_failed" | "login_cancelled" | "connected" | "disconnected" | "selected";
@@ -1917,17 +1954,17 @@ export type Problems1 = string[];
 export type Warnings = string[];
 export type FreeBytes1 = number | null;
 export type IsExistingHome = boolean;
-export type Name46 = string;
-export type Reason8 = string;
+export type Name47 = string;
+export type Reason9 = string;
 export type Time19 = string;
 export type Size8 = number;
 export type Backups = BackupRow[];
 export type Pending1 = string | null;
 export type Confirm2 = string;
 export type KeepModels = boolean;
-export type Name47 = string;
+export type Name48 = string;
 export type RecoveryKey = string;
-export type State15 = "ready" | "unset" | "missing" | "locked" | "damaged";
+export type State16 = "ready" | "unset" | "missing" | "locked" | "damaged";
 export type Path17 = string | null;
 export type DefaultPath = string;
 export type Message7 = string | null;
@@ -1938,7 +1975,7 @@ export type Completed2 = boolean;
 export type CurrentStep = string | null;
 export type ChecklistDismissed = boolean;
 export type Step2 = string;
-export type Name48 = string;
+export type Name49 = string;
 export type Role4 = string;
 export type Signature = string;
 export type Tone = "formal" | "friendly" | "brief";
@@ -1946,8 +1983,8 @@ export type Vips = string;
 export type About = string;
 export type Fields = string[];
 export type Kind25 = string | null;
-export type Id103 = number | null;
-export type Id104 = number;
+export type Id105 = number | null;
+export type Id106 = number;
 export type Time20 = string;
 export type Kind26 = string;
 export type Title21 = string;
@@ -1985,7 +2022,7 @@ export type TraceId4 = string;
 export type Lines = {
   [k: string]: unknown;
 }[];
-export type Name49 = string;
+export type Name50 = string;
 export type Host1 = string;
 export type Ok8 = boolean;
 export type Detail10 = string;
@@ -2106,6 +2143,15 @@ export interface Contracts {
   FinishMailLearning?: FinishMailLearning;
   SortCategory?: SortCategory;
   CategorySortEstimate?: CategorySortEstimate;
+  GetMailSort?: GetMailSort;
+  PrepareMailSort?: PrepareMailSort;
+  SkipMailSort?: SkipMailSort;
+  SortEmail?: SortEmail;
+  SortGroup?: SortGroup;
+  MailSort?: MailSort;
+  SortChoice?: SortChoice;
+  ApplyMailSort?: ApplyMailSort;
+  MailSortApplied?: MailSortApplied;
   ListDocuments?: ListDocuments;
   DocumentRow?: DocumentRow;
   DocumentLibrary?: DocumentLibrary;
@@ -2931,6 +2977,7 @@ export interface RuleActions {
   read_replies?: ReadReplies;
   notify?: Notify;
   tag?: Tag;
+  mentions?: Mentions;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -3507,15 +3554,106 @@ export interface CategorySortEstimate {
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "GetMailSort".
+ */
+export interface GetMailSort {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "PrepareMailSort".
+ */
+export interface PrepareMailSort {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SkipMailSort".
+ */
+export interface SkipMailSort {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SortEmail".
+ */
+export interface SortEmail {
+  subject: Subject9;
+  sender: Sender5;
+  sender_name: SenderName1;
+  when: When;
+  snippet: Snippet1;
+  names_you: NamesYou;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SortGroup".
+ */
+export interface SortGroup {
+  id: Id18;
+  label: Label3;
+  folder: Folder6;
+  count: Count2;
+  senders: Senders1;
+  reason: Reason2;
+  names_you: NamesYou1;
+  emails: Emails1;
+  unsorted?: Unsorted;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MailSort".
+ */
+export interface MailSort {
+  state: State4;
+  done?: Done2;
+  total?: Total6;
+  error?: Error1;
+  owner_name?: OwnerName;
+  emails?: Emails2;
+  reach_ai?: ReachAi;
+  conversations?: Conversations1;
+  groups?: Groups1;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "SortChoice".
+ */
+export interface SortChoice {
+  id: Id19;
+  name?: Name21;
+  folder: Folder7;
+  merged_into?: MergedInto;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ApplyMailSort".
+ */
+export interface ApplyMailSort {
+  choices?: Choices;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MailSortApplied".
+ */
+export interface MailSortApplied {
+  moved: Moved;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "ListDocuments".
  */
 export interface ListDocuments {
   file_type?: FileType;
-  sender?: Sender5;
+  sender?: Sender6;
   date_from?: DateFrom1;
   date_to?: DateTo1;
   source?: Source3;
-  folder?: Folder6;
+  folder?: Folder8;
   tag?: Tag1;
   query?: Query1;
   limit?: Limit2;
@@ -3525,14 +3663,14 @@ export interface ListDocuments {
  * via the `definition` "DocumentRow".
  */
 export interface DocumentRow {
-  sender?: Sender6;
+  sender?: Sender7;
   key: Key1;
-  name: Name21;
+  name: Name22;
   content_type: ContentType1;
   size: Size5;
   date: Date1;
   source: Source4;
-  folder: Folder7;
+  folder: Folder9;
   tags: Tags;
   thread_id?: ThreadId3;
   risky?: Risky;
@@ -3571,8 +3709,8 @@ export interface ListHomeFolder {
  * via the `definition` "HomeEntry".
  */
 export interface HomeEntry {
-  name: Name22;
-  label: Label3;
+  name: Name23;
+  label: Label4;
   path: Path5;
   is_folder: IsFolder;
   size?: Size6;
@@ -3603,7 +3741,7 @@ export interface ReadDocument {
  * via the `definition` "DocumentReader".
  */
 export interface DocumentReader {
-  name: Name23;
+  name: Name24;
   kind: Kind1;
   text: Text2;
   status?: Status4;
@@ -3628,7 +3766,7 @@ export interface DocumentPreview {
  */
 export interface UpdateDocument {
   key: Key5;
-  folder?: Folder8;
+  folder?: Folder10;
   tags?: Tags2;
 }
 /**
@@ -3667,21 +3805,21 @@ export interface DocumentDone {
  * via the `definition` "PanelFilters".
  */
 export interface PanelFilters {
-  sender?: Sender7;
-  subject?: Subject9;
+  sender?: Sender8;
+  subject?: Subject10;
   category?: Category6;
   status?: Status5;
   unread_only?: UnreadOnly;
   flagged_only?: FlaggedOnly;
   query?: Query2;
-  folder?: Folder9;
+  folder?: Folder11;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "Panel".
  */
 export interface Panel {
-  id: Id18;
+  id: Id20;
   title: Title;
   source: Source5;
   filters?: PanelFilters;
@@ -3749,7 +3887,7 @@ export interface GenerationState {
  * via the `definition` "GuardRule".
  */
 export interface GuardRule {
-  name: Name24;
+  name: Name25;
   kind: Kind2;
   pattern: Pattern;
   action?: Action;
@@ -3802,7 +3940,7 @@ export interface GuardTestResult {
  * via the `definition` "PromptLayerView".
  */
 export interface PromptLayerView {
-  name: Name25;
+  name: Name26;
   real: Real;
   masked: Masked1;
   [k: string]: unknown;
@@ -3812,7 +3950,7 @@ export interface PromptLayerView {
  * via the `definition` "ModelCallView".
  */
 export interface ModelCallView {
-  id: Id19;
+  id: Id21;
   time: Time;
   session: Session2;
   agent: Agent;
@@ -3822,7 +3960,7 @@ export interface ModelCallView {
   output_tokens: OutputTokens;
   layers: Layers;
   status: Status6;
-  error?: Error1;
+  error?: Error2;
   [k: string]: unknown;
 }
 /**
@@ -3830,7 +3968,7 @@ export interface ModelCallView {
  * via the `definition` "GetModelCall".
  */
 export interface GetModelCall {
-  id?: Id20;
+  id?: Id22;
   session?: Session3;
 }
 /**
@@ -3877,7 +4015,7 @@ export interface SetDailyCap {
  */
 export interface AgentChanged {
   kind: Kind3;
-  id?: Id21;
+  id?: Id23;
   detail?: Detail;
   [k: string]: unknown;
 }
@@ -3899,12 +4037,12 @@ export interface CreateSession {
  * via the `definition` "SessionRow".
  */
 export interface SessionRow {
-  id: Id22;
+  id: Id24;
   title: Title2;
   agent: Agent3;
   status: Status7;
   step: Step;
-  error: Error2;
+  error: Error3;
   untrusted: Untrusted;
   input_tokens: InputTokens2;
   output_tokens: OutputTokens2;
@@ -3938,14 +4076,14 @@ export interface SessionList {
  * via the `definition` "SessionAction".
  */
 export interface SessionAction {
-  id: Id23;
+  id: Id25;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "RenameSession".
  */
 export interface RenameSession {
-  id: Id24;
+  id: Id26;
   title: Title3;
 }
 /**
@@ -3953,7 +4091,7 @@ export interface RenameSession {
  * via the `definition` "SetSessionModel".
  */
 export interface SetSessionModel {
-  id: Id25;
+  id: Id27;
   model?: Model3;
 }
 /**
@@ -3963,7 +4101,7 @@ export interface SetSessionModel {
  * via the `definition` "ChooseVersion".
  */
 export interface ChooseVersion {
-  id: Id26;
+  id: Id28;
   turn: Turn;
 }
 /**
@@ -4017,13 +4155,13 @@ export interface ApprovalPreview {
  */
 export interface ToolApproval {
   preview?: ApprovalPreview | null;
-  id: Id27;
+  id: Id29;
   session: Session4;
   session_title: SessionTitle;
   tool_call_id: ToolCallId;
   tool: Tool;
   summary: Summary1;
-  reason: Reason2;
+  reason: Reason3;
   detail: Detail1;
   undoable: Undoable;
   status: Status8;
@@ -4052,7 +4190,7 @@ export interface ApprovalList {
  * via the `definition` "DecideApproval".
  */
 export interface DecideApproval {
-  id: Id28;
+  id: Id30;
   choice: Choice;
 }
 /**
@@ -4102,9 +4240,9 @@ export interface Tools {
  * via the `definition` "ToolInfo".
  */
 export interface ToolInfo {
-  name: Name26;
+  name: Name27;
   group: Group;
-  label: Label4;
+  label: Label5;
   description: Description3;
   level: Level1;
   can_allow?: CanAllow;
@@ -4132,7 +4270,7 @@ export interface ToolCatalog {
  * via the `definition` "AnswerSession".
  */
 export interface AnswerSession {
-  id: Id29;
+  id: Id31;
   answer: Answer;
 }
 /**
@@ -4140,7 +4278,7 @@ export interface AnswerSession {
  * via the `definition` "ActivityRow".
  */
 export interface ActivityRow {
-  id: Id30;
+  id: Id32;
   time: Time3;
   session: Session5;
   summary: Summary2;
@@ -4168,7 +4306,7 @@ export interface ActivityList {
  * via the `definition` "UndoActivity".
  */
 export interface UndoActivity {
-  id: Id31;
+  id: Id33;
 }
 /**
  * What the chat screen sends: which session, and what the person typed.
@@ -4177,7 +4315,7 @@ export interface UndoActivity {
  * via the `definition` "SessionChat".
  */
 export interface SessionChat {
-  id: Id32;
+  id: Id34;
   text: Text4;
   retry?: Retry;
   acknowledge_managed?: AcknowledgeManaged;
@@ -4191,7 +4329,7 @@ export interface MemoryFile {
   path: Path8;
   level: Level2;
   agent: Agent4;
-  name: Name27;
+  name: Name28;
   content: Content1;
   source?: Source6;
   updated: Updated2;
@@ -4218,7 +4356,7 @@ export interface MemoryList {
  * via the `definition` "MemoryProposal".
  */
 export interface MemoryProposal {
-  id: Id33;
+  id: Id35;
   agent: Agent5;
   text: Text5;
   source: Source7;
@@ -4231,7 +4369,7 @@ export interface MemoryProposal {
  */
 export interface SaveMemory {
   path?: Path9;
-  name: Name28;
+  name: Name29;
   level?: Level3;
   agent?: Agent6;
   content: Content2;
@@ -4248,7 +4386,7 @@ export interface RemoveMemory {
  * via the `definition` "DecideMemoryProposal".
  */
 export interface DecideMemoryProposal {
-  id: Id34;
+  id: Id36;
   accept: Accept2;
 }
 /**
@@ -4256,7 +4394,7 @@ export interface DecideMemoryProposal {
  * via the `definition` "PromptLayer".
  */
 export interface PromptLayer {
-  name: Name29;
+  name: Name30;
   text: Text6;
   [k: string]: unknown;
 }
@@ -4265,7 +4403,7 @@ export interface PromptLayer {
  * via the `definition` "PromptFile".
  */
 export interface PromptFile {
-  name: Name30;
+  name: Name31;
   title: Title4;
   kind: Kind5;
   content: Content3;
@@ -4296,7 +4434,7 @@ export interface PromptList {
  */
 export interface SavePrompt {
   kind: Kind6;
-  name: Name31;
+  name: Name32;
   content: Content4;
 }
 /**
@@ -4322,7 +4460,7 @@ export interface SourceRef {
  * via the `definition` "ChannelMessage".
  */
 export interface ChannelMessage {
-  id: Id35;
+  id: Id37;
   kind: Kind8;
   agent: Agent7;
   session: Session6;
@@ -4334,7 +4472,7 @@ export interface ChannelMessage {
   answer: Answer1;
   time: Time5;
   urgent: Urgent;
-  count: Count2;
+  count: Count3;
   source_ref?: SourceRef | null;
   [k: string]: unknown;
 }
@@ -4358,7 +4496,7 @@ export interface ChannelList {
  * via the `definition` "RespondChannel".
  */
 export interface RespondChannel {
-  id: Id36;
+  id: Id38;
   answer: Answer2;
 }
 /**
@@ -4366,21 +4504,21 @@ export interface RespondChannel {
  * via the `definition` "DismissChannel".
  */
 export interface DismissChannel {
-  id: Id37;
+  id: Id39;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "BoardItem".
  */
 export interface BoardItem {
-  id: Id38;
+  id: Id40;
   kind: Kind9;
   title: Title6;
   thread: Thread1;
   due: Due;
   by: By1;
   updated: Updated3;
-  done: Done2;
+  done: Done3;
   [k: string]: unknown;
 }
 /**
@@ -4405,11 +4543,11 @@ export interface BoardList {
 export interface AgentChannelMessage {
   purpose?: Purpose;
   expected_output?: ExpectedOutput;
-  state?: State4;
+  state?: State5;
   outcome?: Outcome;
   evidence?: Evidence;
-  id: Id39;
-  sender: Sender8;
+  id: Id41;
+  sender: Sender9;
   recipient: Recipient2;
   topic: Topic;
   text: Text8;
@@ -4446,17 +4584,17 @@ export interface SetTopicMuted {
  * via the `definition` "TriageRun".
  */
 export interface TriageRun {
-  id: Id40;
+  id: Id42;
   message: Message4;
   thread: Thread2;
   time: Time7;
   status: Status10;
   summary: Summary3;
-  reason: Reason3;
+  reason: Reason4;
   facts: Facts;
   suggested_action: SuggestedAction;
   provisional: Provisional;
-  error: Error3;
+  error: Error4;
   call_id: CallId1;
   [k: string]: unknown;
 }
@@ -4499,14 +4637,14 @@ export interface TriageEstimate {
  * via the `definition` "SummarizeThread".
  */
 export interface SummarizeThread {
-  id: Id41;
+  id: Id43;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "DraftThreadReply".
  */
 export interface DraftThreadReply {
-  id: Id42;
+  id: Id44;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -4536,12 +4674,12 @@ export interface ThreadSummary {
  * via the `definition` "Job".
  */
 export interface Job {
-  id: Id43;
+  id: Id45;
   kind: Kind10;
   title: Title7;
   status: Status11;
   progress?: Progress;
-  total?: Total6;
+  total?: Total7;
   link?: Link;
   [k: string]: unknown;
 }
@@ -4557,7 +4695,7 @@ export interface ListJobs {
  * via the `definition` "PipelineFact".
  */
 export interface PipelineFact {
-  label: Label5;
+  label: Label6;
   value: Value5;
   [k: string]: unknown;
 }
@@ -4568,10 +4706,10 @@ export interface PipelineFact {
  * via the `definition` "Pipeline".
  */
 export interface Pipeline {
-  id: Id44;
+  id: Id46;
   title: Title8;
   cadence: Cadence;
-  state: State5;
+  state: State6;
   message?: Message5;
   facts?: Facts1;
   last_run?: LastRun;
@@ -4602,7 +4740,7 @@ export interface PipelineList {
  * via the `definition` "PausePipeline".
  */
 export interface PausePipeline {
-  id: Id45;
+  id: Id47;
   paused: Paused;
 }
 /**
@@ -4610,24 +4748,24 @@ export interface PausePipeline {
  * via the `definition` "RunPipeline".
  */
 export interface RunPipeline {
-  id: Id46;
+  id: Id48;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "PipelineMore".
  */
 export interface PipelineMore {
-  id: Id47;
-  count?: Count3;
+  id: Id49;
+  count?: Count4;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "UpcomingRun".
  */
 export interface UpcomingRun {
-  id: Id48;
+  id: Id50;
   title: Title9;
-  when: When;
+  when: When1;
   [k: string]: unknown;
 }
 /**
@@ -4635,12 +4773,12 @@ export interface UpcomingRun {
  * via the `definition` "HealthItem".
  */
 export interface HealthItem {
-  id: Id49;
-  label: Label6;
-  state: State6;
+  id: Id51;
+  label: Label7;
+  state: State7;
   detail: Detail3;
   link?: Link2;
-  when?: When1;
+  when?: When2;
   [k: string]: unknown;
 }
 /**
@@ -4650,7 +4788,7 @@ export interface HealthItem {
  * via the `definition` "Trigger".
  */
 export interface Trigger {
-  id: Id50;
+  id: Id52;
   title: Title10;
   kind: Kind11;
   event: Event;
@@ -4668,7 +4806,7 @@ export interface Trigger {
  */
 export interface TriggerChoice {
   event: Event1;
-  label: Label7;
+  label: Label8;
   [k: string]: unknown;
 }
 /**
@@ -4692,7 +4830,7 @@ export interface TriggerList {
  * via the `definition` "SaveTrigger".
  */
 export interface SaveTrigger {
-  id?: Id51;
+  id?: Id53;
   title: Title11;
   event?: Event2;
   prompt?: Prompt1;
@@ -4706,7 +4844,7 @@ export interface SaveTrigger {
  * via the `definition` "RemoveTrigger".
  */
 export interface RemoveTrigger {
-  id: Id52;
+  id: Id54;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -4772,7 +4910,7 @@ export interface JobList {
  * via the `definition` "SetSessionContext".
  */
 export interface SetSessionContext {
-  id: Id53;
+  id: Id55;
   context: Context1;
 }
 /**
@@ -4781,7 +4919,7 @@ export interface SetSessionContext {
  */
 export interface ContextItem {
   ref: Ref1;
-  label: Label8;
+  label: Label9;
   [k: string]: unknown;
 }
 /**
@@ -4905,7 +5043,7 @@ export interface MailAgentRun {
  */
 export interface Schedule {
   timezone?: Timezone;
-  id?: Id54;
+  id?: Id56;
   title: Title13;
   prompt?: Prompt2;
   kind?: Kind12;
@@ -4928,7 +5066,7 @@ export interface Schedule {
  */
 export interface ScheduleRow {
   timezone?: Timezone1;
-  id?: Id55;
+  id?: Id57;
   title: Title14;
   prompt?: Prompt3;
   kind?: Kind13;
@@ -4972,14 +5110,14 @@ export interface ScheduleList {
  * via the `definition` "RemoveSchedule".
  */
 export interface RemoveSchedule {
-  id: Id56;
+  id: Id58;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "RunSchedule".
  */
 export interface RunSchedule {
-  id: Id57;
+  id: Id59;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -4994,8 +5132,8 @@ export interface SetDefaults {
  * via the `definition` "TodayThread".
  */
 export interface TodayThread {
-  id: Id58;
-  subject: Subject10;
+  id: Id60;
+  subject: Subject11;
   people: People1;
   importance: Importance4;
   status: Status12;
@@ -5014,7 +5152,7 @@ export interface TodayThread {
 export interface DueItem {
   kind: Kind14;
   title: Title15;
-  when: When2;
+  when: When3;
   overdue: Overdue;
   link: Link4;
   task_id?: TaskId;
@@ -5070,11 +5208,11 @@ export interface BriefReacted {
  * via the `definition` "AgentEntry".
  */
 export interface AgentEntry {
-  id: Id59;
-  name: Name32;
+  id: Id61;
+  name: Name33;
   does: Does;
-  state: State7;
-  when: When3;
+  state: State8;
+  when: When4;
   next_run?: NextRun2;
   next_condition?: NextCondition;
   last_run?: LastRun2;
@@ -5113,11 +5251,11 @@ export interface AgentMascot {
  * via the `definition` "AgentNow".
  */
 export interface AgentNow {
-  state: State8;
+  state: State9;
   task_id?: TaskId1;
   waiting_on?: WaitingOn;
   since?: Since1;
-  reason?: Reason4;
+  reason?: Reason5;
   [k: string]: unknown;
 }
 /**
@@ -5139,8 +5277,8 @@ export interface AgentUsage {
  * via the `definition` "AgentCard".
  */
 export interface AgentCard {
-  id: Id60;
-  name: Name33;
+  id: Id62;
+  name: Name34;
   handle: Handle;
   role: Role3;
   can_do: CanDo;
@@ -5177,8 +5315,8 @@ export interface CardList {
  * via the `definition` "RenameAgent".
  */
 export interface RenameAgent {
-  id: Id61;
-  name: Name34;
+  id: Id63;
+  name: Name35;
   handle: Handle1;
 }
 /**
@@ -5186,14 +5324,14 @@ export interface RenameAgent {
  * via the `definition` "ResetAgentName".
  */
 export interface ResetAgentName {
-  id: Id62;
+  id: Id64;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "SetMascot".
  */
 export interface SetMascot {
-  id: Id63;
+  id: Id65;
   seed: Seed1;
 }
 /**
@@ -5201,14 +5339,14 @@ export interface SetMascot {
  * via the `definition` "TeamTask".
  */
 export interface TeamTask {
-  id: Id64;
+  id: Id66;
   objective: Objective;
   expected_output: ExpectedOutput1;
   done_criteria: DoneCriteria;
   references: References;
   assigner: Assigner;
   owner: Owner;
-  state: State9;
+  state: State10;
   outcome?: Outcome2;
   evidence?: Evidence1;
   verdict?: Verdict;
@@ -5230,10 +5368,10 @@ export interface TeamTask {
  * via the `definition` "TeamMessage".
  */
 export interface TeamMessage {
-  id: Id65;
+  id: Id67;
   task_id: TaskId2;
   kind: Kind16;
-  sender: Sender9;
+  sender: Sender10;
   recipient: Recipient3;
   text: Text10;
   time: Time11;
@@ -5260,7 +5398,7 @@ export interface TeamTaskList {
  * via the `definition` "GetTeamTask".
  */
 export interface GetTeamTask {
-  id: Id66;
+  id: Id68;
 }
 /**
  * One tool call the agent doing a task made, for following the work as it happens.
@@ -5294,7 +5432,7 @@ export interface TeamTaskView {
  * via the `definition` "NoteOnTeamTask".
  */
 export interface NoteOnTeamTask {
-  id: Id67;
+  id: Id69;
   text: Text11;
 }
 /**
@@ -5302,14 +5440,14 @@ export interface NoteOnTeamTask {
  * via the `definition` "CancelTeamTask".
  */
 export interface CancelTeamTask {
-  id: Id68;
+  id: Id70;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "RetryTeamTask".
  */
 export interface RetryTeamTask {
-  id: Id69;
+  id: Id71;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -5345,12 +5483,12 @@ export interface MarkTodaySeen {
  * via the `definition` "MailSuggestion".
  */
 export interface MailSuggestion {
-  id: Id70;
+  id: Id72;
   category: Category8;
-  senders: Senders1;
-  reason: Reason5;
+  senders: Senders2;
+  reason: Reason6;
   quiet: Quiet;
-  emails: Emails1;
+  emails: Emails3;
   opened: Opened;
   replied: Replied;
   to_archive: ToArchive;
@@ -5376,7 +5514,7 @@ export interface MailSuggestionList {
  * via the `definition` "DecideMailSuggestion".
  */
 export interface DecideMailSuggestion {
-  id: Id71;
+  id: Id73;
   accept: Accept3;
 }
 /**
@@ -5394,7 +5532,7 @@ export interface ContactRow {
  * via the `definition` "CorrectionRow".
  */
 export interface CorrectionRow {
-  sender: Sender10;
+  sender: Sender11;
   field: Field2;
   value: Value6;
   said: Said;
@@ -5423,7 +5561,7 @@ export interface LearnedNote {
  * via the `definition` "KnowledgeLayer".
  */
 export interface KnowledgeLayer {
-  name: Name35;
+  name: Name36;
   text: Text13;
   trust: Trust;
   [k: string]: unknown;
@@ -5482,7 +5620,7 @@ export interface ChangeLearnedNote {
  * via the `definition` "ReadMoreMail".
  */
 export interface ReadMoreMail {
-  count: Count4;
+  count: Count5;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -5496,10 +5634,10 @@ export interface GetToday {
  * via the `definition` "Preference".
  */
 export interface Preference {
-  id: Id72;
+  id: Id74;
   purpose: Purpose1;
   account?: Account2;
-  sender?: Sender11;
+  sender?: Sender12;
   topic?: Topic2;
   instruction: Instruction1;
   status: Status14;
@@ -5515,11 +5653,11 @@ export interface Preference {
  * via the `definition` "SavePreference".
  */
 export interface SavePreference {
-  id?: Id73;
+  id?: Id75;
   revision?: Revision2;
   purpose?: Purpose2;
   account?: Account3;
-  sender?: Sender12;
+  sender?: Sender13;
   topic?: Topic3;
   instruction: Instruction2;
   status?: Status15;
@@ -5546,7 +5684,7 @@ export interface PreferenceList {
  * via the `definition` "PreferenceHistory".
  */
 export interface PreferenceHistory {
-  id: Id74;
+  id: Id76;
   [k: string]: unknown;
 }
 /**
@@ -5576,7 +5714,7 @@ export interface PreferenceVersions {
  * via the `definition` "RestorePreference".
  */
 export interface RestorePreference {
-  id: Id75;
+  id: Id77;
   revision: Revision3;
   restore_revision: RestoreRevision;
   [k: string]: unknown;
@@ -5586,7 +5724,7 @@ export interface RestorePreference {
  * via the `definition` "RecordInteraction".
  */
 export interface RecordInteraction {
-  id: Id76;
+  id: Id78;
   thread: Thread7;
   action: Action3;
 }
@@ -5596,7 +5734,7 @@ export interface RecordInteraction {
  */
 export interface PromptHistory {
   kind: Kind17;
-  name: Name36;
+  name: Name37;
   [k: string]: unknown;
 }
 /**
@@ -5604,7 +5742,7 @@ export interface PromptHistory {
  * via the `definition` "PromptVersion".
  */
 export interface PromptVersion {
-  id: Id77;
+  id: Id79;
   content: Content5;
   time: Time13;
   [k: string]: unknown;
@@ -5623,7 +5761,7 @@ export interface PromptVersions {
  */
 export interface RestorePrompt {
   kind: Kind18;
-  name: Name37;
+  name: Name38;
   version: Version1;
   [k: string]: unknown;
 }
@@ -5632,11 +5770,11 @@ export interface RestorePrompt {
  * via the `definition` "PreviewPreference".
  */
 export interface PreviewPreference {
-  id?: Id78;
+  id?: Id80;
   revision?: Revision4;
   purpose?: Purpose3;
   account?: Account4;
-  sender?: Sender13;
+  sender?: Sender14;
   topic?: Topic4;
   instruction: Instruction3;
   status?: Status16;
@@ -5649,7 +5787,7 @@ export interface PreviewPreference {
  */
 export interface PreferencePreview {
   matched: Matched;
-  total: Total7;
+  total: Total8;
   examples: Examples;
   instruction: Instruction4;
   explanation: Explanation;
@@ -5660,11 +5798,11 @@ export interface PreferencePreview {
  * via the `definition` "AgentQueueItem".
  */
 export interface AgentQueueItem {
-  id: Id79;
+  id: Id81;
   title: Title16;
   status: Status17;
   time: Time14;
-  error?: Error4;
+  error?: Error5;
   session?: Session10;
   [k: string]: unknown;
 }
@@ -5692,7 +5830,7 @@ export interface AgentQueue {
  * via the `definition` "QueueAction".
  */
 export interface QueueAction {
-  id: Id80;
+  id: Id82;
   action: Action4;
   [k: string]: unknown;
 }
@@ -5711,11 +5849,11 @@ export interface ExpireLearnedNote {
  * via the `definition` "SimulatePreference".
  */
 export interface SimulatePreference {
-  id?: Id81;
+  id?: Id83;
   revision?: Revision6;
   purpose?: Purpose4;
   account?: Account5;
-  sender?: Sender14;
+  sender?: Sender15;
   topic?: Topic5;
   instruction: Instruction5;
   status?: Status18;
@@ -5728,10 +5866,10 @@ export interface SimulatePreference {
  */
 export interface PreferenceDecision {
   thread: Thread8;
-  subject: Subject11;
+  subject: Subject12;
   before: Before2;
   after: After;
-  reason: Reason6;
+  reason: Reason7;
   [k: string]: unknown;
 }
 /**
@@ -5756,7 +5894,7 @@ export interface SkillFile {
  * via the `definition` "Skill".
  */
 export interface Skill {
-  name: Name38;
+  name: Name39;
   description: Description4;
   origin: Origin;
   active: Active2;
@@ -5774,8 +5912,8 @@ export interface Skill {
  * via the `definition` "SkillProposal".
  */
 export interface SkillProposal {
-  id: Id82;
-  name: Name39;
+  id: Id84;
+  name: Name40;
   description: Description5;
   agents: Agents2;
   needs_tools: NeedsTools1;
@@ -5818,7 +5956,7 @@ export interface AddSkill {
  * via the `definition` "DecideSkill".
  */
 export interface DecideSkill {
-  id: Id83;
+  id: Id85;
   approve: Approve;
 }
 /**
@@ -5826,14 +5964,14 @@ export interface DecideSkill {
  * via the `definition` "SkillName".
  */
 export interface SkillName {
-  name: Name40;
+  name: Name41;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "MonitorAlert".
  */
 export interface MonitorAlert {
-  id: Id84;
+  id: Id86;
   kind: Kind19;
   agent?: Agent8;
   task_id?: TaskId3;
@@ -5852,7 +5990,7 @@ export interface MapEdge {
   task_id: TaskId4;
   source: Source9;
   target: Target;
-  state: State10;
+  state: State11;
   objective: Objective1;
   messages: Messages7;
   waiting: Waiting1;
@@ -5885,8 +6023,8 @@ export interface AgentMap {
  */
 export interface RunSpan {
   kind: Kind20;
-  id: Id85;
-  name: Name41;
+  id: Id87;
+  name: Name42;
   agent?: Agent9;
   time: Time16;
   status?: Status20;
@@ -5929,7 +6067,7 @@ export interface SeeAlerts {
  * via the `definition` "Task".
  */
 export interface Task {
-  id: Id86;
+  id: Id88;
   title: Title17;
   notes: Notes1;
   status: Status21;
@@ -5963,7 +6101,7 @@ export interface TaskList {
  * via the `definition` "SaveTask".
  */
 export interface SaveTask {
-  id?: Id87;
+  id?: Id89;
   title: Title18;
   notes?: Notes2;
   status?: Status22;
@@ -5976,16 +6114,16 @@ export interface SaveTask {
  * via the `definition` "TaskAction".
  */
 export interface TaskAction {
-  id: Id88;
+  id: Id90;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "Reminder".
  */
 export interface Reminder {
-  id: Id89;
+  id: Id91;
   title: Title19;
-  when: When4;
+  when: When5;
   repeat: Repeat;
   thread: Thread11;
   task: Task1;
@@ -6017,9 +6155,9 @@ export interface ReminderList {
  * via the `definition` "SaveReminder".
  */
 export interface SaveReminder {
-  id?: Id90;
+  id?: Id92;
   title: Title20;
-  when: When5;
+  when: When6;
   repeat?: Repeat1;
   thread?: Thread12;
   task?: Task2;
@@ -6030,7 +6168,7 @@ export interface SaveReminder {
  * via the `definition` "SnoozeReminder".
  */
 export interface SnoozeReminder {
-  id: Id91;
+  id: Id93;
   minutes?: Minutes;
 }
 /**
@@ -6038,7 +6176,7 @@ export interface SnoozeReminder {
  * via the `definition` "ReminderAction".
  */
 export interface ReminderAction {
-  id: Id92;
+  id: Id94;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -6053,13 +6191,13 @@ export interface PlannerDone {
  * via the `definition` "LocalModel".
  */
 export interface LocalModel {
-  id: Id93;
-  label: Label9;
+  id: Id95;
+  label: Label10;
   description: Description6;
   size_bytes: SizeBytes;
-  state: State11;
+  state: State12;
   downloaded_bytes?: DownloadedBytes;
-  error?: Error5;
+  error?: Error6;
   active?: Active3;
   [k: string]: unknown;
 }
@@ -6071,9 +6209,9 @@ export interface LocalModel {
  */
 export interface IndexInfo {
   kind: Kind21;
-  state: State12;
+  state: State13;
   indexed: Indexed;
-  total: Total8;
+  total: Total9;
   stale?: Stale;
   fingerprint: Fingerprint;
   build_settings: BuildSettings;
@@ -6095,7 +6233,7 @@ export interface SemanticStatus {
   ready: Ready;
   mirror?: Mirror;
   indexed?: Indexed1;
-  total?: Total9;
+  total?: Total10;
   indexing?: Indexing;
   indexes?: Indexes;
   [k: string]: unknown;
@@ -6114,7 +6252,7 @@ export interface DetectModels {
 export interface ModelDetection {
   on_this_computer: OnThisComputer;
   recommended: Recommended;
-  reason: Reason7;
+  reason: Reason8;
   reachable: Reachable;
   memory_bytes: MemoryBytes;
   free_bytes: FreeBytes;
@@ -6140,14 +6278,14 @@ export interface GetSemanticStatus {
  * via the `definition` "DownloadModel".
  */
 export interface DownloadModel {
-  id?: Id94;
+  id?: Id96;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "ModelName".
  */
 export interface ModelName {
-  id: Id95;
+  id: Id97;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -6163,8 +6301,8 @@ export interface SaveSemanticSettings {
  * via the `definition` "ImportModel".
  */
 export interface ImportModel {
-  id: Id96;
-  folder: Folder10;
+  id: Id98;
+  folder: Folder12;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -6190,8 +6328,8 @@ export interface GetConnectors {
  * via the `definition` "ConnectorTool".
  */
 export interface ConnectorTool {
-  id: Id97;
-  name: Name42;
+  id: Id99;
+  name: Name43;
   description: Description7;
   parameters?: Parameters;
   [k: string]: unknown;
@@ -6206,13 +6344,13 @@ export interface Parameters {
  * via the `definition` "Connector".
  */
 export interface Connector {
-  id: Id98;
-  name: Name43;
+  id: Id100;
+  name: Name44;
   kind: Kind24;
   url?: Url2;
   audience?: Audience;
   enabled?: Enabled7;
-  state: State13;
+  state: State14;
   detail?: Detail7;
   tools?: Tools3;
   has_token?: HasToken;
@@ -6240,7 +6378,7 @@ export interface TestConnector {
  */
 export interface ConnectorTest {
   ok: Ok6;
-  error?: Error6;
+  error?: Error7;
   tools?: Tools4;
   [k: string]: unknown;
 }
@@ -6249,7 +6387,7 @@ export interface ConnectorTest {
  * via the `definition` "AddConnector".
  */
 export interface AddConnector {
-  name: Name44;
+  name: Name45;
   url: Url4;
   token?: Token1;
   audience: Audience1;
@@ -6259,14 +6397,14 @@ export interface AddConnector {
  * via the `definition` "ConnectorAction".
  */
 export interface ConnectorAction {
-  id: Id99;
+  id: Id101;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "SetConnectorEnabled".
  */
 export interface SetConnectorEnabled {
-  id: Id100;
+  id: Id102;
   enabled: Enabled8;
 }
 /**
@@ -6286,7 +6424,7 @@ export interface ApiError {
  * via the `definition` "AppEvent".
  */
 export interface AppEvent {
-  id: Id101;
+  id: Id103;
   seq: Seq1;
   type: Type2;
   version: Version2;
@@ -6318,7 +6456,7 @@ export interface FailedEvent {
   listener: Listener;
   event_seq: EventSeq;
   event_type: EventType;
-  error: Error7;
+  error: Error8;
   time: Time18;
   [k: string]: unknown;
 }
@@ -6388,8 +6526,8 @@ export interface UpdateSettings {
  * via the `definition` "AvailableModel".
  */
 export interface AvailableModel {
-  id: Id102;
-  name: Name45;
+  id: Id104;
+  name: Name46;
   [k: string]: unknown;
 }
 /**
@@ -6475,10 +6613,10 @@ export interface ListModels {
  * via the `definition` "ModelLogin".
  */
 export interface ModelLogin {
-  state: State14;
+  state: State15;
   user_code?: UserCode;
   verification_url?: VerificationUrl;
-  error?: Error8;
+  error?: Error9;
   [k: string]: unknown;
 }
 /**
@@ -6600,8 +6738,8 @@ export interface BackupList {
  * via the `definition` "BackupRow".
  */
 export interface BackupRow {
-  name: Name46;
-  reason: Reason8;
+  name: Name47;
+  reason: Reason9;
   time: Time19;
   size: Size8;
   [k: string]: unknown;
@@ -6629,7 +6767,7 @@ export interface ResetHome {
  * via the `definition` "RestoreBackup".
  */
 export interface RestoreBackup {
-  name: Name47;
+  name: Name48;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -6643,7 +6781,7 @@ export interface UnlockHome {
  * via the `definition` "HomeStatus".
  */
 export interface HomeStatus {
-  state: State15;
+  state: State16;
   path?: Path17;
   default_path: DefaultPath;
   message?: Message7;
@@ -6707,7 +6845,7 @@ export interface GetProfile {
  * via the `definition` "Profile".
  */
 export interface Profile {
-  name?: Name48;
+  name?: Name49;
   role?: Role4;
   signature?: Signature;
   tone?: Tone;
@@ -6739,14 +6877,14 @@ export interface ListNotifications {
  * via the `definition` "MarkNotificationsRead".
  */
 export interface MarkNotificationsRead {
-  id?: Id103;
+  id?: Id105;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "Notification".
  */
 export interface Notification {
-  id: Id104;
+  id: Id106;
   time: Time20;
   kind: Kind26;
   title: Title21;
@@ -6873,7 +7011,7 @@ export interface LogLines {
  * via the `definition` "NetworkCheck".
  */
 export interface NetworkCheck {
-  name: Name49;
+  name: Name50;
   host: Host1;
   ok: Ok8;
   detail: Detail10;

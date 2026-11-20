@@ -3,6 +3,7 @@ import type { AddSkill, DecideSkill, ListSkills, SkillList, SkillName } from "./
 import type { CancelTeamTask, CardList, GetTeamTask, ListCards, ListTeamTasks, NoteOnTeamTask, RenameAgent, ResetAgentName, RetryTeamTask, SetMascot, TeamTaskList, TeamTaskView } from "./contracts.generated";
 import type { MarkFolderRead } from "./contracts.generated";
 import type { MailOrganization, FinishMailLearning, MergeCategories, SortCategory, CategorySortEstimate } from "./contracts.generated";
+import type { ApplyMailSort, GetMailSort, MailSort, MailSortApplied, PrepareMailSort, SkipMailSort } from "./contracts.generated";
 import type {SimulatePreference, PreferenceSimulation} from "./contracts.generated";
 import type {ExpireLearnedNote} from "./contracts.generated";
 import type {GetAgentQueue, AgentQueue, QueueAction} from "./contracts.generated";
@@ -328,6 +329,9 @@ interface Commands {
   "categories.merge": [MergeCategories, CategoryList];
   "categories.sort": [SortCategory, CategorySortEstimate];
   "mail.learning.finish": [FinishMailLearning, MailOrganization];
+  "mail.sort.prepare": [PrepareMailSort, MailSort];
+  "mail.sort.apply": [ApplyMailSort, MailSortApplied];
+  "mail.sort.skip": [SkipMailSort, MailSort];
   "categories.reorder": [ReorderCategories, CategoryList];
   "categories.decide": [DecideCategory, CategoryList];
   "categories.decidePriority": [DecidePriority, CategoryList];
@@ -423,6 +427,7 @@ interface Queries {
   "mail.accounts": [GetMailAccounts, MailAccounts];
   "mail.status": [GetMailStatus, MailStatus];
   "mail.organization": [GetMailStatus, MailOrganization];
+  "mail.sort.get": [GetMailSort, MailSort];
   "threads.list": [ListThreads, ThreadList];
   "thread.get": [GetThread, ThreadView];
   "rules.get": [GetRules, RuleSet];

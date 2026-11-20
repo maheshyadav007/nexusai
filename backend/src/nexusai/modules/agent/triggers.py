@@ -29,7 +29,7 @@ from nexusai.modules.agent import (
 )
 from nexusai.modules.agent.context import TurnRequest
 from nexusai.modules.agent.prompt_data import untrusted
-from nexusai.modules.mail import accounts
+from nexusai.modules.mail import accounts, sorting
 
 log = structlog.get_logger()
 MIGRATION = Migration(
@@ -289,6 +289,11 @@ class Triggers:
             # Only completed download/import events start learning. Individual chunks are not
             # independent arrivals, and must not start per-email work or partial interviews.
             if not history_finished:
+                return
+            # A new Home sorts its mail first, so the AI never reads what the person keeps from
+            # it. The grouping starts now, so the page is ready when they open it.
+            if not mail_agent.learning_state(self.ctx) and not sorting.decided(self.ctx):
+                sorting.prepare(self.ctx)
                 return
             if mail_agent.learning_state(self.ctx) in {"reading", "wrapping"}:
                 mail_agent._set(self.ctx, "mail_bulk_pending", "1")
