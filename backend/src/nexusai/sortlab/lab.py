@@ -25,9 +25,8 @@ from pydantic import BaseModel, Field
 
 from nexusai.contracts.mail import MailAuth, MailProfile, ServerSettings
 from nexusai.kernel.home import app_data_dir
-from nexusai.modules.mail import grouping
+from nexusai.modules.mail import grouping, sorting
 from nexusai.modules.mail.imap import Fetched, Folder, ImapSession, SignInFailed, synced_folders
-from nexusai.modules.mail.parse import parse_message
 from nexusai.modules.mail.pop3 import Pop3Session
 
 BATCH = 50
@@ -35,8 +34,6 @@ SETTINGS_FILE = "sortlab.env"
 # How many of the newest emails to read, unless NEXUSAI_SORTLAB_LIMIT says otherwise.
 LIMIT = 15000
 SKIPPED_ROLES = {"trash", "junk", "drafts"}
-SAMPLES = 10
-MISSED_SENDERS = 40
 PAGE = Path(__file__).with_name("page.html")
 
 
@@ -241,79 +238,11 @@ def download(lab: Lab, sign_in: SignIn, server: Server) -> None:
                 session.close()
 
 
-def _summary(path: Path, named: set[str]) -> dict[str, Any]:
-    parsed = parse_message(path.read_bytes())
-    try:
-        when = datetime.fromisoformat(parsed.date).strftime("%d %b").lstrip("0")
-    except ValueError:
-        when = ""
-    return {
-        "key": path.name,
-        "subject": parsed.subject,
-        "sender": parsed.from_addr,
-        "from": parsed.from_name or parsed.from_addr,
-        "when": when,
-        "snippet": parsed.snippet[:140],
-        "names_you": path.name in named,
-    }
-
-
 def describe(lab: Lab) -> dict[str, Any]:
-    """What the page shows: every group with sample emails and its folder, and the biggest
-    senders left in no group."""
-    report = lab.report
-    assert report is not None
-    # Mentions count only outside groups that name the person in nearly every email.
-    ignored = {group.id for group in report.groups if group.mentions_ignored}
-    named = {
-        key
-        for key, decision in report.decisions.items()
-        if decision.named and decision.group not in ignored
-    }
-    groups = []
-    for group in report.groups:
-        data = json.loads(grouping.to_json(grouping.Report("", "", [group], {})))["groups"][0]
-        data["folder"] = FOLDER_OF[group.section]
-        data["emails"] = [_summary(lab.folder / key, named) for key in group.members[:SAMPLES]]
-        groups.append(data)
-    loose = [key for key, decision in report.decisions.items() if decision.group is None]
-    by_sender: dict[str, list[dict[str, Any]]] = {}
-    for key in loose:
-        summary = _summary(lab.folder / key, named)
-        by_sender.setdefault(summary["sender"], []).append(summary)
-    # The person's own mail is theirs, never something to sort.
-    by_sender.pop(report.owner, None)
-    missed = sorted(by_sender.items(), key=lambda item: -len(item[1]))[:MISSED_SENDERS]
-    own_domain = report.owner.partition("@")[2]
-    endings = grouping._endings(
-        {sender.partition("@")[2] for sender in by_sender}
-        | {sender.partition("@")[2] for group in report.groups for sender in group.senders}
-    )
-
-    def label(sender: str) -> str:
-        """Named like the engine names a group: the domain outside the company."""
-        local, _, domain = sender.partition("@")
-        return local if domain == own_domain else grouping._site(domain, endings)
-
-    reach = sum(decision.reaches_ai for decision in report.decisions.values())
-    return {
-        "owner": report.owner,
-        "owner_name": report.owner_name,
-        "total": len(report.decisions),
-        "reach_ai": reach,
-        "ungrouped": len(loose),
-        "groups": groups,
-        "missed": [
-            {
-                "sender": sender,
-                "label": label(sender),
-                "count": len(items),
-                "emails": items[:SAMPLES],
-            }
-            for sender, items in missed
-            if len(items) > 1
-        ],
-    }
+    """What the page shows, the same as the app's sorting page shows."""
+    assert lab.report is not None
+    found, _ = sorting.describe(lab.report, lambda key: (lab.folder / key).read_bytes())
+    return found
 
 
 def save(lab: Lab, finish: Finish) -> Path:

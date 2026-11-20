@@ -1,0 +1,401 @@
+"""Sorting mail before the AI reads it. The grouping engine suggests where each group goes; the
+person settles it once, and what they keep from the AI becomes rules and filed categories.
+
+Automated and Calendar are folders the AI ignores: their categories are filed by rules, left out
+of meaning search and never learned from. Mail that names the person still reaches the AI.
+"""
+
+import json
+import threading
+import zlib
+from collections import defaultdict
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from typing import Any
+
+import structlog
+
+from nexusai.contracts.mail import (
+    ApplyMailSort,
+    MailRule,
+    MailSort,
+    RuleActions,
+    RuleCondition,
+    SortEmail,
+    SortGroup,
+)
+from nexusai.kernel.database import Migration
+from nexusai.kernel.module import CommandError, Context
+from nexusai.modules.mail import accounts, grouping, rules
+from nexusai.modules.mail.parse import parse_message
+
+log = structlog.get_logger()
+MIGRATION = Migration(
+    "mail_sorting_001",
+    """
+CREATE TABLE mail_sorting (
+  id INTEGER PRIMARY KEY CHECK (id = 1), state TEXT NOT NULL, updated TEXT NOT NULL);
+ALTER TABLE mail_categories ADD COLUMN ai_reads INTEGER NOT NULL DEFAULT 1;
+""",
+)
+SAMPLES = 10
+MISSED_SENDERS = 40
+# Where each section of the engine's report starts out.
+FOLDER_OF = {
+    "automated": "automated",
+    "calendar": "calendar",
+    "people": "inbox",
+    "too_few": "inbox",
+}
+# The folders the AI ignores, by the name their categories nest under.
+QUIET = {"automated": "Automated", "calendar": "Calendar"}
+RULE_PREFIX = "Sorted: "
+
+
+def _summary(key: str, raw: bytes, named: set[str]) -> dict[str, Any]:
+    parsed = parse_message(raw)
+    try:
+        when = datetime.fromisoformat(parsed.date).strftime("%d %b").lstrip("0")
+    except ValueError:
+        when = ""
+    return {
+        "key": key,
+        "subject": parsed.subject,
+        "sender": parsed.from_addr,
+        "from": parsed.from_name or parsed.from_addr,
+        "when": when,
+        "snippet": parsed.snippet[:140],
+        "names_you": key in named,
+    }
+
+
+def describe(
+    report: grouping.Report, read: Callable[[str], bytes]
+) -> tuple[dict[str, Any], dict[str, list[str]]]:
+    """What a sorting page shows, and every email behind each entry: the engine's groups with
+    sample emails and the folder they start in, then the biggest senders left in no group."""
+    # Mentions count only outside groups that name the person in nearly every email.
+    ignored = {group.id for group in report.groups if group.mentions_ignored}
+    named = {
+        key
+        for key, decision in report.decisions.items()
+        if decision.named and decision.group not in ignored
+    }
+    members: dict[str, list[str]] = {}
+    groups = []
+    for group in report.groups:
+        data = json.loads(grouping.to_json(grouping.Report("", "", [group], {})))["groups"][0]
+        data["folder"] = FOLDER_OF[group.section]
+        data["emails"] = [_summary(key, read(key), named) for key in group.members[:SAMPLES]]
+        groups.append(data)
+        members[group.id] = list(group.members)
+    loose = [key for key, decision in report.decisions.items() if decision.group is None]
+    by_sender: dict[str, list[dict[str, Any]]] = {}
+    for key in loose:
+        summary = _summary(key, read(key), named)
+        by_sender.setdefault(summary["sender"], []).append(summary)
+    # The person's own mail is theirs, never something to sort.
+    by_sender.pop(report.owner, None)
+    missed = sorted(by_sender.items(), key=lambda item: -len(item[1]))[:MISSED_SENDERS]
+    own_domain = report.owner.partition("@")[2]
+    endings = grouping._endings(
+        {sender.partition("@")[2] for sender in by_sender}
+        | {sender.partition("@")[2] for group in report.groups for sender in group.senders}
+    )
+
+    def label(sender: str) -> str:
+        """Named like the engine names a group: the domain outside the company."""
+        local, _, domain = sender.partition("@")
+        return local if domain == own_domain else grouping._site(domain, endings)
+
+    shown = []
+    for sender, items in missed:
+        if len(items) < 2:
+            continue
+        shown.append(
+            {
+                "sender": sender,
+                "label": label(sender),
+                "count": len(items),
+                "emails": items[:SAMPLES],
+            }
+        )
+        members[f"miss:{sender}"] = [item["key"] for item in items]
+    found = {
+        "owner": report.owner,
+        "owner_name": report.owner_name,
+        "total": len(report.decisions),
+        "reach_ai": sum(decision.reaches_ai for decision in report.decisions.values()),
+        "ungrouped": len(loose),
+        "groups": groups,
+        "missed": shown,
+    }
+    return found, members
+
+
+@dataclass
+class _Job:
+    state: str = "preparing"
+    done: int = 0
+    total: int = 0
+    error: str = ""
+    found: dict[str, Any] = field(default_factory=dict)
+    members: dict[str, list[str]] = field(default_factory=dict)
+    report: grouping.Report | None = None
+
+
+_jobs: dict[str, _Job] = {}
+_lock = threading.Lock()
+
+
+def decided(ctx: Context) -> str:
+    """ "done" or "skipped" once the person has dealt with it, else ""."""
+    rows = ctx.bus.db.fetch_all("SELECT state FROM mail_sorting WHERE id = 1")
+    return str(rows[0]["state"]) if rows else ""
+
+
+def _decide(ctx: Context, state: str) -> None:
+    with ctx.bus.unit_of_work() as work:
+        work.tx.execute(
+            "INSERT INTO mail_sorting (id, state, updated) VALUES (1, ?, ?)"
+            " ON CONFLICT (id) DO UPDATE SET state = excluded.state, updated = excluded.updated",
+            (state, datetime.now(UTC).isoformat()),
+        )
+        # Learning waits for this, then starts by itself.
+        work.emit("mail.sorted", {"state": state}, source="mail", trace_id=ctx.trace_id)
+
+
+def prepare(ctx: Context) -> None:
+    """Groups the stored mail in the background, once, so the page is ready when it's opened."""
+    home = str(ctx.config.home)
+    with _lock:
+        job = _jobs.get(home)
+        if decided(ctx) or (job is not None and job.state in {"preparing", "ready"}):
+            return
+        job = _jobs[home] = _Job()
+    threading.Thread(target=_group, args=(ctx, job), daemon=True, name="mail-sorting").start()
+
+
+def _group(ctx: Context, job: _Job) -> None:
+    try:
+        account = accounts.current_account(ctx.config)
+        rows = ctx.bus.db.fetch_all(
+            "SELECT m.id, r.data FROM messages m JOIN message_raw r ON r.message = m.id"
+            " WHERE m.account = ? AND m.folder_role NOT IN ('junk', 'trash') ORDER BY m.id",
+            (account,),
+        )
+        job.total = len(rows)
+        mail = [(str(row["id"]), zlib.decompress(row["data"])) for row in rows]
+        job.done = len(mail)
+        report = grouping.group_mailbox(mail)
+        raws = dict(mail)
+        job.found, job.members = describe(report, raws.__getitem__)
+        job.report = report
+        job.state = "ready"
+    except Exception as error:
+        log.warning("mail_sorting_failed", kind=type(error).__name__)
+        job.state, job.error = "failed", f"{type(error).__name__}: {str(error)[:300]}"
+
+
+def status(ctx: Context) -> MailSort:
+    state = decided(ctx)
+    if state:
+        return MailSort(state=state)
+    job = _jobs.get(str(ctx.config.home))
+    if job is None:
+        return MailSort(state="none")
+    if job.state != "ready":
+        return MailSort(state=job.state, done=job.done, total=job.total, error=job.error)
+    found = job.found
+    groups = [
+        SortGroup(
+            id=group["id"],
+            label=group["label"] or (group["reasons"] or [""])[0],
+            folder=group["folder"],
+            count=group["count"],
+            senders=group["senders"],
+            reason=(group["reasons"] or [""])[0],
+            names_you=0 if group["mentions_ignored"] else group["mentions"],
+            emails=[_email(email) for email in group["emails"]],
+        )
+        for group in found["groups"]
+    ] + [
+        SortGroup(
+            id=f"miss:{missed['sender']}",
+            label=missed["label"],
+            folder="inbox",
+            count=missed["count"],
+            senders=[missed["sender"]],
+            reason="",
+            names_you=sum(email["names_you"] for email in missed["emails"]),
+            emails=[_email(email) for email in missed["emails"]],
+            unsorted=True,
+        )
+        for missed in found["missed"]
+    ]
+    return MailSort(
+        state="ready",
+        owner_name=found["owner_name"],
+        emails=found["total"],
+        reach_ai=found["reach_ai"],
+        conversations=found["ungrouped"] - sum(m["count"] for m in found["missed"]),
+        groups=groups,
+    )
+
+
+def _email(email: dict[str, Any]) -> SortEmail:
+    return SortEmail(
+        subject=email["subject"],
+        sender=email["sender"],
+        sender_name=email["from"],
+        when=email["when"],
+        snippet=email["snippet"],
+        names_you=email["names_you"],
+    )
+
+
+def skip(ctx: Context) -> None:
+    """Leaves everything as it is, so the AI reads it all, as before sorting existed."""
+    _decide(ctx, "skipped")
+    _jobs.pop(str(ctx.config.home), None)
+
+
+def apply(ctx: Context, command: ApplyMailSort) -> int:
+    """Files every category the person kept from the AI under its folder, with a rule for what's
+    to come, and returns how many conversations moved. The Inbox stays the AI's to sort."""
+    job = _jobs.get(str(ctx.config.home))
+    if job is None or job.state != "ready" or job.report is None:
+        raise CommandError("mail.sort_not_ready", "The mail isn't grouped yet.", 409)
+    report = job.report
+    chosen = {choice.id: choice for choice in command.choices if choice.id in job.members}
+
+    def final(identifier: str) -> str:
+        seen: set[str] = set()
+        while (step := chosen.get(identifier)) and step.merged_into and identifier not in seen:
+            seen.add(identifier)
+            identifier = step.merged_into
+        return identifier
+
+    def folder_of(identifier: str) -> str:
+        choice = chosen.get(identifier)
+        if choice is not None:
+            return choice.folder
+        group = next((g for g in job.found["groups"] if g["id"] == identifier), None)
+        return str(group["folder"]) if group else "inbox"
+
+    gathered: dict[str, list[str]] = defaultdict(list)
+    for identifier, keys in job.members.items():
+        gathered[final(identifier)].extend(keys)
+    raws = {
+        str(row["id"]): row
+        for row in ctx.bus.db.fetch_all(
+            "SELECT id, thread_id, LOWER(from_addr) AS sender FROM messages WHERE account = ?",
+            (accounts.current_account(ctx.config),),
+        )
+    }
+    ignored = {group.id for group in report.groups if group.mentions_ignored}
+    named = {
+        key
+        for key, decision in report.decisions.items()
+        if decision.named and decision.group not in ignored
+    }
+    # Which kept-out category each sender's mail went to, to know whose rules can cover a sender.
+    home_of: dict[str, set[str]] = defaultdict(set)
+    for identifier, keys in gathered.items():
+        for key in keys:
+            if key in raws:
+                home_of[raws[key]["sender"]].add(identifier)
+    new_rules: list[MailRule] = []
+    moved = 0
+    now = datetime.now(UTC).isoformat()
+    with ctx.bus.unit_of_work() as work:
+        for identifier, keys in gathered.items():
+            place = folder_of(identifier)
+            if place not in QUIET or not keys:
+                continue
+            choice = chosen.get(identifier)
+            label = (choice.name if choice else "").strip() or _label(job.found, identifier)
+            name = f"{QUIET[place]}/{label.replace('/', ' ')}"[:64]
+            senders = sorted({raws[key]["sender"] for key in keys if key in raws})
+            for parent in (QUIET[place], name):
+                work.tx.execute(
+                    "INSERT INTO mail_categories (name, source, in_priority, proposed, why, sender,"
+                    " created, mode, description, ai_reads) VALUES (?, 'user', 0, 0, ?, ?, ?,"
+                    " 'exact', ?, 0) ON CONFLICT (name) DO UPDATE SET mode = 'exact', ai_reads = 0,"
+                    " sender = COALESCE(mail_categories.sender, excluded.sender)",
+                    (
+                        parent,
+                        "Sorted before the AI read it",
+                        senders[0] if parent == name and senders else None,
+                        now,
+                        parent,
+                    ),
+                )
+            # A sender whose mail all went here gets a rule for what's to come. One split across
+            # categories is filed as it is now, since its pattern isn't a rule yet.
+            for sender in senders:
+                if sender == report.owner or home_of[sender] != {identifier}:
+                    continue
+                new_rules.append(
+                    MailRule(
+                        name=f"{RULE_PREFIX}{name}: {sender}"[:120],
+                        conditions=[RuleCondition(field="sender_exact", value=sender)],
+                        actions=RuleActions(
+                            category=name,
+                            skip_agent=True,
+                            mentions=[who for who in (report.owner, report.owner_name) if who],
+                        ),
+                    )
+                )
+            # A conversation with mail that names the person stays where the AI reads it.
+            threads = {raws[key]["thread_id"] for key in keys if key in raws}
+            spoken = {raws[key]["thread_id"] for key in named if key in raws}
+            threads -= spoken
+            quiet = [key for key in keys if key in raws and raws[key]["thread_id"] in threads]
+            for start in range(0, len(threads), 500):
+                chunk = sorted(threads)[start : start + 500]
+                marks = ",".join("?" * len(chunk))
+                moved += work.tx.execute(
+                    f"UPDATE threads SET category = ?, category_source = 'rule', why = ? WHERE id"  # noqa: S608
+                    f" IN ({marks}) AND COALESCE(category_source, '') != 'user'",
+                    (name, f"Sorted into “{name}”", *chunk),
+                ).rowcount
+            for start in range(0, len(quiet), 500):
+                chunk = quiet[start : start + 500]
+                marks = ",".join("?" * len(chunk))
+                work.tx.execute(
+                    f"UPDATE messages SET rule = ?, why = ? WHERE id IN ({marks})",  # noqa: S608
+                    (f"{RULE_PREFIX}{name}", f"Sorted into “{name}”", *(int(k) for k in chunk)),
+                )
+        work.tx.execute(
+            "INSERT INTO mail_sorting (id, state, updated) VALUES (1, 'done', ?)"
+            " ON CONFLICT (id) DO UPDATE SET state = 'done', updated = excluded.updated",
+            (now,),
+        )
+        work.emit("rules.changed", {"count": len(new_rules)}, source="mail", trace_id=ctx.trace_id)
+        work.emit(
+            "mail.changed",
+            {"threads": moved, "reason": "categories"},
+            source="mail",
+            trace_id=ctx.trace_id,
+        )
+        work.emit("mail.sorted", {"state": "done"}, source="mail", trace_id=ctx.trace_id)
+    if new_rules:
+        made = {rule.name for rule in new_rules}
+        rules.change_rules(
+            ctx.config.home,
+            lambda existing: [*(rule for rule in existing if rule.name not in made), *new_rules],
+        )
+    _jobs.pop(str(ctx.config.home), None)
+    return moved
+
+
+def _label(found: dict[str, Any], identifier: str) -> str:
+    for group in found.get("groups", []):
+        if group["id"] == identifier:
+            return str(group["label"] or "Sorted")
+    for missed in found.get("missed", []):
+        if f"miss:{missed['sender']}" == identifier:
+            return str(missed["label"])
+    return "Sorted"

@@ -48,6 +48,7 @@ function useSteps(): { steps: Step[]; loaded: boolean; failed: boolean } {
   const assistant = useAssistant();
   const client = useQueryClient();
   const organization = useQuery({ queryKey: ["mail-organization"], queryFn: () => query("mail.organization", {}), enabled: ready, refetchInterval: 5000 });
+  const sorting = useQuery({ queryKey: ["mail-sort"], queryFn: () => query("mail.sort.get", {}), enabled: ready, refetchInterval: 15000 });
   const retry = useMutation({ mutationFn: () => command("mailAgent.retryLearning", {}), onSuccess: () => client.invalidateQueries({ queryKey: ["mail-organization"] }) });
 
   const hasMail = Boolean(mail.data?.account);
@@ -69,6 +70,8 @@ function useSteps(): { steps: Step[]; loaded: boolean; failed: boolean } {
   else if (state === "failed") Object.assign(reading, { detail: t("start.reading.failed"), tone: "failed", action: { label: "start.retry", run: () => retry.mutate(), loading: retry.isPending }, extra: retry.error ? <p role="alert" className="text-sm text-status-danger">{retry.error.message}</p> : null });
   else if (learned) Object.assign(reading, { detail: t(state === "asking" ? "start.reading.asking" : "start.reading.done"), tone: state === "asking" ? "waiting" : "done" });
   else if (downloading) Object.assign(reading, { detail: t("start.reading.downloading", { done: (mail.data?.done ?? 0).toLocaleString(), total: (mail.data?.total ?? 0).toLocaleString() }), tone: "running" });
+  // Reading waits until the person has sorted, so the AI never reads what they keep from it.
+  else if (sorting.data?.state === "ready" || sorting.data?.state === "preparing") Object.assign(reading, { detail: t("start.reading.sorting", { name: lead }), tone: "waiting", action: { label: "mail.sort.card.open", href: "/mail/sort" } });
   else if (state === "learning") Object.assign(reading, { detail: t("start.reading.progress", { done: organization.data?.done ?? 0, total: organization.data?.total ?? 0 }), tone: "running" });
   steps.push(reading);
 

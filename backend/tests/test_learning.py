@@ -175,3 +175,23 @@ def test_zero_turns_it_off(script: Script, fake: FakeMail, app_config: Config) -
         fake.state.deliver(make_mail(subject="Not read"))
         connect(client, fake)
         assert state(client) == ""
+
+
+def test_a_new_mailbox_is_not_read_until_it_is_sorted(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    replying(script, ["Works with Priya on the budget."], uncertain=True)
+    for number in range(5):
+        fake.state.deliver(
+            make_mail(subject=f"Past {number}", date=f"Mon, 0{number + 1} Jan 2024 10:00:00 +0000")
+        )
+    connect(client, fake, sorted_first=False)
+    # The mail is grouped for the person to sort, and nothing is read by the AI meanwhile.
+    wait(
+        lambda: client.post("/api/queries/mail.sort.get", json={}).json()["state"] == "ready",
+        "grouped",
+    )
+    assert state(client) == ""
+    assert not script.requests
+    client.post("/api/commands/mail.sort.skip", json={})
+    wait(lambda: state(client) == "asking", "learning after sorting")

@@ -25,6 +25,7 @@ from nexusai.contracts.mail import (
 )
 from nexusai.kernel.config import MailConfig
 from nexusai.kernel.database import Database, Migration
+from nexusai.modules.mail import grouping
 from nexusai.modules.mail.attachments import classify
 from nexusai.modules.mail.parse import (
     ParsedMessage,
@@ -642,9 +643,19 @@ def store_message(
         rule=match.name if match else None,
         skip_agent=bool(match and match.actions.skip_agent),
         notify=bool(match and match.actions.notify),
-        worth_a_look=bool(match and match.look_closer and WORTH_A_LOOK.search(parsed.subject)),
+        worth_a_look=bool(match and match.look_closer and WORTH_A_LOOK.search(parsed.subject))
+        or _names_them(match, parsed),
         is_new_thread=is_new,
     )
+
+
+def _names_them(match: RuleMatch | None, parsed: ParsedMessage) -> bool:
+    """Mail a rule keeps from the agent still goes to it when it names the person."""
+    if match is None or not match.actions.skip_agent or not match.actions.mentions:
+        return False
+    owner, *name = match.actions.mentions
+    names = grouping._mention(owner, name[0] if name else "")
+    return grouping._addressed(names, parsed.subject, parsed.own)
 
 
 def _mark_repeats_as_logos(tx: sqlite3.Connection, sha256: str) -> None:

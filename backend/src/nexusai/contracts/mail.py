@@ -408,6 +408,8 @@ class RuleActions(BaseModel):
     read_replies: bool = False
     notify: bool = False
     tag: str | None = Field(default=None, max_length=64)
+    # Skipped mail that names the person still goes to the agent: their address and name.
+    mentions: list[str] = Field(default_factory=list, max_length=4)
 
 
 class MailRule(BaseModel):
@@ -831,3 +833,75 @@ class CategorySortEstimate(BaseModel):
     conversations: int
     estimated_tokens: int
     queued: int = 0
+
+
+# Sorting mail before the AI reads it
+
+
+SortFolder = Literal["inbox", "automated", "calendar"]
+
+
+class GetMailSort(BaseModel):
+    pass
+
+
+class PrepareMailSort(BaseModel):
+    pass
+
+
+class SkipMailSort(BaseModel):
+    pass
+
+
+class SortEmail(BaseModel):
+    subject: str
+    sender: str
+    sender_name: str
+    when: str
+    snippet: str
+    names_you: bool
+
+
+class SortGroup(BaseModel):
+    id: str
+    label: str
+    folder: SortFolder
+    count: int
+    senders: list[str]
+    reason: str
+    # How many of its emails name the person, and so reach the AI wherever it's filed.
+    names_you: int
+    emails: list[SortEmail]
+    # A sender the engine left alone rather than a group it found.
+    unsorted: bool = False
+
+
+class MailSort(BaseModel):
+    state: Literal["none", "preparing", "ready", "failed", "done", "skipped"]
+    done: int = 0
+    total: int = 0
+    error: str = ""
+    owner_name: str = ""
+    emails: int = 0
+    reach_ai: int = 0
+    conversations: int = 0
+    groups: list[SortGroup] = Field(default_factory=list)
+
+
+class SortChoice(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(max_length=400)
+    name: str = Field(default="", max_length=60)
+    folder: SortFolder
+    merged_into: str = Field(default="", max_length=400)
+
+
+class ApplyMailSort(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    choices: list[SortChoice] = Field(default_factory=list, max_length=5000)
+
+
+class MailSortApplied(BaseModel):
+    moved: int

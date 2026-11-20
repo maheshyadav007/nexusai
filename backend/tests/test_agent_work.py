@@ -106,7 +106,11 @@ def wait(check: Callable[[], Any], what: str = "condition", seconds: float = 15)
     raise AssertionError(f"timed out waiting for {what}")
 
 
-def connect(client: TestClient, fake: FakeMail) -> None:
+def connect(client: TestClient, fake: FakeMail, *, sorted_first: bool = True) -> None:
+    """A mailbox the person already sorted, or chose not to, so learning starts as it did
+    before sorting existed. Tests of the sorting step itself pass sorted_first=False."""
+    if sorted_first:
+        assert client.post("/api/commands/mail.sort.skip", json={}).status_code == 200
     client.post(
         "/api/commands/mail.accounts.save",
         json={"name": "t", "profile": fake.profile(), "password": PASSWORD},

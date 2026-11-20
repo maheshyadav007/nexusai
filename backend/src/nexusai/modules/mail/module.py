@@ -12,6 +12,7 @@ import structlog
 from nexusai.contracts.events import AppEvent
 from nexusai.contracts.mail import (
     AddPstImport,
+    ApplyMailSort,
     CategoryList,
     CategoryName,
     CategorySaved,
@@ -28,6 +29,7 @@ from nexusai.contracts.mail import (
     ForwardContext,
     GetMailAccounts,
     GetMailPresets,
+    GetMailSort,
     GetMailStatus,
     GetMoreMail,
     GetPstImports,
@@ -51,12 +53,15 @@ from nexusai.contracts.mail import (
     MailPresets,
     MailProfile,
     MailRule,
+    MailSort,
+    MailSortApplied,
     MailStatus,
     MailSyncChanged,
     MailTestResult,
     MarkFolderRead,
     MergeCategories,
     MoveThread,
+    PrepareMailSort,
     ProbeServer,
     PstImport,
     PstImportAction,
@@ -89,6 +94,7 @@ from nexusai.contracts.mail import (
     SetThreadImportance,
     SetThreadRead,
     SetThreadStatus,
+    SkipMailSort,
     SortCategory,
     StartPstUpload,
     StopHistory,
@@ -100,7 +106,17 @@ from nexusai.contracts.mail import (
     UpdateCategory,
 )
 from nexusai.kernel.module import CommandError, Context, Module
-from nexusai.modules.mail import accounts, outgoing, pst, pst_search, pst_upload, rules, send, store
+from nexusai.modules.mail import (
+    accounts,
+    outgoing,
+    pst,
+    pst_search,
+    pst_upload,
+    rules,
+    send,
+    sorting,
+    store,
+)
 from nexusai.modules.mail.imap import DELETING_ROLES, Folder, distinct_total, test_imap
 from nexusai.modules.mail.parse import normalize_subject, parse_message
 from nexusai.modules.mail.pop3 import test_pop3
@@ -110,7 +126,7 @@ from nexusai.modules.semantic import module as semantic
 
 log = structlog.get_logger()
 ATTACHED_WORDS = re.compile(r"\b(attached|attachment|enclosed|첨부)\b|첨부", re.I)
-mail_module = Module(name="mail", migrations=[*store.MIGRATIONS, pst.MIGRATION])
+mail_module = Module(name="mail", migrations=[*store.MIGRATIONS, pst.MIGRATION, sorting.MIGRATION])
 
 # Filing that only exists on this computer, and old mail read from an archive file.
 LOCAL_PREFIXES = ("local:", "pst:")
@@ -2303,3 +2319,30 @@ def sort_category(command: SortCategory, ctx: Context) -> CategorySortEstimate:
     return CategorySortEstimate(
         conversations=len(candidates), estimated_tokens=tokens, queued=len(candidates)
     )
+
+
+# Sorting mail before the AI reads it
+
+
+@mail_module.query("mail.sort.get")
+def get_mail_sort(query: GetMailSort, ctx: Context) -> MailSort:
+    return sorting.status(ctx)
+
+
+@mail_module.command("mail.sort.prepare")
+def prepare_mail_sort(command: PrepareMailSort, ctx: Context) -> MailSort:
+    sorting.prepare(ctx)
+    return sorting.status(ctx)
+
+
+@mail_module.command("mail.sort.apply")
+def apply_mail_sort(command: ApplyMailSort, ctx: Context) -> MailSortApplied:
+    moved = sorting.apply(ctx, command)
+    _categories_changed(ctx)
+    return MailSortApplied(moved=moved)
+
+
+@mail_module.command("mail.sort.skip")
+def skip_mail_sort(command: SkipMailSort, ctx: Context) -> MailSort:
+    sorting.skip(ctx)
+    return sorting.status(ctx)

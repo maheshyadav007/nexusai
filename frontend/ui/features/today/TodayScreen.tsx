@@ -1,6 +1,7 @@
 "use client";
 
 import { MailOrganizationCard } from "./MailOrganizationCard";
+import { SortMailCard } from "./SortMailCard";
 import Link from "next/link";
 import appConfig from "@/app.config.json";
 import { useEffect, useState, type ReactNode } from "react";
@@ -621,6 +622,7 @@ export function TodayScreen() {
       </header>
       <MorningBrief />
       <FinishSetup />
+      <SortMailCard />
       <MailOrganizationCard />
       {today.isError ? <ErrorState title={t("today.error")} onRetry={() => void today.refetch()} /> : null}
       {today.isPending ? <Skeleton className="h-6 w-full" /> : null}
