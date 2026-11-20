@@ -58,6 +58,7 @@ LINK = re.compile(r"\S*(?:://|%40|www\.)\S*", re.IGNORECASE)
 FOOTER_LINES = 3
 FIRST_TAG = re.compile(r"^\s*(?:(?:re|fwd?|aw|sv)\s*:\s*)*\[([^\]]{1,40})\]", re.IGNORECASE)
 BULK_PRECEDENCE = {"bulk", "list", "junk"}
+UNSUBSCRIBE = re.compile(r"mailto:([^?>\s,]+)", re.IGNORECASE)
 
 
 @dataclass
@@ -370,9 +371,17 @@ def group_mailbox(raws: Iterable[tuple[str, bytes]]) -> Report:
         if address != mail.sender and address != owner
     }
     sent_known = len(sent) >= ENOUGH
-    written_to = {address for mail in sent for address in {*mail.parsed.to, *mail.parsed.cc}} - {
-        owner
+    # Bulk mail names its unsubscribe address; mail sent there unsubscribes, it isn't writing.
+    unsubscribe = {
+        found.lower()
+        for mail in mails
+        for found in UNSUBSCRIBE.findall(mail.parsed.headers.get("list-unsubscribe", ""))
     }
+    written_to = (
+        {address for mail in sent for address in {*mail.parsed.to, *mail.parsed.cc}}
+        - {owner}
+        - unsubscribe
+    )
 
     def answers_people(sender: str, items: list[Mail]) -> bool:
         """A tool never replies to someone else's message; people do."""

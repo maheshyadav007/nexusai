@@ -263,7 +263,13 @@ def describe(lab: Lab) -> dict[str, Any]:
     senders left in no group."""
     report = lab.report
     assert report is not None
-    named = {key for key, decision in report.decisions.items() if decision.named}
+    # Mentions count only outside groups that name the person in nearly every email.
+    ignored = {group.id for group in report.groups if group.mentions_ignored}
+    named = {
+        key
+        for key, decision in report.decisions.items()
+        if decision.named and decision.group not in ignored
+    }
     groups = []
     for group in report.groups:
         data = json.loads(grouping.to_json(grouping.Report("", "", [group], {})))["groups"][0]
@@ -275,7 +281,20 @@ def describe(lab: Lab) -> dict[str, Any]:
     for key in loose:
         summary = _summary(lab.folder / key, named)
         by_sender.setdefault(summary["sender"], []).append(summary)
+    # The person's own mail is theirs, never something to sort.
+    by_sender.pop(report.owner, None)
     missed = sorted(by_sender.items(), key=lambda item: -len(item[1]))[:MISSED_SENDERS]
+    own_domain = report.owner.partition("@")[2]
+    endings = grouping._endings(
+        {sender.partition("@")[2] for sender in by_sender}
+        | {sender.partition("@")[2] for group in report.groups for sender in group.senders}
+    )
+
+    def label(sender: str) -> str:
+        """Named like the engine names a group: the domain outside the company."""
+        local, _, domain = sender.partition("@")
+        return local if domain == own_domain else grouping._site(domain, endings)
+
     reach = sum(decision.reaches_ai for decision in report.decisions.values())
     return {
         "owner": report.owner,
@@ -285,7 +304,12 @@ def describe(lab: Lab) -> dict[str, Any]:
         "ungrouped": len(loose),
         "groups": groups,
         "missed": [
-            {"sender": sender, "count": len(items), "emails": items[:SAMPLES]}
+            {
+                "sender": sender,
+                "label": label(sender),
+                "count": len(items),
+                "emails": items[:SAMPLES],
+            }
             for sender, items in missed
             if len(items) > 1
         ],

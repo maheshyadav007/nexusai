@@ -251,7 +251,7 @@ function start() {
       namesYou: g.mentions_ignored ? 0 : g.mentions };
   }
   for (const m of report.missed) {
-    cats["miss:" + m.sender] = { id: "miss:" + m.sender, kind: "miss", sender: m.sender, name: m.sender.split("@")[0], engineName: "",
+    cats["miss:" + m.sender] = { id: "miss:" + m.sender, kind: "miss", sender: m.sender, name: m.label, engineName: m.label,
       folder: "inbox", engineFolder: "inbox", count: m.count, emails: m.emails, senders: [m.sender], reason: "Not sorted: it looks like a person, or there's too little to go by.", mergedInto: "",
       namesYou: m.emails.filter((e) => e.names_you).length };
   }
@@ -297,7 +297,7 @@ function renderFolders() {
 }
 
 function untouched(cat) {
-  return cat.kind === "miss" && cat.folder === "inbox" && cat.name === cat.sender.split("@")[0];
+  return cat.kind === "miss" && cat.folder === "inbox" && cat.name === cat.engineName;
 }
 
 function catButton(cat) {
@@ -384,7 +384,7 @@ document.getElementById("finish").addEventListener("click", (event) => ask(event
     const all = Object.values(cats);
     const body = {
       groups: all.filter((c) => c.kind === "group").map((c) => ({ id: c.id, name: c.name, folder: c.folder, merged_into: c.mergedInto })),
-      misses: all.filter((c) => c.kind === "miss").map((c) => ({ sender: c.sender, name: c.name === c.sender.split("@")[0] ? "" : c.name, folder: c.folder, merged_into: c.mergedInto })),
+      misses: all.filter((c) => c.kind === "miss").map((c) => ({ sender: c.sender, name: c.name === c.engineName ? "" : c.name, folder: c.folder, merged_into: c.mergedInto })),
       details: document.getElementById("details").checked,
     };
     if (PREVIEW) { document.getElementById("done-text").textContent = "This is a preview, so nothing was saved."; show("done"); return; }

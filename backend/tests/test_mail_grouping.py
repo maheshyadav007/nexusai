@@ -246,3 +246,11 @@ def test_company_mail_that_greets_the_person_by_name_is_never_grouped() -> None:
     report = _box([names], asks, offers)
     assert all(report.decisions[str(n)].group is None for n in range(1, 31))
     assert {report.decisions[str(n)].section for n in range(31, 61)} == {"automated"}
+
+
+def test_unsubscribing_by_email_is_not_writing_to_a_sender() -> None:
+    letters = [_mail("news@paper.example", f"Issue {n}: the week", "Read more", List_Unsubscribe="<mailto:news@paper.example?subject=unsubscribe>") for n in range(25)]  # fmt: skip
+    mine = [_mail(OWNER, "unsubscribe 1fb8", "", to="news@paper.example")]
+    mine += [_mail(OWNER, f"Note {n}", "Hi", to="kim@else.example") for n in range(25)]
+    report = _box(letters, mine)
+    assert {report.decisions[str(n)].section for n in range(25)} == {"automated"}

@@ -208,3 +208,12 @@ def test_settings_come_from_the_file_and_a_plain_login_gets_the_company_domain(
     )  # fmt: skip
     assert sortlab.address_for("sam.lee", server.domain) == "sam.lee@firm.example"
     assert sortlab.address_for("sam@else.example", server.domain) == "sam@else.example"
+
+
+def test_a_group_that_names_everyone_shows_no_email_as_naming_the_person(lab: Any) -> None:
+    _, _, client = lab
+    client.post("/api/start", json=SIGN_IN)
+    _ready(client)
+    report = client.get("/api/report").json()
+    everyone = [group for group in report["groups"] if group["mentions_ignored"]]
+    assert everyone and not any(e["names_you"] for g in everyone for e in g["emails"])
