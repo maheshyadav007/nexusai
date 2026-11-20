@@ -6,63 +6,90 @@
 <title>Sort lab</title>
 <style>
 :root {
-  --page: #F3EEE5; --raised: #FFFDF9; --sunken: #E8E0D3; --ink: #191714; --ink-2: #3E372F;
+  --page: #F3EEE5; --raised: #FFFDF9; --sunken: #E8E0D3; --select: #F4E3D8; --ink: #191714; --ink-2: #3E372F;
   --muted: #5F564C; --line: #D9D1C3; --line-strong: #8F7D6C; --accent: #A8441F; --on-accent: #FCF3EE;
-  --good: #3B5C33; --bad: #A83226;
+  --reads: #3B5C33; --on-reads: #F3F7EF; --reads-soft: #EEF3E8; --bad: #A83226;
   --sans: "Segoe UI", system-ui, -apple-system, sans-serif;
 }
-@media (prefers-color-scheme: dark) { :root {
-  --page: #121010; --raised: #201C18; --sunken: #0C0B0A; --ink: #EFE9DE; --ink-2: #DACBBF;
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --page: #121010; --raised: #201C18; --sunken: #0C0B0A; --select: #3A2A22; --ink: #EFE9DE; --ink-2: #DACBBF;
   --muted: #B5A99B; --line: #3A3128; --line-strong: #6E5A4C; --accent: #E0784F; --on-accent: #191714;
-  --good: #8FBF80; --bad: #EB8074; color-scheme: dark } }
+  --reads: #8FBF80; --on-reads: #14200F; --reads-soft: #1C2618; --bad: #EB8074; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --page: #121010; --raised: #201C18; --sunken: #0C0B0A; --select: #3A2A22; --ink: #EFE9DE; --ink-2: #DACBBF;
+  --muted: #B5A99B; --line: #3A3128; --line-strong: #6E5A4C; --accent: #E0784F; --on-accent: #191714;
+  --reads: #8FBF80; --on-reads: #14200F; --reads-soft: #1C2618; --bad: #EB8074; color-scheme: dark }
 * { box-sizing: border-box; }
+html, body { height: 100%; }
 body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.5 var(--sans); }
-main { max-width: 900px; margin: 0 auto; padding: 32px 16px 110px; display: flex; flex-direction: column; gap: 28px; }
-h1 { font-size: 24px; margin: 0; }
-h2 { font-size: 16px; margin: 0; }
+h1 { font-size: 20px; margin: 0; }
 p { margin: 0; }
 .muted { color: var(--muted); }
-.card { background: var(--raised); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 14px; max-width: 420px; }
-label.field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
-input[type=text], input[type=password] { font: 14px var(--sans); color: var(--ink); background: var(--raised);
-  border: 1px solid var(--line-strong); border-radius: 6px; padding: 8px; min-width: 0; }
-button { font: 600 13px var(--sans); border-radius: 8px; padding: 9px 14px; cursor: pointer; min-height: 38px;
+button { font: 600 13px var(--sans); border-radius: 9px; padding: 0 14px; height: 40px; cursor: pointer;
   border: 1px solid var(--line-strong); background: var(--raised); color: var(--ink); }
 button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 button:disabled { opacity: .5; cursor: default; }
-button.link { border: 0; background: none; color: var(--accent); padding: 2px 0; min-height: 0; font-weight: 500; }
+button.link { border: 0; background: none; color: var(--accent); padding: 0; height: auto; font-weight: 500; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.bar { height: 8px; background: var(--sunken); border-radius: 99px; overflow: hidden; }
-.bar > div { height: 100%; background: var(--accent); width: 0; transition: width .3s; }
-.heading { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; border-bottom: 1px solid var(--line-strong); padding-bottom: 6px; }
-.list { display: flex; flex-direction: column; }
-.item { border-bottom: 1px solid var(--line); padding: 8px 0; display: flex; flex-direction: column; gap: 6px; }
-.line { display: grid; grid-template-columns: minmax(140px, 220px) 64px minmax(0, 1fr) auto; gap: 12px; align-items: center; }
-.line input[type=text] { width: 100%; font-weight: 600; }
-.count { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); }
-.example { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); min-width: 0; }
-.example button { margin-left: 6px; }
-.switch { display: flex; align-items: center; gap: 8px; font-size: 13px; white-space: nowrap; cursor: pointer; min-height: 36px; }
-.switch input { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
-.emails { padding: 4px 0 4px 12px; border-left: 2px solid var(--line); display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
-.emails div { display: flex; gap: 12px; min-width: 0; }
-.emails .subject { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.emails .sender { color: var(--muted); flex: 0 1 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.footer { position: fixed; left: 0; right: 0; bottom: 0; background: var(--raised); border-top: 1px solid var(--line); padding: 12px 16px; }
-.footer .inner { max-width: 900px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
-.row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+input[type=text], input[type=password], select { font: 14px var(--sans); color: var(--ink); background: var(--raised);
+  border: 1px solid var(--line-strong); border-radius: 8px; padding: 8px 10px; min-width: 0; }
 .error { color: var(--bad); }
-.good { color: var(--good); }
-@media (max-width: 640px) {
-  .line { grid-template-columns: 1fr auto; }
-  .line .example { grid-column: 1 / -1; }
-}
 [hidden] { display: none !important; }
+
+/* Sign in and done */
+.center { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.card { background: var(--raised); border: 1px solid var(--line); border-radius: 14px; padding: 28px; width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 16px; }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.bar { height: 6px; background: var(--sunken); border-radius: 99px; overflow: hidden; }
+.bar > div { height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+
+/* The sorter: folders on the left, the chosen category on the right */
+.app { display: flex; height: 100%; }
+nav { width: 300px; flex: none; background: var(--raised); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+nav .top { padding: 22px 22px 14px; display: flex; flex-direction: column; gap: 4px; }
+nav .folders { flex: 1; overflow-y: auto; padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 16px; }
+nav .bottom { padding: 14px 16px 18px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+.folder-head { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; font-weight: 600; }
+.folder-head span:first-child { display: flex; align-items: center; gap: 8px; }
+.chip { font-size: 11px; font-weight: 600; border-radius: 99px; padding: 2px 8px; white-space: nowrap; }
+.chip.reads { background: var(--reads); color: var(--on-reads); }
+.chip.ignores { background: var(--sunken); color: var(--ink-2); }
+.cat { display: flex; justify-content: space-between; gap: 10px; width: 100%; height: auto; padding: 6px 10px 6px 34px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--ink-2); font: 400 13px var(--sans); text-align: left; cursor: pointer; }
+.cat:hover { background: var(--page); }
+.cat[aria-current="true"] { background: var(--select); color: var(--ink); font-weight: 600; }
+.cat .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cat .label i { color: var(--muted); font-style: normal; font-size: 12px; }
+.cat .n { font-variant-numeric: tabular-nums; flex: none; }
+.more { padding: 4px 10px 4px 34px; }
+.plain { display: flex; justify-content: space-between; padding: 6px 10px 6px 34px; font-size: 13px; color: var(--muted); }
+main { flex: 1; min-width: 0; overflow-y: auto; padding: 28px 36px 40px; display: flex; flex-direction: column; gap: 16px; }
+.head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 16px 24px; }
+.name { display: flex; flex-direction: column; gap: 2px; flex: 1 1 320px; min-width: 0; font-size: 12px; color: var(--muted); }
+.name input { font: 600 28px var(--sans); border: 0; border-bottom: 1px dashed var(--line-strong); border-radius: 0; background: transparent; padding: 2px 0; width: 100%; }
+.place { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.place select { font-weight: 600; height: 40px; min-width: 220px; }
+.mail { background: var(--raised); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.mail .row { display: grid; grid-template-columns: minmax(0, 1fr) 70px; gap: 16px; padding: 11px 18px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.mail .row:last-child { border-bottom: 0; }
+.mail .row.you { background: var(--reads-soft); }
+.mail .text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.mail .text span { color: var(--muted); }
+.mail .row.you .text span { color: var(--reads); }
+.mail .when { color: var(--muted); text-align: right; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.note { font-size: 13px; color: var(--muted); }
+@media (max-width: 760px) {
+  .app { flex-direction: column; height: auto; }
+  nav { width: 100%; border-right: 0; border-bottom: 1px solid var(--line); }
+  nav .folders { max-height: 50vh; }
+  main { padding: 22px 16px 32px; }
+}
 </style>
 </head>
 <body>
-<main>
-  <section id="signin" class="card" hidden>
+<section id="signin" class="center" hidden>
+  <div class="card">
     <h1>Sort lab</h1>
     <p class="muted">See how NexusAI would sort your mail. It runs only on this computer and never changes anything on the mail server.</p>
     <p id="not-set" class="error" hidden></p>
@@ -71,55 +98,58 @@ button.link { border: 0; background: none; color: var(--accent); padding: 2px 0;
       <label class="field">Password <input id="password" type="password" required autocomplete="current-password"></label>
       <div><button class="primary" type="submit" id="go">Connect</button></div>
     </form>
-    <div id="progress" hidden>
+    <div id="progress" hidden style="display: flex; flex-direction: column; gap: 8px">
       <p id="progress-text">Connecting…</p>
-      <div class="bar" style="margin-top: 8px"><div id="progress-bar"></div></div>
+      <div class="bar"><div id="progress-bar"></div></div>
     </div>
     <p id="signin-error" class="error" hidden></p>
-  </section>
+  </div>
+</section>
 
-  <section id="results" hidden style="display: flex; flex-direction: column; gap: 28px">
-    <div style="display: flex; flex-direction: column; gap: 6px">
-      <h1>Your mail, sorted</h1>
+<section id="results" class="app" hidden>
+  <nav aria-label="Folders">
+    <div class="top">
+      <h1>Sort your mail</h1>
       <p class="muted" id="summary"></p>
     </div>
-    <datalist id="names"></datalist>
-    <div id="lists" style="display: flex; flex-direction: column; gap: 28px"></div>
-  </section>
+    <div class="folders" id="folders"></div>
+    <div class="bottom">
+      <label style="display: flex; gap: 8px; font-size: 12px; color: var(--muted); align-items: flex-start"><input type="checkbox" id="details" checked style="margin-top: 3px"> Include senders and subjects, so the sorting can be improved</label>
+      <p id="confirm-text" class="note" hidden></p>
+      <div style="display: flex; gap: 8px">
+        <button type="button" class="primary" id="finish" style="flex: 1">Finish</button>
+        <button type="button" id="discard">Discard</button>
+      </div>
+    </div>
+  </nav>
+  <main id="detail"></main>
+</section>
 
-  <section id="done" class="card" hidden>
+<section id="done" class="center" hidden>
+  <div class="card">
     <h1>Done</h1>
-    <p class="good" id="done-text"></p>
+    <p id="done-text"></p>
     <p class="muted">The folder with the file has opened. Send the file to the NexusAI team. You can close this tab and the lab's window.</p>
     <div><button type="button" id="again">Start again</button></div>
-  </section>
-</main>
-
-<div class="footer" id="footer" hidden>
-  <div class="inner">
-    <label class="row" style="gap: 8px"><input type="checkbox" id="details" checked> Include senders and subjects, so the sorting can be improved</label>
-    <div class="row">
-      <span id="confirm-text" class="muted" hidden></span>
-      <button type="button" id="discard">Discard</button>
-      <button type="button" class="primary" id="finish">Finish</button>
-    </div>
   </div>
-</div>
+</section>
 
 <script>
 "use strict";
-const token = location.hash.slice(1);
-// The engine's sections, in the order and words the page shows them.
-const HEADINGS = [
-  ["automated", "Automated"],
-  ["calendar", "Calendar"],
-  ["people", "Announcements"],
-  ["too_few", "Small senders"],
+// A preview page can carry the engine's data itself; the lab gets it from its own server.
+const PREVIEW = window.SORTLAB_PREVIEW || null;
+const token = PREVIEW ? "" : location.hash.slice(1);
+const FOLDERS = [
+  { id: "inbox", name: "Inbox", reads: true, icon: "M22 12h-6l-2 3h-4l-2-3H2|M5.5 5h13L22 12v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6Z" },
+  { id: "automated", name: "Automated", reads: false, icon: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" },
+  { id: "calendar", name: "Calendar", reads: false, icon: "M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z|M16 3v4M8 3v4M3 10h18" },
 ];
 const SMALL = 5;
-const categories = {};
-const added = {};
 let report = null;
+let cats = {};
+let selected = null;
+let opened = {};
+let undo = null;
 let confirming = null;
 
 function h(tag, attrs = {}, ...children) {
@@ -131,6 +161,17 @@ function h(tag, attrs = {}, ...children) {
   }
   for (const child of children.flat()) if (child != null) node.append(child instanceof Node ? child : String(child));
   return node;
+}
+
+function icon(paths) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  for (const [key, value] of Object.entries({ width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": 1.8, "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true" })) svg.setAttribute(key, value);
+  for (const d of paths.split("|")) {
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", d);
+    svg.append(path);
+  }
+  return svg;
 }
 
 async function api(path, body) {
@@ -145,15 +186,16 @@ async function api(path, body) {
 
 function show(id) {
   for (const name of ["signin", "results", "done"]) document.getElementById(name).hidden = name !== id;
-  document.getElementById("footer").hidden = id !== "results";
 }
 
 const fmt = (n) => Number(n).toLocaleString();
+const folderOf = (id) => FOLDERS.find((f) => f.id === id);
 
 async function boot() {
+  if (PREVIEW) { report = PREVIEW; return start(); }
   if (!token) { document.body.textContent = "Open the link the Sort lab showed in its window."; return; }
   const status = await api("/api/status");
-  if (status.state === "ready") return loadResults();
+  if (status.state === "ready") { report = await api("/api/report"); return start(); }
   show("signin");
   const setup = await api("/api/setup");
   if (setup.domain) document.getElementById("username").placeholder = `name or name@${setup.domain}`;
@@ -188,7 +230,7 @@ async function watch() {
     if (status.state === "downloading") text.textContent = `Reading ${fmt(status.done)} of ${fmt(status.total)} emails…`;
     if (status.state === "grouping") text.textContent = "Sorting…";
     bar.style.width = status.total ? `${Math.round((status.done / status.total) * 100)}%` : "4%";
-    if (status.state === "ready") return loadResults();
+    if (status.state === "ready") { report = await api("/api/report"); return start(); }
     if (status.state === "failed") {
       const error = document.getElementById("signin-error");
       error.textContent = status.error; error.hidden = false;
@@ -200,65 +242,125 @@ async function watch() {
   }
 }
 
-function summarize() {
-  const away = Object.values(categories).filter((c) => !c.smart).reduce((n, c) => n + c.count, 0)
-    + Object.values(added).filter((a) => !a.smart).reduce((n, a) => n + a.count, 0);
-  document.getElementById("summary").textContent =
-    `${fmt(report.total)} emails. ${fmt(away)} kept away from the AI, ${fmt(report.total - away)} read by it.`;
-  const names = new Set([...Object.values(categories), ...Object.values(added)].map((c) => c.name.trim()).filter(Boolean));
-  document.getElementById("names").replaceChildren(...[...names].sort().map((name) => h("option", { value: name })));
-}
-
-async function loadResults() {
-  report = await api("/api/report");
+function start() {
+  cats = {};
+  for (const g of report.groups) {
+    cats[g.id] = { id: g.id, kind: "group", name: g.label || g.reasons[0] || "Untitled", engineName: g.label, folder: g.folder,
+      engineFolder: g.folder, count: g.count, emails: g.emails, senders: g.senders, reason: g.reasons[0] || "", mergedInto: "",
+      // Emails that name the person reach the AI wherever they're filed, unless the group names everyone.
+      namesYou: g.mentions_ignored ? 0 : g.mentions };
+  }
+  for (const m of report.missed) {
+    cats["miss:" + m.sender] = { id: "miss:" + m.sender, kind: "miss", sender: m.sender, name: m.label, engineName: m.label,
+      folder: "inbox", engineFolder: "inbox", count: m.count, emails: m.emails, senders: [m.sender], reason: "Not sorted: it looks like a person, or there's too little to go by.", mergedInto: "",
+      namesYou: m.emails.filter((e) => e.names_you).length };
+  }
+  const biggest = Object.values(cats).filter((c) => c.folder === "automated").sort((a, b) => b.count - a.count)[0] || Object.values(cats)[0];
+  selected = biggest ? biggest.id : null;
   show("results");
-  for (const group of report.groups) {
-    categories[group.id] ??= { id: group.id, name: group.label || group.reasons[0] || "", smart: group.smart, count: group.count };
-  }
-  for (const miss of report.missed) added[miss.sender] ??= { sender: miss.sender, name: "", smart: true, count: miss.count };
-  const lists = document.getElementById("lists");
-  lists.replaceChildren();
-  for (const [section, title] of HEADINGS) {
-    const groups = report.groups.filter((g) => g.section === section);
-    if (groups.length) lists.append(block(title, groups.map((g) => [g, categories[g.id]])));
-  }
-  if (report.missed.length) {
-    lists.append(block("Not in a category", report.missed.map((m) => [m, added[m.sender]]),
-      `The biggest senders left out. Give one a category, or switch the AI off, if it's noise.`));
-  }
-  summarize();
+  render();
 }
 
-function block(title, items, note) {
-  const total = items.reduce((n, [, state]) => n + state.count, 0);
-  const list = h("div", { class: "list" });
-  const big = items.filter(([, state]) => state.count >= SMALL);
-  const small = items.filter(([, state]) => state.count < SMALL);
-  list.append(...(big.length ? big : small).map(([item, state]) => row(item, state)));
-  if (big.length && small.length) {
-    const fold = h("div", { hidden: true }, small.map(([item, state]) => row(item, state)));
-    list.append(h("button", { type: "button", class: "link", style: "align-self: flex-start; margin-top: 8px",
-      onclick: (e) => { fold.hidden = !fold.hidden; e.target.textContent = fold.hidden ? `Show ${fmt(small.length)} smaller ones` : "Hide smaller ones"; } },
-      `Show ${fmt(small.length)} smaller ones`), fold);
-  }
-  return h("div", { style: "display: flex; flex-direction: column; gap: 6px" },
-    h("div", { class: "heading" }, h("h2", {}, title), h("span", { class: "muted" }, `${fmt(total)} emails`)),
-    note ? h("p", { class: "muted" }, note) : null, list);
+function live() { return Object.values(cats).filter((c) => !c.mergedInto); }
+
+function render() { renderFolders(); renderDetail(); }
+
+function renderFolders() {
+  const away = live().filter((c) => !folderOf(c.folder).reads).reduce((n, c) => n + c.count - c.namesYou, 0);
+  document.getElementById("summary").textContent = `${report.owner_name} · ${fmt(report.total)} emails · ${fmt(away)} kept from the AI`;
+  const loose = report.ungrouped - report.missed.reduce((n, m) => n + m.count, 0);
+  document.getElementById("folders").replaceChildren(...FOLDERS.map((folder) => {
+    const all = live().filter((c) => c.folder === folder.id).sort((a, b) => b.count - a.count);
+    // Senders the engine left alone stay out of the way until opened, or once someone changes them.
+    const waiting = all.filter((c) => untouched(c) && c.id !== selected);
+    const inside = all.filter((c) => !waiting.includes(c));
+    const big = inside.filter((c) => c.count >= SMALL || c.id === selected);
+    const small = inside.filter((c) => !big.includes(c));
+    const total = all.reduce((n, c) => n + c.count, 0) + (folder.id === "inbox" ? loose : 0);
+    const list = h("div", {}, big.map(catButton));
+    if (small.length) {
+      if (opened[folder.id]) list.append(...small.map(catButton));
+      list.append(h("div", { class: "more" }, h("button", { type: "button", class: "link", onclick: () => { opened[folder.id] = !opened[folder.id]; renderFolders(); } },
+        opened[folder.id] ? "Show fewer" : `+ ${fmt(small.length)} more · ${fmt(small.reduce((n, c) => n + c.count, 0))} emails`)));
+    }
+    if (waiting.length) {
+      list.append(h("div", { class: "more" }, h("button", { type: "button", class: "link", onclick: () => { opened.waiting = !opened.waiting; renderFolders(); } },
+        opened.waiting ? "Hide the senders left unsorted" : `Not sorted: ${fmt(waiting.length)} senders · ${fmt(waiting.reduce((n, c) => n + c.count, 0))} emails`)));
+      if (opened.waiting) list.append(...waiting.map(catButton));
+    }
+    if (folder.id === "inbox" && loose > 0) list.append(h("div", { class: "plain" }, h("span", {}, "Your conversations"), h("span", {}, fmt(loose))));
+    return h("div", {},
+      h("div", { class: "folder-head" }, h("span", {}, icon(folder.icon), folder.name, h("span", { class: "muted", style: "font-weight: 400; font-size: 12px" }, fmt(total))),
+        h("span", { class: `chip ${folder.reads ? "reads" : "ignores"}` }, folder.reads ? "AI reads" : "AI ignores")),
+      list);
+  }));
 }
 
-function row(item, state) {
-  const emails = h("div", { class: "emails", hidden: true }, item.emails.map((email) =>
-    h("div", {}, h("span", { class: "subject" }, email.subject || "(no subject)"), h("span", { class: "sender" }, email.sender))));
-  const example = item.emails[0]?.subject || "(no subject)";
-  return h("div", { class: "item" },
-    h("div", { class: "line" },
-      h("input", { type: "text", list: "names", value: state.name, placeholder: "Category", "aria-label": "Category",
-        oninput: (e) => { state.name = e.target.value; }, onchange: summarize }),
-      h("span", { class: "count" }, fmt(state.count)),
-      h("span", { class: "example", title: example }, example,
-        h("button", { type: "button", class: "link", onclick: (e) => { emails.hidden = !emails.hidden; e.target.textContent = emails.hidden ? "Show" : "Hide"; } }, "Show")),
-      h("label", { class: "switch" }, h("input", { type: "checkbox", checked: state.smart, onchange: (e) => { state.smart = e.target.checked; summarize(); } }), "AI reads it")),
-    emails);
+function untouched(cat) {
+  return cat.kind === "miss" && cat.folder === "inbox" && cat.name === cat.engineName;
+}
+
+function catButton(cat) {
+  return h("button", { type: "button", class: "cat", "aria-current": cat.id === selected ? "true" : "false", onclick: () => { selected = cat.id; undo = null; render(); } },
+    h("span", { class: "label" }, cat.name, untouched(cat) ? h("i", {}, " · not sorted") : null),
+    h("span", { class: "n" }, fmt(cat.count)));
+}
+
+function renderDetail() {
+  const detail = document.getElementById("detail");
+  const cat = cats[selected];
+  if (!cat) { detail.replaceChildren(h("p", { class: "muted" }, "Pick a category on the left.")); return; }
+  const folder = folderOf(cat.folder);
+  const others = live().filter((c) => c.id !== cat.id).sort((a, b) => a.name.localeCompare(b.name));
+  const from = cat.senders.length > 2 ? `${fmt(cat.senders.length)} senders` : cat.senders.join(", ");
+  detail.replaceChildren(...[
+    h("div", { class: "head" },
+      h("label", { class: "name", for: "name" }, "Category",
+        h("input", { id: "name", type: "text", value: cat.name, oninput: (e) => { cat.name = e.target.value; renderFolders(); } })),
+      h("label", { class: "place", for: "place" }, "Folder",
+        h("select", { id: "place", onchange: (e) => { cat.folder = e.target.value; undo = null; render(); } },
+          FOLDERS.map((f) => h("option", { value: f.id, selected: f.id === cat.folder }, `${f.name} · ${f.reads ? "AI reads it" : "AI ignores it"}`))))),
+    h("p", { class: "note" }, `${fmt(cat.count)} emails from ${from}. ${cat.reason.replace(/[^.]$/, "$&.")}`),
+    undo ? h("p", { class: "note" }, undo.text, " ", h("button", { type: "button", class: "link", onclick: undoMerge }, "Undo")) : null,
+    h("div", { class: "mail" }, cat.emails.map((email) => {
+      const you = email.names_you && !folder.reads;
+      return h("div", { class: `row${you ? " you" : ""}` },
+        h("div", { class: "text" }, h("b", {}, email.subject || "(no subject)"), " ",
+          h("span", {}, you ? "· Names you, so the AI still reads it" : `· ${email.from}${email.snippet ? " — " + email.snippet : ""}`)),
+        h("div", { class: "when" }, email.when));
+    })),
+    h("div", { class: "actions" },
+      h("label", { class: "place", for: "merge", style: "flex-direction: row; align-items: center; gap: 8px" }, "Merge into",
+        h("select", { id: "merge", onchange: (e) => merge(cat, e.target.value) },
+          h("option", { value: "" }, "another category…"), others.map((o) => h("option", { value: o.id }, `${o.name} · ${folderOf(o.folder).name} (${fmt(o.count)})`)))),
+      cat.count > cat.emails.length ? h("span", { class: "note" }, `Showing ${fmt(cat.emails.length)} of ${fmt(cat.count)}`) : null),
+  ].filter(Boolean));
+}
+
+function merge(cat, targetId) {
+  const target = cats[targetId];
+  if (!target) return;
+  const before = target.senders;
+  cat.mergedInto = target.id;
+  target.count += cat.count;
+  target.namesYou += cat.namesYou;
+  target.emails = [...target.emails, ...cat.emails].slice(0, 20);
+  target.senders = [...new Set([...target.senders, ...cat.senders])];
+  undo = { cat: cat.id, target: target.id, senders: before, text: `Merged “${cat.name}” into “${target.name}”.` };
+  selected = target.id;
+  render();
+}
+
+function undoMerge() {
+  const cat = cats[undo.cat], target = cats[undo.target];
+  target.count -= cat.count;
+  target.namesYou -= cat.namesYou;
+  target.emails = target.emails.filter((e) => !cat.emails.includes(e));
+  target.senders = undo.senders;
+  cat.mergedInto = "";
+  selected = cat.id;
+  undo = null;
+  render();
 }
 
 const LABELS = { finish: "Finish", discard: "Discard" };
@@ -278,18 +380,22 @@ function ask(button, text, action) {
 }
 
 document.getElementById("finish").addEventListener("click", (event) => ask(event.target,
-  `Saves the categories and deletes the ${fmt(report.total)} downloaded emails from this computer.`, async () => {
-    const result = await api("/api/finish", {
-      groups: Object.values(categories).map(({ id, name, smart }) => ({ id, name, smart })),
-      misses: Object.values(added).map(({ sender, name, smart }) => ({ sender, name, smart })),
+  `Saves your folders and categories, then deletes the ${fmt(report.total)} downloaded emails from this computer.`, async () => {
+    const all = Object.values(cats);
+    const body = {
+      groups: all.filter((c) => c.kind === "group").map((c) => ({ id: c.id, name: c.name, folder: c.folder, merged_into: c.mergedInto })),
+      misses: all.filter((c) => c.kind === "miss").map((c) => ({ sender: c.sender, name: c.name === c.engineName ? "" : c.name, folder: c.folder, merged_into: c.mergedInto })),
       details: document.getElementById("details").checked,
-    });
+    };
+    if (PREVIEW) { document.getElementById("done-text").textContent = "This is a preview, so nothing was saved."; show("done"); return; }
+    const result = await api("/api/finish", body);
     document.getElementById("done-text").textContent = `Saved to ${result.saved}. Deleted ${fmt(result.deleted)} downloaded emails from this computer.`;
     show("done");
   }));
 
 document.getElementById("discard").addEventListener("click", (event) => ask(event.target,
   `Deletes the ${fmt(report.total)} downloaded emails and saves nothing.`, async () => {
+    if (PREVIEW) { document.getElementById("done-text").textContent = "This is a preview, so nothing was deleted."; show("done"); return; }
     const result = await api("/api/discard", {});
     document.getElementById("done-text").textContent = `Deleted ${fmt(result.deleted)} downloaded emails. Nothing was saved.`;
     show("done");
