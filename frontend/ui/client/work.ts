@@ -26,6 +26,18 @@ function useCommand<I, R>(keys: readonly string[], run: (input: I) => Promise<R>
 }
 
 export const useToday = () => useReady(["today"], () => query("today.view", {}));
+// Matters: one record for each real thing going on. Every change to its work changes these too.
+const MATTER_KEYS = ["matters", "tasks", "reminders", "today", "threads", "thread", "board"];
+export const useMattersBrief = () => useReady(["matters", "brief"], () => query("matters.brief", {}));
+export const useMattersWeek = (start: string | null) => useReady(["matters", "week", start], () => query("matters.week", start ? { start } : {}));
+export const useMatterList = (includeDone: boolean) => useReady(["matters", "list", includeDone], () => query("matters.list", { include_done: includeDone }));
+export function useMatter(id: number | null) {
+  const ready = useHomeReady();
+  return useQuery({ queryKey: ["matters", "one", id], queryFn: () => query("matters.get", { id: id as number }), enabled: ready && id !== null });
+}
+export const useMatterDone = () => useCommand(MATTER_KEYS, (id: number) => command("matters.done", { id }));
+export const useMatterReopen = () => useCommand(MATTER_KEYS, (id: number) => command("matters.reopen", { id }));
+export const useUnlinkThread = () => useCommand(MATTER_KEYS, (thread: number) => command("matters.unlink", { thread }));
 export const useChannel = () => useReady(["channel"], () => query("channel.list", {}));
 export const useRespondChannel = () => useCommand(["channel"], (input: { id: number; answer: string }) => command("channel.respond", input));
 export const useDismissChannel = () => useCommand(["channel"], (id: number) => command("channel.dismiss", { id }));

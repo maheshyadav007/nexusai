@@ -1695,3 +1695,143 @@ class GetRunTree(BaseModel):
 
 class SeeAlerts(BaseModel):
     pass
+
+
+# Matters: one record for each real thing going on (docs/MATTERS_PLAN.md).
+MatterState = Literal["waiting_on_you", "waiting_on_others", "fyi", "done"]
+MatterEventKind = Literal[
+    "started", "joined", "mail", "sent", "task", "due", "closed", "done", "reopened", "moved"
+]
+MatterMarkKind = Literal["in", "sent", "due", "reminder", "closed"]
+
+
+class MatterWork(BaseModel):
+    kind: Literal["task", "reminder", "deadline"]
+    id: int
+    title: str
+    when: str | None = None
+    thread: int | None = None
+    proposed: bool = False
+
+
+class MatterRow(BaseModel):
+    id: int
+    title: str
+    state: MatterState
+    # What happens next, in a few words: the open task, or what the latest email asks.
+    next: str | None = None
+    due: str | None = None
+    importance: str = "normal"
+    people: list[str] = Field(default_factory=list)
+    emails: int = 0
+    threads: int = 0
+    work: list[MatterWork] = Field(default_factory=list)
+    last_date: str
+    quiet_days: int = 0
+    started: str | None = None
+    # The newest conversation in it, to open the email itself.
+    latest: SourceRef | None = None
+
+
+class MatterChange(BaseModel):
+    id: int
+    matter: int
+    title: str
+    time: str
+    kind: MatterEventKind
+    text: str
+    why: str = ""
+    source: SourceRef | None = None
+
+
+class MatterDue(BaseModel):
+    matter: int
+    title: str
+    what: str
+    when: str
+    kind: Literal["task", "reminder", "deadline"]
+
+
+class MattersBrief(BaseModel):
+    seen: str | None = None
+    changes: list[MatterChange]
+    needs_you: list[MatterRow]
+    waiting: list[MatterRow]
+    fyi: list[MatterRow]
+    next: list[MatterDue]
+
+
+class MatterMark(BaseModel):
+    time: str
+    kind: MatterMarkKind
+    label: str
+
+
+class MatterLane(BaseModel):
+    matter: MatterRow
+    marks: list[MatterMark]
+
+
+class MattersWeek(BaseModel):
+    start: str
+    lanes: list[MatterLane]
+
+
+class MatterThread(BaseModel):
+    id: int
+    subject: str
+    status: str
+    emails: int
+    last_date: str
+    how: str
+    why: str
+
+
+class MatterDetail(BaseModel):
+    matter: MatterRow
+    events: list[MatterChange]
+    threads: list[MatterThread]
+    people: list[str]
+
+
+class GetMattersBrief(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class GetMattersWeek(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # The Monday the week starts on; the current week when left out.
+    start: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+
+
+class ListMatters(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    include_done: bool = False
+
+
+class MatterList(BaseModel):
+    matters: list[MatterRow]
+
+
+class GetMatter(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+
+
+class MatterAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+
+
+class UnlinkThread(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    thread: int
+
+
+class MatterDone(BaseModel):
+    closed: int = 0

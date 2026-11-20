@@ -53,6 +53,9 @@ from nexusai.contracts.agent import (
     GetGeneration,
     GetGuardRules,
     GetMailAgentSettings,
+    GetMatter,
+    GetMattersBrief,
+    GetMattersWeek,
     GetModelCall,
     GetPermissions,
     GetPreferences,
@@ -78,6 +81,7 @@ from nexusai.contracts.agent import (
     ListChannel,
     ListJobs,
     ListMailSuggestions,
+    ListMatters,
     ListMemory,
     ListPipelines,
     ListPrompts,
@@ -91,6 +95,12 @@ from nexusai.contracts.agent import (
     MailPreview,
     MailSuggestionList,
     MarkTodaySeen,
+    MatterAction,
+    MatterDetail,
+    MatterDone,
+    MatterList,
+    MattersBrief,
+    MattersWeek,
     MemoryList,
     ModelCallView,
     NoteOnTeamTask,
@@ -170,6 +180,7 @@ from nexusai.contracts.agent import (
     TriageExisting,
     TriggerList,
     UndoActivity,
+    UnlinkThread,
     UpcomingRun,
     UsageView,
 )
@@ -194,6 +205,7 @@ from nexusai.modules.agent import (
     guard,
     knowledge,
     mail_agent,
+    matters,
     memory,
     monitor,
     personalization,
@@ -246,6 +258,7 @@ agent_module = Module(
         runtime.COMPACTIONS_MIGRATION,
         citations.MIGRATION,
         conversations.MIGRATION,
+        matters.MIGRATION,
         runtime.TRIGGER_MIGRATION,
         memory.MIGRATION,
         channel.MIGRATION,
@@ -317,6 +330,8 @@ def _startup(ctx: Context) -> None:
         scheduler.start_built_ins(ctx)
         _scheduler = scheduler.Scheduler(ctx)
         _scheduler.start()
+        # What was open before matters existed becomes matters, once.
+        matters.backfill(ctx)
         # Mail may have finished coming down while this wasn't running, or before it existed.
         synced = cast(MailStatus, mail.get_status(GetMailStatus(), ctx))
         _triggers.consider_learning(history_finished=synced.history_finished)
@@ -509,6 +524,10 @@ def person_replied(event: AppEvent, ctx: Context) -> None:
 @agent_module.on("mail.received", "agent.they_answered")
 def they_answered(event: AppEvent, ctx: Context) -> None:
     mail_agent.they_answered(ctx, int(event.payload["message_id"]), int(event.payload["thread_id"]))
+    # Mail the agent never sees, like a review tool's "approved change 88213", still joins
+    # the matter it's about. The agent links the rest after judging it.
+    if event.payload.get("rule"):
+        matters.link(ctx, int(event.payload["thread_id"]), start=False)
 
 
 def conversation_work(event: AppEvent, ctx: Context) -> None:
@@ -521,9 +540,12 @@ def conversation_work(event: AppEvent, ctx: Context) -> None:
         event.payload.get("old_value"),
     )
     if value == "resolved" and old != "resolved":
-        conversations.close_work(ctx, thread)
+        closed = conversations.close_work(ctx, thread)
+        matters.note(ctx, thread, "closed", "Conversation marked done",
+                     f"Closed {closed} open item{'' if closed == 1 else 's'} with it" if closed else "", "person")  # fmt: skip
     elif old == "resolved" and value != "resolved":
         conversations.reopen_work(ctx, thread)
+        matters.note(ctx, thread, "reopened", "Conversation opened again", by="person")
 
 
 def conversation_task(event: AppEvent, ctx: Context) -> None:
@@ -531,6 +553,15 @@ def conversation_task(event: AppEvent, ctx: Context) -> None:
         return
     now, before = event.payload.get("changes", {}), event.payload.get("old", {})
     if now.get("status") == "done" and before.get("status") != "done":
+        title = ctx.bus.db.fetch_all("SELECT title FROM tasks WHERE id = ?", (event.payload["id"],))
+        if title:
+            matters.note(
+                ctx,
+                event.payload.get("thread"),
+                "closed",
+                f'Task done: "{title[0]["title"]}"',
+                by="person",
+            )
         conversations.task_finished(ctx, int(event.payload["id"]))
     elif before.get("status") == "done" and now.get("status") not in {None, "done"}:
         conversations.task_reopened(ctx, int(event.payload["id"]))
@@ -1871,6 +1902,48 @@ def _since_last_look(ctx: Context) -> SinceLastLook:
         judged=judged["judged"],
         proposed=proposed,
     )
+
+
+def _seen(ctx: Context) -> str | None:
+    rows = ctx.bus.db.fetch_all("SELECT value FROM agent_defaults WHERE key = ?", (LAST_SEEN,))
+    return rows[0]["value"] if rows else None
+
+
+@agent_module.query("matters.brief")
+def matters_brief(query: GetMattersBrief, ctx: Context) -> MattersBrief:
+    return matters.brief(ctx, _seen(ctx))
+
+
+@agent_module.query("matters.week")
+def matters_week(query: GetMattersWeek, ctx: Context) -> MattersWeek:
+    return matters.week(ctx, query.start)
+
+
+@agent_module.query("matters.list")
+def matters_list(query: ListMatters, ctx: Context) -> MatterList:
+    return MatterList(matters=matters._matters(ctx, query.include_done))
+
+
+@agent_module.query("matters.get")
+def matters_get(query: GetMatter, ctx: Context) -> MatterDetail:
+    return matters.detail(ctx, query.id)
+
+
+@agent_module.command("matters.done")
+def matters_done(command: MatterAction, ctx: Context) -> MatterDone:
+    return MatterDone(closed=matters.done(ctx, command.id))
+
+
+@agent_module.command("matters.reopen")
+def matters_reopen(command: MatterAction, ctx: Context) -> AgentDone:
+    matters.reopen(ctx, command.id)
+    return AgentDone()
+
+
+@agent_module.command("matters.unlink")
+def matters_unlink(command: UnlinkThread, ctx: Context) -> MatterDone:
+    matters.unlink(ctx, command.thread)
+    return MatterDone()
 
 
 @agent_module.command("today.markSeen")

@@ -23,8 +23,8 @@ from nexusai.contracts.mail import (
     ThreadRow,
     ThreadView,
 )
-from nexusai.kernel.config import MailConfig
 from nexusai.kernel import textmatch
+from nexusai.kernel.config import MailConfig
 from nexusai.kernel.database import Database, Migration
 from nexusai.modules.mail.attachments import classify
 from nexusai.modules.mail.parse import (

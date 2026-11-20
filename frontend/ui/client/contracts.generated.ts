@@ -1761,60 +1761,120 @@ export type Children1 = RunSpan[];
 export type Limit6 = number;
 export type Runs1 = RunSpan[];
 export type Turn2 = number;
+export type Kind21 = "task" | "reminder" | "deadline";
 export type Id88 = number;
 export type Title17 = string;
-export type Notes1 = string;
-export type Status21 = "todo" | "in_progress" | "done";
-export type Due3 = string | null;
+export type When5 = string | null;
 export type Thread9 = number | null;
-export type Source10 = "user" | "agent";
 export type Proposed2 = boolean;
+export type Id89 = number;
+export type Title18 = string;
+export type State12 = "waiting_on_you" | "waiting_on_others" | "fyi" | "done";
+export type Next = string | null;
+export type Due3 = string | null;
+export type Importance5 = string;
+export type People2 = string[];
+export type Emails4 = number;
+export type Threads3 = number;
+export type Work = MatterWork[];
+export type LastDate2 = string;
+export type QuietDays1 = number;
+export type Started1 = string | null;
+export type Id90 = number;
+export type Matter = number;
+export type Title19 = string;
+export type Time17 = string;
+export type Kind22 = "started" | "joined" | "mail" | "sent" | "task" | "due" | "closed" | "done" | "reopened" | "moved";
+export type Text16 = string;
+export type Why4 = string;
+export type Matter1 = number;
+export type Title20 = string;
+export type What = string;
+export type When6 = string;
+export type Kind23 = "task" | "reminder" | "deadline";
+export type Seen1 = string | null;
+export type Changes = MatterChange[];
+export type NeedsYou1 = MatterRow[];
+export type Waiting2 = MatterRow[];
+export type Fyi = MatterRow[];
+export type Next1 = MatterDue[];
+export type Time18 = string;
+export type Kind24 = "in" | "sent" | "due" | "reminder" | "closed";
+export type Label10 = string;
+export type Marks = MatterMark[];
+export type Start1 = string;
+export type Lanes = MatterLane[];
+export type Id91 = number;
+export type Subject13 = string;
+export type Status21 = string;
+export type Emails5 = number;
+export type LastDate3 = string;
+export type How1 = string;
+export type Why5 = string;
+export type Events2 = MatterChange[];
+export type Threads4 = MatterThread[];
+export type People3 = string[];
+export type Start2 = string | null;
+export type IncludeDone = boolean;
+export type Matters = MatterRow[];
+export type Id92 = number;
+export type Id93 = number;
+export type Thread10 = number;
+export type Closed = number;
+export type Id94 = number;
+export type Title21 = string;
+export type Notes1 = string;
+export type Status22 = "todo" | "in_progress" | "done";
+export type Due4 = string | null;
+export type Thread11 = number | null;
+export type Source10 = "user" | "agent";
+export type Proposed3 = boolean;
 export type Created6 = string;
 export type Updated8 = string | null;
 export type Completed = string | null;
-export type IncludeDone = boolean;
+export type IncludeDone1 = boolean;
 export type Tasks1 = Task[];
-export type Id89 = number | null;
-export type Title18 = string;
+export type Id95 = number | null;
+export type Title22 = string;
 export type Notes2 = string;
-export type Status22 = "todo" | "in_progress" | "done";
-export type Due4 = string | null;
-export type Thread10 = number | null;
-export type Proposed3 = boolean;
-export type Id90 = number;
-export type Id91 = number;
-export type Title19 = string;
-export type When5 = string;
+export type Status23 = "todo" | "in_progress" | "done";
+export type Due5 = string | null;
+export type Thread12 = number | null;
+export type Proposed4 = boolean;
+export type Id96 = number;
+export type Id97 = number;
+export type Title23 = string;
+export type When7 = string;
 export type Repeat = "none" | "day" | "week" | "month" | "year";
-export type Thread11 = number | null;
+export type Thread13 = number | null;
 export type Task1 = number | null;
 export type Source11 = "user" | "agent";
-export type Proposed4 = boolean;
+export type Proposed5 = boolean;
 export type Fired = boolean;
 export type Created7 = string | null;
 export type Updated9 = string | null;
 export type Reminders = Reminder[];
-export type Id92 = number | null;
-export type Title20 = string;
-export type When6 = string;
+export type Id98 = number | null;
+export type Title24 = string;
+export type When8 = string;
 export type Repeat1 = "none" | "day" | "week" | "month" | "year";
-export type Thread12 = number | null;
+export type Thread14 = number | null;
 export type Task2 = number | null;
-export type Proposed5 = boolean;
-export type Id93 = number;
+export type Proposed6 = boolean;
+export type Id99 = number;
 export type Minutes = number;
-export type Id94 = number;
+export type Id100 = number;
 export type Ok5 = boolean;
-export type Id95 = string;
-export type Label10 = string;
+export type Id101 = string;
+export type Label11 = string;
 export type Description6 = string;
 export type SizeBytes = number;
-export type State12 = "missing" | "downloading" | "ready" | "failed";
+export type State13 = "missing" | "downloading" | "ready" | "failed";
 export type DownloadedBytes = number;
 export type Error6 = string | null;
 export type Active3 = boolean;
-export type Kind21 = "mail" | "document";
-export type State13 = "off" | "current" | "partial" | "out_of_date";
+export type Kind25 = "mail" | "document";
+export type State14 = "off" | "current" | "partial" | "out_of_date";
 export type Indexed = number;
 export type Total9 = number;
 export type Stale = number;
@@ -1835,27 +1895,27 @@ export type Reachable = boolean;
 export type MemoryBytes = number;
 export type FreeBytes = number;
 export type Cores = number;
-export type Kind22 = "mail" | "document";
-export type Id96 = string | null;
-export type Id97 = string;
+export type Kind26 = "mail" | "document";
+export type Id102 = string | null;
+export type Id103 = string;
 export type Mirror1 = string | null;
-export type Id98 = string;
+export type Id104 = string;
 export type Folder12 = string;
-export type Kind23 = "mail" | "document";
+export type Kind27 = "mail" | "document";
 export type Ref2 = string;
 export type Score = number;
 export type Excerpt1 = string;
 export type Place2 = string | null;
-export type Id99 = string;
+export type Id105 = string;
 export type Name43 = string;
 export type Description7 = string;
-export type Id100 = string;
+export type Id106 = string;
 export type Name44 = string;
-export type Kind24 = "email" | "mcp";
+export type Kind28 = "email" | "mcp";
 export type Url2 = string | null;
 export type Audience = ("internal" | "public") | null;
 export type Enabled7 = boolean;
-export type State14 = "ok" | "failed" | "changed" | "off";
+export type State15 = "ok" | "failed" | "changed" | "off";
 export type Detail7 = string | null;
 export type Tools3 = ConnectorTool[];
 export type HasToken = boolean;
@@ -1869,27 +1929,27 @@ export type Name45 = string;
 export type Url4 = string;
 export type Token1 = string | null;
 export type Audience1 = "internal" | "public";
-export type Id101 = string;
-export type Id102 = string;
+export type Id107 = string;
+export type Id108 = string;
 export type Enabled8 = boolean;
 export type Code = string;
 export type Message6 = string;
 export type TraceId2 = string | null;
-export type Id103 = string;
+export type Id109 = string;
 export type Seq1 = number;
 export type Type2 = string;
 export type Version2 = number;
-export type Time17 = string;
+export type Time19 = string;
 export type Source12 = string;
 export type TraceId3 = string;
 export type CauseId = string | null;
 export type Depth = number;
-export type Events2 = AppEvent[];
+export type Events3 = AppEvent[];
 export type Listener = string;
 export type EventSeq = number;
 export type EventType = string;
 export type Error8 = string;
-export type Time18 = string;
+export type Time20 = string;
 export type Failed2 = FailedEvent[];
 export type Since2 = number;
 export type Theme = string;
@@ -1912,7 +1972,7 @@ export type TimeFormat1 = ("system" | "12" | "24") | null;
 export type RemoteImages1 = ("load" | "block") | null;
 export type SoundMuted1 = boolean | null;
 export type SoundOff1 = string[] | null;
-export type Id104 = string;
+export type Id110 = string;
 export type Name46 = string;
 export type Models1 = AvailableModel[];
 export type BaseUrl = string;
@@ -1927,12 +1987,12 @@ export type BaseUrl2 = string | null;
 export type ApiKey1 = string | null;
 export type Model5 = string | null;
 export type SupportsTools1 = boolean;
-export type State15 = "idle" | "waiting" | "failed";
+export type State16 = "idle" | "waiting" | "failed";
 export type UserCode = string | null;
 export type VerificationUrl = string | null;
 export type Error9 = string | null;
 export type Model6 = string;
-export type Text16 = string;
+export type Text17 = string;
 export type Change = "login_started" | "login_failed" | "login_cancelled" | "connected" | "disconnected" | "selected";
 export type Connected = boolean;
 export type AccountEmail = string | null;
@@ -1960,7 +2020,7 @@ export type FreeBytes1 = number | null;
 export type IsExistingHome = boolean;
 export type Name47 = string;
 export type Reason9 = string;
-export type Time19 = string;
+export type Time21 = string;
 export type Size8 = number;
 export type Backups = BackupRow[];
 export type Pending1 = string | null;
@@ -1968,7 +2028,7 @@ export type Confirm2 = string;
 export type KeepModels = boolean;
 export type Name48 = string;
 export type RecoveryKey = string;
-export type State16 = "ready" | "unset" | "missing" | "locked" | "damaged";
+export type State17 = "ready" | "unset" | "missing" | "locked" | "damaged";
 export type Path17 = string | null;
 export type DefaultPath = string;
 export type Message7 = string | null;
@@ -1986,20 +2046,20 @@ export type Tone = "formal" | "friendly" | "brief";
 export type Vips = string;
 export type About = string;
 export type Fields = string[];
-export type Kind25 = string | null;
-export type Id105 = number | null;
-export type Id106 = number;
-export type Time20 = string;
-export type Kind26 = string;
-export type Title21 = string;
+export type Kind29 = string | null;
+export type Id111 = number | null;
+export type Id112 = number;
+export type Time22 = string;
+export type Kind30 = string;
+export type Title25 = string;
 export type Detail8 = string;
 export type Link5 = string | null;
 export type Read3 = boolean;
 export type Items4 = Notification[];
 export type Unread3 = number;
 export type Kinds = string[];
-export type Kind27 = string;
-export type Title22 = string;
+export type Kind31 = string;
+export type Title26 = string;
 export type Detail9 = string;
 export type Link6 = string | null;
 export type Unread4 = number;
@@ -2032,8 +2092,8 @@ export type Ok8 = boolean;
 export type Detail10 = string;
 export type Checks = NetworkCheck[];
 export type Level4 = string | null;
-export type Text17 = string | null;
-export type Events3 = {
+export type Text18 = string | null;
+export type Events4 = {
   [k: string]: unknown;
 }[];
 export type Lines1 = {
@@ -2387,6 +2447,24 @@ export interface Contracts {
   RunList?: RunList;
   GetRunTree?: GetRunTree;
   SeeAlerts?: SeeAlerts;
+  MatterWork?: MatterWork;
+  MatterRow?: MatterRow;
+  MatterChange?: MatterChange;
+  MatterDue?: MatterDue;
+  MattersBrief?: MattersBrief;
+  MatterMark?: MatterMark;
+  MatterLane?: MatterLane;
+  MattersWeek?: MattersWeek;
+  MatterThread?: MatterThread;
+  MatterDetail?: MatterDetail;
+  GetMattersBrief?: GetMattersBrief;
+  GetMattersWeek?: GetMattersWeek;
+  ListMatters?: ListMatters;
+  MatterList?: MatterList;
+  GetMatter?: GetMatter;
+  MatterAction?: MatterAction;
+  UnlinkThread?: UnlinkThread;
+  MatterDone?: MatterDone;
   Task?: Task;
   ListTasks?: ListTasks;
   TaskList?: TaskList;
@@ -6071,17 +6149,200 @@ export interface SeeAlerts {
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MatterWork".
+ */
+export interface MatterWork {
+  kind: Kind21;
+  id: Id88;
+  title: Title17;
+  when?: When5;
+  thread?: Thread9;
+  proposed?: Proposed2;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MatterRow".
+ */
+export interface MatterRow {
+  id: Id89;
+  title: Title18;
+  state: State12;
+  next?: Next;
+  due?: Due3;
+  importance?: Importance5;
+  people?: People2;
+  emails?: Emails4;
+  threads?: Threads3;
+  work?: Work;
+  last_date: LastDate2;
+  quiet_days?: QuietDays1;
+  started?: Started1;
+  latest?: SourceRef | null;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MatterChange".
+ */
+export interface MatterChange {
+  id: Id90;
+  matter: Matter;
+  title: Title19;
+  time: Time17;
+  kind: Kind22;
+  text: Text16;
+  why?: Why4;
+  source?: SourceRef | null;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MatterDue".
+ */
+export interface MatterDue {
+  matter: Matter1;
+  title: Title20;
+  what: What;
+  when: When6;
+  kind: Kind23;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MattersBrief".
+ */
+export interface MattersBrief {
+  seen?: Seen1;
+  changes: Changes;
+  needs_you: NeedsYou1;
+  waiting: Waiting2;
+  fyi: Fyi;
+  next: Next1;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MatterMark".
+ */
+export interface MatterMark {
+  time: Time18;
+  kind: Kind24;
+  label: Label10;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MatterLane".
+ */
+export interface MatterLane {
+  matter: MatterRow;
+  marks: Marks;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MattersWeek".
+ */
+export interface MattersWeek {
+  start: Start1;
+  lanes: Lanes;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MatterThread".
+ */
+export interface MatterThread {
+  id: Id91;
+  subject: Subject13;
+  status: Status21;
+  emails: Emails5;
+  last_date: LastDate3;
+  how: How1;
+  why: Why5;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MatterDetail".
+ */
+export interface MatterDetail {
+  matter: MatterRow;
+  events: Events2;
+  threads: Threads4;
+  people: People3;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "GetMattersBrief".
+ */
+export interface GetMattersBrief {}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "GetMattersWeek".
+ */
+export interface GetMattersWeek {
+  start?: Start2;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ListMatters".
+ */
+export interface ListMatters {
+  include_done?: IncludeDone;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MatterList".
+ */
+export interface MatterList {
+  matters: Matters;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "GetMatter".
+ */
+export interface GetMatter {
+  id: Id92;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MatterAction".
+ */
+export interface MatterAction {
+  id: Id93;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "UnlinkThread".
+ */
+export interface UnlinkThread {
+  thread: Thread10;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MatterDone".
+ */
+export interface MatterDone {
+  closed?: Closed;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "Task".
  */
 export interface Task {
-  id: Id88;
-  title: Title17;
+  id: Id94;
+  title: Title21;
   notes: Notes1;
-  status: Status21;
-  due: Due3;
-  thread: Thread9;
+  status: Status22;
+  due: Due4;
+  thread: Thread11;
   source: Source10;
-  proposed: Proposed2;
+  proposed: Proposed3;
   created: Created6;
   updated?: Updated8;
   completed?: Completed;
@@ -6093,7 +6354,7 @@ export interface Task {
  * via the `definition` "ListTasks".
  */
 export interface ListTasks {
-  include_done?: IncludeDone;
+  include_done?: IncludeDone1;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -6108,34 +6369,34 @@ export interface TaskList {
  * via the `definition` "SaveTask".
  */
 export interface SaveTask {
-  id?: Id89;
-  title: Title18;
+  id?: Id95;
+  title: Title22;
   notes?: Notes2;
-  status?: Status22;
-  due?: Due4;
-  thread?: Thread10;
-  proposed?: Proposed3;
+  status?: Status23;
+  due?: Due5;
+  thread?: Thread12;
+  proposed?: Proposed4;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "TaskAction".
  */
 export interface TaskAction {
-  id: Id90;
+  id: Id96;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "Reminder".
  */
 export interface Reminder {
-  id: Id91;
-  title: Title19;
-  when: When5;
+  id: Id97;
+  title: Title23;
+  when: When7;
   repeat: Repeat;
-  thread: Thread11;
+  thread: Thread13;
   task: Task1;
   source: Source11;
-  proposed: Proposed4;
+  proposed: Proposed5;
   fired: Fired;
   created?: Created7;
   source_ref?: SourceRef | null;
@@ -6162,20 +6423,20 @@ export interface ReminderList {
  * via the `definition` "SaveReminder".
  */
 export interface SaveReminder {
-  id?: Id92;
-  title: Title20;
-  when: When6;
+  id?: Id98;
+  title: Title24;
+  when: When8;
   repeat?: Repeat1;
-  thread?: Thread12;
+  thread?: Thread14;
   task?: Task2;
-  proposed?: Proposed5;
+  proposed?: Proposed6;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "SnoozeReminder".
  */
 export interface SnoozeReminder {
-  id: Id93;
+  id: Id99;
   minutes?: Minutes;
 }
 /**
@@ -6183,7 +6444,7 @@ export interface SnoozeReminder {
  * via the `definition` "ReminderAction".
  */
 export interface ReminderAction {
-  id: Id94;
+  id: Id100;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -6198,11 +6459,11 @@ export interface PlannerDone {
  * via the `definition` "LocalModel".
  */
 export interface LocalModel {
-  id: Id95;
-  label: Label10;
+  id: Id101;
+  label: Label11;
   description: Description6;
   size_bytes: SizeBytes;
-  state: State12;
+  state: State13;
   downloaded_bytes?: DownloadedBytes;
   error?: Error6;
   active?: Active3;
@@ -6215,8 +6476,8 @@ export interface LocalModel {
  * via the `definition` "IndexInfo".
  */
 export interface IndexInfo {
-  kind: Kind21;
-  state: State13;
+  kind: Kind25;
+  state: State14;
   indexed: Indexed;
   total: Total9;
   stale?: Stale;
@@ -6271,7 +6532,7 @@ export interface ModelDetection {
  * via the `definition` "RebuildIndex".
  */
 export interface RebuildIndex {
-  kind: Kind22;
+  kind: Kind26;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -6285,14 +6546,14 @@ export interface GetSemanticStatus {
  * via the `definition` "DownloadModel".
  */
 export interface DownloadModel {
-  id?: Id96;
+  id?: Id102;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "ModelName".
  */
 export interface ModelName {
-  id: Id97;
+  id: Id103;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -6308,7 +6569,7 @@ export interface SaveSemanticSettings {
  * via the `definition` "ImportModel".
  */
 export interface ImportModel {
-  id: Id98;
+  id: Id104;
   folder: Folder12;
 }
 /**
@@ -6316,7 +6577,7 @@ export interface ImportModel {
  * via the `definition` "SemanticHit".
  */
 export interface SemanticHit {
-  kind: Kind23;
+  kind: Kind27;
   ref: Ref2;
   score: Score;
   excerpt: Excerpt1;
@@ -6335,7 +6596,7 @@ export interface GetConnectors {
  * via the `definition` "ConnectorTool".
  */
 export interface ConnectorTool {
-  id: Id99;
+  id: Id105;
   name: Name43;
   description: Description7;
   parameters?: Parameters;
@@ -6351,13 +6612,13 @@ export interface Parameters {
  * via the `definition` "Connector".
  */
 export interface Connector {
-  id: Id100;
+  id: Id106;
   name: Name44;
-  kind: Kind24;
+  kind: Kind28;
   url?: Url2;
   audience?: Audience;
   enabled?: Enabled7;
-  state: State14;
+  state: State15;
   detail?: Detail7;
   tools?: Tools3;
   has_token?: HasToken;
@@ -6404,14 +6665,14 @@ export interface AddConnector {
  * via the `definition` "ConnectorAction".
  */
 export interface ConnectorAction {
-  id: Id101;
+  id: Id107;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "SetConnectorEnabled".
  */
 export interface SetConnectorEnabled {
-  id: Id102;
+  id: Id108;
   enabled: Enabled8;
 }
 /**
@@ -6431,11 +6692,11 @@ export interface ApiError {
  * via the `definition` "AppEvent".
  */
 export interface AppEvent {
-  id: Id103;
+  id: Id109;
   seq: Seq1;
   type: Type2;
   version: Version2;
-  time: Time17;
+  time: Time19;
   source: Source12;
   trace_id: TraceId3;
   cause_id?: CauseId;
@@ -6451,7 +6712,7 @@ export interface Payload {
  * via the `definition` "EventLog".
  */
 export interface EventLog {
-  events: Events2;
+  events: Events3;
   failed: Failed2;
   [k: string]: unknown;
 }
@@ -6464,7 +6725,7 @@ export interface FailedEvent {
   event_seq: EventSeq;
   event_type: EventType;
   error: Error8;
-  time: Time18;
+  time: Time20;
   [k: string]: unknown;
 }
 /**
@@ -6533,7 +6794,7 @@ export interface UpdateSettings {
  * via the `definition` "AvailableModel".
  */
 export interface AvailableModel {
-  id: Id104;
+  id: Id110;
   name: Name46;
   [k: string]: unknown;
 }
@@ -6620,7 +6881,7 @@ export interface ListModels {
  * via the `definition` "ModelLogin".
  */
 export interface ModelLogin {
-  state: State15;
+  state: State16;
   user_code?: UserCode;
   verification_url?: VerificationUrl;
   error?: Error9;
@@ -6632,7 +6893,7 @@ export interface ModelLogin {
  */
 export interface ModelReply {
   model: Model6;
-  text: Text16;
+  text: Text17;
   [k: string]: unknown;
 }
 /**
@@ -6747,7 +7008,7 @@ export interface BackupList {
 export interface BackupRow {
   name: Name47;
   reason: Reason9;
-  time: Time19;
+  time: Time21;
   size: Size8;
   [k: string]: unknown;
 }
@@ -6788,7 +7049,7 @@ export interface UnlockHome {
  * via the `definition` "HomeStatus".
  */
 export interface HomeStatus {
-  state: State16;
+  state: State17;
   path?: Path17;
   default_path: DefaultPath;
   message?: Message7;
@@ -6875,7 +7136,7 @@ export interface ProfileChanged {
  * via the `definition` "ListNotifications".
  */
 export interface ListNotifications {
-  kind?: Kind25;
+  kind?: Kind29;
 }
 /**
  * No id means all of them.
@@ -6884,17 +7145,17 @@ export interface ListNotifications {
  * via the `definition` "MarkNotificationsRead".
  */
 export interface MarkNotificationsRead {
-  id?: Id105;
+  id?: Id111;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "Notification".
  */
 export interface Notification {
-  id: Id106;
-  time: Time20;
-  kind: Kind26;
-  title: Title21;
+  id: Id112;
+  time: Time22;
+  kind: Kind30;
+  title: Title25;
   detail: Detail8;
   link: Link5;
   read: Read3;
@@ -6917,8 +7178,8 @@ export interface NotificationList {
  * via the `definition` "NotificationRequested".
  */
 export interface NotificationRequested {
-  kind: Kind27;
-  title: Title22;
+  kind: Kind31;
+  title: Title26;
   detail?: Detail9;
   link?: Link6;
   [k: string]: unknown;
@@ -7038,7 +7299,7 @@ export interface NetworkChecks {
  */
 export interface SearchLogs {
   level?: Level4;
-  text?: Text17;
+  text?: Text18;
 }
 /**
  * Everything that happened under one trace ID, oldest first.
@@ -7047,7 +7308,7 @@ export interface SearchLogs {
  * via the `definition` "TraceView".
  */
 export interface TraceView {
-  events: Events3;
+  events: Events4;
   lines: Lines1;
   [k: string]: unknown;
 }

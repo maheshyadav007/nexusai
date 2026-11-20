@@ -28,6 +28,7 @@ from nexusai.modules.agent import (
     feedback,
     gateway,
     guard,
+    matters,
     memory,
     prompts_builder,
     providers,
@@ -1158,6 +1159,9 @@ class Triage:
         memory.add_learned(ctx.config.home, _strings(parsed.get("learned")), thread)
         if learning:
             return
+        # Before the work, so its matter's timeline shows the email first and the task after.
+        if not filing_only:
+            matters.link(ctx, thread)
         self._proposals(thread, parsed, subject)
         if question:
             channel.post(
@@ -1223,6 +1227,7 @@ class Triage:
     def _proposals(self, thread: int, parsed: dict[str, Any], subject: str) -> None:
         """The agent proposes. The person accepts tasks and reminders, and sends drafts."""
         ctx = self.ctx
+        why = str(parsed.get("reason") or "")[:500]
         db = ctx.bus.db
         for item in parsed.get("tasks") or []:
             if not isinstance(item, dict) or not _title(item.get("title")):
@@ -1237,10 +1242,12 @@ class Triage:
             if current:
                 if due and due != current[0]["due"] and current[0]["source"] == "agent":
                     planner.change_task(ctx, current[0]["id"], {"due": due})
+                    matters.note(ctx, thread, "due", f"Due date now {due}", why)
                 continue
             if planner.has_task(db, title, thread) or planner.has_reminder(db, title, thread):
                 continue
             planner.add_task(ctx, title, due, thread, "agent", True)
+            matters.note(ctx, thread, "task", f'Task added: "{title}"', why)
         for item in parsed.get("reminders") or []:
             if (
                 not isinstance(item, dict)
@@ -1256,10 +1263,12 @@ class Triage:
             if current:
                 if when != current[0]["due_at"] and current[0]["source"] == "agent":
                     planner.change_reminder(ctx, current[0]["id"], {"due_at": when})
+                    matters.note(ctx, thread, "due", f"Reminder moved to {when}", why)
                 continue
             if planner.has_reminder(db, title, thread) or planner.has_task(db, title, thread):
                 continue
             planner.add_reminder(ctx, title, when, "none", thread, None, "agent", True)
+            matters.note(ctx, thread, "task", f'Reminder set: "{title}"', why)
         for item in parsed.get("deadlines") or []:
             if not isinstance(item, dict) or not _title(item.get("what")):
                 continue
@@ -1272,6 +1281,7 @@ class Triage:
             if task:
                 if due and not task[0]["due"] and task[0]["source"] == "agent":
                     planner.change_task(ctx, task[0]["id"], {"due": due})
+                    matters.note(ctx, thread, "due", f"Due date now {due}", why)
                 continue
             channel.board_add(
                 ctx, "deadline", _title(item["what"])[:300], thread, due, cards.name(db, AGENT)

@@ -15,6 +15,28 @@ body {
 }
 
 @layer components {
+  /* Where Track places things: the numbers come from data, the look from here. */
+  .nx-track-at {
+    position: absolute;
+    top: 50%;
+    left: var(--nx-at, 0%);
+    transform: translate(-50%, -50%);
+  }
+  .nx-track-span {
+    position: absolute;
+    top: 50%;
+    left: var(--nx-from, 0%);
+    width: var(--nx-width, 0%);
+    height: 2px;
+    transform: translateY(-50%);
+  }
+  .nx-track-now {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: var(--nx-at, 0%);
+    width: 2px;
+  }
   .onboarding-fields [data-field] > label {
     @apply text-sm font-normal text-ink-muted;
   }

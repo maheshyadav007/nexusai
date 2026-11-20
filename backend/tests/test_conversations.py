@@ -1,4 +1,5 @@
 """One thing going on is one conversation, and its work goes with it (docs/MATTERS_PLAN.md, phase 1)."""
+# ruff: noqa: F811
 
 from typing import Any
 
@@ -22,7 +23,9 @@ SENDER = "Cloud Billing <billing@cloud.example>"
 
 
 def tasks(client: TestClient, include_done: bool = False) -> list[dict[str, Any]]:
-    return client.post("/api/queries/tasks.list", json={"include_done": include_done}).json()["tasks"]
+    return client.post("/api/queries/tasks.list", json={"include_done": include_done}).json()[
+        "tasks"
+    ]
 
 
 def reminders(client: TestClient) -> list[dict[str, Any]]:
@@ -40,7 +43,9 @@ def test_a_reminder_email_joins_the_open_conversation_and_moves_its_task(
     connect(client, fake)
     script.replies = [
         triage_reply(tasks=[{"title": "Verify the billing account", "due": "2099-01-10"}]),
-        triage_reply(tasks=[{"title": "Complete the account verification now", "due": "2099-01-05"}]),
+        triage_reply(
+            tasks=[{"title": "Complete the account verification now", "due": "2099-01-05"}]
+        ),
     ]
     fake.state.deliver(make_mail(subject="Verify your billing account", sender=SENDER))
     first = triaged(client, "Verify your billing account")
@@ -55,8 +60,13 @@ def test_a_reminder_email_joins_the_open_conversation_and_moves_its_task(
     )
     assert joined["id"] == first["id"]
     assert "Already open for this conversation" in script.requests[-1].messages[-1].text
-    found = wait(lambda: (lambda rows: rows if rows[0]["due"] == "2099-01-05" else None)(tasks(client)), "moved")
-    assert [(t["title"], t["thread"]) for t in found] == [("Verify the billing account", first["id"])]
+    found = wait(
+        lambda: (lambda rows: rows if rows[0]["due"] == "2099-01-05" else None)(tasks(client)),
+        "moved",
+    )
+    assert [(t["title"], t["thread"]) for t in found] == [
+        ("Verify the billing account", first["id"])
+    ]
 
 
 def test_a_resend_of_a_finished_conversation_starts_a_new_one(
@@ -68,14 +78,16 @@ def test_a_resend_of_a_finished_conversation_starts_a_new_one(
     status(client, first["id"], "resolved")
     fake.state.deliver(make_mail(subject="Submit the monthly timesheet", sender=SENDER))
     wait(
-        lambda: len(
-            [
-                t
-                for t in client.post("/api/queries/threads.list", json={}).json()["threads"]
-                if "monthly timesheet" in t["subject"]
-            ]
-        )
-        == 2,
+        lambda: (
+            len(
+                [
+                    t
+                    for t in client.post("/api/queries/threads.list", json={}).json()["threads"]
+                    if "monthly timesheet" in t["subject"]
+                ]
+            )
+            == 2
+        ),
         "second conversation",
     )
 
@@ -128,7 +140,7 @@ def test_ticking_the_last_task_finishes_the_conversation(
         )
     ]
     fake.state.deliver(make_mail(subject="The deck"))
-    thread = triaged(client, "The deck")
+    triaged(client, "The deck")
     task = wait(lambda: tasks(client), "task")[0]
     save = {k: task[k] for k in ("id", "title", "notes", "due", "thread")}
     client.post("/api/commands/tasks.save", json={**save, "status": "done", "proposed": False})
