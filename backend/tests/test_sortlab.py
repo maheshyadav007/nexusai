@@ -1,6 +1,8 @@
 """The sort lab from sign-in to a finished experiment, against a made-up mailbox."""
 
 import json
+import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -217,3 +219,15 @@ def test_a_group_that_names_everyone_shows_no_email_as_naming_the_person(lab: An
     report = client.get("/api/report").json()
     everyone = [group for group in report["groups"] if group["mentions_ignored"]]
     assert everyone and not any(e["names_you"] for g in everyone for e in g["emails"])
+
+
+def test_the_lab_needs_no_database_or_keychain_library() -> None:
+    """The exe leaves them out, so importing either would stop it from starting."""
+    code = (
+        "import sys, nexusai.sortlab.lab, nexusai.sortlab.__main__\n"
+        "print(sorted({m.split('.')[0] for m in sys.modules} & {'sqlcipher3', 'keyring'}))"
+    )
+    loaded = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    )
+    assert loaded.stdout.strip() == "[]"
