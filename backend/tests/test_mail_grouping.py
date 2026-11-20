@@ -254,3 +254,41 @@ def test_unsubscribing_by_email_is_not_writing_to_a_sender() -> None:
     mine += [_mail(OWNER, f"Note {n}", "Hi", to="kim@else.example") for n in range(25)]
     report = _box(letters, mine)
     assert {report.decisions[str(n)].section for n in range(25)} == {"automated"}
+
+
+# One list, one number per sender
+
+
+def enumerate_mail(raws: list[bytes]) -> list[tuple[str, bytes]]:
+    return [(str(index), raw) for index, raw in enumerate(raws)]
+
+
+def test_each_sender_gets_one_score_and_a_side() -> None:
+    tool = [_mail("ci@tools.example", f"Build {n} passed", "Done.") for n in range(6)]
+    news = [_mail("news@paper.example", f"Story {chr(97 + n)}", "Read more", List_Unsubscribe="<https://x>") for n in range(6)]  # fmt: skip
+    person = [_mail("kim@else.example", f"About {topic}", "Thoughts?") for topic in ("a", "b", "c")]
+    once = [_mail("new@shop.example", "Welcome", "Hi")]
+    report = grouping.score_senders(enumerate_mail(tool + news + person + once))
+    sides = {row.sender: row.side for row in report.senders}
+    assert sides["ci@tools.example"] == "ignores"
+    assert sides["news@paper.example"] == "ignores"
+    assert sides["kim@else.example"] == "reads"
+    assert (
+        next(row for row in report.senders if row.sender == "new@shop.example").kept
+        == "A new sender"
+    )
+    assert [row.count for row in report.senders] == sorted(
+        (row.count for row in report.senders), reverse=True
+    )
+
+
+def test_an_ignored_email_reaches_the_ai_when_it_mentions_the_person_or_a_person_replies() -> None:
+    builds = [
+        _mail("ci@tools.example", f"Build {n} passed", "Done.\nLogs\nMore\nCI") for n in range(6)
+    ]
+    named = _mail("ci@tools.example", "Build 9 failed", f"Assigned to {OWNER}\nLogs\nMore\nCI")
+    report = grouping.score_senders(enumerate_mail([*builds, named]))
+    tool = next(row for row in report.senders if row.sender == "ci@tools.example")
+    assert tool.side == "ignores" and tool.reach == 1
+    # The one that names them goes to the AI; the six that don't stay away from it.
+    assert report.quiet == {str(n) for n in range(len(builds))}
