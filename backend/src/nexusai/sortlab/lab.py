@@ -67,20 +67,33 @@ class Server:
     source: str
 
 
+Destination = Literal["inbox", "automated", "calendar"]
+# The folder decides what the AI does: it reads the Inbox and ignores the other two.
+FOLDER_OF = {
+    "automated": "automated",
+    "calendar": "calendar",
+    "people": "inbox",
+    "too_few": "inbox",
+}
+
+
 class GroupFeedback(BaseModel):
-    """What the person settled for one group: its category name, and whether the AI reads it."""
+    """Where the person put one group: its category name, its folder, or another category it
+    was merged into."""
 
     id: str
     name: str = Field(default="", max_length=200)
-    smart: bool | None = None
+    folder: Destination | None = None
+    merged_into: str = Field(default="", max_length=400)
 
 
 class MissFeedback(BaseModel):
-    """A sender left in no group that the person put in a category or kept from the AI."""
+    """A sender left in no group that the person named, moved or merged."""
 
     sender: str = Field(max_length=320)
     name: str = Field(default="", max_length=200)
-    smart: bool = True
+    folder: Destination = "inbox"
+    merged_into: str = Field(default="", max_length=400)
 
 
 class Finish(BaseModel):
@@ -228,24 +241,39 @@ def download(lab: Lab, sign_in: SignIn, server: Server) -> None:
                 session.close()
 
 
-def _summary(path: Path) -> dict[str, str]:
+def _summary(path: Path, named: set[str]) -> dict[str, Any]:
     parsed = parse_message(path.read_bytes())
-    return {"key": path.name, "subject": parsed.subject, "sender": parsed.from_addr}
+    try:
+        when = datetime.fromisoformat(parsed.date).strftime("%d %b").lstrip("0")
+    except ValueError:
+        when = ""
+    return {
+        "key": path.name,
+        "subject": parsed.subject,
+        "sender": parsed.from_addr,
+        "from": parsed.from_name or parsed.from_addr,
+        "when": when,
+        "snippet": parsed.snippet[:140],
+        "names_you": path.name in named,
+    }
 
 
 def describe(lab: Lab) -> dict[str, Any]:
-    """What the page shows: every group with sample emails, and the biggest senders left smart."""
+    """What the page shows: every group with sample emails and its folder, and the biggest
+    senders left in no group."""
     report = lab.report
     assert report is not None
+    named = {key for key, decision in report.decisions.items() if decision.named}
     groups = []
     for group in report.groups:
         data = json.loads(grouping.to_json(grouping.Report("", "", [group], {})))["groups"][0]
-        data["emails"] = [_summary(lab.folder / key) for key in group.members[:SAMPLES]]
+        data["folder"] = FOLDER_OF[group.section]
+        data["emails"] = [_summary(lab.folder / key, named) for key in group.members[:SAMPLES]]
         groups.append(data)
     loose = [key for key, decision in report.decisions.items() if decision.group is None]
-    by_sender: dict[str, list[dict[str, str]]] = {}
+    by_sender: dict[str, list[dict[str, Any]]] = {}
     for key in loose:
-        summary = _summary(lab.folder / key)
+        summary = _summary(lab.folder / key, named)
         by_sender.setdefault(summary["sender"], []).append(summary)
     missed = sorted(by_sender.items(), key=lambda item: -len(item[1]))[:MISSED_SENDERS]
     reach = sum(decision.reaches_ai for decision in report.decisions.values())
@@ -259,28 +287,35 @@ def describe(lab: Lab) -> dict[str, Any]:
         "missed": [
             {"sender": sender, "count": len(items), "emails": items[:SAMPLES]}
             for sender, items in missed
+            if len(items) > 1
         ],
     }
 
 
 def save(lab: Lab, finish: Finish) -> Path:
-    """Each category's name and whether the AI reads it, beside what the engine chose. With
-    details, also each one's senders and subject patterns, to improve the engine."""
+    """Each category's name and folder beside what the engine chose, so the differences show
+    what to fix. With details, also each one's senders and subject patterns."""
     found = lab.found
     engine = {group["id"]: group for group in found.get("groups", [])}
+    numbers = {item.id: f"group-{number}" for number, item in enumerate(finish.groups, 1)}
+
+    def shown(identifier: str) -> str:
+        # The engine's id holds a sender's address, so without details it's just a number.
+        return identifier if finish.details or not identifier else numbers.get(identifier, "")
+
     categories = []
-    for number, item in enumerate(finish.groups, 1):
+    for item in finish.groups:
         group = engine.get(item.id, {})
-        smart = group.get("smart", True) if item.smart is None else item.smart
+        folder = item.folder or group.get("folder", "inbox")
         row: dict[str, Any] = {
-            # The engine's id holds a sender's address, so without details it's just a number.
-            "id": item.id if finish.details else f"group-{number}",
+            "id": shown(item.id),
             "name": item.name.strip() or group.get("label", ""),
             "engine_name": group.get("label", ""),
-            "ai_reads": smart,
-            "engine_ai_reads": group.get("smart", True),
-            "engine_section": group.get("section", ""),
+            "folder": folder,
+            "engine_folder": group.get("folder", "inbox"),
+            "ai_reads": folder == "inbox",
             "count": group.get("count", 0),
+            "merged_into": shown(item.merged_into),
         }
         if finish.details:
             row |= {key: group.get(key, []) for key in ("senders", "patterns", "reasons")}
@@ -288,12 +323,14 @@ def save(lab: Lab, finish: Finish) -> Path:
     added = [
         {
             "name": miss.name.strip(),
-            "ai_reads": miss.smart,
+            "folder": miss.folder,
+            "ai_reads": miss.folder == "inbox",
             "count": _missed_count(found, miss.sender),
+            "merged_into": shown(miss.merged_into),
         }
         | ({"sender": miss.sender} if finish.details else {})
         for miss in finish.misses
-        if miss.name.strip() or not miss.smart
+        if miss.name.strip() or miss.folder != "inbox" or miss.merged_into
     ]
     sections: Counter[str] = Counter()
     for group in found.get("groups", []):

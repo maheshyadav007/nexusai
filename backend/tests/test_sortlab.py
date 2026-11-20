@@ -83,22 +83,38 @@ def test_an_experiment_groups_saves_feedback_and_deletes_the_mail(lab: Any) -> N
     assert report["owner"] == corp_mail.OWNER[1] and report["total"] == 1000
     first = report["groups"][0]
     assert first["emails"] and first["section"] == "automated"
+    second = report["groups"][1]
     missed = report["missed"][0]
     finish = {
-        "groups": [{"id": first["id"], "name": "Parts system", "smart": True}],
-        "misses": [{"sender": missed["sender"], "name": "Reviews", "smart": False}],
+        "groups": [
+            {"id": first["id"], "name": "Parts system", "folder": "inbox"},
+            {"id": second["id"], "merged_into": first["id"]},
+        ],
+        "misses": [{"sender": missed["sender"], "name": "Reviews", "folder": "automated"}],
         "details": False,
     }
     done = client.post("/api/finish", json=finish).json()
     assert done["deleted"] == 1000
     assert not state.folder.exists()
     saved = json.loads(Path(done["saved"]).read_text())
-    category = saved["categories"][0]
+    category, merged = saved["categories"]
     assert (category["name"], category["engine_name"]) == ("Parts system", first["label"])
     # The person's choice is kept beside the engine's, so the difference shows what to fix.
-    assert (category["ai_reads"], category["engine_ai_reads"]) == (True, False)
+    assert (category["folder"], category["engine_folder"], category["ai_reads"]) == (
+        "inbox",
+        "automated",
+        True,
+    )
+    # A merge points at the other category by the same neutral number, not its address.
+    assert merged["merged_into"] == category["id"] == "group-1"
     assert saved["added_from_ungrouped"] == [
-        {"name": "Reviews", "ai_reads": False, "count": missed["count"]}
+        {
+            "name": "Reviews",
+            "folder": "automated",
+            "ai_reads": False,
+            "count": missed["count"],
+            "merged_into": "",
+        }
     ]
     # Without details, no sender or subject leaves the computer in the file.
     assert "@" not in json.dumps(saved) and "senders" not in category
@@ -112,15 +128,29 @@ def test_details_keep_senders_and_patterns_for_improving_the_engine(lab: Any) ->
     first, missed = report["groups"][0], report["missed"][0]
     body = {
         "groups": [{"id": first["id"]}],
-        "misses": [{"sender": missed["sender"], "smart": False}, {"sender": "untouched@x.example"}],
+        "misses": [
+            {"sender": missed["sender"], "folder": "automated"},
+            {"sender": "untouched@x.example"},
+        ],
         "details": True,
     }
     saved = json.loads(Path(client.post("/api/finish", json=body).json()["saved"]).read_text())
     category = saved["categories"][0]
     assert category["senders"] == first["senders"] and category["patterns"]
-    assert category["name"] == first["label"]
+    assert (category["name"], category["folder"]) == (first["label"], first["folder"])
     # Only senders the person changed are kept.
     assert [row["sender"] for row in saved["added_from_ungrouped"]] == [missed["sender"]]
+
+
+def test_each_email_shown_says_when_it_came_and_whether_it_names_the_person(lab: Any) -> None:
+    _, _, client = lab
+    client.post("/api/start", json=SIGN_IN)
+    _ready(client)
+    report = client.get("/api/report").json()
+    emails = [email for group in report["groups"] for email in group["emails"]]
+    assert all(email["when"] and "from" in email and "snippet" in email for email in emails)
+    assert any(email["names_you"] for email in emails)
+    assert {group["folder"] for group in report["groups"]} == {"automated", "calendar", "inbox"}
 
 
 def test_discarding_deletes_the_mail_and_saves_nothing(lab: Any) -> None:
