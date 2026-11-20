@@ -187,6 +187,7 @@ from nexusai.modules.agent import (
     citations,
     cockpit,
     context,
+    conversations,
     facts,
     feedback,
     gateway,
@@ -244,6 +245,7 @@ agent_module = Module(
         runtime.RETRY_MIGRATION,
         runtime.COMPACTIONS_MIGRATION,
         citations.MIGRATION,
+        conversations.MIGRATION,
         runtime.TRIGGER_MIGRATION,
         memory.MIGRATION,
         channel.MIGRATION,
@@ -509,9 +511,36 @@ def they_answered(event: AppEvent, ctx: Context) -> None:
     mail_agent.they_answered(ctx, int(event.payload["message_id"]), int(event.payload["thread_id"]))
 
 
+def conversation_work(event: AppEvent, ctx: Context) -> None:
+    """Done, from anywhere, closes the conversation's work; opening it again brings that back."""
+    if event.payload.get("field") != "status":
+        return
+    thread, value, old = (
+        int(event.payload["thread_id"]),
+        event.payload.get("value"),
+        event.payload.get("old_value"),
+    )
+    if value == "resolved" and old != "resolved":
+        conversations.close_work(ctx, thread)
+    elif old == "resolved" and value != "resolved":
+        conversations.reopen_work(ctx, thread)
+
+
+def conversation_task(event: AppEvent, ctx: Context) -> None:
+    if event.payload.get("by") != "person" or not event.payload.get("id"):
+        return
+    now, before = event.payload.get("changes", {}), event.payload.get("old", {})
+    if now.get("status") == "done" and before.get("status") != "done":
+        conversations.task_finished(ctx, int(event.payload["id"]))
+    elif before.get("status") == "done" and now.get("status") not in {None, "done"}:
+        conversations.task_reopened(ctx, int(event.payload["id"]))
+
+
 @agent_module.on("thread.updated", "agent.learn_from_corrections")
 def learn_from_corrections(event: AppEvent, ctx: Context) -> None:
     """What the person changes teaches the agent. What an agent changes doesn't count."""
+    # Here rather than a listener of its own: each listener slows every event for the rest.
+    conversation_work(event, ctx)
     if event.payload.get("by", "person") != "person":
         return
     thread = int(event.payload["thread_id"])
@@ -2075,6 +2104,7 @@ def act_agent_queue(command: QueueAction, ctx: Context) -> AgentDone:
 
 @agent_module.on("tasks.changed", "agent.observe_task_outcomes")
 def observe_task_outcomes(event: AppEvent, ctx: Context) -> None:
+    conversation_task(event, ctx)
     if event.payload.get("by") != "person" or not event.payload.get("id"):
         return
     changes = event.payload.get("changes", {})

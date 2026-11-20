@@ -16,7 +16,7 @@ from nexusai.contracts.agent import (
     TriageEstimate,
     TriageRun,
 )
-from nexusai.kernel.database import Migration
+from nexusai.kernel.database import Database, Migration
 from nexusai.kernel.home import scratch_folder
 from nexusai.kernel.module import CommandError, Context
 from nexusai.modules.agent import (
@@ -395,13 +395,12 @@ def task_for(
     facts = signals.about_thread(ctx, thread)
     if facts:
         task += f"\n\n{facts}"
-    board = db.fetch_all(
-        "SELECT kind, title, due FROM work_board WHERE thread = ? AND done = 0 ORDER BY id",
-        (thread,),
-    )
-    if board:
-        lines = "\n".join(f"- {r['kind']}: {r['title']} (due {r['due']})" for r in board)
-        task += "\n\nAlready on the work board for this conversation:\n" + untrusted(lines)
+    open_work = open_work_lines(db, thread)
+    if open_work:
+        task += (
+            "\n\nAlready open for this conversation. Don't add these again; a new task or"
+            " reminder you give replaces the open one's date:\n" + untrusted(open_work)
+        )
     known = [
         dict(row)
         for row in db.fetch_all(
@@ -441,6 +440,27 @@ def task_for(
     if answers:
         task += "\n\nThe person answered your earlier question: " + " ".join(answers)
     return subject, sender, task
+
+
+def open_work_lines(db: Database, thread: int) -> str:
+    """The conversation's open tasks, reminders and deadlines, one line each."""
+    rows = [
+        *db.fetch_all(
+            "SELECT 'task' AS kind, title, due FROM tasks WHERE thread = ? AND status != 'done' ORDER BY id",
+            (thread,),
+        ),
+        *db.fetch_all(
+            "SELECT 'reminder' AS kind, title, due_at AS due FROM reminders WHERE thread = ? AND fired = 0 ORDER BY id",
+            (thread,),
+        ),
+        *db.fetch_all(
+            "SELECT kind, title, due FROM work_board WHERE thread = ? AND done = 0 ORDER BY id",
+            (thread,),
+        ),
+    ]
+    return "\n".join(
+        f"- {r['kind']}: {r['title']}" + (f" (due {r['due']})" if r["due"] else "") for r in rows
+    )
 
 
 def _style_samples(ctx: Context, thread: int) -> str:
@@ -1203,49 +1223,59 @@ class Triage:
     def _proposals(self, thread: int, parsed: dict[str, Any], subject: str) -> None:
         """The agent proposes. The person accepts tasks and reminders, and sends drafts."""
         ctx = self.ctx
-        for item in parsed.get("deadlines") or []:
-            if isinstance(item, dict) and item.get("what"):
-                channel.board_add(
-                    ctx,
-                    "deadline",
-                    str(item["what"])[:300],
-                    thread,
-                    _valid_date(item.get("due")),
-                    cards.name(ctx.bus.db, AGENT),
-                )
+        db = ctx.bus.db
         for item in parsed.get("tasks") or []:
-            if (
-                isinstance(item, dict)
-                and item.get("title")
-                and not planner.has_task(ctx.bus.db, str(item["title"])[:500], thread)
-                and not planner.has_reminder(ctx.bus.db, str(item["title"])[:500], thread)
-            ):
-                planner.add_task(
-                    ctx,
-                    str(item["title"])[:500],
-                    _valid_date(item.get("due")),
-                    thread,
-                    "agent",
-                    True,
-                )
+            if not isinstance(item, dict) or not _title(item.get("title")):
+                continue
+            title, due = _title(item["title"]), _valid_date(item.get("due"))
+            # One task per conversation. A resend or a reminder email moves its date; it used to
+            # add a second task in other words beside the first.
+            current = db.fetch_all(
+                "SELECT id, due, source FROM tasks WHERE thread = ? AND status != 'done' ORDER BY id LIMIT 1",
+                (thread,),
+            )
+            if current:
+                if due and due != current[0]["due"] and current[0]["source"] == "agent":
+                    planner.change_task(ctx, current[0]["id"], {"due": due})
+                continue
+            if planner.has_task(db, title, thread) or planner.has_reminder(db, title, thread):
+                continue
+            planner.add_task(ctx, title, due, thread, "agent", True)
         for item in parsed.get("reminders") or []:
             if (
-                isinstance(item, dict)
-                and item.get("title")
-                and _valid_moment(item.get("when"))
-                and not planner.has_reminder(ctx.bus.db, str(item["title"])[:500], thread)
-                and not planner.has_task(ctx.bus.db, str(item["title"])[:500], thread)
+                not isinstance(item, dict)
+                or not _title(item.get("title"))
+                or not _valid_moment(item.get("when"))
             ):
-                planner.add_reminder(
-                    ctx,
-                    str(item["title"])[:500],
-                    str(item["when"])[:16],
-                    "none",
-                    thread,
-                    None,
-                    "agent",
-                    True,
-                )
+                continue
+            title, when = _title(item["title"]), str(item["when"])[:16]
+            current = db.fetch_all(
+                "SELECT id, due_at, source FROM reminders WHERE thread = ? AND fired = 0 ORDER BY id LIMIT 1",
+                (thread,),
+            )
+            if current:
+                if when != current[0]["due_at"] and current[0]["source"] == "agent":
+                    planner.change_reminder(ctx, current[0]["id"], {"due_at": when})
+                continue
+            if planner.has_reminder(db, title, thread) or planner.has_task(db, title, thread):
+                continue
+            planner.add_reminder(ctx, title, when, "none", thread, None, "agent", True)
+        for item in parsed.get("deadlines") or []:
+            if not isinstance(item, dict) or not _title(item.get("what")):
+                continue
+            due = _valid_date(item.get("due"))
+            # With a task, the deadline is its due date. As a second line it showed twice.
+            task = db.fetch_all(
+                "SELECT id, due, source FROM tasks WHERE thread = ? AND status != 'done' ORDER BY id LIMIT 1",
+                (thread,),
+            )
+            if task:
+                if due and not task[0]["due"] and task[0]["source"] == "agent":
+                    planner.change_task(ctx, task[0]["id"], {"due": due})
+                continue
+            channel.board_add(
+                ctx, "deadline", _title(item["what"])[:300], thread, due, cards.name(db, AGENT)
+            )
         if parsed.get("draft"):
             self._draft(thread, str(parsed["draft"]), subject)
         if parsed.get("memory"):
@@ -1287,6 +1317,11 @@ class Triage:
                 "INSERT INTO mail_drafts (body, updated) VALUES (?, ?)", (json.dumps(draft), _now())
             )
             work.emit("drafts.changed", {}, source="agent", trace_id=ctx.trace_id)
+
+
+def _title(value: Any) -> str:
+    """A task's title as the person reads it: a model sometimes left a [mail:N] marker in it."""
+    return " ".join(citations.MARKER.sub("", str(value or "")).split())[:500]
 
 
 def _valid_date(value: Any) -> str | None:

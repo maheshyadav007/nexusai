@@ -309,14 +309,11 @@ def test_proposals_wait_for_the_person(client: TestClient, script: Script, fake:
     ]
     fake.state.deliver(make_mail(subject="Contract"))
     thread = triaged(client, "Contract")
-    board = wait(lambda: client.post("/api/queries/board.list").json()["items"], "board")
-    assert (board[0]["title"], board[0]["due"], board[0]["thread"]) == (
-        "Contract due",
-        "2099-01-15",
-        thread["id"],
-    )
     task = wait(lambda: client.post("/api/queries/tasks.list", json={}).json()["tasks"], "task")[0]
     assert task["proposed"] is True and task["source"] == "agent" and task["thread"] == thread["id"]
+    # With a task, the deadline is the task's date rather than a second line beside it.
+    assert task["due"] == "2099-01-10"
+    assert client.post("/api/queries/board.list").json()["items"] == []
     reminder = client.post("/api/queries/reminders.list").json()["reminders"][0]
     assert reminder["proposed"] is True
     draft = client.post("/api/queries/drafts.list").json()["drafts"][0]

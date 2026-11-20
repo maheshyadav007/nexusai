@@ -24,6 +24,7 @@ from nexusai.contracts.mail import (
     ThreadView,
 )
 from nexusai.kernel.config import MailConfig
+from nexusai.kernel import textmatch
 from nexusai.kernel.database import Database, Migration
 from nexusai.modules.mail.attachments import classify
 from nexusai.modules.mail.parse import (
@@ -424,8 +425,30 @@ def _merge(tx: sqlite3.Connection, keep: int, others: set[int]) -> None:
         tx.execute("DELETE FROM threads WHERE id = ?", (other,))
 
 
+def _open_resend(
+    tx: sqlite3.Connection, account: str, parsed: ParsedMessage, norm: str
+) -> int | None:
+    """The same sender sending the same subject again, like "Reminder: X" after "X", while the
+    first is still open. It's the same thing, so it joins instead of becoming a second
+    conversation with a second task. A closed one doesn't take it: next month's timesheet is new."""
+    if not norm or not parsed.from_addr:
+        return None
+    since = (datetime.fromisoformat(parsed.date) - timedelta(days=SUBJECT_WINDOW_DAYS)).isoformat()
+    for row in tx.execute(
+        "SELECT t.id, t.subject_norm FROM threads t WHERE t.account = ? AND t.in_trash = 0"
+        " AND t.status IN ('waiting_on_you', 'waiting_on_others') AND t.last_date >= ?"
+        " AND EXISTS (SELECT 1 FROM messages m WHERE m.thread_id = t.id AND LOWER(m.from_addr) = ?)"
+        " ORDER BY t.last_date DESC LIMIT 20",
+        (account, since, parsed.from_addr.lower()),
+    ):
+        if row[1] == norm or textmatch.same(row[1], norm):
+            return int(row[0])
+    return None
+
+
 def _assign_thread(tx: sqlite3.Connection, account: str, parsed: ParsedMessage) -> tuple[int, bool]:
-    """References, then Outlook's Thread-Index, then subject and people."""
+    """References, then Outlook's Thread-Index, then subject and people, then a resend of
+    something still open."""
     ids = list(
         {
             parsed.message_id,
@@ -474,6 +497,9 @@ def _assign_thread(tx: sqlite3.Connection, account: str, parsed: ParsedMessage) 
         ):
             if people & set(json.loads(row[1])):
                 return row[0], False
+    resent = _open_resend(tx, account, parsed, norm)
+    if resent:
+        return resent, False
     cursor = tx.execute(
         "INSERT INTO threads (account, subject, subject_norm, root_index, last_date)"
         " VALUES (?, ?, ?, ?, ?)",

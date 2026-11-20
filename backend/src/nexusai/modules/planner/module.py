@@ -370,6 +370,7 @@ def save_task(command: SaveTask, ctx: Context) -> PlannerDone:
         add_task(ctx, command.title, command.due, command.thread, "user", False, command.notes)
         return PlannerDone()
     with ctx.bus.unit_of_work() as work:
+        before = work.tx.execute("SELECT * FROM tasks WHERE id = ?", (command.id,)).fetchone()
         work.tx.execute(
             "UPDATE tasks SET title = ?, notes = ?, status = ?, due = ?, thread = ?, proposed = ?,"
             " updated = ?, completed = CASE WHEN ? = 'done' THEN COALESCE(completed, ?) END"
@@ -387,7 +388,21 @@ def save_task(command: SaveTask, ctx: Context) -> PlannerDone:
                 command.id,
             ),
         )
-        work.emit("tasks.changed", {}, source="planner", trace_id=ctx.trace_id)
+        # What changed, like a tool's change says, so ticking the last task of a conversation
+        # can finish the conversation too.
+        changes = {"status": command.status, "proposed": command.proposed}
+        work.emit(
+            "tasks.changed",
+            {
+                "id": command.id,
+                "by": ctx.actor,
+                "changes": changes,
+                "old": {key: before[key] for key in changes} if before else {},
+                "thread": before["thread"] if before else None,
+            },
+            source="planner",
+            trace_id=ctx.trace_id,
+        )
     return PlannerDone()
 
 

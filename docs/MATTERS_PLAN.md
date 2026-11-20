@@ -1,6 +1,6 @@
 # Matters: one record for each real thing going on
 
-Status: plan, 2026-11-21. Nothing here is built yet. Read section 0 first if you are picking this up in a new session.
+Status: plan, 2026-11-21, reviewed the same day: everything stays except the graph view, which is dropped. Phase 1 is in progress on the `conversations` branch. Read section 0 first if you are picking this up in a new session.
 
 > **The idea.** The person doesn't care about emails. They care about the *things going on*: Priya's budget decision, the Q4 timesheet, the visa renewal, the PLM release. Today NexusAI tracks emails and threads, so the same thing arriving as three emails becomes three things: three tasks, three reminders, three brief lines. This plan adds one durable record per real thing, a **Matter**. Every email, thread, task, reminder, draft and brief line attaches to it, and every change to it is logged with the email that caused it. The inbox stays for reading mail; Today becomes a live board of matters.
 
@@ -60,6 +60,13 @@ Brief: daily-prep schedule ──► brief_task() ──► update_brief (whole 
 4. **The brief is rewritten whole, once a morning** (`prompts/daily-prep.md`, `mail_agent.brief_task`). An important email at 11:00 isn't in the brief until the next morning, unless someone asks.
 5. **Nothing connects related items.** Closing a task doesn't touch its reminder, the waiting status of the other thread, or the brief line.
 
+### Seen on the real mailbox (2026-11-21, read-only, no model)
+
+- Google Cloud "verification past due" came twice, a week apart, as two threads: two tasks and two deadlines.
+- "[GitHub] Please verify your device" got two open tasks in the **same** thread in different words; one title had a `[mail:15937]` marker in it.
+- Every task from mail also had a work-board deadline, so Due today showed each one twice.
+- The corp sample (`evals/corp_mailbox.json`) shows what only matters can fix: change 88213 arrives from Karthik, Swarm approval and Swarm comment; Carrier X and Orion each span three senders and subjects.
+
 ### What already helps
 
 - **`rules.Engine`** decides per batch, before the AI, with a reason for each email. It's the model to follow: deterministic first, small AI step, decisions logged.
@@ -105,7 +112,7 @@ Rules of thumb:
 
 ## 4. Data model
 
-SQLite, in the mail module's database. Everything is a plain table, and the graph view later is just a query over these tables.
+SQLite, in the mail module's database. Everything is a plain table.
 
 ```sql
 -- One record per real-world thing.
@@ -193,13 +200,6 @@ CREATE TABLE brief_lines (
   seen TEXT                            -- when the person last saw this version
 );
 ```
-
-### Graph-ready by design
-
-- **Nodes:** matter, thread, message, person, task, reminder, document (attachments) and, later, calendar events.
-- **Edges:** `matter_threads`, thread→message (`messages.thread_id`), `matter_people`, work→matter, `matter_relations`, and attachments to their message.
-- A `matter.graph` query returns `{nodes, edges}` for any matter, two hops out. The Obsidian-style view later is only a renderer over that query, with no new data needed.
-- Times on events give the "valid from / valid to" history that temporal knowledge graphs use. We can show "what did we know on Tuesday" without extra work.
 
 ---
 
@@ -446,9 +446,9 @@ Each **matter card** has:
 - **Tasks and Reminders screens:** each row shows its matter, and filtering by matter works.
 - **Chat (Posty):** "What's going on with the budget?" answers from the matter: state, timeline and open work, with markers. "Close everything about the timesheet" uses the same cascade sheet.
 
-### Later: the graph
+### People
 
-The matter page gets a "Map" tab drawing `matter.graph` (section 4). People pages ("everything open with Priya") come from `matter_people`. Neither needs new data.
+People pages ("everything open with Priya") come from `matter_people`.
 
 ---
 
@@ -558,10 +558,6 @@ Each phase ships alone, keeps all tests green, and is checked on real mail (with
 ### Phase 7: Promises and chasing
 
 - **Build:** judge sent mail for commitments; waiting-on-others with chase drafts (section 9).
-
-### Phase 8: The map
-
-- **Build:** the `matter.graph` query and the Map tab; people pages.
 
 ---
 

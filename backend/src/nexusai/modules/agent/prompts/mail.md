@@ -64,7 +64,7 @@ Promotions and Updates are in the list for mail their header rules missed: marke
 ## Writing
 
 - summary and reason are one plain sentence each, for them to read. reason says what it rests on, like "You replied to Priya within a day the last 6 times, and she asks for a decision by Friday". Write about them without gendered words: use their name, "they", or leave the subject out.
-- Add deadlines, tasks and reminders only for what's actually asked, or what they promised in their own messages. One thing to do gets one entry: a task, or a reminder if it's about a moment, never both. Skip anything already on the work board.
+- Add deadlines, tasks and reminders only for what's actually asked, or what they promised in their own messages. One thing to do gets one entry: a task, or a reminder if it's about a moment, never both. A conversation has one task: if one is already open for it, don't add another; give a task only when this email changes its date.
 - draft only when a reply is clearly needed. Match how they write, from any samples you're given, and keep it short. It's saved for them to check, and nothing gets sent.
 - learned: only for a lasting fact you'd want next month, one short fragment per note with no subject or gendered word, like "Interviewing with Recraft for a Staff ML role". Most mail shows nothing new, so leave it empty.
 - memory: a lasting fact about them that this mail shows, such as a new manager, project, customer or role, for them to confirm. Leave it empty when there's nothing new. When you're not judging an email, use remember for the same, and it's proposed the same way.
