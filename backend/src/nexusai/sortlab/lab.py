@@ -13,7 +13,6 @@ import shutil
 import subprocess
 import sys
 import threading
-from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -64,38 +63,18 @@ class Server:
     source: str
 
 
-Destination = Literal["inbox", "automated", "calendar"]
-# The folder decides what the AI does: it reads the Inbox and ignores the other two.
-FOLDER_OF = {
-    "automated": "automated",
-    "calendar": "calendar",
-    "people": "inbox",
-    "too_few": "inbox",
-}
-
-
-class GroupFeedback(BaseModel):
-    """Where the person put one group: its category name, its folder, or another category it
-    was merged into."""
-
-    id: str
-    name: str = Field(default="", max_length=200)
-    folder: Destination | None = None
-    merged_into: str = Field(default="", max_length=400)
-
-
-class MissFeedback(BaseModel):
-    """A sender left in no group that the person named, moved or merged."""
+class SenderChoice(BaseModel):
+    """Where the person put one sender: the side the AI reads or ignores, and on the ignored
+    side, whether it gets its own category and what it's called."""
 
     sender: str = Field(max_length=320)
+    side: Literal["reads", "ignores"]
+    own: bool = False
     name: str = Field(default="", max_length=200)
-    folder: Destination = "inbox"
-    merged_into: str = Field(default="", max_length=400)
 
 
 class Finish(BaseModel):
-    groups: list[GroupFeedback] = Field(default_factory=list)
-    misses: list[MissFeedback] = Field(default_factory=list)
+    senders: list[SenderChoice] = Field(default_factory=list)
     details: bool = True
 
 
@@ -107,7 +86,7 @@ class Lab:
     done: int = 0
     total: int = 0
     error: str = ""
-    report: grouping.Report | None = None
+    report: grouping.SenderReport | None = None
     found: dict[str, Any] = field(default_factory=dict)
     # Show the results folder when an experiment finishes, so the file is easy to send.
     reveal: bool = False
@@ -225,7 +204,7 @@ def download(lab: Lab, sign_in: SignIn, server: Server) -> None:
         session.close()
         session = None
         lab.state = "grouping"
-        lab.report = grouping.group_mailbox(grouping.read_folder(lab.folder))
+        lab.report = grouping.score_senders(grouping.read_folder(lab.folder))
         lab.found = describe(lab)
         lab.state = "ready"
     except SignInFailed:
@@ -239,72 +218,59 @@ def download(lab: Lab, sign_in: SignIn, server: Server) -> None:
 
 
 def describe(lab: Lab) -> dict[str, Any]:
-    """What the page shows, the same as the app's sorting page shows."""
+    """Every sender with its score and side, the way the page shows it."""
     assert lab.report is not None
-    found, _ = sort_view.describe(lab.report, lambda key: (lab.folder / key).read_bytes())
-    return found
+    return sort_view.describe_senders(lab.report, lambda key: (lab.folder / key).read_bytes())
 
 
 def save(lab: Lab, finish: Finish) -> Path:
-    """Each category's name and folder beside what the engine chose, so the differences show
-    what to fix. With details, also each one's senders and subject patterns."""
+    """Each sender's side and category beside what the engine chose, so the differences show
+    what to fix. With details, also each one's address, score signs and subject patterns."""
     found = lab.found
-    engine = {group["id"]: group for group in found.get("groups", [])}
-    numbers = {item.id: f"group-{number}" for number, item in enumerate(finish.groups, 1)}
-
-    def shown(identifier: str) -> str:
-        # The engine's id holds a sender's address, so without details it's just a number.
-        return identifier if finish.details or not identifier else numbers.get(identifier, "")
-
-    categories = []
-    for item in finish.groups:
-        group = engine.get(item.id, {})
-        folder = item.folder or group.get("folder", "inbox")
-        row: dict[str, Any] = {
-            "id": shown(item.id),
-            "name": item.name.strip() or group.get("label", ""),
-            "engine_name": group.get("label", ""),
-            "folder": folder,
-            "engine_folder": group.get("folder", "inbox"),
-            "ai_reads": folder == "inbox",
-            "count": group.get("count", 0),
-            "merged_into": shown(item.merged_into),
+    engine = {row["sender"]: row for row in found.get("senders", [])}
+    chosen = {choice.sender: choice for choice in finish.senders}
+    rows = []
+    for number, (sender, row) in enumerate(engine.items(), 1):
+        choice = chosen.get(sender)
+        side = choice.side if choice else row["side"]
+        own = (choice.own if choice else row["own"]) and side == "ignores"
+        entry: dict[str, Any] = {
+            # Without details, a number rather than the sender's address.
+            "id": sender if finish.details else f"sender-{number}",
+            "count": row["count"],
+            "score": row["score"],
+            "side": side,
+            "engine_side": row["side"],
+            "own_category": own,
+            "engine_own_category": row["own"],
+            "name": ((choice.name.strip() if choice else "") or row["label"]) if own else "",
+            "kept": row["kept"],
         }
         if finish.details:
-            row |= {key: group.get(key, []) for key in ("senders", "patterns", "reasons")}
-        categories.append(row)
-    added = [
-        {
-            "name": miss.name.strip(),
-            "folder": miss.folder,
-            "ai_reads": miss.folder == "inbox",
-            "count": _missed_count(found, miss.sender),
-            "merged_into": shown(miss.merged_into),
-        }
-        | ({"sender": miss.sender} if finish.details else {})
-        for miss in finish.misses
-        if miss.name.strip() or miss.folder != "inbox" or miss.merged_into
-    ]
-    sections: Counter[str] = Counter()
-    for group in found.get("groups", []):
-        sections[group["section"]] += group["count"]
+            entry |= {
+                "label": row["label"],
+                "repeats": row["repeats"],
+                "bulk": row["bulk"],
+                "one_way": row["one_way"],
+                "examples": row["examples"],
+            }
+        rows.append(entry)
+    ignored = [row for row in rows if row["side"] == "ignores"]
     result = {
         "saved": datetime.now(UTC).isoformat(),
         "emails": found.get("total", 0),
-        "reached_ai": found.get("reach_ai", 0),
-        "ungrouped": found.get("ungrouped", 0),
-        "engine_sections": dict(sections),
-        "categories": categories,
-        "added_from_ungrouped": added,
+        "engine_reached_ai": found.get("reach_ai", 0),
+        "calendar": found.get("calendar", 0),
+        "senders": len(rows),
+        "ignored_senders": len(ignored),
+        "categories": [row["name"] for row in ignored if row["own_category"]],
+        "moved_by_person": sum(row["side"] != row["engine_side"] for row in rows),
+        "rows": rows,
     }
     lab.results.mkdir(parents=True, exist_ok=True)
     path = lab.results / f"sort-lab-{datetime.now():%Y%m%d-%H%M%S}.json"
     path.write_text(json.dumps(result, indent=1, ensure_ascii=False), encoding="utf-8")
     return path
-
-
-def _missed_count(found: dict[str, Any], sender: str) -> int:
-    return next((m["count"] for m in found.get("missed", []) if m["sender"] == sender), 0)
 
 
 def create_app(lab: Lab, token: str) -> FastAPI:

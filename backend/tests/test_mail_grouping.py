@@ -273,6 +273,8 @@ def test_each_sender_gets_one_score_and_a_side() -> None:
     assert sides["ci@tools.example"] == "ignores"
     assert sides["news@paper.example"] == "ignores"
     assert sides["kim@else.example"] == "reads"
+    # How many would still reach the AI if it were ignored, so moving it changes the totals.
+    assert next(row for row in report.senders if row.sender == "kim@else.example").reach == 0
     assert (
         next(row for row in report.senders if row.sender == "new@shop.example").kept
         == "A new sender"

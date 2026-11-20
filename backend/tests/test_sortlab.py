@@ -74,7 +74,7 @@ def _ready(client: TestClient) -> dict[str, Any]:
     raise AssertionError("The lab never finished grouping")
 
 
-def test_an_experiment_groups_saves_feedback_and_deletes_the_mail(lab: Any) -> None:
+def test_an_experiment_scores_senders_saves_choices_and_deletes_the_mail(lab: Any) -> None:
     state, server, client = lab
     assert client.post("/api/start", json=SIGN_IN).status_code == 200
     assert _ready(client)["state"] == "ready"
@@ -83,76 +83,62 @@ def test_an_experiment_groups_saves_feedback_and_deletes_the_mail(lab: Any) -> N
     assert not server.changes
     report = client.get("/api/report").json()
     assert report["owner"] == corp_mail.OWNER[1] and report["total"] == 1000
-    first = report["groups"][0]
-    assert first["emails"] and first["section"] == "automated"
-    second = report["groups"][1]
-    missed = report["missed"][0]
+    rows = report["senders"]
+    assert [row["count"] for row in rows] == sorted((row["count"] for row in rows), reverse=True)
+    ignored = [row for row in rows if row["side"] == "ignores"]
+    # The five biggest the AI ignores start as their own categories.
+    assert [row["own"] for row in ignored[:6]] == [True] * 5 + [False]
+    tool, person = ignored[0], next(row for row in rows if row["side"] == "reads")
     finish = {
-        "groups": [
-            {"id": first["id"], "name": "Parts system", "folder": "inbox"},
-            {"id": second["id"], "merged_into": first["id"]},
+        "senders": [
+            {"sender": tool["sender"], "side": "ignores", "own": True, "name": "Code reviews"},
+            {"sender": person["sender"], "side": "ignores"},
         ],
-        "misses": [{"sender": missed["sender"], "name": "Reviews", "folder": "automated"}],
         "details": False,
     }
     done = client.post("/api/finish", json=finish).json()
     assert done["deleted"] == 1000
     assert not state.folder.exists()
     saved = json.loads(Path(done["saved"]).read_text())
-    category, merged = saved["categories"]
-    assert (category["name"], category["engine_name"]) == ("Parts system", first["label"])
-    # The person's choice is kept beside the engine's, so the difference shows what to fix.
-    assert (category["folder"], category["engine_folder"], category["ai_reads"]) == (
-        "inbox",
-        "automated",
+    assert saved["senders"] == len(rows) and saved["moved_by_person"] == 1
+    first = saved["rows"][0]
+    assert (first["name"], first["own_category"], first["side"]) == (
+        "Code reviews",
         True,
+        "ignores",
     )
-    # A merge points at the other category by the same neutral number, not its address.
-    assert merged["merged_into"] == category["id"] == "group-1"
-    assert saved["added_from_ungrouped"] == [
-        {
-            "name": "Reviews",
-            "folder": "automated",
-            "ai_reads": False,
-            "count": missed["count"],
-            "merged_into": "",
-        }
-    ]
+    moved = next(
+        row for row in saved["rows"] if row["engine_side"] == "reads" and row["side"] == "ignores"
+    )
+    assert moved["count"] == person["count"]
+    assert "Code reviews" in saved["categories"]
     # Without details, no sender or subject leaves the computer in the file.
-    assert "@" not in json.dumps(saved) and "senders" not in category
+    assert "@" not in json.dumps(saved) and "examples" not in first
 
 
-def test_details_keep_senders_and_patterns_for_improving_the_engine(lab: Any) -> None:
+def test_details_keep_senders_and_score_signs_for_improving_the_engine(lab: Any) -> None:
     _, _, client = lab
     client.post("/api/start", json=SIGN_IN)
     _ready(client)
-    report = client.get("/api/report").json()
-    first, missed = report["groups"][0], report["missed"][0]
-    body = {
-        "groups": [{"id": first["id"]}],
-        "misses": [
-            {"sender": missed["sender"], "folder": "automated"},
-            {"sender": "untouched@x.example"},
-        ],
-        "details": True,
-    }
+    first = client.get("/api/report").json()["senders"][0]
+    body = {"senders": [], "details": True}
     saved = json.loads(Path(client.post("/api/finish", json=body).json()["saved"]).read_text())
-    category = saved["categories"][0]
-    assert category["senders"] == first["senders"] and category["patterns"]
-    assert (category["name"], category["folder"]) == (first["label"], first["folder"])
-    # Only senders the person changed are kept.
-    assert [row["sender"] for row in saved["added_from_ungrouped"]] == [missed["sender"]]
+    row = saved["rows"][0]
+    assert row["id"] == first["sender"] and row["examples"] == first["examples"]
+    assert {"repeats", "bulk", "one_way"} <= row.keys()
+    # Nothing changed by the person: every sender stays where the engine put it.
+    assert saved["moved_by_person"] == 0
 
 
-def test_each_email_shown_says_when_it_came_and_whether_it_names_the_person(lab: Any) -> None:
+def test_each_email_shown_says_when_it_came_and_whether_it_still_reaches_the_ai(lab: Any) -> None:
     _, _, client = lab
     client.post("/api/start", json=SIGN_IN)
     _ready(client)
     report = client.get("/api/report").json()
-    emails = [email for group in report["groups"] for email in group["emails"]]
-    assert all(email["when"] and "from" in email and "snippet" in email for email in emails)
-    assert any(email["names_you"] for email in emails)
-    assert {group["folder"] for group in report["groups"]} == {"automated", "calendar", "inbox"}
+    emails = [email for row in report["senders"] for email in row["emails"]]
+    assert all(email["when"] and "snippet" in email for email in emails)
+    ignored = [row for row in report["senders"] if row["side"] == "ignores" and row["reach"]]
+    assert any(email["names_you"] for row in ignored for email in row["emails"])
 
 
 def test_discarding_deletes_the_mail_and_saves_nothing(lab: Any) -> None:
@@ -212,13 +198,13 @@ def test_settings_come_from_the_file_and_a_plain_login_gets_the_company_domain(
     assert sortlab.address_for("sam@else.example", server.domain) == "sam@else.example"
 
 
-def test_a_group_that_names_everyone_shows_no_email_as_naming_the_person(lab: Any) -> None:
+def test_a_sender_that_names_everyone_lets_none_of_it_through(lab: Any) -> None:
     _, _, client = lab
     client.post("/api/start", json=SIGN_IN)
     _ready(client)
     report = client.get("/api/report").json()
-    everyone = [group for group in report["groups"] if group["mentions_ignored"]]
-    assert everyone and not any(e["names_you"] for g in everyone for e in g["emails"])
+    team = next(row for row in report["senders"] if row["examples"][0].startswith("weekly effort"))
+    assert team["side"] == "ignores" and team["reach"] == 0
 
 
 def test_the_lab_needs_no_database_or_keychain_library() -> None:

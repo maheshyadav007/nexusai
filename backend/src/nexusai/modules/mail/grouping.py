@@ -686,11 +686,12 @@ class SenderScore:
     side: Literal["reads", "ignores"]
     # Why it stays with the AI whatever its score, if it does.
     kept: str
-    # Emails that still reach the AI from the ignored side: they name the person, or a person
-    # replied in that conversation.
+    # How many would still reach the AI if it's ignored, whichever side it starts on: they
+    # name the person, or a person replied in that conversation.
     reach: int
     examples: list[tuple[str, int]]
     members: list[str] = field(repr=False)
+    through: list[str] = field(default_factory=list, repr=False)
 
 
 @dataclass
@@ -767,9 +768,10 @@ def score_senders(raws: Iterable[tuple[str, bytes]]) -> SenderReport:
                 score=round(score, 2),
                 side=side,
                 kept=kept,
-                reach=through if side == "ignores" else len(items),
+                reach=through,
                 examples=Counter(item.pattern for item in items).most_common(3),
                 members=[item.key for item in items],
+                through=sorted(passes),
             )
         )
     scored.sort(key=lambda row: (-row.count, row.sender))

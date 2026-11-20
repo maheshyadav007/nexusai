@@ -102,3 +102,44 @@ def describe(
         "missed": shown,
     }
     return found, members
+
+
+# The sender list: one row per sender, on the side the AI reads or the side it ignores.
+
+# The biggest senders the AI ignores start out as their own categories.
+TOP_CATEGORIES = 5
+
+
+def describe_senders(report: grouping.SenderReport, read: Callable[[str], bytes]) -> dict[str, Any]:
+    """Every sender biggest first, with its score, its side, whether it starts as its own
+    category, and sample emails. An email marked through still reaches the AI."""
+    ignored = [row.sender for row in report.senders if row.side == "ignores"]
+    own = set(ignored[:TOP_CATEGORIES])
+    through = {key for row in report.senders for key in row.through}
+    senders = []
+    for row in report.senders:
+        senders.append(
+            {
+                "sender": row.sender,
+                "label": row.label,
+                "count": row.count,
+                "score": row.score,
+                "repeats": row.repeats,
+                "bulk": row.bulk,
+                "one_way": row.one_way,
+                "side": row.side,
+                "kept": row.kept,
+                "reach": row.reach,
+                "own": row.sender in own,
+                "examples": [pattern for pattern, _ in row.examples],
+                "emails": [_summary(key, read(key), through) for key in row.members[:SAMPLES]],
+            }
+        )
+    return {
+        "owner": report.owner,
+        "owner_name": report.owner_name,
+        "total": report.total,
+        "reach_ai": report.reach_ai,
+        "calendar": len(report.calendar),
+        "senders": senders,
+    }
