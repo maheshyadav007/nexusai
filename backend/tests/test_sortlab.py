@@ -217,3 +217,27 @@ def test_the_lab_needs_no_database_or_keychain_library() -> None:
         [sys.executable, "-c", code], capture_output=True, text=True, check=True
     )
     assert loaded.stdout.strip() == "[]"
+
+
+def test_the_lab_shows_each_categorys_rules_from_the_same_engine(lab: Any) -> None:
+    state, _, client = lab
+    assert client.post("/api/start", json=SIGN_IN).status_code == 200
+    assert _ready(client)["state"] == "ready"
+    plm = [row["sender"] for row in client.get("/api/report").json()["senders"]
+           if row["sender"].startswith("plm-")]  # fmt: skip
+    assert len(plm) == 2
+    found = client.post(
+        "/api/rules", json={"categories": [{"name": "PLM", "senders": plm}], "automated": []}
+    ).json()
+    entry = next(c for c in found["categories"] if c["name"] == "Automated/PLM")
+    # One rule per address, and one for the tag both carry, so a new address is filed too.
+    assert any("tag [PLM]" in text for text in entry["rules"])
+    assert sum("it's from" in text for text in entry["rules"]) == 2
+    assert entry["kept"] > 0
+    saved = client.post(
+        "/api/finish",
+        json={"sorted": {"categories": [{"name": "PLM", "senders": plm}]}, "details": True},
+    ).json()
+    written = json.loads(Path(saved["saved"]).read_text())
+    assert any(c["name"] == "Automated/PLM" and c["rules"] for c in written["rules"])
+    assert state.mail == []

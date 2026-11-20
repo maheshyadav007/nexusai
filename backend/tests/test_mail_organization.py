@@ -76,7 +76,7 @@ def add(
             read=False,
             flagged=False,
             parsed=parse_message(raw),
-            match=match,
+            decision=rules.decision_for(match, parse_message(raw)),
             config=ctx.config.mail,
         )
     assert result is not None
@@ -433,7 +433,7 @@ def test_account_scoped_group_identity_and_security_header_exception(ctx: Contex
     )
     raw = make_mail(subject="Suspicious sign-in", sender="no-reply@example.com")
     matched = rules.evaluate(parse_message(raw), [])
-    assert matched and matched.look_closer and matched.actions.category == "Updates"
+    assert matched and matched.look_closer and matched.actions.category == "Automated"
     result = add(ctx, "Suspicious sign-in", sender="no-reply@example.com", match=matched)
     assert result.worth_a_look
     bulk_learning.finalize(ctx)
@@ -460,8 +460,8 @@ def test_broadcast_priority_exception_and_waiting_override(ctx: Context) -> None
 
 def test_changing_header_folder_to_smart_or_removing_it_stops_exact_filing(ctx: Context) -> None:
     parsed = parse_message(make_mail(sender="no-reply@example.com"))
-    assert rules.evaluate(parsed, [], folder_modes={"Updates": "exact"})
-    assert rules.evaluate(parsed, [], folder_modes={"Updates": "smart"}) is None
+    assert rules.evaluate(parsed, [], folder_modes={"Automated": "exact"})
+    assert rules.evaluate(parsed, [], folder_modes={"Automated": "smart"}) is None
     assert rules.evaluate(parsed, [], folder_modes={}) is None
 
 
@@ -585,12 +585,19 @@ def test_personalized_folder_settings_reach_mail_context(ctx: Context) -> None:
     assert "do not assign these as Smart folders" in task
 
 
-def test_default_plm_swarm_are_exact_and_out_of_priority(ctx: Context) -> None:
-    from dataclasses import replace
-
+def test_no_starter_categories_ship(ctx: Context) -> None:
     from nexusai.kernel.config import load_config
 
-    defaults = load_config(ctx.config.home).mail.starter_categories
+    assert load_config(ctx.config.home).mail.starter_categories == ()
+
+
+def test_starter_categories_are_exact_and_out_of_priority(ctx: Context) -> None:
+    from dataclasses import replace
+
+    defaults = (
+        {"name": "PLM", "subject_prefix": "[PLM]"},
+        {"name": "Swarm", "subject_prefix": "[Swarm]"},
+    )
     seeded = Context(
         bus=ctx.bus,
         config=replace(ctx.config, mail=replace(ctx.config.mail, starter_categories=defaults)),

@@ -61,10 +61,10 @@ export function SortScreen() {
   </div>;
   if (state === "failed") return <ErrorState title={t("mail.sort.failed")} onRetry={() => prepare.mutate()} />;
   if (state === "done" || state === "skipped") return <div className="p-6"><EmptyState icon="inbox" title={t("mail.sort.title")} description={t(state === "done" ? "mail.sort.done" : "mail.sort.skipped", { name: lead })} /></div>;
-  return <Sorter groups={sort.data.groups ?? []} owner={sort.data.owner_name ?? ""} emails={sort.data.emails ?? 0} conversations={sort.data.conversations ?? 0} lead={lead} onDone={() => void refresh().then(() => router.push("/today"))} />;
+  return <Sorter groups={sort.data.groups ?? []} owner={sort.data.owner_name ?? ""} emails={sort.data.emails ?? 0} conversations={sort.data.conversations ?? 0} alreadySorted={sort.data.already_sorted ?? 0} lead={lead} onDone={() => void refresh().then(() => router.push("/today"))} />;
 }
 
-function Sorter({ groups, owner, emails, conversations, lead, onDone }: { groups: SortGroup[]; owner: string; emails: number; conversations: number; lead: string; onDone: () => void }) {
+function Sorter({ groups, owner, emails, conversations, alreadySorted, lead, onDone }: { groups: SortGroup[]; owner: string; emails: number; conversations: number; alreadySorted: number; lead: string; onDone: () => void }) {
   const [cats, setCats] = useState<Record<string, Category>>(() => Object.fromEntries(groups.map((group) => [group.id, { ...group, name: group.label, place: group.folder, mergedInto: "" }])));
   const [selected, setSelected] = useState<string>(() => [...groups].filter((g) => g.folder === "automated").sort((a, b) => b.count - a.count)[0]?.id ?? groups[0]?.id ?? "");
   const [opened, setOpened] = useState<Record<string, boolean>>({});
@@ -101,6 +101,7 @@ function Sorter({ groups, owner, emails, conversations, lead, onDone }: { groups
       <div className="flex flex-col gap-1 px-5 pb-3 pt-5">
         <h1 className="font-serif text-title text-ink-primary">{t("mail.sort.title")}</h1>
         <p className="text-sm tabular-nums text-ink-muted">{owner ? `${owner} · ` : ""}{t("mail.sort.summary", { emails: emails.toLocaleString(), kept: kept.toLocaleString() })}</p>
+        {alreadySorted > 0 ? <p className="text-sm tabular-nums text-ink-muted">{t("mail.sort.alreadySorted", { count: alreadySorted.toLocaleString() })}</p> : null}
       </div>
       <div className="flex flex-col gap-4 overflow-y-auto px-3 pb-3 md:flex-1">
         {FOLDERS.map((folder) => <FolderBlock key={folder.id} folder={folder} cats={live} selected={selected} opened={opened} conversations={folder.id === "inbox" ? conversations : 0}

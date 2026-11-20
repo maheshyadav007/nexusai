@@ -41,10 +41,13 @@ def _summary(key: str, raw: bytes, named: set[str]) -> dict[str, Any]:
 
 
 def describe(
-    report: grouping.Report, read: Callable[[str], bytes]
+    report: grouping.Report,
+    read: Callable[[str], bytes],
+    covered: frozenset[str] = frozenset(),
 ) -> tuple[dict[str, Any], dict[str, list[str]]]:
     """What a sorting page shows, and every email behind each entry: the engine's groups with
-    sample emails and the folder they start in, then the biggest senders left in no group."""
+    sample emails and the folder they start in, then the biggest senders left in no group. Mail
+    in `covered` is already filed by the person's own rules, so it is in no entry."""
     # Mentions count only outside groups that name the person in nearly every email.
     ignored = {group.id for group in report.groups if group.mentions_ignored}
     named = {
@@ -55,12 +58,20 @@ def describe(
     members: dict[str, list[str]] = {}
     groups = []
     for group in report.groups:
+        kept = [key for key in group.members if key not in covered]
+        if not kept:
+            continue
         data = json.loads(grouping.to_json(grouping.Report("", "", [group], {})))["groups"][0]
         data["folder"] = FOLDER_OF[group.section]
-        data["emails"] = [_summary(key, read(key), named) for key in group.members[:SAMPLES]]
+        data["count"] = len(kept)
+        data["emails"] = [_summary(key, read(key), named) for key in kept[:SAMPLES]]
         groups.append(data)
-        members[group.id] = list(group.members)
-    loose = [key for key, decision in report.decisions.items() if decision.group is None]
+        members[group.id] = kept
+    loose = [
+        key
+        for key, decision in report.decisions.items()
+        if decision.group is None and key not in covered
+    ]
     by_sender: dict[str, list[dict[str, Any]]] = {}
     for key in loose:
         summary = _summary(key, read(key), named)
@@ -98,6 +109,7 @@ def describe(
         "total": len(report.decisions),
         "reach_ai": sum(decision.reaches_ai for decision in report.decisions.values()),
         "ungrouped": len(loose),
+        "already_sorted": len(covered),
         "groups": groups,
         "missed": shown,
     }

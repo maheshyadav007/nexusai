@@ -17,7 +17,7 @@ from fake_mail import PASSWORD, USER, FakeMail, make_mail, start_fake_mail
 from fake_pop3 import FakePop3, start_fake_pop3
 from nexusai.api.app import create_app
 from nexusai.kernel.config import Config, SystemMail, SystemModel, load_config
-from nexusai.modules.mail import store
+from nexusai.modules.mail import rules, store
 from nexusai.modules.mail.parse import parse_message
 from nexusai.modules.mail.pop3 import Pop3Session
 from test_mail_sync import status, threads, wait
@@ -312,7 +312,7 @@ def test_pst_folders_survive_a_pop3_mailbox(client: TestClient, pop3: FakePop3) 
             read=True,
             flagged=False,
             parsed=parse_message(raw),
-            match=None,
+            decision=rules.Decision(True, "No rule matched"),
             config=load_config().mail,
         )
     assert stored is not None

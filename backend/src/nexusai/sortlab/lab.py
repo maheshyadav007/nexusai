@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import threading
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -24,8 +25,9 @@ from pydantic import BaseModel, Field
 
 from nexusai.contracts.mail import MailAuth, MailProfile, ServerSettings
 from nexusai.kernel.home import app_data_dir
-from nexusai.modules.mail import grouping, sort_view
+from nexusai.modules.mail import grouping, rules, sort_rules, sort_view
 from nexusai.modules.mail.imap import Fetched, Folder, ImapSession, SignInFailed, synced_folders
+from nexusai.modules.mail.parse import ParsedMessage, parse_message
 from nexusai.modules.mail.pop3 import Pop3Session
 
 BATCH = 50
@@ -73,8 +75,22 @@ class SenderChoice(BaseModel):
     name: str = Field(default="", max_length=200)
 
 
+class LabCategory(BaseModel):
+    name: str = Field(max_length=200)
+    senders: list[str] = Field(default_factory=list, max_length=5000)
+
+
+class Sorted(BaseModel):
+    """The ignored side as the page has it: its own categories, and the senders going straight
+    into Automated."""
+
+    categories: list[LabCategory] = Field(default_factory=list, max_length=2000)
+    automated: list[str] = Field(default_factory=list, max_length=20000)
+
+
 class Finish(BaseModel):
     senders: list[SenderChoice] = Field(default_factory=list)
+    sorted: Sorted = Field(default_factory=Sorted)
     details: bool = True
 
 
@@ -87,6 +103,8 @@ class Lab:
     total: int = 0
     error: str = ""
     report: grouping.SenderReport | None = None
+    # The downloaded mail, read once, for the rule engine to try each rule on.
+    mail: list[ParsedMessage] = field(default_factory=list, repr=False)
     found: dict[str, Any] = field(default_factory=dict)
     # Show the results folder when an experiment finishes, so the file is easy to send.
     reveal: bool = False
@@ -96,7 +114,7 @@ class Lab:
         """Deletes every downloaded email. Returns how many there were."""
         count = len(list(self.folder.glob("*.eml"))) if self.folder.exists() else 0
         shutil.rmtree(self.folder, ignore_errors=True)
-        self.report, self.found = None, {}
+        self.report, self.found, self.mail = None, {}, []
         return count
 
 
@@ -204,7 +222,9 @@ def download(lab: Lab, sign_in: SignIn, server: Server) -> None:
         session.close()
         session = None
         lab.state = "grouping"
-        lab.report = grouping.score_senders(grouping.read_folder(lab.folder))
+        downloaded = grouping.read_folder(lab.folder)
+        lab.report = grouping.score_senders(downloaded)
+        lab.mail = [parse_message(raw) for _, raw in downloaded]
         lab.found = describe(lab)
         lab.state = "ready"
     except SignInFailed:
@@ -221,6 +241,53 @@ def describe(lab: Lab) -> dict[str, Any]:
     """Every sender with its score and side, the way the page shows it."""
     assert lab.report is not None
     return sort_view.describe_senders(lab.report, lambda key: (lab.folder / key).read_bytes())
+
+
+AUTOMATED = "Automated"
+
+
+def rule_preview(lab: Lab, chosen: Sorted) -> dict[str, Any]:
+    """The rules each category would get, written as the app writes them, and what the rule
+    engine then does with the downloaded mail: how much each keeps from the AI, how much still
+    reaches it and why, and how much it takes from senders left with the AI."""
+    assert lab.report is not None
+    owner, mentions = lab.report.owner, [lab.report.owner, lab.report.owner_name]
+    seen = [sort_rules.Seen.of(parsed) for parsed in lab.mail]
+    entries = [(f"{AUTOMATED}/{c.name.strip()}", c.senders) for c in chosen.categories]
+    entries.append((AUTOMATED, chosen.automated))
+    made = {
+        name: sort_rules.rules_for(name, senders, seen, mentions, owner)
+        for name, senders in entries
+    }
+    decisions = rules.Engine([rule for found in made.values() for rule in found]).decide(lab.mail)
+    found = []
+    for name, senders in entries:
+        own = set(senders)
+        mine = [
+            (parsed, decision)
+            for parsed, decision in zip(lab.mail, decisions, strict=True)
+            if decision.category == name
+        ]
+        found.append(
+            {
+                "name": name,
+                "rules": [rules.describe_rule(rule) for rule in made[name]],
+                # The same rules as parts, for the page to show without sentences.
+                "match": [
+                    {
+                        "kind": "tag" if rule.conditions[0].field == "tag" else "from",
+                        "value": rule.conditions[0].value,
+                    }
+                    for rule in made[name]
+                ],
+                "kept": sum(not decision.reaches_ai for _, decision in mine),
+                "reach": dict(
+                    Counter(decision.exception for _, decision in mine if decision.reaches_ai)
+                ),
+                "others": sum(parsed.from_addr not in own for parsed, _ in mine),
+            }
+        )
+    return {"categories": found, "reach_ai": sum(decision.reaches_ai for decision in decisions)}
 
 
 def save(lab: Lab, finish: Finish) -> Path:
@@ -265,6 +332,12 @@ def save(lab: Lab, finish: Finish) -> Path:
         "ignored_senders": len(ignored),
         "categories": [row["name"] for row in ignored if row["own_category"]],
         "moved_by_person": sum(row["side"] != row["engine_side"] for row in rows),
+        # What the rule engine would do with them, as the app would write the rules.
+        "rules": [
+            {**entry, "name": entry["name"] if finish.details else f"category-{number}"}
+            | ({} if finish.details else {"rules": len(entry["rules"])})
+            for number, entry in enumerate(rule_preview(lab, finish.sorted)["categories"], 1)
+        ],
         "rows": rows,
     }
     lab.results.mkdir(parents=True, exist_ok=True)
@@ -321,6 +394,13 @@ def create_app(lab: Lab, token: str) -> FastAPI:
         if lab.state != "ready":
             raise HTTPException(409, "Not ready yet.")
         return lab.found
+
+    @app.post("/api/rules")
+    def preview(body: Sorted, x_lab_token: str | None = Header(default=None)) -> dict[str, Any]:
+        check(x_lab_token)
+        if lab.state != "ready":
+            raise HTTPException(409, "Not ready yet.")
+        return rule_preview(lab, body)
 
     @app.post("/api/finish")
     def finish(body: Finish, x_lab_token: str | None = Header(default=None)) -> dict[str, Any]:

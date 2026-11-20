@@ -62,10 +62,24 @@ body {
   .focus-ring {
     @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-default;
   }
+  /* A folder the AI sorts: its edges are dashed, because the AI, not a rule, draws them. */
+  .icon-dashed {
+    stroke-dasharray: 2.6 2.2;
+  }
 }
 
-svg.lucide {
+/* Every icon, whichever set draws it, takes the theme's line weight. */
+svg.icon {
   stroke-width: var(--icon-stroke);
+}
+
+@layer base {
+  /* An icon given no size is 24px, as Lucide's were; any size class still wins. */
+  :where(svg.icon) {
+    width: 1.5rem;
+    height: 1.5rem;
+    flex-shrink: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

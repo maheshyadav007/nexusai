@@ -25,7 +25,6 @@ from nexusai.contracts.mail import (
 )
 from nexusai.kernel.config import MailConfig
 from nexusai.kernel.database import Database, Migration
-from nexusai.modules.mail import grouping
 from nexusai.modules.mail.attachments import classify
 from nexusai.modules.mail.parse import (
     ParsedMessage,
@@ -33,7 +32,7 @@ from nexusai.modules.mail.parse import (
     normalize_subject,
     part_bytes,
 )
-from nexusai.modules.mail.rules import WORTH_A_LOOK, RuleMatch
+from nexusai.modules.mail.rules import Decision
 from nexusai.modules.mail.safe_html import sanitize
 
 log = structlog.get_logger()
@@ -389,7 +388,7 @@ SERVER_ROLES = frozenset({"inbox", "sent", "drafts", "archive", "trash", "junk"}
 # The same word mistyped is rarely this different from the real one.
 TYPO_LIKENESS = 0.8
 # Mail most people don't go looking for, and what they've taken part in, which they do.
-LESS_LIKELY_CATEGORIES = frozenset({"Promotions", "Social", "Forums"})
+LESS_LIKELY_CATEGORIES = frozenset({"Promotions", "Social", "Forums", "Automated"})
 OWN_WEIGHT = 1.5
 HIGH_WEIGHT = 1.3
 LOW_WEIGHT = 0.6
@@ -544,10 +543,11 @@ def store_message(
     read: bool,
     flagged: bool,
     parsed: ParsedMessage,
-    match: RuleMatch | None,
+    decision: Decision,
     config: MailConfig,
 ) -> Stored | None:
     """None if this email is already stored, in which case it just gains this folder."""
+    match = decision.match
     if tx.execute(
         "SELECT 1 FROM message_locations WHERE account = ? AND folder = ? AND uid = ?",
         (account, folder, uid),
@@ -641,21 +641,12 @@ def store_message(
         message=message,
         thread=thread,
         rule=match.name if match else None,
-        skip_agent=bool(match and match.actions.skip_agent),
+        skip_agent=not decision.reaches_ai,
         notify=bool(match and match.actions.notify),
-        worth_a_look=bool(match and match.look_closer and WORTH_A_LOOK.search(parsed.subject))
-        or _names_them(match, parsed),
+        # Its rule keeps mail away, yet this one is the exception, whatever else came with it.
+        worth_a_look=bool(decision.exception),
         is_new_thread=is_new,
     )
-
-
-def _names_them(match: RuleMatch | None, parsed: ParsedMessage) -> bool:
-    """Mail a rule keeps from the agent still goes to it when it names the person."""
-    if match is None or not match.actions.skip_agent or not match.actions.mentions:
-        return False
-    owner, *name = match.actions.mentions
-    names = grouping._mention(owner, name[0] if name else "")
-    return grouping._addressed(names, parsed.subject, parsed.own)
 
 
 def _mark_repeats_as_logos(tx: sqlite3.Connection, sha256: str) -> None:

@@ -35,7 +35,7 @@ from nexusai.modules.mail.imap import (
 )
 from nexusai.modules.mail.parse import parse_message
 from nexusai.modules.mail.pop3 import Pop3Session
-from nexusai.modules.mail.rules import evaluate, own_domain_of
+from nexusai.modules.mail.rules import own_domain_of
 
 log = structlog.get_logger()
 DRAFT_HEADER = "x-nexusai-draft"
@@ -636,10 +636,9 @@ class MailSync:
             return 0
         wanted = self._note_copies(session, folder, uids)
         fetched = self._download(session, wanted)
-        from nexusai.modules.mail.module import folder_modes, ordered_rules
+        from nexusai.modules.mail.module import rule_engine
 
-        rules = ordered_rules(self.ctx)
-        modes = folder_modes(self.ctx)
+        engine = rule_engine(self.ctx, self._own_domain)
         prepared = []
         for item in fetched:
             try:
@@ -656,10 +655,11 @@ class MailSync:
             # NexusAI's own saved drafts are shown from the drafts list, not as mail.
             if DRAFT_HEADER in parsed.headers:
                 continue
-            prepared.append((item, parsed, evaluate(parsed, rules, self._own_domain, modes)))
+            prepared.append((item, parsed))
+        decisions = engine.decide([parsed for _, parsed in prepared])
         with self.ctx.bus.unit_of_work() as work:
             stored = []
-            for item, parsed, match in prepared:
+            for (item, parsed), decision in zip(prepared, decisions, strict=True):
                 result = store.store_message(
                     work.tx,
                     account=self.account,
@@ -670,12 +670,12 @@ class MailSync:
                     read=item.read,
                     flagged=item.flagged,
                     parsed=parsed,
-                    match=match,
+                    decision=decision,
                     config=self.config,
                 )
                 if result:
                     stored.append(result)
-                    if match and match.actions.mark_read and not item.read:
+                    if decision.match and decision.match.actions.mark_read and not item.read:
                         work.tx.execute(
                             "INSERT INTO mail_outbox (account, op, payload) VALUES (?, 'read', ?)",
                             (

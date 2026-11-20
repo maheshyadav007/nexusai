@@ -177,6 +177,7 @@ def _sort_kinds_once(ctx: Context) -> None:
         return
     last = 0
     home_rules = rules.load_rules(ctx.config.home)
+    mail_rules_on = ctx.config.mail.rules_on
     changed = False
     while not _closing.is_set():
         rows = db.fetch_all(
@@ -198,7 +199,8 @@ def _sort_kinds_once(ctx: Context) -> None:
                 _, profiles = accounts.read_accounts(ctx.config)
                 profile = profiles.get(row["account"])
                 domain = own_domain_of(profile.address or profile.auth.user) if profile else None
-                match = rules.evaluate(parsed, home_rules, domain, folder_modes(ctx))
+                engine = rules.Engine(home_rules, domain, folder_modes(ctx), on=mail_rules_on)
+                match = engine.match(parsed)
                 if match is None:
                     continue
                 tx.execute(
@@ -226,6 +228,7 @@ def _startup(ctx: Context) -> None:
     _closing.clear()
     _add_starter_categories(ctx)
     _organization_defaults(ctx)
+    _automated_folder(ctx)
     global _maintenance
 
     def maintain() -> None:
@@ -1172,6 +1175,7 @@ def category_rows(ctx: Context) -> list[MailCategory]:
                 unread=unread or 0,
                 created=row["created"],
                 updated=row["updated"] or row["created"],
+                ai_reads=bool(row["ai_reads"]),
             )
         )
         positions[row["name"]] = row["position"]
@@ -1229,11 +1233,11 @@ def _apply_category_rule(
     rules.change_rules(ctx.config.home, changed)
     if not conditions or not refile:
         return 0
-    current_rules = ordered_rules(ctx)
     active = accounts.current_account(ctx.config)
     _, profiles = accounts.read_accounts(ctx.config)
     profile = profiles.get(active)
     domain = own_domain_of(profile.address or profile.auth.user) if profile else None
+    engine = rule_engine(ctx, domain)
     changed_threads: set[int] = set()
     # Latest-message provenance and primary/extra filing are determined together.
     with ctx.bus.db.transaction() as tx:
@@ -1245,7 +1249,7 @@ def _apply_category_rule(
             raw = store.raw_of(ctx.bus.db, row["id"])
             if raw is None:
                 continue
-            match = rules.evaluate(parse_message(raw), current_rules, domain, folder_modes(ctx))
+            match = engine.match(parse_message(raw))
             if not match or not match.actions.category:
                 continue
             if name not in {match.actions.category, *match.extra_categories}:
@@ -1335,18 +1339,24 @@ def _add_starter_categories(ctx: Context) -> None:
     _categories_changed(ctx)
 
 
+def _automated_folder(ctx: Context) -> None:
+    """Every Home has the Automated folder the header rules file into, older ones too. Only
+    added, never changed: Updates and the others stay as the person has them."""
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "INSERT OR IGNORE INTO mail_categories (name, source, mode, description, in_priority,"
+            " ai_reads, created) VALUES (?, 'rule', 'exact', ?, 0, 0, ?)",
+            (rules.AUTOMATED, rules.AUTOMATED, datetime.now(UTC).isoformat()),
+        )
+
+
 def _organization_defaults(ctx: Context) -> None:
     """Idempotent upgrades for existing Homes; never reinstate a folder the person removed."""
     marker = "mail_organization_defaults_001"
     if ctx.bus.db.fetch_all("SELECT 1 FROM migrations WHERE id = ?", (marker,)):
         return
-    defaults = {
-        "Updates": "exact",
-        "Promotions": "exact",
-        "Forums": "exact",
-        "Social": "exact",
-        "Broadcast": "smart",
-    }
+    # One folder for mail tools send; the person's own folders come from the Sort step.
+    defaults = {rules.AUTOMATED: "exact"}
     with ctx.bus.db.transaction() as tx:
         for name, mode in defaults.items():
             tx.execute(
@@ -1422,8 +1432,8 @@ def _organization_provenance(ctx: Context) -> None:
         return
     try:
         last = 0
-        home_rules = ordered_rules(ctx)
         _, profiles = accounts.read_accounts(ctx.config)
+        engines: dict[str | None, rules.Engine] = {}
         while not _closing.is_set():
             rows = ctx.bus.db.fetch_all(
                 "SELECT id,thread_id,account FROM messages WHERE id>? ORDER BY id LIMIT ?",
@@ -1444,9 +1454,9 @@ def _organization_provenance(ctx: Context) -> None:
                     domain = (
                         own_domain_of(profile.address or profile.auth.user) if profile else None
                     )
-                    match = rules.evaluate(
-                        parse_message(raw), home_rules, domain, folder_modes(ctx)
-                    )
+                    if domain not in engines:
+                        engines[domain] = rule_engine(ctx, domain)
+                    match = engines[domain].match(parse_message(raw))
                     tx.execute(
                         "UPDATE messages SET rule=? WHERE id=?",
                         (match.name if match else None, row["id"]),
@@ -1462,6 +1472,14 @@ def folder_modes(ctx: Context) -> dict[str, str]:
         row["name"]: row["mode"]
         for row in ctx.bus.db.fetch_all("SELECT name,mode FROM mail_categories WHERE proposed=0")
     }
+
+
+def rule_engine(ctx: Context, own_domain: str | None) -> rules.Engine:
+    """The one door every email passes before the AI. Switched off in the settings, every email
+    reaches the AI and none is filed by a rule."""
+    return rules.Engine(
+        ordered_rules(ctx), own_domain, folder_modes(ctx), on=ctx.config.mail.rules_on
+    )
 
 
 def ordered_rules(ctx: Context) -> list[MailRule]:
@@ -1670,7 +1688,7 @@ def update_category(command: UpdateCategory, ctx: Context) -> CategoryList:
     if (
         mode == "exact"
         and not (sender or subject)
-        and command.name not in {"Updates", "Promotions", "Forums", "Social"}
+        and command.name not in {"Updates", "Promotions", "Forums", "Social", rules.AUTOMATED}
     ):
         top = db.fetch_all(
             "SELECT m.from_addr FROM messages m JOIN threads t ON t.id=m.thread_id WHERE t.account=? AND (t.category=? OR EXISTS(SELECT 1 FROM json_each(t.extra_categories) WHERE value=?)) GROUP BY LOWER(m.from_addr) ORDER BY COUNT(*) DESC LIMIT 1",
@@ -2139,7 +2157,7 @@ def _keep_sent_copy(work: Any, ctx: Context, account: str, raw: bytes) -> None:
         read=True,
         flagged=False,
         parsed=parse_message(raw),
-        match=None,
+        decision=rules.Decision(True, "Your own sent mail"),
         config=ctx.config.mail,
     )
     if stored:

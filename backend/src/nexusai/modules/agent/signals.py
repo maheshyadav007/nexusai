@@ -23,7 +23,7 @@ REVIEW_SENDERS = 40
 REVIEW_MIN_EMAILS = 5
 STYLE_SAMPLES = 2
 STYLE_SAMPLE_CHARS = 400
-BROAD_CATEGORIES = ("Promotions", "Updates", "Social", "Forums")
+BROAD_CATEGORIES = ("Promotions", "Updates", "Social", "Forums", "Automated")
 
 
 def own_addresses(ctx: Context) -> set[str]:

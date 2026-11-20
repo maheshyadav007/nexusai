@@ -77,6 +77,20 @@ input[type=text], input[type=password] { font: 14px var(--sans); color: var(--in
 .emails .subject { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .emails .through { color: var(--reads); flex: none; }
 .emails .when { color: var(--muted); flex: none; }
+.cat { background: var(--raised); border: 1px solid var(--line-strong); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.cat-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: baseline; padding: 0 2px; }
+.cat-head input { font: 600 15px var(--sans); color: var(--ink); background: transparent; border: 0; border-bottom: 1px dashed var(--line-strong); border-radius: 0; padding: 0; width: 100%; }
+.cat-head .line { grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
+.cat .row { border-color: var(--line); background: var(--page); }
+.rules { font-size: 12px; color: var(--ink-2); background: var(--sunken); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.rules .when { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.rules .label { color: var(--muted); }
+.pill { display: inline-flex; align-items: baseline; gap: 4px; max-width: 100%; background: var(--raised); border: 1px solid var(--line); border-radius: 99px; padding: 1px 8px; color: var(--ink); }
+.pill i { font-style: normal; font-size: 11px; color: var(--muted); }
+.pill span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pill.tag { border-color: var(--line-strong); font-weight: 600; }
+.rules .count { color: var(--muted); font-variant-numeric: tabular-nums; }
+.kind { font-size: 11px; font-weight: 600; color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: 0 7px; white-space: nowrap; }
 .footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; background: var(--raised); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; position: sticky; bottom: 12px; }
 @media (max-width: 760px) { .columns { grid-template-columns: 1fr; } }
 </style>
@@ -120,6 +134,7 @@ input[type=text], input[type=password] { font: 14px var(--sans); color: var(--in
       <p class="sub">Their own category · the 5 biggest are ticked</p>
       <div class="list" id="own"></div>
       <p class="sub">The rest go into Automated</p>
+      <div class="rules" id="rest-rules" hidden></div>
       <div class="list" id="rest"></div>
       <p class="sub" id="cal"></p>
     </section>
@@ -158,6 +173,10 @@ let byCount = [];
 const state = {};
 const opened = {};
 const openEmails = {};
+// What the rule engine says about each category's rules, by the category's id: its first
+// sender, so a rename keeps them.
+let ruled = {};
+let asking = null;
 let confirming = null;
 
 function h(tag, attrs = {}, ...children) {
@@ -250,6 +269,9 @@ async function watch() {
 function start() {
   byCount = [...report.senders].sort((a, b) => b.count - a.count);
   for (const s of byCount) state[s.sender] = { side: s.side, own: s.own, name: s.label };
+  // A sender named like a category that starts on its own joins it, so one tool is one category.
+  const named = new Set(byCount.filter((s) => s.own).map((s) => keyOf(s.label)));
+  for (const s of byCount) if (s.side === "ignores" && named.has(keyOf(s.label))) state[s.sender].own = true;
   show("results");
   render();
 }
@@ -262,12 +284,15 @@ function why(s) {
   return parts.join(" · ");
 }
 
-function row(s) {
+function row(s, inCard = false) {
   const st = state[s.sender];
   const ignored = st.side === "ignores";
   const move = h("button", { type: "button", class: "icon", "aria-label": ignored ? `Let the AI read ${st.name}` : `Keep ${st.name} from the AI`,
     onclick: () => { st.side = ignored ? "reads" : "ignores"; render(); } }, arrow(ignored));
-  const name = ignored && st.own
+  // Inside a category a sender goes by its address; the category's name is on the card.
+  const name = inCard
+    ? h("span", {}, s.sender)
+    : ignored && st.own
     ? h("input", { type: "text", value: st.name, maxlength: 60, "aria-label": "Category name", oninput: (e) => { st.name = e.target.value; } })
     : h("span", {}, st.name);
   const tick = h("input", { type: "checkbox", checked: st.own, "aria-label": `Own category for ${st.name}`, onchange: (e) => { st.own = e.target.checked; render(); } });
@@ -280,7 +305,7 @@ function row(s) {
     : null;
   return h("div", { class: `row${ignored && st.own ? " own" : ""}` },
     ignored ? tick : move,
-    h("div", { class: "who" }, h("div", { class: "name" }, name), h("div", { class: "line" }, `${s.sender} · ${s.examples[0] || ""}`)),
+    h("div", { class: "who" }, h("div", { class: "name" }, name), h("div", { class: "line" }, inCard ? s.examples[0] || "" : `${s.sender} · ${s.examples[0] || ""}`)),
     h("span", { class: "n" }, fmt(s.count)),
     ignored ? move : h("span", { class: "spacer" }),
     h("div", { class: "score" },
@@ -300,19 +325,103 @@ function fold(id, items) {
     opened[id] ? "Show fewer" : `+ ${fmt(items.length - SHOWN)} more senders · ${fmt(items.slice(SHOWN).reduce((n, s) => n + s.count, 0))} emails`));
 }
 
-function render() {
+const keyOf = (name) => name.trim().toLocaleLowerCase();
+
+// Senders on the ignored side with the same category name are one category.
+function categories(ignores) {
+  const found = new Map();
+  for (const s of ignores.filter((s) => state[s.sender].own)) {
+    const key = keyOf(state[s.sender].name) || keyOf(s.label) || s.sender;
+    if (!found.has(key)) found.set(key, { key, id: s.sender, name: state[s.sender].name.trim() || s.label, members: [] });
+    found.get(key).members.push(s);
+  }
+  return [...found.values()];
+}
+
+// Addresses past this many fold into "+ N more", so a big category stays one line.
+const PILLS = 3;
+
+function ruleBox(entry) {
+  if (!entry) return null;
+  const from = entry.match.filter((m) => m.kind === "from");
+  const tags = entry.match.filter((m) => m.kind === "tag");
+  const pill = (m) => h("span", { class: `pill ${m.kind}`, title: m.kind === "tag" ? `Subject has the tag [${m.value}]` : `From ${m.value}` },
+    h("i", {}, m.kind === "tag" ? "tag" : "from"), h("span", {}, m.kind === "tag" ? `[${m.value}]` : m.value));
+  const reached = Object.values(entry.reach).reduce((n, v) => n + v, 0);
+  return h("div", { class: "rules" },
+    h("div", { class: "when" }, h("span", { class: "label" }, "Files mail"),
+      [...tags, ...from.slice(0, PILLS)].map(pill),
+      from.length > PILLS ? h("span", { class: "label", title: from.slice(PILLS).map((m) => m.value).join("\n") }, `+ ${fmt(from.length - PILLS)} more`) : null),
+    h("div", { class: "label" }, `The AI skips it, except mail that names you${tags.length ? ", and replies" : ""}.`),
+    h("div", { class: "count" }, [`${fmt(entry.kept)} hidden`, `${fmt(reached)} reach the AI`,
+      ...(entry.others ? [`${fmt(entry.others)} from senders the AI reads`] : [])].join(" · ")));
+}
+
+function card(cat, reads) {
+  const count = cat.members.reduce((n, s) => n + s.count, 0);
+  const senders = cat.members.length === 1 ? "1 sender" : `${fmt(cat.members.length)} senders`;
+  const where = (name) => `Automated/${name.trim() || "…"} · ${senders}`;
+  const path = h("span", { class: "line" }, where(cat.name));
+  // Typing renames it everywhere at once; leaving the box merges it with a category of that name.
+  const rename = (value) => { for (const s of cat.members) state[s.sender].name = value; path.textContent = where(value); };
+  // Senders the AI reads that go by this name, or by the name a member started with.
+  const names = new Set([cat.key, ...cat.members.map((s) => keyOf(s.label))]);
+  const elsewhere = reads.filter((s) => names.has(keyOf(s.label)));
+  return h("div", { class: "cat" },
+    h("div", { class: "cat-head" },
+      h("input", { type: "text", value: cat.name, maxlength: 60, "aria-label": "Category name", title: "Rename it to another category's name to merge them",
+        oninput: (e) => rename(e.target.value), onchange: () => render() }),
+      h("span", { class: "n" }, fmt(count)),
+      h("span", { class: "line", style: "display: flex; gap: 8px; align-items: center" }, h("span", { class: "kind" }, "Rule folder"), path)),
+    ruleBox(ruled[cat.id]),
+    elsewhere.length ? h("button", { type: "button", class: "link", style: "font-size: 12px; padding: 2px",
+      onclick: () => { for (const s of elsewhere) Object.assign(state[s.sender], { side: "ignores", own: true, name: cat.name }); render(); } },
+      `${elsewhere.length === 1 ? "1 more sender" : `${fmt(elsewhere.length)} more senders`} with this name are read by the AI · move here`) : null,
+    h("div", { class: "list" }, cat.members.map((s) => row(s, true))));
+}
+
+function sortedNow(ignores) {
+  return {
+    categories: categories(ignores).map((cat) => ({ id: cat.id, name: cat.name, senders: cat.members.map((s) => s.sender) })),
+    automated: ignores.filter((s) => !state[s.sender].own).map((s) => s.sender),
+  };
+}
+
+// Asks the lab's rule engine once the person stops changing things.
+function askRules(ignores) {
+  if (PREVIEW) return;
+  clearTimeout(asking);
+  asking = setTimeout(async () => {
+    try {
+      const asked = sortedNow(ignores);
+      const found = await api("/api/rules", asked);
+      // Answers come in the order asked, the straight-to-Automated senders last.
+      const ids = [...asked.categories.map((cat) => cat.id), "Automated"];
+      ruled = Object.fromEntries(found.categories.map((entry, index) => [ids[index], entry]));
+      if (!document.activeElement || document.activeElement.tagName !== "INPUT" || document.activeElement.type !== "text") render(false);
+    } catch { /* The page still works without the rules shown. */ }
+  }, 300);
+}
+
+function render(ask = true) {
   const reads = byCount.filter((s) => state[s.sender].side === "reads");
   const ignores = byCount.filter((s) => state[s.sender].side === "ignores");
   fold("reads", reads);
-  fold("own", ignores.filter((s) => state[s.sender].own));
+  document.getElementById("own").replaceChildren(...categories(ignores).map((cat) => card(cat, reads)));
   fold("rest", ignores.filter((s) => !state[s.sender].own));
+  const restRules = ruleBox(ruled.Automated);
+  const restBox = document.getElementById("rest-rules");
+  restBox.hidden = !restRules;
+  restBox.replaceChildren(...(restRules ? restRules.childNodes : []));
+  if (ask) askRules(ignores);
   const quiet = ignores.reduce((n, s) => n + s.count - s.reach, 0) + report.calendar;
   document.getElementById("reads-n").textContent = `${fmt(reads.length)} senders · ${fmt(reads.reduce((n, s) => n + s.count, 0))} emails`;
   document.getElementById("ignores-n").textContent = `${fmt(ignores.length)} senders · ${fmt(ignores.reduce((n, s) => n + s.count, 0))} emails`;
   document.getElementById("cal").textContent = `Calendar · ${fmt(report.calendar)} invitations and replies, kept from the AI`;
   document.getElementById("summary").textContent = `${report.owner_name} · ${fmt(report.total)} emails · ${fmt(quiet)} kept from the AI · ${fmt(report.total - quiet)} read by it`;
-  const own = ignores.filter((s) => state[s.sender].own).length;
-  document.getElementById("foot").textContent = `${fmt(own)} categories under Automated, ${fmt(ignores.length - own)} more senders straight into Automated, one rule per sender for future mail.`;
+  const own = categories(ignores).length;
+  const straight = ignores.filter((s) => !state[s.sender].own).length;
+  document.getElementById("foot").textContent = `${fmt(own)} categories under Automated, ${fmt(straight)} more senders straight into Automated. Each gets a rule per sender, and one for its own [tag] when it has one.`;
 }
 
 const LABELS = { finish: "Finish", discard: "Discard" };
@@ -335,7 +444,8 @@ document.getElementById("finish").addEventListener("click", (event) => ask(event
   `Saves how you sorted the senders, then deletes the ${fmt(report.total)} downloaded emails from this computer.`, async () => {
     const senders = byCount.map((s) => ({ sender: s.sender, side: state[s.sender].side, own: state[s.sender].own, name: state[s.sender].name === s.label ? "" : state[s.sender].name }));
     if (PREVIEW) { document.getElementById("done-text").textContent = "This is a preview, so nothing was saved."; show("done"); return; }
-    const result = await api("/api/finish", { senders, details: document.getElementById("details").checked });
+    const ignores = byCount.filter((s) => state[s.sender].side === "ignores");
+    const result = await api("/api/finish", { senders, sorted: sortedNow(ignores), details: document.getElementById("details").checked });
     document.getElementById("done-text").textContent = `Saved to ${result.saved}. Deleted ${fmt(result.deleted)} downloaded emails from this computer.`;
     show("done");
   }));

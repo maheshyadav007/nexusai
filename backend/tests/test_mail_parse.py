@@ -176,28 +176,28 @@ def test_attachment_kinds(changes: dict[str, object], seen: int, kind: str) -> N
 
 
 @pytest.mark.parametrize(
-    ("headers", "sender", "category"),
+    ("headers", "sender", "kind"),
     [
-        ({"Auto-Submitted": "auto-generated"}, "a@example.org", "Updates"),
-        ({"List-Id": "<dev.lists.x>"}, "a@example.org", "Forums"),
-        ({"Precedence": "list"}, "a@example.org", "Forums"),
-        ({"List-Unsubscribe": "<mailto:u@x>"}, "a@example.org", "Promotions"),
-        ({"Precedence": "bulk"}, "a@example.org", "Promotions"),
-        ({}, "no-reply@example.org", "Updates"),
-        ({}, "notifications@example.org", "Updates"),
+        ({"Auto-Submitted": "auto-generated"}, "a@example.org", "Automatically generated mail"),
+        ({"List-Id": "<dev.lists.x>"}, "a@example.org", "Mailing list"),
+        ({"Precedence": "list"}, "a@example.org", "Mailing list"),
+        ({"List-Unsubscribe": "<mailto:u@x>"}, "a@example.org", "Marketing or bulk mail"),
+        ({"Precedence": "bulk"}, "a@example.org", "Marketing or bulk mail"),
+        ({}, "no-reply@example.org", "Sent from a no-reply address"),
+        ({}, "notifications@example.org", "Sent from a no-reply address"),
         (
             {"X-GitHub-Reason": "mention", "List-Unsubscribe": "<mailto:u@x>"},
             "a@example.org",
-            "Updates",
+            "Notification from a system",
         ),
-        ({}, "someone@facebookmail.com", "Social"),
+        ({}, "someone@facebookmail.com", "From a social network"),
     ],
 )
-def test_builtin_rules_catch_routine_mail(
-    headers: dict[str, str], sender: str, category: str
-) -> None:
+def test_builtin_rules_catch_routine_mail(headers: dict[str, str], sender: str, kind: str) -> None:
     match = evaluate(parse_message(make_mail(sender=sender, headers=headers)), [])
-    assert match and match.actions.category == category and match.actions.skip_agent
+    # Every kind goes to the one folder the AI skips; the rule's name says which kind it was.
+    assert match and match.name == kind
+    assert match.actions.category == "Automated" and match.actions.skip_agent
     assert match.why.startswith("Matched the rule")
 
 

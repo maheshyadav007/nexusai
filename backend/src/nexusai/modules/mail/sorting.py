@@ -18,14 +18,13 @@ from nexusai.contracts.mail import (
     ApplyMailSort,
     MailRule,
     MailSort,
-    RuleActions,
-    RuleCondition,
     SortEmail,
     SortGroup,
 )
 from nexusai.kernel.database import Migration
 from nexusai.kernel.module import CommandError, Context
-from nexusai.modules.mail import accounts, grouping, rules, sort_view
+from nexusai.modules.mail import accounts, grouping, rules, sort_rules, sort_view
+from nexusai.modules.mail.parse import SUBJECT_PREFIX, parse_message
 
 log = structlog.get_logger()
 MIGRATION = Migration(
@@ -38,7 +37,7 @@ ALTER TABLE mail_categories ADD COLUMN ai_reads INTEGER NOT NULL DEFAULT 1;
 )
 # What the page shows is described in sort_view, which the Sort lab shares without the database.
 QUIET = {"automated": "Automated", "calendar": "Calendar"}
-RULE_PREFIX = "Sorted: "
+RULE_PREFIX = sort_rules.PREFIX
 
 
 @dataclass
@@ -49,6 +48,8 @@ class _Job:
     error: str = ""
     found: dict[str, Any] = field(default_factory=dict)
     members: dict[str, list[str]] = field(default_factory=dict)
+    # The groups that start as folders of their own: the biggest automated ones.
+    own: frozenset[str] = frozenset()
     report: grouping.Report | None = None
 
 
@@ -97,12 +98,30 @@ def _group(ctx: Context, job: _Job) -> None:
         job.done = len(mail)
         report = grouping.group_mailbox(mail)
         raws = dict(mail)
-        job.found, job.members = sort_view.describe(report, raws.__getitem__)
+        job.found, job.members = sort_view.describe(report, raws.__getitem__, _covered(ctx, mail))
+        automated = [group for group in job.found["groups"] if group["folder"] == "automated"]
+        biggest = sorted(automated, key=lambda group: -group["count"])[: sort_view.TOP_CATEGORIES]
+        job.own = frozenset(group["id"] for group in biggest)
         job.report = report
         job.state = "ready"
     except Exception as error:
         log.warning("mail_sorting_failed", kind=type(error).__name__)
         job.state, job.error = "failed", f"{type(error).__name__}: {str(error)[:300]}"
+
+
+def _covered(ctx: Context, mail: list[tuple[str, bytes]]) -> frozenset[str]:
+    """Mail the person's own rules and categories already file. Sorting builds on them, so an
+    imported archive or a second look never starts over."""
+    # Imported here: the mail module imports this one.
+    from nexusai.modules.mail.module import rule_engine
+
+    engine = rule_engine(ctx, None)
+    decisions = engine.decide([parse_message(raw) for _, raw in mail])
+    return frozenset(
+        key
+        for (key, _), decision in zip(mail, decisions, strict=True)
+        if decision.category and decision.rule not in rules.BUILT_IN_RULES
+    )
 
 
 def status(ctx: Context) -> MailSort:
@@ -125,6 +144,7 @@ def status(ctx: Context) -> MailSort:
             reason=(group["reasons"] or [""])[0],
             names_you=0 if group["mentions_ignored"] else group["mentions"],
             emails=[_email(email) for email in group["emails"]],
+            own=group["id"] in job.own,
         )
         for group in found["groups"]
     ] + [
@@ -147,6 +167,7 @@ def status(ctx: Context) -> MailSort:
         emails=found["total"],
         reach_ai=found["reach_ai"],
         conversations=found["ungrouped"] - sum(m["count"] for m in found["missed"]),
+        already_sorted=found.get("already_sorted", 0),
         groups=groups,
     )
 
@@ -197,10 +218,20 @@ def apply(ctx: Context, command: ApplyMailSort) -> int:
     raws = {
         str(row["id"]): row
         for row in ctx.bus.db.fetch_all(
-            "SELECT id, thread_id, LOWER(from_addr) AS sender FROM messages WHERE account = ?",
+            "SELECT id, thread_id, LOWER(from_addr) AS sender, subject, EXISTS (SELECT 1 FROM"
+            " message_refs f WHERE f.message = messages.id) AS answers FROM messages"
+            " WHERE account = ?",
             (accounts.current_account(ctx.config),),
         )
     }
+    mailbox = [
+        sort_rules.Seen(
+            row["sender"],
+            row["subject"] or "",
+            bool(row["answers"] or SUBJECT_PREFIX.match(row["subject"] or "")),
+        )
+        for row in raws.values()
+    ]
     ignored = {group.id for group in report.groups if group.mentions_ignored}
     named = {
         key
@@ -223,9 +254,12 @@ def apply(ctx: Context, command: ApplyMailSort) -> int:
                 continue
             choice = chosen.get(identifier)
             label = (choice.name if choice else "").strip() or _label(job.found, identifier)
-            name = f"{QUIET[place]}/{label.replace('/', ' ')}"[:64]
+            # The biggest tools, and any the person named, get a folder of their own; the rest
+            # and all calendar mail go straight into the parent.
+            own = place == "automated" and (identifier in job.own or bool(choice and choice.name))
+            name = f"{QUIET[place]}/{label.replace('/', ' ')}"[:64] if own else QUIET[place]
             senders = sorted({raws[key]["sender"] for key in keys if key in raws})
-            for parent in (QUIET[place], name):
+            for parent in dict.fromkeys((QUIET[place], name)):
                 work.tx.execute(
                     "INSERT INTO mail_categories (name, source, in_priority, proposed, why, sender,"
                     " created, mode, description, ai_reads) VALUES (?, 'user', 0, 0, ?, ?, ?,"
@@ -239,22 +273,16 @@ def apply(ctx: Context, command: ApplyMailSort) -> int:
                         parent,
                     ),
                 )
-            # A sender whose mail all went here gets a rule for what's to come. One split across
-            # categories is filed as it is now, since its pattern isn't a rule yet.
-            for sender in senders:
-                if sender == report.owner or home_of[sender] != {identifier}:
-                    continue
-                new_rules.append(
-                    MailRule(
-                        name=f"{RULE_PREFIX}{name}: {sender}"[:120],
-                        conditions=[RuleCondition(field="sender_exact", value=sender)],
-                        actions=RuleActions(
-                            category=name,
-                            skip_agent=True,
-                            mentions=[who for who in (report.owner, report.owner_name) if who],
-                        ),
-                    )
-                )
+            # A sender whose mail all went here gets a rule for what's to come, and so does the
+            # tag that marks it. One split across categories is filed as it is now, since its
+            # pattern isn't a rule yet.
+            new_rules += sort_rules.rules_for(
+                name,
+                [sender for sender in senders if home_of[sender] == {identifier}],
+                mailbox,
+                mentions=[report.owner, report.owner_name],
+                owner=report.owner,
+            )
             # A conversation with mail that names the person stays where the AI reads it.
             threads = {raws[key]["thread_id"] for key in keys if key in raws}
             spoken = {raws[key]["thread_id"] for key in named if key in raws}

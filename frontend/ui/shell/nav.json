@@ -16,26 +16,14 @@
         {
           "id": "priority",
           "labelKey": "nav.priority",
-          "icon": "priority",
+          "icon": "inbox",
           "href": "/mail/priority"
-        },
-        {
-          "id": "important",
-          "labelKey": "nav.important",
-          "icon": "important",
-          "href": "/mail/important"
         },
         {
           "id": "starred",
           "labelKey": "nav.starred",
           "icon": "starred",
           "href": "/mail/starred"
-        },
-        {
-          "id": "all-mail",
-          "labelKey": "nav.allMail",
-          "icon": "inbox",
-          "href": "/mail/all"
         },
         {
           "id": "sent",
@@ -50,16 +38,32 @@
           "href": "/mail/drafts"
         },
         {
+          "id": "important",
+          "labelKey": "nav.important",
+          "icon": "important",
+          "href": "/mail/important",
+          "more": true
+        },
+        {
+          "id": "all-mail",
+          "labelKey": "nav.allMail",
+          "icon": "allMail",
+          "href": "/mail/all",
+          "more": true
+        },
+        {
           "id": "archive",
           "labelKey": "nav.archive",
           "icon": "archive",
-          "href": "/mail/archive"
+          "href": "/mail/archive",
+          "more": true
         },
         {
           "id": "trash",
           "labelKey": "nav.trash",
           "icon": "trash",
-          "href": "/mail/trash"
+          "href": "/mail/trash",
+          "more": true
         }
       ]
     },
