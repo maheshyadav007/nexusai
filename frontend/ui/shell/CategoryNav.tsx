@@ -4,7 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { ApiRequestError } from "@/ui/client/api";
-import { Icon } from "@/ui/icons";
+import { Icon, type IconName } from "@/ui/icons";
+import type { MailCategory } from "@/ui/client/contracts.generated";
 import { useCategories, useSaveCategory } from "@/ui/client/mail";
 import { Button } from "@/ui/primitives/Button";
 import { Checkbox } from "@/ui/primitives/Checkbox";
@@ -14,8 +15,9 @@ import { IconButton } from "@/ui/primitives/IconButton";
 import { Input } from "@/ui/primitives/Input";
 import { Select } from "@/ui/primitives/Select";
 import { ActiveMark } from "@/ui/primitives/Motion";
+import { Tooltip } from "@/ui/primitives/Tooltip";
 import { t } from "@/ui/strings";
-import { categoryHref, customCategories } from "./customMail";
+import { AUTOMATED, CALENDAR, categoryHref, customCategories, keptFromAi } from "./customMail";
 import { MailNavMenu } from "./MailNavMenu";
 
 
@@ -75,29 +77,39 @@ export function CategoryNavActions({ collapsed }: { collapsed: boolean }) {
   return <div className="flex shrink-0 items-center justify-between px-2 text-sm text-ink-muted"><span>{t("nav.categories")}</span><NewCategory /></div>;
 }
 
-/** Folders the person or an agent made. They live in the sidebar beside the fixed ones. */
-export function CategoryNav({ collapsed, visibleHrefs }: { collapsed: boolean; visibleHrefs?: ReadonlySet<string> }) {
+const iconOf = (item: MailCategory): IconName =>
+  item.name === AUTOMATED ? "automated" : item.name === CALENDAR ? "calendar" : item.mode === "exact" ? "folderRule" : "folderSmart";
+
+/** Folders the person or an agent made. They live in the sidebar beside the fixed ones. `pick`
+ *  chooses which: those the AI reads, or those it skips. A folder inside another shows by its
+ *  own name, set in under its parent. */
+export function CategoryNav({ collapsed, visibleHrefs, pick = (item) => !keptFromAi(item) }: { collapsed: boolean; visibleHrefs?: ReadonlySet<string>; pick?: (item: MailCategory) => boolean }) {
   const categories = useCategories();
   const pathname = usePathname();
   if (collapsed) return null;
   const hrefOf = categoryHref;
-  // A created folder must remain reachable even before any mail is assigned to it.
-  const rows = customCategories(categories.data?.categories ?? []).filter((item) => !visibleHrefs || visibleHrefs.has(hrefOf(item.name)));
+  const rows = customCategories(categories.data?.categories ?? []).filter((item) => pick(item) && (!visibleHrefs || visibleHrefs.has(hrefOf(item.name))));
+  const names = new Set(rows.map((item) => item.name));
   return (
     <section aria-label={t("nav.categories")}>
       <ul className="flex flex-col gap-px">
         {rows.map((item) => {
           const href = hrefOf(item.name);
           const active = pathname === href || pathname.startsWith(`${href}/`);
+          const parent = item.name.includes("/") ? item.name.slice(0, item.name.lastIndexOf("/")) : "";
+          const nested = Boolean(parent) && names.has(parent);
           return (
             <li key={item.name} data-testid="nav-category">
               <MailNavMenu href={href} scope={{ folder: "all", category: item.name }} category={item}>
-              <Link href={href} aria-current={active ? "page" : undefined} className={`focus-ring press relative flex items-center gap-2 rounded-md px-2 py-1 text-md transition-colors duration-fast ${active ? "text-ink-primary" : "text-ink-secondary hover:bg-surface-raised hover:text-ink-primary"}`}>
+              <Link href={href} aria-current={active ? "page" : undefined} aria-label={item.name} className={`focus-ring press relative flex items-center gap-2 rounded-md py-px text-md ${nested ? "pl-6 pr-2" : "px-2"} transition-colors duration-fast ${active ? "text-ink-primary" : "text-ink-secondary hover:bg-surface-raised hover:text-ink-primary"}`}>
                 {active ? <ActiveMark group="nav-active" /> : null}
-                <span aria-hidden className={`relative flex shrink-0 ${item.in_priority ? "text-accent-default" : ""}`}>
-                  <Icon name="folder" />
-                </span>
-                <span className="relative min-w-0 flex-1 truncate">{item.name}</span>
+                <Tooltip content={t(item.mode === "exact" ? "categories.kind.exact" : "categories.kind.smart")} side="right">
+                  <span aria-hidden className={`relative flex shrink-0 ${item.in_priority ? "text-accent-default" : ""}`}>
+                    <Icon name={iconOf(item)} />
+                  </span>
+                </Tooltip>
+                <span className="relative min-w-0 flex-1 truncate">{nested ? item.name.slice(parent.length + 1) : item.name}</span>
+                <span className="sr-only">{t(item.mode === "exact" ? "categories.kind.exact" : "categories.kind.smart")}</span>
                 {item.unread ? <span className="relative text-sm tabular-nums text-ink-muted">{item.unread}</span> : null}
               </Link>
               </MailNavMenu>

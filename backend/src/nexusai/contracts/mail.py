@@ -392,7 +392,14 @@ class RuleCondition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     field: Literal[
-        "subject", "subject_prefix", "body", "sender", "sender_exact", "header", "has_attachment"
+        "subject",
+        "subject_prefix",
+        "tag",
+        "body",
+        "sender",
+        "sender_exact",
+        "header",
+        "has_attachment",
     ]
     value: str = Field(default="", max_length=500)
     header: str | None = Field(default=None, max_length=100)
@@ -438,6 +445,8 @@ class MailCategory(BaseModel):
     unread: int = 0
     created: str | None = None
     updated: str | None = None
+    # False for folders the AI skips, like Automated and what the Sort step files under it.
+    ai_reads: bool = True
 
 
 class ListCategories(BaseModel):
@@ -874,6 +883,8 @@ class SortGroup(BaseModel):
     emails: list[SortEmail]
     # A sender the engine left alone rather than a group it found.
     unsorted: bool = False
+    # Starts as a folder of its own under Automated, rather than going straight into it.
+    own: bool = False
 
 
 class MailSort(BaseModel):
@@ -885,6 +896,8 @@ class MailSort(BaseModel):
     emails: int = 0
     reach_ai: int = 0
     conversations: int = 0
+    # Emails the person's own rules already file, left as they are and out of the groups.
+    already_sorted: int = 0
     groups: list[SortGroup] = Field(default_factory=list)
 
 

@@ -6,10 +6,14 @@ import { MailNavMenu } from "./MailNavMenu";
 import type { MarkFolderRead } from "@/ui/client/contracts.generated";
 import { CategoryNavActions } from "./CategoryNav";
 import { CustomMailNav } from "./CustomMailNav";
+import { CategoryNav } from "./CategoryNav";
+import { FolderNav } from "./FolderNav";
+import { SidebarFold } from "./SidebarFold";
+import { categoryHref, customCategories, customFolders, folderHref, isCurrentMail, keptFromAi } from "./customMail";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useState } from "react";
-import { useMailFolders } from "@/ui/client/mail";
+import { useCategories, useDrafts, useMailFolders } from "@/ui/client/mail";
 import appConfig from "@/app.config.json";
 import { Icon } from "@/ui/icons";
 import { useSidebar } from "@/ui/client/settings";
@@ -26,7 +30,6 @@ import { arrange } from "./sidebarLayout";
 // One highlight that glides to the row you chose.
 const ACTIVE_ROW = "nav-active";
 const MAIL_SECTION = "mail";
-const FOLDERS_COME_BEFORE = new Set(["archive", "trash"]);
 
 function NavRow({ item, active, collapsed, count, attention }: { item: NavItem; active: boolean; collapsed: boolean; count: number | undefined; attention: boolean }) {
   const label = t(item.label);
@@ -81,10 +84,40 @@ function useUnreadCounts(): Readonly<Record<string, number>> {
   return { priority: found.priority ?? 0, important: found.important ?? 0, starred: found.starred ?? 0, "all-mail": found.all ?? 0, sent: found.sent ?? 0, drafts: found.drafts ?? 0, archive: found.archive ?? 0, trash: found.trash ?? 0 };
 }
 
+/** What the AI skips, folded: Automated with the tools filed under it, and Calendar. */
+function KeptNav() {
+  const categories = useCategories();
+  const pathname = usePathname();
+  const kept = customCategories(categories.data?.categories ?? []).filter(keptFromAi);
+  if (!kept.length) return null;
+  return (
+    <SidebarFold id="kept" icon="keptFromAi" label={t("nav.kept")} count={kept.reduce((n, item) => n + (item.unread ?? 0), 0)} holdsActive={kept.some((item) => isCurrentMail(pathname, categoryHref(item.name)))}>
+      <CategoryNav collapsed={false} pick={keptFromAi} />
+    </SidebarFold>
+  );
+}
+
+/** What's needed now and then: the views and folders that don't earn a row of their own. */
+function MoreNav({ items, row }: { items: NavItem[]; row: (item: NavItem) => React.ReactNode }) {
+  const pathname = usePathname();
+  const folders = useMailFolders();
+  const onServer = customFolders(folders.data?.folders ?? [], pathname);
+  if (!items.length && !onServer.length) return null;
+  const holdsActive = items.some((item) => isCurrentMail(pathname, item.href)) || onServer.some((row) => isCurrentMail(pathname, folderHref(row.name)));
+  return (
+    <SidebarFold id="more" icon="moreFolders" label={t("nav.more")} holdsActive={holdsActive}>
+      <ul className="flex flex-col gap-px">{items.map(row)}</ul>
+      <FolderNav collapsed={false} />
+    </SidebarFold>
+  );
+}
+
 export function NavSidebar({ counts }: { counts?: Readonly<Record<string, number>> }) {
   const pathname = usePathname();
   const waiting = useWaitingCounts();
   const unread = useUnreadCounts();
+  const drafts = useDrafts();
+  const draftCount = (drafts.data?.drafts.length ?? 0) + (unread.drafts ?? 0);
   const layout = useSidebar();
   const sections = arrange(NAV_SECTIONS, layout.data).filter((section) => !section.hidden);
   const [collapsed, setCollapsed] = useState(false);
@@ -130,16 +163,18 @@ export function NavSidebar({ counts }: { counts?: Readonly<Record<string, number
         <div className="flex min-h-full flex-col gap-2 px-2 pb-2">
           {sections.map((section) => {
             const items = section.items.filter((item) => !item.hidden);
-            // Every folder and category sits together, before the two that end the list.
-            const closing = items.findIndex((item) => FOLDERS_COME_BEFORE.has(item.id));
-            const split = section.id === MAIL_SECTION ? (closing < 0 ? items.length : closing) : items.length;
+            const mail = section.id === MAIL_SECTION;
+            // Mail keeps the daily folders in view. Drafts shows only when there are some, and
+            // the rarely needed ones wait under More, except in the narrow rail.
+            const daily = mail ? items.filter((item) => (collapsed || !item.more) && (item.id !== "drafts" || draftCount > 0 || isCurrentMail(pathname, item.href))) : items;
             return (
-              <section key={section.id} aria-label={t(section.label)} className={section.id === MAIL_SECTION ? "flex shrink-0 flex-col" : "shrink-0 border-t border-line-subtle pt-2"}>
+              <section key={section.id} aria-label={t(section.label)} className={mail ? "flex shrink-0 flex-col gap-1" : "shrink-0 border-t border-line-subtle pt-2"}>
                 {collapsed || !section.heading ? null : <h2 className="mb-1 px-2 text-sm text-ink-muted">{t(section.label)}</h2>}
-                <ul className="flex flex-col gap-px">{items.slice(0, split).map(row)}</ul>
-                {section.id === MAIL_SECTION ? <CategoryNavActions collapsed={collapsed} /> : null}
-                {section.id === MAIL_SECTION ? <CustomMailNav collapsed={collapsed} /> : null}
-                <ul className="flex flex-col gap-px">{items.slice(split).map(row)}</ul>
+                <ul className="flex flex-col gap-px">{daily.map(row)}</ul>
+                {mail ? <CategoryNavActions collapsed={collapsed} /> : null}
+                {mail ? <CustomMailNav collapsed={collapsed} /> : null}
+                {mail && !collapsed ? <KeptNav /> : null}
+                {mail && !collapsed ? <MoreNav items={items.filter((item) => item.more)} row={row} /> : null}
               </section>
             );
           })}

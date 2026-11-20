@@ -39,7 +39,7 @@ export function FolderNav({ collapsed, visibleHrefs }: { collapsed: boolean; vis
           return (
             <li key={row.name} data-testid="nav-folder">
               <MailNavMenu href={href} scope={{ location: row.name }} {...((row.on_server ?? 0) > (row.here ?? 0) ? { moreFolder: row.name } : {})}>
-              <Link href={href} aria-current={active ? "page" : undefined} className={`focus-ring press relative flex items-center gap-2 rounded-md px-2 py-1 text-md transition-colors duration-fast ${active ? "text-ink-primary" : "text-ink-secondary hover:bg-surface-sunken hover:text-ink-primary"}`}>
+              <Link href={href} aria-current={active ? "page" : undefined} className={`focus-ring press relative flex items-center gap-2 rounded-md px-2 py-px text-md transition-colors duration-fast ${active ? "text-ink-primary" : "text-ink-secondary hover:bg-surface-sunken hover:text-ink-primary"}`}>
                 {active ? <ActiveMark group="nav-active" /> : null}
                 <span aria-hidden className="relative flex shrink-0" {...{ style: { marginLeft: `${depth}rem` } }}>
                   <Icon name="folder" />

@@ -7,6 +7,8 @@ export interface NavItem {
   label: StringKey;
   icon: IconName;
   href: string;
+  /** Rarely needed, so it waits folded under More. */
+  more?: boolean;
 }
 
 export interface NavSection {
@@ -22,9 +24,10 @@ interface RawItem {
   labelKey: string;
   icon: string;
   href: string;
+  more?: boolean;
 }
 
-const item = (raw: RawItem): NavItem => ({ id: raw.id, label: raw.labelKey as StringKey, icon: raw.icon as IconName, href: raw.href });
+const item = (raw: RawItem): NavItem => ({ id: raw.id, label: raw.labelKey as StringKey, icon: raw.icon as IconName, href: raw.href, ...(raw.more ? { more: true } : {}) });
 
 export const NAV_TOP: NavItem[] = nav.top.map((raw) => item(raw));
 export const NAV_SECTIONS: NavSection[] = nav.sections.map((section) => ({

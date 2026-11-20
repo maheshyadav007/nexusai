@@ -264,7 +264,7 @@ def test_rule_matched_mail_skips_triage_and_says_why(client: TestClient, fake: F
     connect(client, fake)
     fake.state.deliver(make_mail(subject="Build passed", sender="no-reply@ci.example"))
     thread = thread_with(client, "Build passed")
-    assert thread["category"] == "Updates"
+    assert thread["category"] == "Automated"
     assert thread["why"] == "Matched the rule “Sent from a no-reply address”"
     assert events(client, "mail.needsTriage") == []
 

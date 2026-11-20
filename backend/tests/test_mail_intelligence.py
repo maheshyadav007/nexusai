@@ -663,7 +663,7 @@ def test_exact_header_folder_keeps_primary_and_smart_filing_is_extra(
         )
     )
     first = thread_named(client, "Interview")
-    assert first["category"] == "Promotions"
+    assert first["category"] == "Automated"
     post(client, "categories.save", "commands", name="Job search", mode="smart")
     script.default = triage_reply(smart_folders=["Job search"], status="waiting_on_others")
     fake.state.deliver(
@@ -689,7 +689,7 @@ def test_exact_header_folder_keeps_primary_and_smart_filing_is_extra(
         lambda: "Job search" in json.loads(row(client, first["id"])["extra_categories"]),
         "Smart filing as extra",
     )
-    assert row(client, first["id"])["category"] == "Updates"
+    assert row(client, first["id"])["category"] == "Automated"
 
 
 def test_a_conversation_a_rule_filed_gets_no_ai_folders_and_is_not_learned(

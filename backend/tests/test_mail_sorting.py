@@ -41,7 +41,7 @@ def stored(ctx: Context, subject: str, sender: str, body: str = "Done.\nCI") -> 
             read=False,
             flagged=False,
             parsed=parsed,
-            match=rules.evaluate(parsed, rules.load_rules(ctx.config.home)),
+            decision=rules.Engine(rules.load_rules(ctx.config.home)).decide([parsed])[0],
             config=ctx.config.mail,
         )
     assert result is not None
@@ -124,7 +124,8 @@ def test_new_mail_follows_the_rule_unless_it_names_the_person(ctx: Context, mail
         f"Please look, {OWNER} is on call.\nLogs\nCI\nFooter",
     )
     assert quiet.skip_agent and not quiet.worth_a_look
-    assert asked.skip_agent and asked.worth_a_look
+    # Its rule keeps the sender away, but this one names the person, so the AI reads it.
+    assert not asked.skip_agent and asked.worth_a_look
 
 
 def test_a_merged_or_inbox_choice_files_nothing_there(ctx: Context, mailbox: Any) -> None:  # noqa: F811
@@ -141,3 +142,42 @@ def test_skipping_leaves_the_mail_as_it_was(ctx: Context, mailbox: Any) -> None:
     sorting.skip(ctx)
     assert sorting.decided(ctx) == "skipped" and sorting.status(ctx).state == "skipped"
     assert not ctx.bus.db.fetch_all("SELECT 1 FROM messages WHERE rule LIKE 'Sorted: %'")
+
+
+def test_mail_its_own_rules_already_file_is_left_as_it_is(ctx: Context, mailbox: Any) -> None:  # noqa: F811
+    # Sorting after an archive comes in builds on the categories and rules already there.
+    from nexusai.contracts.mail import MailRule, RuleActions, RuleCondition
+
+    rules.change_rules(
+        ctx.config.home,
+        lambda existing: [
+            *existing,
+            MailRule(
+                name="Builds",
+                conditions=[RuleCondition(field="sender_exact", value="ci@tools.example")],
+                actions=RuleActions(category="Builds", skip_agent=True),
+            ),
+        ],
+    )
+    status = ready(ctx)
+    assert status.already_sorted == 9
+    assert not [group for group in status.groups if "ci@tools.example" in group.senders]
+
+
+def test_only_the_biggest_tools_get_a_folder_and_the_rest_go_into_automated(ctx: Context) -> None:  # noqa: F811
+    for tool in range(7):
+        for n in range(6 + tool):
+            stored(ctx, f"Report {n} ready", f"tool{tool}@tools{tool}.example")
+    status = ready(ctx)
+    automated = [group for group in status.groups if group.folder == "automated"]
+    assert len(automated) == 7 and sum(group.own for group in automated) == 5
+    sorting.apply(ctx, ApplyMailSort(choices=[]))
+    names = {row["name"] for row in ctx.bus.db.fetch_all("SELECT name FROM mail_categories")}
+    assert len([name for name in names if name.startswith("Automated/")]) == 5
+    smallest = ctx.bus.db.fetch_all(
+        "SELECT DISTINCT t.category FROM threads t JOIN messages m ON m.thread_id = t.id"
+        " WHERE m.from_addr = 'tool0@tools0.example'"
+    )
+    assert [row["category"] for row in smallest] == ["Automated"]
+    # New Homes start with only the Automated folder; the header kinds all file into it.
+    assert not names & {"Updates", "Promotions", "Forums", "Social", "Broadcast"}

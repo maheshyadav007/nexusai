@@ -20,7 +20,7 @@ from nexusai.contracts.mail import SearchMail
 from nexusai.kernel import backups
 from nexusai.kernel.config import Config
 from nexusai.kernel.database import Database
-from nexusai.modules.mail import store
+from nexusai.modules.mail import rules, store
 from nexusai.modules.mail.parse import ParsedMessage
 from nexusai.modules.semantic.catalog import DIMENSIONS
 from nexusai.modules.semantic.index import VectorIndex
@@ -151,7 +151,7 @@ def mailbox(tmp_path_factory: pytest.TempPathFactory) -> Any:
                     read=number % 3 == 0,
                     flagged=False,
                     parsed=message,
-                    match=None,
+                    decision=rules.Decision(True, "No rule matched"),
                     config=config.mail,
                 )
                 assert stored
@@ -280,7 +280,7 @@ def test_new_mail_reaches_the_store(mailbox: Mailbox) -> None:
                 read=False,
                 flagged=False,
                 parsed=message,
-                match=None,
+                decision=rules.Decision(True, "No rule matched"),
                 config=mailbox.config.mail,
             )
 

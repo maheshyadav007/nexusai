@@ -103,6 +103,23 @@ def normalize_subject(subject: str) -> str:
     return re.sub(r"\s+", " ", SUBJECT_PREFIX.sub("", subject or "")).strip().lower()
 
 
+SUBJECT_TAG = re.compile(r"\[([^\[\]]{1,40})\]")
+# A ticket or build number after the tag's name: "PLM-1104", "Build 12", "Ticket#88".
+TAG_NUMBER = re.compile(r"[\s#:_-]+\d[\d.]*$|(?<=[A-Za-z])\d+$")
+
+
+def tags_of(subject: str) -> tuple[str, ...]:
+    """Every [tag] in a subject, in order, without a trailing number:
+    "Re: [PLM-1104][Reminder] Due" gives ("PLM", "Reminder"). A tag that is only a number, like
+    a list's "[123]", is no tag."""
+    found: list[str] = []
+    for match in SUBJECT_TAG.finditer(subject or ""):
+        tag = " ".join(TAG_NUMBER.sub("", match.group(1).strip()).split()).strip(" -_:#")
+        if re.search(r"[^\W\d_]", tag) and tag.casefold() not in {t.casefold() for t in found}:
+            found.append(tag)
+    return tuple(found)
+
+
 @dataclass
 class Part:
     index: int

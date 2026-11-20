@@ -12,7 +12,7 @@ from nexusai.kernel.module import Context
 from nexusai.modules.mail import accounts, store
 from nexusai.modules.mail.extract import ISOLATED_PYTHON
 from nexusai.modules.mail.parse import Part, parse_message
-from nexusai.modules.mail.rules import evaluate, own_domain_of
+from nexusai.modules.mail.rules import own_domain_of
 
 log = structlog.get_logger()
 MIGRATION = Migration(
@@ -199,10 +199,9 @@ def _store_batch(ctx: Context, import_id: int, batch: list[dict[str, object]]) -
     _, profiles = accounts.read_accounts(ctx.config)
     profile = profiles.get(account)
     domain = own_domain_of(profile.address or profile.auth.user) if profile else None
-    from nexusai.modules.mail.module import folder_modes, ordered_rules
+    from nexusai.modules.mail.module import rule_engine
 
-    rules = ordered_rules(ctx)
-    modes = folder_modes(ctx)
+    engine = rule_engine(ctx, domain)
     prepared = []
     failed = 0
     for record in batch:
@@ -227,10 +226,11 @@ def _store_batch(ctx: Context, import_id: int, batch: list[dict[str, object]]) -
                     sha256="",
                 )
             )
-        prepared.append((record, raw, parsed, evaluate(parsed, rules, domain, folder_modes=modes)))
+        prepared.append((record, raw, parsed))
+    decisions = engine.decide([parsed for _, _, parsed in prepared])
     imported = duplicates = 0
     with ctx.bus.unit_of_work() as work:
-        for record, raw, parsed, match in prepared:
+        for (record, raw, parsed), decision in zip(prepared, decisions, strict=True):
             # Mail already here from the server stays as it is. The archive only adds what's missing.
             exists = work.tx.execute(
                 "SELECT 1 FROM messages WHERE account = ? AND message_id = ? LIMIT 1",
@@ -249,7 +249,7 @@ def _store_batch(ctx: Context, import_id: int, batch: list[dict[str, object]]) -
                 read=True,
                 flagged=False,
                 parsed=parsed,
-                match=match,
+                decision=decision,
                 config=ctx.config.mail,
             )
             if stored:

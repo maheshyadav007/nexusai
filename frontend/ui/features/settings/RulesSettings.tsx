@@ -22,6 +22,7 @@ import { t } from "@/ui/strings";
 const FIELDS = [
   { value: "subject", label: t("rules.field.subject") },
   { value: "subject_prefix", label: t("rules.field.subjectPrefix") },
+  { value: "tag", label: t("rules.field.tag") },
   { value: "sender", label: t("rules.field.sender") },
   { value: "body", label: t("rules.field.body") },
   { value: "header", label: t("rules.field.header") },

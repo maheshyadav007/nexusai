@@ -28,6 +28,8 @@ class MailConfig:
     backfill_batch: int
     progress_every: int
     starter_categories: tuple[dict[str, str], ...]
+    # The rule engine. Off, every email reaches the AI and no rule files any.
+    rules_on: bool
     flag_window: int
     suggested_pull: int
     check_every_seconds: float

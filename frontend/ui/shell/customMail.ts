@@ -2,6 +2,12 @@ import type { MailCategory, MailFolder } from "@/ui/client/contracts.generated";
 
 export const CUSTOM_MAIL_PREVIEW = 5;
 const LISTED_ELSEWHERE = new Set(["inbox", "sent", "drafts", "archive", "trash", "all"]);
+// The folders the AI skips that the Sort step files into, named as the server names them.
+export const AUTOMATED = "Automated";
+export const CALENDAR = "Calendar";
+
+/** A category the AI skips: Automated, Calendar, what's filed under them, or one set that way. */
+export const keptFromAi = (item: MailCategory) => item.ai_reads === false || [AUTOMATED, CALENDAR].some((name) => item.name === name || item.name.startsWith(`${name}/`));
 
 export const categoryHref = (name: string) => `/mail/category/${encodeURIComponent(name)}`;
 export const folderHref = (name: string) => `/mail/folder/${encodeURIComponent(name)}`;

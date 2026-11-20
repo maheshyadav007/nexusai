@@ -37,12 +37,11 @@ model_list_client_versions = ["99.0.0", "0.0.0"]
 test_instructions = "You are NexusAI's connection test. Reply briefly."
 
 [mail]
-# Filed by rule on every Home, without a model. One with no mail stays out of the sidebar.
-starter_categories = [
-  { name = "PLM", subject_prefix = "[PLM]" },
-  { name = "Swarm", subject_prefix = "[Swarm]" },
-  { name = "3GPP Briefing", subject_prefix = "[3GPP Briefing]" },
-]
+# Filed by rule on every Home, without a model, as { name, subject_prefix }. None ship: the
+# Sort step learns each mailbox's own tools, tags and senders.
+starter_categories = []
+# The rule engine every email passes before the AI. Off, the AI reads everything.
+rules_on = true
 connect_timeout_seconds = 30
 initial_batch = 200
 backfill_batch = 100

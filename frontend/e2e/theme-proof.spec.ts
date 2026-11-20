@@ -51,6 +51,7 @@ for (const path of SCREENS) {
 test("the sidebar navigates, marks where you are, and remembers being collapsed", async ({ page }) => {
   await page.goto("/");
   await expect(page).toHaveURL(/\/today$/);
+  await page.getByRole("button", { name: "More" }).click();
   await page.getByRole("link", { name: "All mail" }).click();
   await expect(page).toHaveURL(/\/mail\/all$/);
   await expect(page.getByRole("link", { name: "All mail" })).toHaveAttribute("aria-current", "page");
@@ -227,8 +228,8 @@ test("profile saves from Settings, and preferences choose the first screen", asy
   await page.goto("/settings?section=preferences");
   const screen = page.getByRole("combobox", { name: "Open to" });
   await screen.click();
-  await page.getByRole("option", { name: "Priority" }).click();
-  await expect(screen).toHaveText(/Priority/);
+  await page.getByRole("option", { name: "Inbox" }).click();
+  await expect(screen).toHaveText(/Inbox/);
   await page.goto("/");
   await expect(page).toHaveURL(/\/mail\/priority$/);
   await page.goto("/settings?section=preferences");
@@ -259,18 +260,18 @@ test("the sidebar can be reordered, hidden and reset, by keyboard and buttons", 
   await page.keyboard.press("Space");
   await expect.poll(firstSection).toBe("Mail");
 
-  await editor.getByRole("switch", { name: "Drafts" }).click();
+  await editor.getByRole("switch", { name: "Starred" }).click();
   await page.keyboard.press("Escape");
-  await expect(nav.getByRole("link", { name: "Drafts" })).toBeHidden();
+  await expect(nav.getByRole("link", { name: "Starred" })).toBeHidden();
   await expect(nav.getByRole("link", { name: "Sent" })).toBeVisible();
   await page.reload();
   await expect(nav.getByRole("link", { name: "Sent" })).toBeVisible();
-  await expect(nav.getByRole("link", { name: "Drafts" })).toBeHidden();
+  await expect(nav.getByRole("link", { name: "Starred" })).toBeHidden();
 
   await nav.getByRole("button", { name: "Customize sidebar" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Reset layout" }).click();
   await page.keyboard.press("Escape");
-  await expect(nav.getByRole("link", { name: "Drafts" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Starred" })).toBeVisible();
   await expect.poll(firstSection).toBe("Mail");
 });
 

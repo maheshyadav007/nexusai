@@ -173,7 +173,8 @@ export type Status1 = "none" | "waiting_on_you" | "waiting_on_others" | "resolve
 export type Id10 = number;
 export type Category3 = string | null;
 export type Ok2 = boolean;
-export type Field = "subject" | "subject_prefix" | "body" | "sender" | "sender_exact" | "header" | "has_attachment";
+export type Field =
+  "subject" | "subject_prefix" | "tag" | "body" | "sender" | "sender_exact" | "header" | "has_attachment";
 export type Value1 = string;
 export type Header = string | null;
 export type Category4 = string | null;
@@ -424,6 +425,7 @@ export type Count1 = number;
 export type Unread1 = number;
 export type Created = string | null;
 export type Updated = string | null;
+export type AiReads = boolean;
 export type Categories1 = MailCategory[];
 export type Name9 = string;
 export type InPriority1 = boolean;
@@ -609,6 +611,7 @@ export type Reason2 = string;
 export type NamesYou1 = number;
 export type Emails1 = SortEmail[];
 export type Unsorted = boolean;
+export type Own = boolean;
 export type State4 = "none" | "preparing" | "ready" | "failed" | "done" | "skipped";
 export type Done2 = number;
 export type Total6 = number;
@@ -617,6 +620,7 @@ export type OwnerName = string;
 export type Emails2 = number;
 export type ReachAi = number;
 export type Conversations1 = number;
+export type AlreadySorted = number;
 export type Groups1 = SortGroup[];
 export type Id19 = string;
 export type Name21 = string;
@@ -3010,6 +3014,7 @@ export interface MailCategory {
   unread?: Unread1;
   created?: Created;
   updated?: Updated;
+  ai_reads?: AiReads;
   [k: string]: unknown;
 }
 /**
@@ -3600,6 +3605,7 @@ export interface SortGroup {
   names_you: NamesYou1;
   emails: Emails1;
   unsorted?: Unsorted;
+  own?: Own;
   [k: string]: unknown;
 }
 /**
@@ -3615,6 +3621,7 @@ export interface MailSort {
   emails?: Emails2;
   reach_ai?: ReachAi;
   conversations?: Conversations1;
+  already_sorted?: AlreadySorted;
   groups?: Groups1;
   [k: string]: unknown;
 }
