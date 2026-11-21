@@ -847,9 +847,6 @@ class CategorySortEstimate(BaseModel):
 # Sorting mail before the AI reads it
 
 
-SortFolder = Literal["inbox", "automated", "calendar"]
-
-
 class GetMailSort(BaseModel):
     pass
 
@@ -871,20 +868,27 @@ class SortEmail(BaseModel):
     names_you: bool
 
 
-class SortGroup(BaseModel):
-    id: str
+class SortSender(BaseModel):
+    """One sender on the sorting page: how automated it looks, and which side it starts on."""
+
+    sender: str
     label: str
-    folder: SortFolder
     count: int
-    senders: list[str]
-    reason: str
-    # How many of its emails name the person, and so reach the AI wherever it's filed.
-    names_you: int
+    # The strongest of the three signs, from 0 to 1. At half or more the AI ignores it.
+    score: float
+    repeats: float
+    bulk: float
+    one_way: bool
+    side: Literal["reads", "ignores"]
+    # Why it stays with the AI whatever its score, if it does.
+    kept: str
+    # How many would still reach the AI if it's ignored: they name the person, or a person
+    # replied in that conversation.
+    reach: int
+    # Starts as a category of its own under Automated, rather than going straight into it.
+    own: bool
+    examples: list[str]
     emails: list[SortEmail]
-    # A sender the engine left alone rather than a group it found.
-    unsorted: bool = False
-    # Starts as a folder of its own under Automated, rather than going straight into it.
-    own: bool = False
 
 
 class MailSort(BaseModel):
@@ -895,25 +899,29 @@ class MailSort(BaseModel):
     owner_name: str = ""
     emails: int = 0
     reach_ai: int = 0
-    conversations: int = 0
-    # Emails the person's own rules already file, left as they are and out of the groups.
+    # Invitations and replies, kept from the AI whatever happens to their senders.
+    calendar: int = 0
+    # Emails the person's own rules already file, left as they are and out of the list.
     already_sorted: int = 0
-    groups: list[SortGroup] = Field(default_factory=list)
+    senders: list[SortSender] = Field(default_factory=list)
 
 
-class SortChoice(BaseModel):
+class SortSenderChoice(BaseModel):
+    """Where the person put one sender. On the ignored side, `own` gives it a category of its
+    own, named `name`; senders given the same name share one."""
+
     model_config = ConfigDict(extra="forbid")
 
-    id: str = Field(max_length=400)
+    sender: str = Field(max_length=320)
+    side: Literal["reads", "ignores"]
+    own: bool = False
     name: str = Field(default="", max_length=60)
-    folder: SortFolder
-    merged_into: str = Field(default="", max_length=400)
 
 
 class ApplyMailSort(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    choices: list[SortChoice] = Field(default_factory=list, max_length=5000)
+    senders: list[SortSenderChoice] = Field(default_factory=list, max_length=20000)
 
 
 class MailSortApplied(BaseModel):

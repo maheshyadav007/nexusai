@@ -25,12 +25,12 @@ test("sorting files tool mail under Automated, renamed, before the AI reads it",
   await expect.poll(async () => (await post(request, "/api/queries/threads.list", { folder: "all" })).threads.filter((row: { subject: string }) => row.subject.startsWith(`Build ${stamp}`) || /^Build \d+ passed$/.test(row.subject)).length, { timeout: 30_000 }).toBeGreaterThanOrEqual(6);
 
   await page.goto("/mail/sort");
-  const group = page.getByRole("button", { name: /^ci\s/ });
-  await expect(group).toBeVisible({ timeout: 60_000 });
-  await group.click();
-  await expect(page.getByRole("combobox", { name: "Folder", exact: true })).toContainText("Automated");
-  await page.getByRole("textbox", { name: "Category", exact: true }).fill("Build bot");
-  await expect(page.getByRole("button", { name: /^Build bot\s/ })).toBeVisible();
+  // The build bot repeats its subjects, so it starts on the side the AI ignores, in a category of its own.
+  const card = page.getByTestId("sort-category").filter({ hasText: "builds@ci.example" });
+  await expect(card).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("sort-sender").filter({ hasText: "builds@ci.example" })).toHaveAttribute("data-side", "ignores");
+  await card.getByRole("textbox", { name: "Category name" }).fill("Build bot");
+  await expect(card).toContainText("Automated/Build bot");
   await page.getByRole("button", { name: "Sort my mail", exact: true }).click();
   await page.waitForURL("**/today");
 

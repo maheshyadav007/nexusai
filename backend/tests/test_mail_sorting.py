@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from fake_mail import make_mail
-from nexusai.contracts.mail import ApplyMailSort, MailSort, SortChoice
+from nexusai.contracts.mail import ApplyMailSort, MailSort, SortSenderChoice
 from nexusai.kernel.module import Context
 from nexusai.modules.mail import rules, sorting, store
 from nexusai.modules.mail.parse import parse_message
@@ -56,7 +56,17 @@ def ready(ctx: Context) -> MailSort:  # noqa: F811
         if status.state in {"ready", "failed"}:
             return status
         time.sleep(0.05)
-    raise AssertionError("The mail was never grouped")
+    raise AssertionError("The mail was never scored")
+
+
+def build_bot(status: MailSort) -> Any:
+    return next(row for row in status.senders if row.sender == "ci@tools.example")
+
+
+def named(name: str, side: str = "ignores") -> ApplyMailSort:
+    return ApplyMailSort(
+        senders=[SortSenderChoice(sender="ci@tools.example", side=side, own=True, name=name)]  # type: ignore[arg-type]
+    )
 
 
 @pytest.fixture
@@ -76,11 +86,12 @@ def mailbox(ctx: Context) -> dict[str, Any]:  # noqa: F811
 def test_sorting_files_what_the_ai_ignores_and_gives_it_a_rule(ctx: Context, mailbox: Any) -> None:  # noqa: F811
     status = ready(ctx)
     assert status.state == "ready" and status.emails == 12
-    tool = next(group for group in status.groups if "ci@tools.example" in group.senders)
-    assert tool.folder == "automated" and tool.names_you == 1
-    moved = sorting.apply(
-        ctx, ApplyMailSort(choices=[SortChoice(id=tool.id, name="Builds", folder="automated")])
-    )
+    tool = build_bot(status)
+    assert tool.side == "ignores" and tool.own and tool.reach == 1 and tool.count == 9
+    assert tool.score >= 0.5
+    kim = next(row for row in status.senders if row.sender == "kim@else.example")
+    assert kim.side == "reads"
+    moved = sorting.apply(ctx, named("Builds"))
     assert moved == 8
     category = ctx.bus.db.fetch_all(
         "SELECT * FROM mail_categories WHERE name = 'Automated/Builds'"
@@ -107,11 +118,8 @@ def test_sorting_files_what_the_ai_ignores_and_gives_it_a_rule(ctx: Context, mai
 
 
 def test_new_mail_follows_the_rule_unless_it_names_the_person(ctx: Context, mailbox: Any) -> None:  # noqa: F811
-    status = ready(ctx)
-    tool = next(group for group in status.groups if "ci@tools.example" in group.senders)
-    sorting.apply(
-        ctx, ApplyMailSort(choices=[SortChoice(id=tool.id, name="Builds", folder="automated")])
-    )
+    ready(ctx)
+    sorting.apply(ctx, named("Builds"))
     rule = next(
         r for r in rules.load_rules(ctx.config.home) if r.actions.category == "Automated/Builds"
     )
@@ -128,13 +136,27 @@ def test_new_mail_follows_the_rule_unless_it_names_the_person(ctx: Context, mail
     assert not asked.skip_agent and asked.worth_a_look
 
 
-def test_a_merged_or_inbox_choice_files_nothing_there(ctx: Context, mailbox: Any) -> None:  # noqa: F811
-    status = ready(ctx)
-    tool = next(group for group in status.groups if "ci@tools.example" in group.senders)
-    moved = sorting.apply(ctx, ApplyMailSort(choices=[SortChoice(id=tool.id, folder="inbox")]))
+def test_a_sender_moved_to_the_ai_is_filed_nowhere(ctx: Context, mailbox: Any) -> None:  # noqa: F811
+    ready(ctx)
+    moved = sorting.apply(ctx, named("Builds", side="reads"))
     assert moved == 0
     assert not ctx.bus.db.fetch_all("SELECT 1 FROM mail_categories WHERE name LIKE 'Automated%'")
     assert not [r for r in rules.load_rules(ctx.config.home) if r.name.startswith("Sorted: ")]
+
+
+def test_scoring_waits_until_the_mail_is_all_in(ctx: Context, mailbox: Any) -> None:  # noqa: F811
+    from nexusai.modules.mail import accounts
+
+    account = accounts.current_account(ctx.config)
+    with ctx.bus.db.transaction() as tx:
+        tx.execute("INSERT INTO mail_sync_settings (account) VALUES (?)", (account,))
+    sorting.prepare(ctx)
+    assert sorting.status(ctx).state == "none"
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "UPDATE mail_sync_settings SET history_finished = 'now' WHERE account = ?", (account,)
+        )
+    assert ready(ctx).state == "ready"
 
 
 def test_skipping_leaves_the_mail_as_it_was(ctx: Context, mailbox: Any) -> None:  # noqa: F811
@@ -161,7 +183,27 @@ def test_mail_its_own_rules_already_file_is_left_as_it_is(ctx: Context, mailbox:
     )
     status = ready(ctx)
     assert status.already_sorted == 9
-    assert not [group for group in status.groups if "ci@tools.example" in group.senders]
+    assert not [row for row in status.senders if row.sender == "ci@tools.example"]
+
+
+def test_senders_given_one_name_share_a_category(ctx: Context) -> None:  # noqa: F811
+    for tool in range(2):
+        for n in range(6):
+            stored(ctx, f"Alert {n} raised", f"alerts{tool}@monitor.example")
+    ready(ctx)
+    sorting.apply(
+        ctx,
+        ApplyMailSort(
+            senders=[
+                SortSenderChoice(
+                    sender=f"alerts{tool}@monitor.example", side="ignores", own=True, name=name
+                )
+                for tool, name in ((0, "Monitoring"), (1, "monitoring"))
+            ]
+        ),
+    )
+    names = {row["name"] for row in ctx.bus.db.fetch_all("SELECT name FROM mail_categories")}
+    assert names == {"Automated", "Automated/Monitoring"}
 
 
 def test_only_the_biggest_tools_get_a_folder_and_the_rest_go_into_automated(ctx: Context) -> None:  # noqa: F811
@@ -169,9 +211,9 @@ def test_only_the_biggest_tools_get_a_folder_and_the_rest_go_into_automated(ctx:
         for n in range(6 + tool):
             stored(ctx, f"Report {n} ready", f"tool{tool}@tools{tool}.example")
     status = ready(ctx)
-    automated = [group for group in status.groups if group.folder == "automated"]
-    assert len(automated) == 7 and sum(group.own for group in automated) == 5
-    sorting.apply(ctx, ApplyMailSort(choices=[]))
+    automated = [row for row in status.senders if row.side == "ignores"]
+    assert len(automated) == 7 and sum(row.own for row in automated) == 5
+    sorting.apply(ctx, ApplyMailSort())
     names = {row["name"] for row in ctx.bus.db.fetch_all("SELECT name FROM mail_categories")}
     assert len([name for name in names if name.startswith("Automated/")]) == 5
     smallest = ctx.bus.db.fetch_all(
