@@ -1,4 +1,4 @@
-.PHONY: setup dev start serve backend frontend check speed eval-mail eval-skills test-start test-backend test-serve test-reset
+.PHONY: setup dev start serve backend frontend check speed eval-mail eval-skills test-start test-backend test-serve test-company test-reset
 
 setup:
 	cd backend && uv sync
@@ -45,12 +45,23 @@ eval-skills:
 TEST_DIR := $(CURDIR)/.test-instance
 TEST_DATA := NEXUSAI_APP_DATA=$(TEST_DIR)/app-data
 
+# make test-start COMPANY=1 also runs a made-up company's mail server (POP3 and SMTP, on this
+# computer only) holding the Korvia mockup mailbox, and makes it the test instance's company
+# server. Onboarding then asks for a username and password: sign in as admin / admin. A Gmail
+# address still goes to Gmail, so both can be tried. Without COMPANY it's the normal setup.
+COMPANY_MAIL := NEXUSAI_MAIL_PROTOCOL=pop3 NEXUSAI_MAIL_HOST=127.0.0.1 NEXUSAI_MAIL_PORT=8110 \
+	NEXUSAI_MAIL_SECURE=false NEXUSAI_SMTP_HOST=127.0.0.1 NEXUSAI_SMTP_PORT=8026 \
+	NEXUSAI_MAIL_DOMAIN=korvia.example NEXUSAI_MAIL_LABEL="Korvia mail (mockup)"
+
 test-start:
 	cd frontend && npm run build
-	$(MAKE) -j2 test-backend test-serve
+	$(MAKE) -j3 test-backend test-serve $(if $(COMPANY),test-company)
 
 test-backend:
-	cd backend && $(TEST_DATA) NEXUSAI_HOME=$(TEST_DIR)/home NEXUSAI_SECRETS_TEST_FILE=$(TEST_DIR)/secrets.json NEXUSAI_PORT=4101 uv run nexusai-backend
+	cd backend && $(TEST_DATA) $(if $(COMPANY),$(COMPANY_MAIL)) NEXUSAI_HOME=$(TEST_DIR)/home NEXUSAI_SECRETS_TEST_FILE=$(TEST_DIR)/secrets.json NEXUSAI_PORT=4101 uv run nexusai-backend
+
+test-company:
+	cd backend && uv run python tests/company_server.py
 
 test-serve:
 	cd frontend && $(TEST_DATA) NEXUSAI_DESKTOP_BACKEND_URL=http://127.0.0.1:4101 NEXUSAI_ALLOWED_ORIGINS=http://127.0.0.1:4001,http://localhost:4001 npx next start -p 4001

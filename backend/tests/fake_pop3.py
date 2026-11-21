@@ -51,7 +51,8 @@ class _Handler(socketserver.StreamRequestHandler):
             elif command == "PASS":
                 if state.busy:
                     self.reply("-ERR [IN-USE] mailbox locked")
-                elif user == USER and parts[1] == PASSWORD:
+                # A server can sign in someone else, like the company mockup's admin / admin.
+                elif (user, parts[1]) == getattr(self.server, "login", (USER, PASSWORD)):
                     with state.lock:
                         snapshot = list(state.mails)
                     self.reply("+OK signed in")
@@ -101,8 +102,9 @@ class FakePop3:
         self.server.server_close()
 
 
-def start_fake_pop3() -> FakePop3:
-    server = _Threaded(("127.0.0.1", 0), _Handler)
+def start_fake_pop3(port: int = 0, login: tuple[str, str] = (USER, PASSWORD)) -> FakePop3:
+    server = _Threaded(("127.0.0.1", port), _Handler)
+    server.login = login  # type: ignore[attr-defined]
     state = Pop3State()
     server.state = state  # type: ignore[attr-defined]
     threading.Thread(target=server.serve_forever, daemon=True).start()

@@ -369,7 +369,8 @@ class _SmtpHandler(socketserver.StreamRequestHandler):
                 import base64
 
                 decoded = base64.b64decode(text.split()[2]).split(b"\0")
-                good = decoded[1].decode() == USER and decoded[2].decode() == PASSWORD
+                login = getattr(self.server, "login", (USER, PASSWORD))
+                good = (decoded[1].decode(), decoded[2].decode()) == login
                 reply("235 ok" if good else "535 bad credentials")
             elif upper.startswith("MAIL FROM"):
                 envelope = {"from": text, "to": []}
