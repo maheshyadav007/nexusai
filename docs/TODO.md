@@ -2,6 +2,10 @@
 
 Work agreed on but not planned yet. Each item gets a proper plan before it's built.
 
+## Vectorize only mail the AI reads
+
+Noted 2026-11-21. Today the semantic index embeds every email, before the rules sort anything, so newsletters, tool notices and everything else kept from the AI gets embedded too. That's wrong: only email that passes through the AI (what the rule engine lets reach the Mail agent) should be vectorized. Just a note for now; to be planned.
+
 ## Monitoring schedules
 
 Planned in full in `docs/SCHEDULES_AND_MONITORS_PLAN.md`. Filling forms and spreadsheets from mail is planned in `docs/FORM_FILLING_PLAN.md`.
