@@ -31,6 +31,8 @@ export function RunningBrief() {
   if (brief.isError) return <ErrorState title={t("matters.error")} onRetry={() => void brief.refetch()} />;
   const changes = brief.data?.changes ?? [];
   const seen = brief.data?.seen;
+  // Empty, it would only push what does need doing down the page.
+  if (brief.isSuccess && changes.length === 0) return null;
   const unseen = (change: MatterChange) => !seen || change.time > seen;
   return (
     <section aria-label={t("matters.running")} data-testid="running-brief" className="flex flex-col gap-3 rounded-lg border border-line-subtle bg-surface-raised p-4 shadow-raised">
@@ -39,7 +41,6 @@ export function RunningBrief() {
         {seen ? <p className="text-sm tabular-nums text-ink-muted">{t("matters.since.seen", { when: day(seen) })}</p> : null}
       </header>
       {brief.isPending ? <Skeleton className="h-6 w-full" /> : null}
-      {brief.isSuccess && changes.length === 0 ? <p className="text-md text-ink-muted">{t("matters.since.empty")}</p> : null}
       <ol className="flex flex-col">
         <Presence>
           {changes.map((change) => (

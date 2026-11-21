@@ -563,7 +563,6 @@ export function TodayScreen() {
       <MorningBrief />
       <RunningBrief />
       <FinishSetup />
-      <SortMailCard />
       <MailOrganizationCard />
       {today.isError ? <ErrorState title={t("today.error")} onRetry={() => void today.refetch()} /> : null}
       {today.isPending ? <Skeleton className="h-6 w-full" /> : null}
@@ -596,6 +595,8 @@ export function TodayScreen() {
           <Stat href="/cockpit" label={t("today.stat.working")} value={cockpit.data?.jobs.length ?? 0} />
         </nav>
       </header>
+      {/* Until it's sorted the AI reads nothing, so this comes before everything else. */}
+      <SortMailCard />
       <Tabs
         label={t("matters.tabs")}
         value={view}
