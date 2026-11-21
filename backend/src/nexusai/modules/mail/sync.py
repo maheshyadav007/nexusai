@@ -29,6 +29,7 @@ from nexusai.modules.mail.imap import (
     Folder,
     FolderStatus,
     ImapSession,
+    ServerBusy,
     SignInFailed,
     distinct_total,
     synced_folders,
@@ -40,6 +41,10 @@ from nexusai.modules.mail.rules import own_domain_of
 log = structlog.get_logger()
 DRAFT_HEADER = "x-nexusai-draft"
 PROGRESS_NOTICE_SECONDS = 1.0
+# The longest wait between tries while older mail is still coming down.
+DOWNLOADING_RETRY_SECONDS = 30.0
+# The shortest wait after the server said it's busy: trying sooner only adds to its count.
+BUSY_RETRY_SECONDS = 120.0
 MailSession = ImapSession | Pop3Session
 
 
@@ -175,6 +180,15 @@ class MailSync:
             except SignInFailed:
                 self._set_state("failed", "The mail server refused the username or password.")
                 return
+            except ServerBusy as error:
+                # Limits like Gmail's daily download take hours to lift, and every try counts
+                # against them, so these wait the long way, whatever is still to come down.
+                log.info("mail_server_busy", account=self.account, said=str(error)[:300])
+                self._set_state(
+                    "offline", f"The mail server is turning connections away for now: {error}"
+                )
+                self._rest(delay)
+                delay = min(max(delay * 2, BUSY_RETRY_SECONDS), self.config.reconnect_max_seconds)
             except ConnectionFailed as error:
                 log.info(
                     "mail_connection_lost",
@@ -182,18 +196,31 @@ class MailSync:
                     error=type(error).__name__,
                     detail=str(error)[:200],
                 )
-                self._set_state("offline", "Can't reach the mail server. Retrying.")
-                self._stop.wait(delay)
-                delay = min(delay * 2, self.config.reconnect_max_seconds)
+                self._set_state("offline", "Can't reach the mail server. Trying again shortly.")
+                self._rest(delay)
+                delay = min(delay * 2, self._longest_wait())
             except Exception:
                 log.exception("mail_sync_failed", account=self.account)
-                self._set_state("offline", "Mail sync hit a problem. Retrying.")
-                self._stop.wait(delay)
-                delay = min(delay * 2, self.config.reconnect_max_seconds)
+                self._set_state("offline", "Mail sync hit a problem. Trying again shortly.")
+                self._rest(delay)
+                delay = min(delay * 2, self._longest_wait())
             finally:
                 if session:
                     session.close()
         self.status.state = "off"
+
+    def _rest(self, delay: float) -> None:
+        """Waits before trying again, unless asked to try now or to stop."""
+        self._wake.wait(delay)
+        self._wake.clear()
+
+    def _longest_wait(self) -> float:
+        """While older mail is still coming down someone is usually watching, so a connection
+        that comes back is noticed within half a minute. After that the wait can grow longer."""
+        settings = self._settings()
+        if settings is not None and not settings["history_finished"]:
+            return min(DOWNLOADING_RETRY_SECONDS, self.config.reconnect_max_seconds)
+        return self.config.reconnect_max_seconds
 
     def _pop3_uids(self, names: list[str]) -> dict[str, int]:
         """A lasting number for each server ID. New ones count up, so newer mail is higher."""
@@ -615,14 +642,13 @@ class MailSync:
         return [uid for uid in uids if uid not in copies]
 
     def _download(self, session: MailSession, uids: list[int]) -> list[Fetched]:
-        """A few at a time, so a large batch shows its progress as it comes."""
-        every = self.config.progress_every
-        if len(uids) <= every:
-            return session.fetch(uids)
+        """One request per fetch_batch, with progress after each, so it moves as mail comes."""
+        size = self.config.fetch_batch
         fetched: list[Fetched] = []
+        # The goal shows before the first request comes back, not after it.
         self._note_progress()
-        for start in range(0, len(uids), every):
-            fetched += session.fetch(uids[start : start + every])
+        for start in range(0, len(uids), size):
+            fetched += session.fetch(uids[start : start + size])
             self._note_progress(downloading=len(fetched))
         return fetched
 

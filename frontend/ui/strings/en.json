@@ -2181,5 +2181,8 @@
   "accounts.download.rate": "{rate} a minute",
   "accounts.download.all": "All {total} emails downloaded",
   "accounts.download.setup": "Setup continues once your mail is here. Sorting starts by itself when the download ends, so you can leave this open and come back.",
-  "accounts.download.setupDone": "Sorting your senders now. Continue when you're ready."
+  "accounts.download.setupDone": "Sorting your senders now. Continue when you're ready.",
+  "accounts.download.offline": "Your mail is safe, and the download picks up where it stopped.",
+  "accounts.download.retry": "Try now",
+  "accounts.download.paused": "Waiting for the connection"
 }

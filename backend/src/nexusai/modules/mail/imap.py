@@ -45,6 +45,27 @@ class SignInFailed(Exception):
     pass
 
 
+class ServerBusy(OSError):
+    """The server turned the sign-in away for now, not for a wrong password: too many
+    connections, a download limit reached, or it's unavailable. Retried like a lost connection."""
+
+
+# RFC 5530 codes, and the words servers use, for a refusal that passes by itself. Gmail says
+# "[UNAVAILABLE]", "Too many simultaneous connections" or "exceeded ... bandwidth limits".
+TEMPORARY_REFUSALS = (
+    "UNAVAILABLE", "LIMIT", "INUSE", "SERVERBUG", "THROTTL", "TOO MANY", "BANDWIDTH",
+    "TRY AGAIN", "TEMPORAR",
+)  # fmt: skip
+
+
+def refusal(error: Exception) -> Exception:
+    """A wrong password, or the server being busy, from what it said when it said no."""
+    said = str(error)[:300]
+    if any(word in said.upper() for word in TEMPORARY_REFUSALS):
+        return ServerBusy(said)
+    return SignInFailed(said)
+
+
 class DeleteRefused(Exception):
     """This account is set to never delete anything on the server."""
 
@@ -95,7 +116,8 @@ class ImapSession:
         try:
             self.client.login(profile.auth.user, password)
         except LoginError as error:
-            raise SignInFailed from error
+            log.info("mail_sign_in_refused", host=profile.imap.host, said=str(error)[:300])
+            raise refusal(error) from error
 
     def folders(self) -> list[Folder]:
         found = []
@@ -297,6 +319,11 @@ def test_imap(
             session.close()
     except SignInFailed:
         return "The server refused that username or password."
+    except ServerBusy as error:
+        return (
+            "The server turned the sign-in away for now, not over the password:"
+            f" {error} Try again in a while."
+        )
     except ConnectionFailed as error:
         return (
             f"Couldn't connect to {profile.imap.host}:{profile.imap.port}. {type(error).__name__}"

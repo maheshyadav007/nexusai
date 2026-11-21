@@ -105,10 +105,16 @@ class FakePop3:
         self.server.server_close()
 
 
-def start_fake_pop3(port: int = 0, login: tuple[str, str] = (USER, PASSWORD)) -> FakePop3:
+def start_fake_pop3(
+    port: int = 0, login: tuple[str, str] = (USER, PASSWORD), mails: list[bytes] | None = None
+) -> FakePop3:
+    """A running server. Mail given here is all in place before it answers anyone, as on a real
+    server; a client that signed in halfway through loading would see half a mailbox."""
+    state = Pop3State()
+    for raw in mails or []:
+        state.deliver(raw)
     server = _Threaded(("127.0.0.1", port), _Handler)
     server.login = login  # type: ignore[attr-defined]
-    state = Pop3State()
     server.state = state  # type: ignore[attr-defined]
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return FakePop3(server.server_address[1], state, server)

@@ -83,11 +83,10 @@ def mailbox() -> list[bytes]:
 
 
 def main() -> None:
-    pop3 = start_fake_pop3(int(os.environ.get("COMPANY_POP3_PORT", 8110)), LOGIN)
+    mails = [raw.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n") for raw in mailbox()]
+    pop3 = start_fake_pop3(int(os.environ.get("COMPANY_POP3_PORT", 8110)), LOGIN, mails)
     # COMPANY_DELAY_MS slows each email down, to see a download take time as Gmail's does.
     pop3.server.delay = int(os.environ.get("COMPANY_DELAY_MS", 0)) / 1000  # type: ignore[attr-defined]
-    for raw in mailbox():
-        pop3.state.deliver(raw.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
     smtp = _Threaded(("127.0.0.1", int(os.environ.get("COMPANY_SMTP_PORT", 8026))), _SmtpHandler)
     smtp.sent = []  # type: ignore[attr-defined]
     smtp.login = LOGIN  # type: ignore[attr-defined]

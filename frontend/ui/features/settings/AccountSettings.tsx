@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ApiRequestError } from "@/ui/client/api";
 import type { MailProfile } from "@/ui/client/contracts.generated";
 import { useMailAccounts, useMailPresets, useMailStatus, useProbeServer, useRemoveAccount, useSaveAccount, useSetNeverDelete, useTestAccount } from "@/ui/client/mail";
-import { usePipelines } from "@/ui/client/work";
+import { usePipelines, useRunPipeline } from "@/ui/client/work";
 import { PipelineRow } from "@/ui/features/cockpit/Pipelines";
 import { Icon } from "@/ui/icons";
 import { Button } from "@/ui/primitives/Button";
@@ -46,8 +46,13 @@ const RATE_WINDOW_MS = 90_000;
 const RATE_MIN_MS = 6_000;
 
 /** Emails a minute, from how fast the count went up lately; null until there's enough to say. */
-function useRate(done: number): number | null {
+function useRate(done: number, paused: boolean): number | null {
   const samples = useRef<{ at: number; done: number }[]>([]);
+  // Time without a connection isn't the download's speed, so measuring starts again after it.
+  if (paused) {
+    samples.current = [];
+    return null;
+  }
   const now = Date.now();
   const last = samples.current.at(-1);
   if (!last || last.done !== done) samples.current = [...samples.current, { at: now, done }].filter((sample) => now - sample.at <= RATE_WINDOW_MS);
@@ -71,7 +76,9 @@ export function MailDownload({ setup = false }: { setup?: boolean }) {
   // Once it's done the download's own count is cleared, so what arrived is the total.
   const total = finished ? Math.max(status.data?.pulled ?? 0, status.data?.total ?? 0) : (status.data?.total ?? 0);
   const done = Math.min(status.data?.done ?? 0, total);
-  const rate = useRate(done);
+  const offline = !finished && status.data?.state === "offline";
+  const rate = useRate(done, offline);
+  const retry = useRunPipeline();
   // Setup shows that it's finished; elsewhere the box goes once there's nothing coming down.
   if (!total || (finished && !setup)) return null;
   const percent = Math.floor((done / total) * 100);
@@ -87,8 +94,21 @@ export function MailDownload({ setup = false }: { setup?: boolean }) {
       <Progress label={t("accounts.download")} value={finished ? total : done} max={total} />
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-sm tabular-nums">
         <span className="text-ink-secondary">{finished ? t("accounts.download.all", { total: total.toLocaleString() }) : t("accounts.download.count", { done: done.toLocaleString(), total: total.toLocaleString() })}</span>
-        {finished ? null : <span role="status" className="text-ink-muted">{rate ? `${timeLeft(total - done, rate)} · ${t("accounts.download.rate", { rate: Math.round(rate).toLocaleString() })}` : t("accounts.download.measuring")}</span>}
+        {finished ? null : <span role="status" className={offline ? "text-status-warning" : "text-ink-muted"}>{offline ? t("accounts.download.paused") : rate ? `${timeLeft(total - done, rate)} · ${t("accounts.download.rate", { rate: Math.round(rate).toLocaleString() })}` : t("accounts.download.measuring")}</span>}
       </div>
+      {offline ? (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-surface-sunken px-3 py-2">
+          <span className="flex min-w-0 flex-1 items-start gap-2 text-sm">
+            <Icon name="offline" className="mt-px h-4 w-4 shrink-0 text-status-warning" />
+            {/* What went wrong in the server's words, then what happens to the mail. */}
+            <span className="flex flex-col gap-1">
+              {status.data?.message ? <span className="text-ink-primary">{status.data.message}</span> : null}
+              <span className="text-ink-secondary">{t("accounts.download.offline")}</span>
+            </span>
+          </span>
+          <Button variant="quiet" loading={retry.isPending} onClick={() => retry.mutate(MAIL_PIPELINE)}>{t("accounts.download.retry")}</Button>
+        </div>
+      ) : null}
       <p className="text-sm text-ink-muted">{t(setup ? (finished ? "accounts.download.setupDone" : "accounts.download.setup") : "accounts.download.continue")}</p>
     </section>
   );
