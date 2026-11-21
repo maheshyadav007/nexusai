@@ -569,3 +569,20 @@ def test_an_account_that_already_had_a_brief_gets_no_extra_one(ctx: Context) -> 
         assert [row["event"] for row in events] == ["morning-2026-11-15"]
     finally:
         engine.close()
+
+
+def test_quitting_does_not_wait_forever_for_a_stuck_turn(
+    ctx: Context, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: a turn waiting on a model kept a stopped app running, still syncing mail."""
+    import threading
+    import time
+
+    monkeypatch.setattr(runtime, "CLOSE_SECONDS", 0.5)
+    engine = runtime.SessionRuntime(ctx)
+    never = threading.Event()
+    engine.pool.submit(never.wait, 60)
+    started = time.monotonic()
+    engine.close()
+    assert time.monotonic() - started < 3
+    never.set()
