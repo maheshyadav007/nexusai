@@ -39,7 +39,8 @@ const FOLDER_NAMES = { inbox: "mail.sort.folder.inbox", automated: "mail.sort.fo
 const folderName = (id: SortFolder) => t(FOLDER_NAMES[id]);
 const reads = (id: SortFolder) => FOLDERS.find((folder) => folder.id === id)?.reads ?? true;
 
-export function SortScreen() {
+/** The sorting page. Setup passes onDone to carry on with its next step; elsewhere it's Today. */
+export function SortScreen({ onDone }: { onDone?: () => void } = {}) {
   const ready = useHomeReady();
   const lead = useLeadName();
   const router = useRouter();
@@ -60,8 +61,9 @@ export function SortScreen() {
     <p className="text-sm text-ink-muted">{t("mail.sort.preparing.note")}</p>
   </div>;
   if (state === "failed") return <ErrorState title={t("mail.sort.failed")} onRetry={() => prepare.mutate()} />;
-  if (state === "done" || state === "skipped") return <div className="p-6"><EmptyState icon="inbox" title={t("mail.sort.title")} description={t(state === "done" ? "mail.sort.done" : "mail.sort.skipped", { name: lead })} /></div>;
-  return <Sorter groups={sort.data.groups ?? []} owner={sort.data.owner_name ?? ""} emails={sort.data.emails ?? 0} conversations={sort.data.conversations ?? 0} alreadySorted={sort.data.already_sorted ?? 0} lead={lead} onDone={() => void refresh().then(() => router.push("/today"))} />;
+  const finished = () => void refresh().then(() => (onDone ? onDone() : router.push("/today")));
+  if (state === "done" || state === "skipped") return <div className="p-6"><EmptyState icon="inbox" title={t("mail.sort.title")} description={t(state === "done" ? "mail.sort.done" : "mail.sort.skipped", { name: lead })} {...(onDone ? { action: <Button variant="primary" onClick={onDone}>{t("setup.next")}</Button> } : {})} /></div>;
+  return <Sorter groups={sort.data.groups ?? []} owner={sort.data.owner_name ?? ""} emails={sort.data.emails ?? 0} conversations={sort.data.conversations ?? 0} alreadySorted={sort.data.already_sorted ?? 0} lead={lead} onDone={finished} />;
 }
 
 function Sorter({ groups, owner, emails, conversations, alreadySorted, lead, onDone }: { groups: SortGroup[]; owner: string; emails: number; conversations: number; alreadySorted: number; lead: string; onDone: () => void }) {

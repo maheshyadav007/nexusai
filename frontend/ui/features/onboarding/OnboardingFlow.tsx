@@ -12,6 +12,7 @@ import { AgentPresets } from "@/ui/features/settings/AgentSettings";
 import { HomeChooser } from "@/ui/features/home/HomeChooser";
 import { WELCOME_PARAM } from "@/ui/features/today/FinishSetup";
 import { EmailConnector } from "@/ui/features/connectors/ConnectorsScreen";
+import { SortScreen } from "@/ui/features/mail/SortScreen";
 import { LocalModelSettings } from "@/ui/features/settings/LocalModelSettings";
 import { ProfileForm } from "@/ui/features/settings/ProfileForm";
 import { Button } from "@/ui/primitives/Button";
@@ -34,6 +35,8 @@ const STEPS: readonly Step[] = [
   { id: "home", label: "setup.home.label", title: "setup.home.title", formTitle: "setup.home.formTitle", formNote: "setup.home.formNote" },
   { id: "profile", label: "setup.you.label", title: "setup.profile.title", formTitle: "setup.profile.formTitle", formNote: "setup.profile.formNote" },
   { id: "mail", label: "setup.mail.label", title: "setup.mail.title", formTitle: "setup.mail.formTitle", formNote: "setup.mail.formNote" },
+  // Right after mail and before search, so what the person keeps from the AI is never embedded.
+  { id: "sort", label: "setup.sort.label", title: "setup.sort.label", formTitle: "setup.sort.label", formNote: "setup.sort.label" },
   { id: "search", label: "setup.search.label", title: "setup.search.title", formTitle: "setup.search.formTitle", formNote: "setup.search.formNote" },
   { id: "permissions", label: "setup.agent.label", title: "setup.permissions.title", formTitle: "setup.permissions.formTitle", formNote: "setup.permissions.formNote" },
 ];
@@ -48,6 +51,20 @@ function SearchStep() {
   return <LocalModelSettings brief bare />;
 }
 
+/** Where setup is: the same bar on every step. */
+function Topbar({ index }: { index: number }) {
+  return (
+    <header className="flex h-topbar shrink-0 items-center justify-between gap-5 px-6 lg:px-7">
+      <span className="text-lg font-medium">{t("app.name")}</span>
+      <div className="flex items-center gap-3 text-sm text-ink-muted">
+        <span className="hidden sm:inline">{t("setup.quick")}</span>
+        <progress className="nx-progress w-rail-wide" aria-label={t("setup.progress")} max={STEPS.length} value={index + 1} />
+        <span className="tabular-nums">{t("setup.stepCount", { current: index + 1, total: STEPS.length })}</span>
+      </div>
+    </header>
+  );
+}
+
 function Frame({ step, index, actions, children }: { step: Step; index: number; actions?: ReactNode; children: ReactNode }) {
   const seen = useRef(index);
   const lead = useLeadName();
@@ -59,14 +76,7 @@ function Frame({ step, index, actions, children }: { step: Step; index: number; 
   }, [index]);
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-surface-page text-ink-primary">
-      <header className="flex h-topbar shrink-0 items-center justify-between gap-5 px-6 lg:px-7">
-        <span className="text-lg font-medium">{t("app.name")}</span>
-        <div className="flex items-center gap-3 text-sm text-ink-muted">
-          <span className="hidden sm:inline">{t("setup.quick")}</span>
-          <progress className="nx-progress w-rail-wide" aria-label={t("setup.progress")} max={STEPS.length} value={index + 1} />
-          <span className="tabular-nums">{t("setup.stepCount", { current: index + 1, total: STEPS.length })}</span>
-        </div>
-      </header>
+      <Topbar index={index} />
       <main ref={main} className="min-h-0 flex-1 overflow-y-auto overscroll-contain lg:grid lg:grid-cols-5 lg:overflow-hidden">
         <aside className="relative flex min-h-drawer flex-col justify-between px-6 py-6 lg:col-span-2 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:px-7 lg:py-7">
           <AssistantGuide prominent title={t(step.title, { name: lead })} message={`guide.setup.${step.id}` as StringKey} />
@@ -143,7 +153,8 @@ export function OnboardingFlow() {
       return;
     }
     setConfirmSkip(false);
-    const next = STEPS[index + 1];
+    // Without mail there's nothing to sort.
+    const next = STEPS[index + 1]?.id === "sort" && !mail.data?.account ? STEPS[index + 2] : STEPS[index + 1];
     if (next) setStep.mutate(next.id);
     else {
       // So the mail agent has something sensible to judge by, even if the person never edits it.
@@ -154,11 +165,22 @@ export function OnboardingFlow() {
   };
   const back =
     index > 1 ? (
-      <Button variant="quiet" onClick={() => setStep.mutate((STEPS[index - 1] as Step).id)}>
+      <Button variant="quiet" onClick={() => setStep.mutate((STEPS[STEPS[index - 1]?.id === "sort" && !mail.data?.account ? index - 2 : index - 1] as Step).id)}>
         {t("setup.back")}
       </Button>
     ) : null;
 
+  // The sorting page needs the whole width, so it has the setup bar and nothing else.
+  if (step.id === "sort") {
+    return (
+      <div className="flex h-screen flex-col overflow-hidden bg-surface-page text-ink-primary">
+        <Topbar index={index} />
+        <main className="flex min-h-0 flex-1 flex-col overflow-y-auto border-t border-line-subtle">
+          <SortScreen onDone={goNext} />
+        </main>
+      </div>
+    );
+  }
   if (step.id === "profile") {
     return (
       <Frame step={step} index={index}>

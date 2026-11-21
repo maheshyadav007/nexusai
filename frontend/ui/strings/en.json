@@ -2158,5 +2158,6 @@
   "matters.running": "What changed in your matters",
   "matters.since.seen": "You last looked at {when}. Newer lines are marked.",
   "matters.unseen": "New since you looked",
-  "matters.started": "Started {when}"
+  "matters.started": "Started {when}",
+  "setup.sort.label": "Sort"
 }

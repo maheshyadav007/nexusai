@@ -116,6 +116,19 @@ def test_mail_is_found_by_meaning_and_words_rank_with_it(
     assert both[0]["matched_by"] == "both"
 
 
+def test_mail_waits_for_sorting_before_it_is_embedded(
+    client: TestClient, fake: FakeMail, model_here: None
+) -> None:
+    """What the person keeps from the AI is sorted out first, so it's never embedded at all."""
+    fake.state.deliver(make_mail(subject="Finance review", body="cut the spending"))
+    connect(client, fake, sorted_first=False)
+    wait(lambda: client.post("/api/queries/mail.status").json()["messages"] == 1, "the mail")
+    wait(lambda: status(client)["ready"], "the model")
+    assert status(client)["indexed"] == 0
+    assert client.post("/api/commands/mail.sort.skip", json={}).status_code == 200
+    wait(lambda: all_indexed(client) and status(client)["indexed"] == 1, "indexing after sorting")
+
+
 def test_a_question_in_another_language_finds_it(
     client: TestClient, fake: FakeMail, model_here: None
 ) -> None:
