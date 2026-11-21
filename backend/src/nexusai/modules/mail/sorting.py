@@ -46,6 +46,8 @@ class _Job:
     report: grouping.SenderReport | None = None
     # Mail the person's own rules already file, left out of the list.
     covered: int = 0
+    # The newest email scored, so mail that came after it gets scored too.
+    newest: int = 0
 
 
 _jobs: dict[str, _Job] = {}
@@ -77,12 +79,23 @@ def prepare(ctx: Context) -> None:
         "SELECT 1 FROM mail_sync_settings WHERE account = ? AND history_finished IS NULL",
         (accounts.current_account(ctx.config),),
     )
+    newest = int(ctx.bus.db.fetch_all("SELECT COALESCE(MAX(id), 0) AS n FROM messages")[0]["n"])
     with _lock:
         job = _jobs.get(home)
-        if downloading or decided(ctx) or (job is not None and job.state in {"preparing", "ready"}):
+        busy = job is not None and job.state == "preparing"
+        # A score from before newer mail came in is scored again, so nothing is left off the list.
+        current = job is not None and job.state == "ready" and job.newest >= newest
+        if downloading or decided(ctx) or busy or current:
             return
         job = _jobs[home] = _Job()
+    _announce(ctx, job.state)
     threading.Thread(target=_score, args=(ctx, job), daemon=True, name="mail-sorting").start()
+
+
+def _announce(ctx: Context, state: str) -> None:
+    """Tells the page the scoring started, ended or failed, so it never has to keep asking."""
+    with ctx.bus.unit_of_work() as work:
+        work.emit("mail.sortChanged", {"state": state}, source="mail", trace_id=ctx.trace_id)
 
 
 def _score(ctx: Context, job: _Job) -> None:
@@ -94,6 +107,7 @@ def _score(ctx: Context, job: _Job) -> None:
             (account,),
         )
         job.total = len(rows)
+        job.newest = max((int(row["id"]) for row in rows), default=0)
         mail = [(str(row["id"]), zlib.decompress(row["data"])) for row in rows]
         covered = _covered(ctx, mail)
         mail = [(key, raw) for key, raw in mail if key not in covered]
@@ -106,6 +120,7 @@ def _score(ctx: Context, job: _Job) -> None:
     except Exception as error:
         log.warning("mail_sorting_failed", kind=type(error).__name__)
         job.state, job.error = "failed", f"{type(error).__name__}: {str(error)[:300]}"
+    _announce(ctx, job.state)
 
 
 def _covered(ctx: Context, mail: list[tuple[str, bytes]]) -> frozenset[str]:

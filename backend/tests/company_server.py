@@ -11,7 +11,8 @@ here. New mail can arrive while it runs:
 
     curl -X POST localhost:8768 -d '{"subject": "CL 88213 is merged", "sender": "Karthik Nair <karthik.nair@korvia.example>", "body": "Done."}'
 
-Ports come from COMPANY_POP3_PORT, COMPANY_SMTP_PORT and COMPANY_CONTROL_PORT.
+Ports come from COMPANY_POP3_PORT, COMPANY_SMTP_PORT and COMPANY_CONTROL_PORT. COMPANY_DELAY_MS
+slows each email down, to watch a download take time as it does from Gmail.
 """
 
 import json
@@ -83,6 +84,8 @@ def mailbox() -> list[bytes]:
 
 def main() -> None:
     pop3 = start_fake_pop3(int(os.environ.get("COMPANY_POP3_PORT", 8110)), LOGIN)
+    # COMPANY_DELAY_MS slows each email down, to see a download take time as Gmail's does.
+    pop3.server.delay = int(os.environ.get("COMPANY_DELAY_MS", 0)) / 1000  # type: ignore[attr-defined]
     for raw in mailbox():
         pop3.state.deliver(raw.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
     smtp = _Threaded(("127.0.0.1", int(os.environ.get("COMPANY_SMTP_PORT", 8026))), _SmtpHandler)

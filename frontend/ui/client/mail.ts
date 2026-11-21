@@ -10,6 +10,7 @@ export type ThreadStatus = SetThreadStatus["status"];
 
 export function useMailStatus() {
   const ready = useHomeReady();
+  // Kept current by events: mail.syncProgress arrives about once a second while mail comes down.
   return useQuery({ queryKey: ["mail-status"], queryFn: () => query("mail.status", {}), enabled: ready });
 }
 

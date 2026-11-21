@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { command, query } from "@/ui/client/api";
 import type { SortSender } from "@/ui/client/contracts.generated";
 import { useHomeReady, useLeadName } from "@/ui/client/home";
@@ -32,39 +32,49 @@ const keyOf = (name: string) => name.trim().toLocaleLowerCase();
 
 /** The sorting page, the same as the Sort lab's: every sender scored, on the side the AI reads
  * or the side it ignores. Setup passes onDone to carry on with its next step; elsewhere it's Today. */
-export function SortScreen({ onDone }: { onDone?: () => void } = {}) {
+export function SortScreen({ onDone, onBack }: { onDone?: () => void; onBack?: () => void } = {}) {
   const ready = useHomeReady();
   const lead = useLeadName();
   const router = useRouter();
   const client = useQueryClient();
-  // Scoring waits until all the mail is in, so it's asked again until it starts.
-  const sort = useQuery({ queryKey: ["mail-sort"], queryFn: () => query("mail.sort.get", {}), enabled: ready, refetchInterval: (state) => (state.state.data?.state === "preparing" ? 1500 : state.state.data?.state === "none" ? 3000 : false) });
+  // Kept current by events: mail.sortChanged when scoring starts, ends or fails, and
+  // mail.historyFinished, after which scoring starts by itself.
+  const sort = useQuery({ queryKey: ["mail-sort"], queryFn: () => query("mail.sort.get", {}), enabled: ready });
   const prepare = useMutation({ mutationFn: () => command("mail.sort.prepare", {}), onSuccess: (data) => client.setQueryData(["mail-sort"], data) });
   const refresh = () => Promise.all(["mail-sort", "categories", "threads", "today"].map((key) => client.invalidateQueries({ queryKey: [key] })));
   const state = sort.data?.state;
+  // Asked once when the page opens too, so mail that came in after scoring gets scored.
+  const asked = useRef(false);
   useEffect(() => {
-    if (state === "none" && !prepare.isPending) prepare.mutate();
-  }, [state, sort.dataUpdatedAt]);
+    if (!state || prepare.isPending) return;
+    if (state === "none" || (state === "ready" && !asked.current)) {
+      asked.current = true;
+      prepare.mutate();
+    }
+  }, [state]);
 
   if (sort.isError) return <ErrorState title={t("mail.sort.failed")} onRetry={() => void sort.refetch()} />;
   if (!sort.data) return <div className="p-6"><Skeleton className="h-6 w-full" /></div>;
+  const back = onBack ? <Button variant="quiet" className="self-start" onClick={onBack}>{t("setup.back")}</Button> : null;
   if (state === "none") return <div className="mx-auto flex max-w-reading flex-col gap-4 p-6">
     <h1 className="font-serif text-title text-ink-primary">{t("mail.sort.title")}</h1>
     <p role="status" className="text-md text-ink-secondary">{t("mail.sort.none")}</p>
     <Skeleton className="h-6 w-full" />
+    {back}
   </div>;
   if (state === "preparing") return <div className="mx-auto flex max-w-reading flex-col gap-4 p-6">
     <h1 className="font-serif text-title text-ink-primary">{t("mail.sort.title")}</h1>
     <Progress label={t("mail.sort.preparing", { count: (sort.data.total ?? 0).toLocaleString() })} value={sort.data.done ?? 0} max={Math.max(sort.data.total ?? 0, 1)} />
     <p className="text-sm text-ink-muted">{t("mail.sort.preparing.note")}</p>
+    {back}
   </div>;
   if (state === "failed") return <ErrorState title={t("mail.sort.failed")} onRetry={() => prepare.mutate()} />;
   const finished = () => void refresh().then(() => (onDone ? onDone() : router.push("/today")));
   if (state === "done" || state === "skipped") return <div className="p-6"><EmptyState icon="inbox" title={t("mail.sort.title")} description={t(state === "done" ? "mail.sort.done" : "mail.sort.skipped", { name: lead })} {...(onDone ? { action: <Button variant="primary" onClick={onDone}>{t("setup.next")}</Button> } : {})} /></div>;
-  return <Sorter senders={sort.data.senders ?? []} owner={sort.data.owner_name ?? ""} total={sort.data.emails ?? 0} calendar={sort.data.calendar ?? 0} alreadySorted={sort.data.already_sorted ?? 0} lead={lead} onDone={finished} />;
+  return <Sorter senders={sort.data.senders ?? []} owner={sort.data.owner_name ?? ""} total={sort.data.emails ?? 0} calendar={sort.data.calendar ?? 0} alreadySorted={sort.data.already_sorted ?? 0} lead={lead} onDone={finished} back={back} />;
 }
 
-function Sorter({ senders, owner, total, calendar, alreadySorted, lead, onDone }: { senders: readonly SortSender[]; owner: string; total: number; calendar: number; alreadySorted: number; lead: string; onDone: () => void }) {
+function Sorter({ senders, owner, total, calendar, alreadySorted, lead, onDone, back }: { senders: readonly SortSender[]; owner: string; total: number; calendar: number; alreadySorted: number; lead: string; onDone: () => void; back: ReactNode }) {
   const byCount = [...senders].sort((a, b) => b.count - a.count);
   const [choices, setChoices] = useState<Choices>(() => {
     const start: Choices = Object.fromEntries(byCount.map((s) => [s.sender, { side: s.side, own: s.own, name: s.label }]));
@@ -130,6 +140,7 @@ function Sorter({ senders, owner, total, calendar, alreadySorted, lead, onDone }
         {apply.isError || skip.isError ? <p role="alert" className="text-sm text-status-danger">{(apply.error ?? skip.error)?.message}</p> : null}
       </div>
       <div className="flex items-center gap-2">
+        {back}
         <Button variant="quiet" loading={skip.isPending} disabled={apply.isPending} onClick={() => skip.mutate()}>{t("mail.sort.skip")}</Button>
         <Button variant="primary" loading={apply.isPending} disabled={skip.isPending} onClick={() => apply.mutate()}>{t("mail.sort.finish")}</Button>
       </div>

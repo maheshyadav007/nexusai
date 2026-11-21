@@ -20,7 +20,7 @@ from nexusai.contracts.mail import (
 )
 from nexusai.contracts.notifications import NotificationRequested
 from nexusai.kernel.module import Context
-from nexusai.modules.mail import store
+from nexusai.modules.mail import sorting, store
 from nexusai.modules.mail.imap import (
     READ,
     ConnectionFailed,
@@ -130,10 +130,12 @@ class MailSync:
         """How much of what's wanted is here, counting each email once, and what's on its way."""
         settings = self._settings()
         budget = settings["history_budget"] if settings else None
-        pulled = self._pulled() + downloading
-        wanted = self.status.server_total if budget is None else pulled + budget
-        self.status.total = max(min(wanted, self.status.server_total), pulled)
-        self.status.done = pulled
+        # The allowance shrinks only as mail is stored, so the goal is stored mail plus what's
+        # left of it. Counting a batch still on its way as well made the total creep up.
+        stored = self._pulled()
+        wanted = self.status.server_total if budget is None else stored + budget
+        self.status.total = max(min(wanted, self.status.server_total), stored)
+        self.status.done = min(stored + downloading, self.status.total)
         now = time.monotonic()
         if now - self._last_notice < PROGRESS_NOTICE_SECONDS:
             return
@@ -373,6 +375,9 @@ class MailSync:
                 source="mail",
                 trace_id=self.ctx.trace_id,
             )
+        # Sorting comes next and takes a while on a big mailbox, so it starts now: the page is
+        # ready when the person gets there, even if they left while the mail came down.
+        sorting.prepare(self.ctx)
 
     def _checked(self, found: int, pulled: int, *, waiting: bool) -> None:
         """One check is done: note what it found, so the Cockpit can say whether we're in step."""

@@ -159,6 +159,15 @@ def test_scoring_waits_until_the_mail_is_all_in(ctx: Context, mailbox: Any) -> N
     assert ready(ctx).state == "ready"
 
 
+def test_mail_that_came_after_scoring_is_scored_when_asked_again(
+    ctx: Context,  # noqa: F811
+    mailbox: Any,
+) -> None:
+    assert ready(ctx).emails == 12
+    stored(ctx, "Release 4 notes", "notes@tools.example")
+    assert ready(ctx).emails == 13
+
+
 def test_skipping_leaves_the_mail_as_it_was(ctx: Context, mailbox: Any) -> None:  # noqa: F811
     ready(ctx)
     sorting.skip(ctx)

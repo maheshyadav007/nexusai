@@ -2,6 +2,7 @@
 
 import socketserver
 import threading
+import time
 from dataclasses import dataclass, field
 
 from fake_mail import PASSWORD, USER
@@ -64,6 +65,8 @@ class _Handler(socketserver.StreamRequestHandler):
                     self.reply(f"{number} {name}")
                 self.reply(".")
             elif command == "RETR":
+                # A server can be slow on purpose, like a real one far away.
+                time.sleep(getattr(self.server, "delay", 0.0))
                 name, raw = snapshot[int(parts[1]) - 1]
                 if name in state.refuse:
                     self.reply("-ERR can't read that one")

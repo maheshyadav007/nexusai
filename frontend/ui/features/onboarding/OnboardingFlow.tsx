@@ -147,7 +147,10 @@ export function OnboardingFlow() {
   const index = found > 0 ? found : 1;
   const step = STEPS[index] as Step;
   const isLast = index === STEPS.length - 1;
+  // With mail connected, setup waits for it: sorting needs all of it, and starts by itself.
+  const downloading = step.id === "mail" && Boolean(mail.data?.account) && !mail.data?.history_finished;
   const goNext = () => {
+    if (downloading) return;
     if (step.id === "mail" && !mail.data?.account && !confirmSkip) {
       setConfirmSkip(true);
       return;
@@ -176,7 +179,7 @@ export function OnboardingFlow() {
       <div className="flex h-screen flex-col overflow-hidden bg-surface-page text-ink-primary">
         <Topbar index={index} />
         <main className="flex min-h-0 flex-1 flex-col overflow-y-auto border-t border-line-subtle">
-          <SortScreen onDone={goNext} />
+          <SortScreen onDone={goNext} onBack={() => setStep.mutate("mail")} />
         </main>
       </div>
     );
@@ -195,7 +198,7 @@ export function OnboardingFlow() {
       actions={
         <>
           {back ?? <span aria-hidden />}
-          <Button variant="primary" loading={setStep.isPending || finish.isPending} onClick={goNext} sizedFor={SETUP_LABELS()}>
+          <Button variant="primary" loading={setStep.isPending || finish.isPending} disabled={downloading} onClick={goNext} sizedFor={SETUP_LABELS()}>
             {t(isLast ? "setup.enter" : (step.id === "mail" && !mail.data?.account) || (step.id === "search" && !semantic.data?.ready && !semantic.data?.models.some((row) => row.state === "downloading")) ? "setup.skip" : "setup.next")}
           </Button>
         </>

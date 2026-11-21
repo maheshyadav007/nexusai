@@ -828,6 +828,26 @@ def test_only_the_newest_come_down_and_get_more_carries_on(
     assert len(events(client, "mail.received")) == 1
 
 
+def test_the_total_holds_still_while_a_limited_download_runs_and_sorting_starts_after(
+    client: TestClient, fake: FakeMail
+) -> None:
+    fill(fake, 30)
+    save(client, fake, pull_limit=12)
+    seen = set()
+    while not status(client)["history_finished"]:
+        now = status(client)
+        if now["total"]:
+            seen.add(now["total"])
+            assert now["done"] <= now["total"]
+    # A batch on its way used to be counted twice, so the total crept up as mail came down.
+    assert seen <= {12}
+    # Sorting needs all the mail, so it starts by itself once the download ends.
+    wait(
+        lambda: client.post("/api/queries/mail.sort.get", json={}).json()["state"] == "ready",
+        "sorting to be ready",
+    )
+
+
 def test_stop_ends_history_but_new_mail_keeps_coming(client: TestClient, fake: FakeMail) -> None:
     fill(fake, 3)
     connect(client, fake)
