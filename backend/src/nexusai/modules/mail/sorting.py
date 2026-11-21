@@ -287,6 +287,17 @@ def apply(ctx: Context, command: ApplyMailSort) -> int:
                     f"UPDATE messages SET rule = ?, why = ? WHERE id IN ({marks})",  # noqa: S608
                     (f"{RULE_PREFIX}{name}", f"Sorted into “{name}”", *(int(k) for k in part)),
                 )
+            # The Inbox goes by the newest email's rule. The thread was filed above, before its
+            # emails had one, so it stayed in the Inbox though the AI ignores its folder.
+            for start in range(0, len(ordered), 500):
+                chunk = ordered[start : start + 500]
+                marks = ",".join("?" * len(chunk))
+                work.tx.execute(
+                    f"UPDATE threads SET latest_rule = (SELECT rule FROM messages m WHERE"  # noqa: S608
+                    f" m.thread_id = threads.id ORDER BY m.date DESC, m.id DESC LIMIT 1)"
+                    f" WHERE id IN ({marks})",
+                    chunk,
+                )
         work.tx.execute(
             "INSERT INTO mail_sorting (id, state, updated) VALUES (1, 'done', ?)"
             " ON CONFLICT (id) DO UPDATE SET state = 'done', updated = excluded.updated",

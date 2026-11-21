@@ -105,6 +105,8 @@ function AskRow({ message }: { message: ChannelMessage }) {
 /** One thing waiting on the person, however it came to be, so it can be done alone or in bulk. */
 // Past this many of one kind, they fold into one row: twenty memory notes read as one decision.
 const GROUP_AT = 3;
+// Up to this many suggestions show as they are; more fold into one line to open.
+const SUGGESTIONS_SHOWN = 3;
 
 /** Many proposals of one kind as one row: accept them all, or open the list to go one by one. */
 function ProposalGroup({ testid, icon, title, accept, items, children }: { testid: string; icon: IconName; title: string; accept: string; items: readonly WaitingItem[]; children: ReactNode }) {
@@ -274,6 +276,9 @@ function WaitingOnYou() {
   const priorityPicks: readonly MailCategory[] = (categories.data?.categories ?? []).filter((item) => item.priority_suggested);
   const count = useWaitingCount();
   const [selecting, setSelecting] = useState(false);
+  // What only an agent can't settle (approvals, questions) shows first. Suggestions can wait, so
+  // past a few they fold into one line: twelve memories and four folders read as one decision.
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
   const groups = groupApprovals(pending);
   const groupKey = (group: readonly ToolApproval[]) => `approval-${group[0]?.session}-${group[0]?.tool}`;
@@ -290,6 +295,8 @@ function WaitingOnYou() {
     return { key: groupKey(group), title: group[0]?.tool_label ?? group[0]?.tool ?? "", ...(careful ? {} : { doIt: () => decideApprovals.mutateAsync({ allow: ids }) }), decline: () => decideApprovals.mutateAsync({ deny: ids }) };
   };
   const askItem = (message: ChannelMessage): WaitingItem => ({ key: `ask-${message.id}`, title: message.text, decline: () => dismiss.mutateAsync(message.id) });
+  const suggestionCount = proposedTasks.length + proposedReminders.length + proposedCategories.length + priorityPicks.length + (suggestions.data?.suggestions.length ?? 0) + proposedMemories.length;
+  const folded = !selecting && suggestionCount > SUGGESTIONS_SHOWN;
   const allItems: readonly WaitingItem[] = [
     ...groups.map(approvalItem),
     ...asks.map(askItem),
@@ -347,7 +354,14 @@ function WaitingOnYou() {
           );
         })}
       </Presence>
-      <ul className="flex flex-col gap-3">
+      {folded ? (
+        <div data-testid="suggestions-fold" className="flex items-center gap-3 rounded-lg border border-line-subtle bg-surface-raised p-3">
+          <Icon name="thinking" className="h-4 w-4 shrink-0 text-ink-muted" />
+          <span className="min-w-0 flex-1 text-md text-ink-primary">{tn("today.suggestions.count", suggestionCount, { name: lead })}</span>
+          <Button variant="quiet" aria-expanded={showSuggestions} onClick={() => setShowSuggestions(!showSuggestions)}>{t(showSuggestions ? "today.group.hide" : "today.group.review")}</Button>
+        </div>
+      ) : null}
+      {folded && !showSuggestions ? null : <ul className="flex flex-col gap-3">
         <Presence>
           {(() => {
             const rows = proposedTasks.map((task) => {
@@ -390,7 +404,7 @@ function WaitingOnYou() {
             );
           })()}
         </Presence>
-      </ul>
+      </ul>}
     </Panel>
   );
 }

@@ -401,6 +401,10 @@ def test_a_busy_server_is_waited_out_but_a_wrong_password_stops() -> None:
     assert isinstance(
         refusal(Exception("[AUTHENTICATIONFAILED] Invalid credentials")), SignInFailed
     )
+    # imaplib passes the server's words as bytes; the person reads them as text.
+    busy = refusal(Exception(b"[ALERT] Too many simultaneous connections. (Failure)"))
+    assert str(busy) == "[ALERT] Too many simultaneous connections. (Failure)"
+    assert str(refusal(Exception("b'[UNAVAILABLE] Try later'"))) == "[UNAVAILABLE] Try later"
 
 
 def test_a_sign_in_turned_away_for_now_is_tried_again(

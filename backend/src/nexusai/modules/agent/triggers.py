@@ -372,6 +372,16 @@ class Triggers:
             (accounts.current_account(ctx.config),),
         )
         session = review[0]["interview"] if review else mail_agent._setting(ctx, INTERVIEW_STARTED)
+        # One first meeting. One the person started from Getting started counts too: starting
+        # another here, after their mail was read, gave them the same meeting twice.
+        if not session:
+            started = ctx.bus.db.fetch_all(
+                "SELECT id FROM agent_sessions WHERE agent = ? ORDER BY created LIMIT 1",
+                (INTERVIEW_AGENT,),
+            )
+            if started:
+                mail_agent._set(ctx, INTERVIEW_STARTED, started[0]["id"])
+                return
         if review and review[0]["state"] == "failed":
             # Failed learning used to hold the first meeting until someone retried it. The meeting
             # is about the person, so it goes ahead now; group questions follow a successful retry.

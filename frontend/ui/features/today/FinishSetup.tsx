@@ -78,6 +78,9 @@ function useSteps(): { steps: Step[]; loaded: boolean; failed: boolean } {
   const questions: Step = { id: "questions", title: "start.questions.title", detail: t("start.questions.later"), tone: "idle" };
   if (met) Object.assign(questions, { detail: t("start.questions.done"), tone: "done" });
   else if (meeting) Object.assign(questions, { detail: t("start.questions.open", { name: lead }), tone: "waiting", action: { label: "start.open", href: `/agent/sessions/${meeting.id}` } });
+  // Once the mail is read it starts by itself, with questions about that mail. A button before
+  // then started a second meeting on top of the one that followed.
+  else if (hasModel && hasMail && !learned && state !== "failed") Object.assign(questions, { detail: t("start.questions.after", { name: lead }), tone: "idle" });
   else if (hasModel) Object.assign(questions, { detail: t("start.questions.ready"), tone: "waiting", action: { label: "start.begin", run: () => assistant.start({ title: t("setup.interview.label", { agent: agentName("interview") }), agent: "interview" }) } });
   steps.push(questions);
 

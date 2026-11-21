@@ -15,7 +15,7 @@ from nexusai.kernel.module import CommandError, Context
 from nexusai.modules.agent import category_names, facts, memory, signals
 from nexusai.modules.agent.context import TurnRequest
 from nexusai.modules.agent.prompt_data import untrusted
-from nexusai.modules.mail import accounts
+from nexusai.modules.mail import accounts, sorting
 from nexusai.modules.mail.rules import FILED_BY_RULE, NO_REPLY, REPLY_PREFIX, WORTH_A_LOOK
 
 BATCH_SIZE = 30
@@ -357,9 +357,11 @@ def record(ctx: Context, batch: int, fields: dict[str, Any], turn: int) -> str:
             results[key] = GroupResult.model_validate(cleaned)
         except (ValidationError, ValueError, TypeError):
             problems.append(f"{alias_of[key]} has invalid fields")
+    # Folders are settled when the person sorts their mail, so learning only suggests them before.
+    sorted_already = sorting.decided(ctx) == "done"
     with ctx.bus.unit_of_work() as work:
         for result in results.values():
-            folder = result.folder
+            folder = None if sorted_already else result.folder
             name = None
             if folder:
                 known = [row["name"] for row in work.tx.execute("SELECT name FROM mail_categories")]

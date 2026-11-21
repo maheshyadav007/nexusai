@@ -106,6 +106,16 @@ def test_sorting_files_what_the_ai_ignores_and_gives_it_a_rule(ctx: Context, mai
         )
     }
     assert filed == {build.thread for build in mailbox["builds"]}
+    # Kept from the AI, so out of the Inbox too; the one that names them stays in it.
+    from nexusai.modules.mail.store import FOLDER_FILTERS
+
+    inbox = {
+        row["id"]
+        for row in ctx.bus.db.fetch_all(
+            f"SELECT id FROM threads WHERE {FOLDER_FILTERS['priority']}"  # noqa: S608
+        )
+    }
+    assert not inbox & filed and mailbox["asked"].thread in inbox
     # The email that names them stays where the AI reads it.
     asked = ctx.bus.db.fetch_all(
         "SELECT category FROM threads WHERE id = ?", (mailbox["asked"].thread,)
@@ -232,3 +242,18 @@ def test_only_the_biggest_tools_get_a_folder_and_the_rest_go_into_automated(ctx:
     assert [row["category"] for row in smallest] == ["Automated"]
     # New Homes start with only the Automated folder; the header kinds all file into it.
     assert not names & {"Updates", "Promotions", "Forums", "Social", "Broadcast"}
+
+
+def test_after_sorting_the_ai_suggests_no_folders(ctx: Context) -> None:  # noqa: F811
+    from nexusai.modules.agent.mail_agent import Triage
+
+    suggestion = {"name": "Vendor quotes", "reason": "They keep coming", "sender": "q@v.example"}
+    sorting.skip(ctx)
+    Triage(ctx)._suggest_category(suggestion, 1)
+    # Skipped, the person never settled folders, so the AI may still suggest one.
+    assert ctx.bus.db.fetch_all("SELECT 1 FROM mail_categories WHERE name = 'Vendor quotes'")
+    with ctx.bus.db.transaction() as tx:
+        tx.execute("DELETE FROM mail_categories")
+        tx.execute("UPDATE mail_sorting SET state = 'done'")
+    Triage(ctx)._suggest_category(suggestion, 1)
+    assert not ctx.bus.db.fetch_all("SELECT 1 FROM mail_categories")

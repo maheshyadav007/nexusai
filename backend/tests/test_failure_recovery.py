@@ -483,16 +483,39 @@ def test_failed_group_learning_does_not_hold_the_first_meeting(
         # Once is enough while learning stays failed.
         dispatcher._start_interview()
         assert len(submitted) == 1
-        # The failed learning stays retryable, and a successful retry asks its own questions.
+        # The failed learning stays retryable. A successful retry doesn't start a second first
+        # meeting: its questions about groups are on the learning card on Today.
         assert (
             ctx.bus.db.fetch_all("SELECT state FROM mail_learning_reviews")[0]["state"] == "failed"
         )
         with ctx.bus.db.transaction() as tx:
             tx.execute("UPDATE mail_learning_reviews SET state='asking'")
         dispatcher._start_interview()
-        assert len(submitted) == 2
-        review = ctx.bus.db.fetch_all("SELECT interview FROM mail_learning_reviews")[0]
-        assert review["interview"] and review["interview"] != first[0]["id"]
+        assert len(submitted) == 1
+        assert (
+            len(ctx.bus.db.fetch_all("SELECT id FROM agent_sessions WHERE agent='interview'")) == 1
+        )
+    finally:
+        engine.close()
+
+
+def test_a_first_meeting_the_person_started_is_not_started_again(
+    ctx: Context, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: Start on Getting started, then the meeting started itself after reading."""
+    engine = runtime.SessionRuntime(ctx)
+    try:
+        submitted = []
+        monkeypatch.setattr(engine, "_submit", lambda *args: submitted.append(args))
+        dispatcher = triggers.Triggers(ctx, engine)
+        monkeypatch.setattr(dispatcher, "_model_ready", lambda: True)
+        engine.create("First meeting", [], triggers.INTERVIEW_AGENT)
+        mail_agent.set_learning_state(ctx, "done")
+        dispatcher._start_interview()
+        assert submitted == []
+        assert (
+            len(ctx.bus.db.fetch_all("SELECT id FROM agent_sessions WHERE agent='interview'")) == 1
+        )
     finally:
         engine.close()
 

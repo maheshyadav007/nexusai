@@ -58,9 +58,18 @@ TEMPORARY_REFUSALS = (
 )  # fmt: skip
 
 
+def said_by(error: Exception) -> str:
+    """What the server said, as text: imaplib hands it over as bytes, which printed as b'...'."""
+    detail = error.args[0] if error.args else error
+    text = detail.decode(errors="replace") if isinstance(detail, bytes) else str(detail)
+    if text.startswith(("b'", 'b"')) and text.endswith(("'", '"')):
+        text = text[2:-1]
+    return text.strip()[:300]
+
+
 def refusal(error: Exception) -> Exception:
     """A wrong password, or the server being busy, from what it said when it said no."""
-    said = str(error)[:300]
+    said = said_by(error)
     if any(word in said.upper() for word in TEMPORARY_REFUSALS):
         return ServerBusy(said)
     return SignInFailed(said)
@@ -116,7 +125,7 @@ class ImapSession:
         try:
             self.client.login(profile.auth.user, password)
         except LoginError as error:
-            log.info("mail_sign_in_refused", host=profile.imap.host, said=str(error)[:300])
+            log.info("mail_sign_in_refused", host=profile.imap.host, said=said_by(error))
             raise refusal(error) from error
 
     def folders(self) -> list[Folder]:

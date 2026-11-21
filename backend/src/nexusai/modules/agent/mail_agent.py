@@ -38,7 +38,7 @@ from nexusai.modules.agent.context import TurnRequest
 from nexusai.modules.agent.gateway import Layer
 from nexusai.modules.agent.prompt_data import untrusted
 from nexusai.modules.agent.providers import Message
-from nexusai.modules.mail import accounts
+from nexusai.modules.mail import accounts, sorting
 from nexusai.modules.mail import module as mail
 from nexusai.modules.mail.rules import FILED_BY_RULE, NO_REPLY
 from nexusai.modules.planner import module as planner
@@ -1195,6 +1195,9 @@ class Triage:
     def _suggest_category(self, suggestion: Any, thread: int) -> None:
         """Mail that keeps coming from one place. Once enough does, the person decides, on Today."""
         if not isinstance(suggestion, dict) or not suggestion.get("name"):
+            return
+        # After the person has sorted their mail, its folders are theirs: the AI doesn't add any.
+        if sorting.decided(self.ctx) == "done":
             return
         name = str(suggestion["name"]).strip()[:64]
         db = self.ctx.bus.db

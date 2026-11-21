@@ -2184,5 +2184,8 @@
   "accounts.download.setupDone": "Sorting your senders now. Continue when you're ready.",
   "accounts.download.offline": "Your mail is safe, and the download picks up where it stopped.",
   "accounts.download.retry": "Try now",
-  "accounts.download.paused": "Waiting for the connection"
+  "accounts.download.paused": "Waiting for the connection",
+  "start.questions.after": "{name} starts this by itself once your mail is read, so the questions are about your actual mail.",
+  "today.suggestions.count.one": "{name} has {count} suggestion for you to look at when you have a moment",
+  "today.suggestions.count.other": "{name} has {count} suggestions for you to look at when you have a moment"
 }

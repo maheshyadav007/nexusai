@@ -57,7 +57,7 @@ from nexusai.modules.agent.prompt_data import untrusted
 from nexusai.modules.connectors import module as connectors
 from nexusai.modules.documents.module import get_document as _get_document
 from nexusai.modules.documents.module import list_documents as _list_documents
-from nexusai.modules.mail import accounts, outgoing, store
+from nexusai.modules.mail import accounts, outgoing, sorting, store
 from nexusai.modules.mail.module import run_search
 from nexusai.modules.planner import module as planner
 from nexusai.modules.semantic import module as semantic
@@ -1329,7 +1329,13 @@ def build_tools(
     def recommend_mail_change(
         category: str, senders: list[str], reason: str, tool_call_id: str, quiet: bool = False
     ) -> str:
-        result = suggestions.add(ctx, category, senders, reason, quiet)
+        # The person settled which mail goes where when they sorted it; the rules do the filing.
+        result = (
+            "Not suggested: the person already sorted their mail, and their sorting decides the"
+            " folders. Mention it in your summary instead if it really matters."
+            if sorting.decided(ctx) == "done"
+            else suggestions.add(ctx, category, senders, reason, quiet)
+        )
         _log_call(
             ctx, session, tool_call_id, "recommend_mail_change", category, result, "done", None, 0
         )
