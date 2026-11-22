@@ -1,6 +1,7 @@
 """Matters: one record for each real thing going on (docs/MATTERS_PLAN.md, phase 2)."""
 # ruff: noqa: F811
 
+from datetime import date, timedelta
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -67,7 +68,7 @@ def test_one_change_from_different_senders_is_one_matter(
     matter = found[0]
     assert matter["state"] == "waiting_on_you" and matter["next"] == "Get CL 88213 merged"
     detail = query(client, "matters.get", id=matter["id"])
-    kinds = [event["kind"] for event in reversed(detail["events"])]
+    kinds = [event["kind"] for event in detail["events"]]
     assert kinds[0] == "started" and sorted(kinds[1:]) == ["joined", "task"]
     joined = next(event for event in detail["events"] if event["kind"] == "joined")
     assert joined["why"] == "Both mention 88213" and joined["source"]["kind"] == "mail"
@@ -150,3 +151,7 @@ def test_the_week_has_a_lane_per_matter_with_its_emails(
     lane = week["lanes"][0]
     assert lane["matter"]["title"] == "Review the T311 CR draft"
     assert [mark["kind"] for mark in lane["marks"]] == ["in"]
+    # The Week tab scrolls: a range that starts weeks back and runs weeks on has the same mark.
+    start = (date.today() - timedelta(days=21)).isoformat()
+    longer = query(client, "matters.week", start=start, days=42)
+    assert longer["start"] == start and [m["kind"] for m in longer["lanes"][0]["marks"]] == ["in"]

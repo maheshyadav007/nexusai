@@ -9,6 +9,8 @@ export const ICON_NAMES = [
   "starred", "reply", "replyAll", "forward", "trash", "add", "markUnread", "folder",
   // The two kinds of folder a person or the AI makes: filed by rules, or sorted by the AI.
   "folderRule", "folderSmart",
+  // A label on the server, such as a Gmail label: mail the person tagged, not a folder the app files into.
+  "label",
   // What the AI skips: the section, mail tools send, and invitations.
   "keptFromAi", "automated", "calendar", "moreFolders", "allMail",
   "agent", "all", "approvals", "archive", "attachment", "categories", "channel", "check",

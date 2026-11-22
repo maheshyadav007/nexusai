@@ -238,5 +238,36 @@ def preview(ctx: Context, thread: int) -> MailPreview:
     )
 
 
+def agent_preview(ctx: Context, agent: str, text: str) -> MailPreview:
+    """What the brief writer's morning run, or Posty given this message, would be sent, with
+    the tools such a run starts with. Calls no model."""
+    from nexusai.modules.agent import cards, tools
+
+    task = mail_agent.brief_task(ctx) if agent == "daily-prep" else ""
+    message = text or (
+        "Write my morning brief from what's on my plate." if agent == "daily-prep" else ""
+    )
+    engine = cards.engine(ctx.bus.db, agent)
+    shown = tools.shown_for(engine, False)
+    allowed = tools.allowed_for(engine, "schedule" if agent == "daily-prep" else "person", False)
+    starting = shown or allowed
+    layers = layers_for(
+        ctx,
+        agent,
+        f"{message}\n{task}",
+        "",
+        tools=sorted(starting) if starting is not None else None,
+        scratch="your scratch folder",
+    )
+    masking = DataGuard(ctx.bus.db, guards.load_rules(ctx.config.home))
+    masked = [Layer(layer.name, masking.mask(layer.text)) for layer in layers]
+    return MailPreview(
+        layers=_shown(masked),
+        given=masking.mask(f"{message}\n\n{task}".strip()),
+        instruction="",
+        approx_tokens=_tokens(layers, f"{message}\n{task}"),
+    )
+
+
 def _tokens(layers: list[Any], task: str) -> int:
     return (sum(len(layer.text) for layer in layers) + len(task)) // CHARS_PER_TOKEN

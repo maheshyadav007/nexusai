@@ -59,7 +59,9 @@ def test_a_reminder_email_joins_the_open_conversation_and_moves_its_task(
         "joined",
     )
     assert joined["id"] == first["id"]
-    assert "Already open for this conversation" in script.requests[-1].messages[-1].text
+    # Its open task is in front of the AI: in its matter, or listed for the conversation.
+    shown = script.requests[-1].messages[-1].text
+    assert "Already open for this conversation" in shown or "open: [task:" in shown
     found = wait(
         lambda: (lambda rows: rows if rows[0]["due"] == "2099-01-05" else None)(tasks(client)),
         "moved",

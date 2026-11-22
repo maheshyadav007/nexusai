@@ -1368,3 +1368,34 @@ def test_historical_chunks_do_not_emit_live_bulk_arrival(
     )
     assert not events(client, "mail.bulkArrived")
     assert events(client, "mail.historyFinished")
+
+
+def test_a_folder_counts_what_its_sorting_rules_keep_from_the_ai(
+    client: TestClient, fake: FakeMail
+) -> None:
+    kept = {
+        "name": "Shopping: offers@store.example",
+        "conditions": [{"field": "sender", "value": "offers@store.example"}],
+        "actions": {"category": "Shopping", "skip_agent": True},
+    }
+    read = {
+        "name": "Shopping: orders",
+        "conditions": [{"field": "subject", "value": "order"}],
+        "actions": {"category": "Shopping"},
+    }
+    assert client.post("/api/commands/rules.save", json={"rules": [kept, read]}).status_code == 200
+    connect(client, fake)
+    fake.state.deliver(make_mail(subject="Weekend sale", sender="offers@store.example"))
+    fake.state.deliver(make_mail(subject="Where is my order?"))
+    shopping = wait(
+        lambda: next(
+            (
+                c
+                for c in client.post("/api/queries/categories.list").json()["categories"]
+                if c["name"] == "Shopping" and c["count"] == 2
+            ),
+            None,
+        ),
+        "both filed",
+    )
+    assert shopping["kept"] == 1

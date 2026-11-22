@@ -128,9 +128,8 @@ export function MatterGroups() {
   const brief = useMattersBrief();
   const data = brief.data;
   if (!data) return brief.isPending ? <Skeleton className="h-6 w-full" /> : null;
-  if (!data.needs_you.length && !data.waiting.length && !data.fyi.length) {
-    return <p className="rounded-lg border border-line-subtle bg-surface-raised p-4 text-md text-ink-muted shadow-raised">{t("matters.group.empty")}</p>;
-  }
+  // Empty, the page's one "All clear" line says it.
+  if (!data.needs_you.length && !data.waiting.length && !data.fyi.length) return null;
   return (
     <>
       <Group id="today-important" icon="priority" title={t("matters.group.needsYou")} urgent matters={data.needs_you} />

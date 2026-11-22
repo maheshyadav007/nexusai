@@ -100,7 +100,9 @@ from nexusai.contracts.mail import (
     StopHistory,
     SuggestRecipients,
     TestMailAccount,
+    ThreadInInbox,
     ThreadList,
+    ThreadToInbox,
     ThreadUpdated,
     ThreadView,
     UpdateCategory,
@@ -114,6 +116,7 @@ from nexusai.modules.mail import (
     pst_upload,
     rules,
     send,
+    sort_rules,
     sorting,
     store,
 )
@@ -484,6 +487,10 @@ def set_never_delete(command: SetNeverDelete, ctx: Context) -> MailStatus:
     return cast(MailStatus, get_status(GetMailStatus(), ctx))
 
 
+# Where Gmail keeps its own folders, whatever the language.
+GMAIL_SYSTEM = frozenset({"[Gmail]", "[Google Mail]"})
+
+
 @mail_module.query("mail.folders")
 def mail_folders(query: ListMailFolders, ctx: Context) -> MailFolders:
     account = accounts.current_account(ctx.config)
@@ -515,6 +522,8 @@ def mail_folders(query: ListMailFolders, ctx: Context) -> MailFolders:
                 on_server=row["server_count"],
                 here=here,
                 unread=unread,
+                # Gmail flags its other system folders, so a plain one under its own is one of these.
+                shown_elsewhere=row["role"] == "other" and parent in GMAIL_SYSTEM,
             )
         )
     return MailFolders(folders=found, counts=store.unread_counts(db, account))
@@ -890,6 +899,44 @@ def move_thread(command: MoveThread, ctx: Context) -> MailDone:
     return MailDone()
 
 
+READS_PREFIX = sort_rules.READS_PREFIX
+
+
+@mail_module.command("thread.toInbox")
+def to_inbox(command: ThreadToInbox, ctx: Context) -> ThreadInInbox:
+    """Undoes what kept a conversation from the AI: its folder, its rule, and Archive. The newest
+    email is read again. Always also turns the sender's sorting rules into one that lets it in."""
+    messages = _thread_messages(ctx, command.id)
+    latest = max(messages, key=lambda row: (row["date"] or "", row["id"]))
+    sender = str(latest["from_addr"] or "").casefold()
+    if not ctx.bus.db.fetch_all("SELECT 1 FROM threads WHERE id=? AND in_inbox=1", (command.id,)):
+        move_thread(MoveThread(id=command.id, to="inbox"), ctx)
+    with ctx.bus.unit_of_work() as work:
+        old = work.tx.execute("SELECT category FROM threads WHERE id=?", (command.id,)).fetchone()[
+            0
+        ]
+        work.tx.execute(
+            "UPDATE messages SET rule = NULL, why = NULL WHERE thread_id = ?", (command.id,)
+        )
+        # Marked the person's choice, so sorting and rules leave it where it is.
+        work.tx.execute(
+            "UPDATE threads SET category = NULL, extra_categories = '[]', category_source = 'user',"
+            " latest_rule = NULL, why = 'You moved it to the Inbox' WHERE id = ?",
+            (command.id,),
+        )
+        _changed(work, ctx, command.id, "category", None, old)
+        work.emit(
+            "mail.needsTriage",
+            {"message_id": latest["id"], "thread_id": command.id},
+            source="mail",
+            trace_id=ctx.trace_id,
+        )
+    if command.always and sender:
+        # The sender's one rule becomes one that lets it into the Inbox, as the Sort page does.
+        sorting.move_sender(ctx, sender, reads=True, keep_folder=False)
+    return ThreadInInbox(sender=sender)
+
+
 @mail_module.command("thread.addToFolder")
 def add_to_folder(command: ChangeThreadFolder, ctx: Context) -> MailDone:
     """Copies on the server. The next check sees the copy and files it, so this needs no guess."""
@@ -1126,6 +1173,22 @@ def category_rows(ctx: Context) -> list[MailCategory]:
             (account, account),
         )
     }
+    # What sorting keeps from the AI is decided by each sender's rule, so it's counted per folder.
+    skipping = [
+        rule.name
+        for rule in rules.load_rules(ctx.config.home)
+        if rule.enabled and rule.actions.skip_agent
+    ]
+    marks = ",".join("?" * len(skipping)) or "NULL"
+    kept = {
+        row["name"]: row["n"]
+        for row in db.fetch_all(
+            f"SELECT category AS name, COUNT(*) AS n FROM threads WHERE account = ?"  # noqa: S608
+            f" AND category IS NOT NULL AND (in_inbox = 1 OR in_archive = 1) AND latest_rule IN ({marks})"
+            " GROUP BY category",
+            (account, *skipping),
+        )
+    }
     found = []
     named = set()
     positions: dict[str, int] = {}
@@ -1176,6 +1239,7 @@ def category_rows(ctx: Context) -> list[MailCategory]:
                 created=row["created"],
                 updated=row["updated"] or row["created"],
                 ai_reads=bool(row["ai_reads"]),
+                kept=min(kept.get(row["name"], 0), count),
             )
         )
         positions[row["name"]] = row["position"]
@@ -1190,6 +1254,7 @@ def category_rows(ctx: Context) -> list[MailCategory]:
                     proposed=False,
                     count=count,
                     unread=unread or 0,
+                    kept=min(kept.get(name, 0), count),
                 )
             )
     # Those the person put in order come first, and new ones follow by name.
@@ -2349,7 +2414,7 @@ def get_mail_sort(query: GetMailSort, ctx: Context) -> MailSort:
 
 @mail_module.command("mail.sort.prepare")
 def prepare_mail_sort(command: PrepareMailSort, ctx: Context) -> MailSort:
-    sorting.prepare(ctx)
+    sorting.prepare(ctx, again=command.again)
     return sorting.status(ctx)
 
 

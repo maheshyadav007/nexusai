@@ -24,13 +24,23 @@ test("sorting files tool mail under Automated, renamed, before the AI reads it",
   }
   await expect.poll(async () => (await post(request, "/api/queries/threads.list", { folder: "all" })).threads.filter((row: { subject: string }) => row.subject.startsWith(`Build ${stamp}`) || /^Build \d+ passed$/.test(row.subject)).length, { timeout: 30_000 }).toBeGreaterThanOrEqual(6);
 
+  // A person writes too, so the side the AI reads has someone on it.
+  for (const topic of ["the offsite", "Friday's demo"]) await post(request, CONTROL, { subject: `About ${topic} ${stamp}`, sender: "Kim Lee <kim@people.example>", to: USER, body: "What do you think?\nKim" });
+  const shots = process.env.E2E_SHOTS;
+  if (shots) await page.setViewportSize({ width: 1440, height: 1400 });
   await page.goto("/mail/sort");
   // The build bot repeats its subjects, so it starts on the side the AI ignores, in a category of its own.
   const card = page.getByTestId("sort-category").filter({ hasText: "builds@ci.example" });
   await expect(card).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByTestId("sort-sender").filter({ hasText: "builds@ci.example" })).toHaveAttribute("data-side", "ignores");
+  await expect(card).toHaveAttribute("data-side", "ignores");
+  // Which side is said in words: the switch shows it, and a press moves the whole group across.
+  await card.getByRole("radio", { name: "AI reads" }).click();
+  const group = page.getByTestId("sort-group").filter({ hasText: "builds@ci.example" });
+  await expect(group).toHaveAttribute("data-side", "reads");
+  await group.getByRole("radio", { name: "AI ignores" }).click();
   await card.getByRole("textbox", { name: "Category name" }).fill("Build bot");
   await expect(card).toContainText("Automated/Build bot");
+  if (shots) await page.screenshot({ path: `${shots}/sort.png`, fullPage: true });
   await page.getByRole("button", { name: "Sort my mail", exact: true }).click();
   await page.waitForURL("**/today");
 
@@ -41,4 +51,45 @@ test("sorting files tool mail under Automated, renamed, before the AI reads it",
   expect((await post(request, "/api/queries/mail.sort.get")).state).toBe("done");
   const rules = (await post(request, "/api/queries/rules.get")).rules as { actions: { category: string; skip_agent: boolean } }[];
   expect(rules.some((rule) => rule.actions.category === "Automated/Build bot" && rule.actions.skip_agent)).toBe(true);
+
+  // Settings shows what sorting wrote under its folder, in words.
+  await page.goto("/settings?section=rules");
+  const written = page.getByTestId("rule-group").filter({ hasText: "Automated/Build bot" });
+  await written.getByRole("button", { name: "Open Automated/Build bot" }).click();
+  await expect(written.getByTestId("written-rule").first()).toContainText("From builds@ci.example");
+  if (shots) {
+    await page.screenshot({ path: `${shots}/rules-sorted.png`, fullPage: true });
+    await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "More" }).click();
+    await page.screenshot({ path: `${shots}/sidebar-more.png` });
+  }
+});
+
+test("the Sort page opens again as things are now, and moving a sender saves its one rule", async ({ page, request }) => {
+  type Rule = { name: string; conditions: { field: string; value: string }[]; actions: { category: string | null; skip_agent: boolean } };
+  const rulesFor = async (sender: string) => ((await post(request, "/api/queries/rules.get")).rules as Rule[]).filter((rule) => rule.conditions.some((c) => c.value === sender));
+  // Sorted by the test before: the build bot is kept from the AI in its own folder, Kim is read.
+  await page.goto("/mail/sort");
+  const bot = page.getByTestId("sort-category").filter({ hasText: "Automated/Build bot" });
+  await expect(bot).toBeVisible({ timeout: 60_000 });
+  await expect(bot).toContainText("Filed here by a rule now");
+  await expect(page.getByTestId("sort-group").filter({ hasText: "kim@people.example" })).toHaveAttribute("data-side", "reads");
+  await expect(page.getByRole("button", { name: "Skip sorting" })).toHaveCount(0);
+
+  // The bot moves to the AI: it leaves the folder the AI skips, with one rule that lets it in.
+  await bot.getByRole("radio", { name: "AI reads" }).click();
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await page.waitForURL("**/today");
+  await expect.poll(async () => (await rulesFor("builds@ci.example")).map((rule) => rule.actions.skip_agent)).toEqual([false]);
+
+  // Opened again, the page shows that, not what it showed before.
+  await page.goto("/mail/sort");
+  const read = page.getByTestId("sort-group").filter({ hasText: "builds@ci.example" });
+  await expect(read).toBeVisible({ timeout: 60_000 });
+  await expect(read).toHaveAttribute("data-side", "reads");
+  // Kim goes the other way: kept from the AI, with one rule.
+  await page.getByTestId("sort-group").filter({ hasText: "kim@people.example" }).getByRole("radio", { name: "AI ignores" }).click();
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await page.waitForURL("**/today");
+  await expect.poll(async () => (await rulesFor("kim@people.example")).map((rule) => rule.actions.skip_agent)).toEqual([true]);
+  expect((await rulesFor("builds@ci.example")).length).toBe(1);
 });

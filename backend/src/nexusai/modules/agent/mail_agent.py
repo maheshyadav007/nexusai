@@ -16,6 +16,7 @@ from nexusai.contracts.agent import (
     TriageEstimate,
     TriageRun,
 )
+from nexusai.kernel import textmatch
 from nexusai.kernel.database import Database, Migration
 from nexusai.kernel.home import scratch_folder
 from nexusai.kernel.module import CommandError, Context
@@ -28,6 +29,7 @@ from nexusai.modules.agent import (
     feedback,
     gateway,
     guard,
+    kinds,
     matters,
     memory,
     prompts_builder,
@@ -40,6 +42,7 @@ from nexusai.modules.agent.prompt_data import untrusted
 from nexusai.modules.agent.providers import Message
 from nexusai.modules.mail import accounts, sorting
 from nexusai.modules.mail import module as mail
+from nexusai.modules.mail import rules as mail_rules
 from nexusai.modules.mail.rules import FILED_BY_RULE, NO_REPLY
 from nexusai.modules.planner import module as planner
 
@@ -325,8 +328,16 @@ def _thread_text(
     own = signals.own_addresses(ctx)
     blocks: list[str] = []
     used = 0
+    # A reminder that repeats an earlier email word for word is said once: the oldest in full,
+    # the rest as a pointer to it.
+    first_with: dict[str, int] = {}
+    for row in reversed(rows):
+        first_with.setdefault(" ".join(str(row["clean_text"] or "").split()), row["id"])
     for row in rows:
         body = "[Encrypted: can't be read]" if row["encrypted"] else row["clean_text"]
+        earlier = first_with.get(" ".join(str(row["clean_text"] or "").split()))
+        if not row["encrypted"] and body and earlier is not None and earlier != row["id"]:
+            body = f"[The same text as message {earlier}]"
         block = f"{_header(ctx, row, own)}\n{body}"
         if used + len(block) > limit_chars and blocks:
             break
@@ -396,7 +407,20 @@ def task_for(
     facts = signals.about_thread(ctx, thread)
     if facts:
         task += f"\n\n{facts}"
-    open_work = open_work_lines(db, thread)
+    # How the rules handled its newest email, in their own words, so the AI knows what code
+    # already decided and doesn't undo it.
+    task += "\n\nHow the person's rules handled it: " + untrusted(_rule_line(ctx, thread))
+    related = matters.context_for(ctx, thread)
+    if related:
+        task += (
+            "\n\nMatters this email may belong to (found by code; the why is reliable). If it's about"
+            " the same thing as one of them, so finishing one would finish the other, put its number"
+            " in matter. If an open task there already covers what this email asks, don't add a task:"
+            " give that task's id in updates, with the new due date if it changed:\n"
+            + untrusted(related)
+        )
+    # A conversation in a matter has its open work listed there already.
+    open_work = "" if matters.matter_of(db, thread) is not None else open_work_lines(db, thread)
     if open_work:
         task += (
             "\n\nAlready open for this conversation. Don't add these again; a new task or"
@@ -423,13 +447,23 @@ def task_for(
             descriptions
         )
     exact = db.fetch_all(
-        "SELECT name, description, sender, subject, in_priority FROM mail_categories WHERE proposed = 0 AND mode = 'exact' AND name NOT IN ('Promotions','Updates') ORDER BY position, name"
+        "SELECT name, description, subject FROM mail_categories WHERE proposed = 0 AND mode = 'exact' AND name NOT IN ('Promotions','Updates') ORDER BY position, name"
     )
     if exact:
+        # The person's own words and tags for each, without the sender addresses its rules use.
+        described = [
+            row["name"]
+            + (
+                f" — {row['description']}"
+                if row["description"] and row["description"] != row["name"]
+                else ""
+            )
+            + (f" (subject starts with {row['subject']})" if row["subject"] else "")
+            for row in exact
+        ]
         task += (
-            "\n\nExact folders and personalized settings (rules are applied deterministically; "
-            "do not assign these as Smart folders or override their matches):\n"
-            + untrusted(json.dumps([dict(row) for row in exact], ensure_ascii=False))
+            "\n\nExact folders (rules file mail here; never assign these as Smart folders or"
+            " override them):\n" + untrusted("\n".join(described))
         )
     waiting = db.fetch_all("SELECT name FROM mail_categories WHERE proposed = 1 ORDER BY 1")
     if waiting:
@@ -441,6 +475,24 @@ def task_for(
     if answers:
         task += "\n\nThe person answered your earlier question: " + " ".join(answers)
     return subject, sender, task
+
+
+def _rule_line(ctx: Context, thread: int) -> str:
+    """The rule that matched the newest email, and whether it lets the AI read it, in words.
+    Read from the rule itself: an email's why also holds the AI's own earlier judgement."""
+    rows = ctx.bus.db.fetch_all(
+        "SELECT rule FROM messages WHERE thread_id = ? ORDER BY date DESC, id DESC LIMIT 1",
+        (thread,),
+    )
+    name = rows[0]["rule"] if rows else None
+    if not name:
+        return "No rule matched it, so it came to you to judge."
+    found = next((r for r in mail_rules.load_rules(ctx.config.home) if r.name == name), None)
+    if found is None:
+        return f"Matched the rule “{name}”."
+    where = f"filed in {found.actions.category}" if found.actions.category else "left in the Inbox"
+    reads = "kept from you unless it names them" if found.actions.skip_agent else "for you to read"
+    return f"Matched their rule “{name}”: {where}, {reads}."
 
 
 def open_work_lines(db: Database, thread: int) -> str:
@@ -609,10 +661,8 @@ def on_the_plate(ctx: Context) -> str:
 def brief_task(ctx: Context) -> str:
     from nexusai.modules.agent import briefs
 
-    plate = on_the_plate(ctx)
-    task = (
-        briefs.snapshot(ctx) + "\n\nOn their plate today:\n" + untrusted(plate or "Nothing open.")
-    )
+    # One matter at a time, so the same thing isn't listed as a task, a deadline and an email.
+    task = briefs.coverage(ctx) + "\n\n" + untrusted(matters.plate(ctx) or "Nothing open.")
     decisions: list[str] = []
     for label, query in (
         ("Approvals", "SELECT id, summary AS text FROM tool_approvals WHERE status = 'pending'"),
@@ -1161,7 +1211,11 @@ class Triage:
             return
         # Before the work, so its matter's timeline shows the email first and the task after.
         if not filing_only:
-            matters.link(ctx, thread)
+            # The AI may only pick a matter it was shown; anything else is left to code.
+            shown = dict(matters.shortlist(ctx, thread))
+            chosen = str(parsed.get("matter") or "").strip().strip("[]")
+            pick = int(chosen) if chosen.isdigit() and int(chosen) in shown else None
+            matters.link(ctx, thread, choose=pick, because=reason if pick else "")
         self._proposals(thread, parsed, subject)
         if question:
             channel.post(
@@ -1232,25 +1286,31 @@ class Triage:
         ctx = self.ctx
         why = str(parsed.get("reason") or "")[:500]
         db = ctx.bus.db
+        matter = matters.matter_of(db, thread)
+        asked = db.fetch_all(
+            "SELECT id FROM messages WHERE thread_id = ? ORDER BY date DESC, id DESC LIMIT 1",
+            (thread,),
+        )
+        source = asked[0]["id"] if asked else None
         for item in parsed.get("tasks") or []:
             if not isinstance(item, dict) or not _title(item.get("title")):
                 continue
             title, due = _title(item["title"]), _valid_date(item.get("due"))
-            # One task per conversation. A resend or a reminder email moves its date; it used to
-            # add a second task in other words beside the first.
-            current = db.fetch_all(
-                "SELECT id, due, source FROM tasks WHERE thread = ? AND status != 'done' ORDER BY id LIMIT 1",
-                (thread,),
-            )
+            # One task per thing. The AI names the open task an email updates; otherwise the
+            # conversation's own task, or one in its matter worded alike, is the same task. A
+            # resend or a reminder email moves its date instead of adding a copy.
+            current = _same_task(db, item.get("updates"), thread, matter, title)
             if current:
-                if due and due != current[0]["due"] and current[0]["source"] == "agent":
-                    planner.change_task(ctx, current[0]["id"], {"due": due})
-                    matters.note(ctx, thread, "due", f"Due date now {due}", why)
+                if due and due != current["due"] and current["source"] == "agent":
+                    planner.change_task(ctx, current["id"], {"due": due})
+                    matters.note(ctx, thread, "due", f'"{current["title"]}" now due {due}', why)
                 continue
             if planner.has_task(db, title, thread) or planner.has_reminder(db, title, thread):
                 continue
-            planner.add_task(ctx, title, due, thread, "agent", True)
-            matters.note(ctx, thread, "task", f'Task added: "{title}"', why)
+            planner.add_task(
+                ctx, title, due, thread, "agent", True, matter=matter, source_message=source
+            )
+            matters.note(ctx, thread, "task", f'To-do: "{title}"', why)
         for item in parsed.get("reminders") or []:
             if (
                 not isinstance(item, dict)
@@ -1270,8 +1330,10 @@ class Triage:
                 continue
             if planner.has_reminder(db, title, thread) or planner.has_task(db, title, thread):
                 continue
-            planner.add_reminder(ctx, title, when, "none", thread, None, "agent", True)
-            matters.note(ctx, thread, "task", f'Reminder set: "{title}"', why)
+            planner.add_reminder(
+                ctx, title, when, "none", thread, None, "agent", True, matter=matter
+            )
+            matters.note(ctx, thread, "task", f'Reminder: "{title}"', why)
         for item in parsed.get("deadlines") or []:
             if not isinstance(item, dict) or not _title(item.get("what")):
                 continue
@@ -1286,9 +1348,13 @@ class Triage:
                     planner.change_task(ctx, task[0]["id"], {"due": due})
                     matters.note(ctx, thread, "due", f"Due date now {due}", why)
                 continue
-            channel.board_add(
-                ctx, "deadline", _title(item["what"])[:300], thread, due, cards.name(db, AGENT)
-            )
+            # A deadline is a to-do with a date, not a second kind of item beside it.
+            what = _title(item["what"])[:300]
+            if not planner.has_task(db, what, thread):
+                planner.add_task(
+                    ctx, what, due, thread, "agent", True, matter=matter, source_message=source
+                )
+                matters.note(ctx, thread, "task", f'To-do: "{what}"', why)
         if parsed.get("draft"):
             self._draft(thread, str(parsed["draft"]), subject)
         if parsed.get("memory"):
@@ -1330,6 +1396,24 @@ class Triage:
                 "INSERT INTO mail_drafts (body, updated) VALUES (?, ?)", (json.dumps(draft), _now())
             )
             work.emit("drafts.changed", {}, source="agent", trace_id=ctx.trace_id)
+
+
+def _same_task(db: Database, named: Any, thread: int, matter: int | None, title: str) -> Any:
+    """The open task an email is about, if there is one: the one the AI named from its matter,
+    the conversation's own, or one in the matter worded alike."""
+    rows = db.fetch_all(
+        "SELECT id, due, source, title, thread FROM tasks WHERE status != 'done' AND (thread = ? OR matter = ?)"
+        " ORDER BY id",
+        (thread, matter if matter is not None else -1),
+    )
+    found = kinds.parse(named)
+    if found and found[0] == "task":
+        picked = next((r for r in rows if r["id"] == found[1]), None)
+        if picked:
+            return picked
+    return next((r for r in rows if r["thread"] == thread), None) or next(
+        (r for r in rows if textmatch.same(r["title"], title)), None
+    )
 
 
 def _title(value: Any) -> str:

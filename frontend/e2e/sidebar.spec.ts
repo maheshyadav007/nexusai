@@ -1,7 +1,8 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-// Your folders hold the person's own categories; server folders wait under More.
+// Your folders hold the person's own categories and their labels on the server; More holds only
+// the system folders.
 const categories = ["Action needed", "Projects", "Finance", "People", "Travel", "Newsletters", "Team updates", "Reference", ...Array.from({ length: 12 }, (_, i) => `Project ${i + 1}`)].map((name) => ({ name, source: "user", in_priority: false, proposed: false, count: 3, unread: 0 }));
 const folders = Array.from({ length: 2 }, (_, i) => ({ name: `Server ${i + 1}`, label: `Server ${i + 1}`, role: "other", here: 4, on_server: 4, unread: 0 }));
 const screenshots = "../output/sidebar-review-2026-11-05";
@@ -23,11 +24,13 @@ test("five custom rows expand within a scroll area and collapse with the selecte
   await page.route("**/api/queries/profile.get", (route) => route.fulfill({ json: { name: "Mahesh Yadav", role: "", tone: "friendly" } }));
   await page.goto("/today");
   const nav = page.getByRole("navigation", { name: "Main navigation" });
-  const rows = nav.locator('[data-testid="nav-folder"], [data-testid="nav-category"]');
+  // The categories, the first five of them until shown all; the server's labels sit below them.
+  const rows = nav.locator('[data-testid="nav-category"]');
   const list = nav.getByRole("region", { name: "Categories and custom folders" });
   const today = nav.getByRole("link", { name: "Today", exact: true });
   const priority = nav.getByRole("link", { name: "Inbox", exact: true });
   await expect(rows).toHaveCount(5);
+  await expect(nav.locator('[data-testid="nav-folder"]')).toHaveCount(2);
   await expect(today).toHaveAttribute("aria-current", "page");
   const homeBox = await today.boundingBox();
   const mailBox = await priority.boundingBox();
@@ -79,15 +82,18 @@ test("five custom rows expand within a scroll area and collapse with the selecte
 
 test("five or fewer custom folders need no expansion button", async ({ page }) => {
   await page.route("**/api/queries/categories.list", (route) => route.fulfill({ json: { categories: categories.slice(0, 3) } }));
-  await page.route("**/api/queries/mail.folders", (route) => route.fulfill({ json: { folders: folders.slice(0, 2), counts: {} } }));
+  // Gmail's own Starred and Important are the app's views of those names, so they don't show twice.
+  const gmail = ["Starred", "Important"].map((label) => ({ name: `[Gmail]/${label}`, label, role: "other", here: 4, on_server: 4, unread: 0, shown_elsewhere: true }));
+  await page.route("**/api/queries/mail.folders", (route) => route.fulfill({ json: { folders: [...folders.slice(0, 2), ...gmail], counts: {} } }));
   await page.goto("/today");
   const nav = page.getByRole("navigation", { name: "Main navigation" });
   await expect(nav.locator('[data-testid="nav-category"]')).toHaveCount(3);
   await expect(nav.getByRole("button", { name: /Show all|Show less/ })).toHaveCount(0);
-  // Server folders wait folded under More.
-  await expect(nav.locator('[data-testid="nav-folder"]')).toHaveCount(0);
+  // The server's own labels show with the person's folders, not folded under More.
+  await expect(nav.locator('[data-testid="nav-folder"]')).toHaveCount(2);
   await nav.getByRole("button", { name: "More" }).click();
   await expect(nav.locator('[data-testid="nav-folder"]')).toHaveCount(2);
+  await expect(nav.getByRole("link", { name: "All mail", exact: true })).toBeVisible();
 });
 
 test("account menu aligns above the user button and supports keyboard and collapsed navigation", async ({ page }) => {

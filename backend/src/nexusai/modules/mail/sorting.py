@@ -9,13 +9,22 @@ names the person, or that a person answered, still reaches the AI.
 
 import threading
 import zlib
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
 import structlog
 
-from nexusai.contracts.mail import ApplyMailSort, MailRule, MailSort, SortEmail, SortSender
+from nexusai.contracts.mail import (
+    ApplyMailSort,
+    MailRule,
+    MailSort,
+    RuleActions,
+    RuleCondition,
+    SortEmail,
+    SortSender,
+)
 from nexusai.kernel.database import Migration
 from nexusai.kernel.module import CommandError, Context
 from nexusai.modules.mail import accounts, grouping, rules, sort_rules, sort_view
@@ -48,10 +57,20 @@ class _Job:
     covered: int = 0
     # The newest email scored, so mail that came after it gets scored too.
     newest: int = 0
+    # Opened again after sorting, rather than for the first time.
+    again: bool = False
+    # Senders a rule already files, as (folder, kept from the AI). They start where it puts them.
+    current: dict[str, tuple[str, bool]] = field(default_factory=dict)
+    # The rules it was scored against; a change to them means the page would be out of date.
+    rules: str = ""
 
 
 _jobs: dict[str, _Job] = {}
 _lock = threading.Lock()
+
+
+def _now() -> str:
+    return datetime.now(UTC).isoformat()
 
 
 def decided(ctx: Context) -> str:
@@ -71,8 +90,13 @@ def _decide(ctx: Context, state: str) -> None:
         work.emit("mail.sorted", {"state": state}, source="mail", trace_id=ctx.trace_id)
 
 
-def prepare(ctx: Context) -> None:
-    """Scores the stored mail in the background, once, so the page is ready when it's opened."""
+def _rules_now(ctx: Context) -> str:
+    return "\n".join(rule.model_dump_json() for rule in rules.load_rules(ctx.config.home))
+
+
+def prepare(ctx: Context, again: bool = False) -> None:
+    """Scores the stored mail in the background, once, so the page is ready when it's opened.
+    Opened again after sorting, it looks again whenever mail or rules changed since."""
     home = str(ctx.config.home)
     # Scoring half a mailbox would put senders on the wrong side, so it waits for the download.
     downloading = ctx.bus.db.fetch_all(
@@ -83,11 +107,19 @@ def prepare(ctx: Context) -> None:
     with _lock:
         job = _jobs.get(home)
         busy = job is not None and job.state == "preparing"
-        # A score from before newer mail came in is scored again, so nothing is left off the list.
-        current = job is not None and job.state == "ready" and job.newest >= newest
-        if downloading or decided(ctx) or busy or current:
+        # A score from before newer mail came in, or before the rules changed, is scored again,
+        # so the page never shows a sender where it no longer is.
+        reviewing = bool(again and decided(ctx))
+        current = (
+            job is not None
+            and job.state == "ready"
+            and job.newest >= newest
+            and job.again == reviewing
+            and job.rules == _rules_now(ctx)
+        )
+        if downloading or (decided(ctx) and not reviewing) or busy or current:
             return
-        job = _jobs[home] = _Job()
+        job = _jobs[home] = _Job(again=reviewing, rules=_rules_now(ctx))
     _announce(ctx, job.state)
     threading.Thread(target=_score, args=(ctx, job), daemon=True, name="mail-sorting").start()
 
@@ -109,12 +141,17 @@ def _score(ctx: Context, job: _Job) -> None:
         job.total = len(rows)
         job.newest = max((int(row["id"]) for row in rows), default=0)
         mail = [(str(row["id"]), zlib.decompress(row["data"])) for row in rows]
-        covered = _covered(ctx, mail)
-        mail = [(key, raw) for key, raw in mail if key not in covered]
+        # Every sender is on the page, the first time and every time after; one a rule already
+        # files starts where its rule puts it, so the page shows what's true now.
+        covered, job.current = _covered(ctx, mail)
         job.done = job.total
         report = grouping.score_senders(mail)
         raws = dict(mail)
         job.found = sort_view.describe_senders(report, raws.__getitem__)
+        for row in job.found["senders"]:
+            if row["sender"] in job.current:
+                folder, kept = job.current[row["sender"]]
+                row.update(folder=folder, side="ignores" if kept else "reads", own=False)
         job.report, job.covered = report, len(covered)
         job.state = "ready"
     except Exception as error:
@@ -123,26 +160,44 @@ def _score(ctx: Context, job: _Job) -> None:
     _announce(ctx, job.state)
 
 
-def _covered(ctx: Context, mail: list[tuple[str, bytes]]) -> frozenset[str]:
-    """Mail the person's own rules and categories already file. Sorting builds on them, so an
+def _covered(
+    ctx: Context, mail: list[tuple[str, bytes]]
+) -> tuple[frozenset[str], dict[str, tuple[str, bool]]]:
+    """Mail the person's own rules and categories already file, and for each sender the folder
+    its rule files it into and whether that keeps it from the AI. Sorting builds on them, so an
     imported archive or a second look never starts over."""
     # Imported here: the mail module imports this one.
     from nexusai.modules.mail.module import rule_engine
 
     engine = rule_engine(ctx, None)
-    decisions = engine.decide([parse_message(raw) for _, raw in mail])
-    return frozenset(
-        key
-        for (key, _), decision in zip(mail, decisions, strict=True)
-        if decision.category and decision.rule not in rules.BUILT_IN_RULES
-    )
+    parsed = [parse_message(raw) for _, raw in mail]
+    decisions = engine.decide(parsed)
+    covered: set[str] = set()
+    seen: dict[str, Counter[tuple[str, bool]]] = defaultdict(Counter)
+    for (key, _), message, decision in zip(mail, parsed, decisions, strict=True):
+        if decision.match and decision.category and decision.rule not in rules.BUILT_IN_RULES:
+            covered.add(key)
+            filing = (decision.category, decision.match.actions.skip_agent)
+            seen[message.from_addr.lower()][filing] += 1
+        elif decision.rule and decision.rule.startswith(sort_rules.READS_PREFIX):
+            # Let through on purpose: on the side the AI reads, in no folder.
+            seen[message.from_addr.lower()][("", False)] += 1
+    # A sender's most usual filing is where it stands.
+    current = {sender: counts.most_common(1)[0][0] for sender, counts in seen.items()}
+    return frozenset(covered), current
 
 
 def status(ctx: Context) -> MailSort:
     state = decided(ctx)
-    if state:
-        return MailSort(state=state)
-    job = _jobs.get(str(ctx.config.home))
+    view = _view(_jobs.get(str(ctx.config.home)))
+    if not state:
+        return view
+    # Sorted or skipped already: the page can be opened again, from a fresh look at the mail.
+    review = view.state if view.state in {"none", "preparing", "ready", "failed"} else "none"
+    return view.model_copy(update={"state": state, "review": review})
+
+
+def _view(job: "_Job | None") -> MailSort:
     if job is None:
         return MailSort(state="none")
     if job.state != "ready":
@@ -204,6 +259,13 @@ def plan(found: dict[str, Any], command: ApplyMailSort) -> dict[str, list[str]]:
     return folders
 
 
+def _about(rule: MailRule, senders: set[str]) -> bool:
+    return any(
+        c.field in {"sender", "sender_exact"} and (c.value or "").lower() in senders
+        for c in rule.conditions
+    )
+
+
 def apply(ctx: Context, command: ApplyMailSort) -> int:
     """Files every sender the person kept from the AI, with a rule for what's to come, and
     returns how many conversations moved. What the AI reads stays in the Inbox."""
@@ -212,7 +274,26 @@ def apply(ctx: Context, command: ApplyMailSort) -> int:
         raise CommandError("mail.sort_not_ready", "The mail isn't scored yet.", 409)
     report = job.report
     by_sender = {row.sender: row for row in report.senders}
-    folders = plan(job.found, command)
+    found = job.found
+    # A sender a rule already files only changes sides, in its rule; the rest are sorted as
+    # they always were. Nothing the person didn't move changes.
+    flips: dict[str, bool] = {}
+    # Let through by an "AI reads" rule and moved back: that rule goes, and it's sorted afresh.
+    unlet: set[str] = set()
+    if job.current:
+        chosen = {choice.sender: choice for choice in command.senders}
+        for sender, (folder, kept) in job.current.items():
+            choice = chosen.get(sender)
+            if choice is None or (choice.side == "ignores") == kept:
+                continue
+            if folder:
+                flips[sender] = choice.side == "ignores"
+            else:
+                unlet.add(sender)
+        settled = {s for s in job.current if s not in unlet}
+        command = ApplyMailSort(senders=[c for c in command.senders if c.sender not in settled])
+        found = {**found, "senders": [r for r in found["senders"] if r["sender"] not in settled]}
+    folders = plan(found, command)
     raws = {
         str(row["id"]): row
         for row in ctx.bus.db.fetch_all(
@@ -311,11 +392,97 @@ def apply(ctx: Context, command: ApplyMailSort) -> int:
             trace_id=ctx.trace_id,
         )
         work.emit("mail.sorted", {"state": "done"}, source="mail", trace_id=ctx.trace_id)
-    if new_rules:
-        made = {rule.name for rule in new_rules}
+    if unlet:
         rules.change_rules(
             ctx.config.home,
-            lambda existing: [*(rule for rule in existing if rule.name not in made), *new_rules],
+            lambda existing: [
+                rule
+                for rule in existing
+                if not (rule.name.startswith(sort_rules.READS_PREFIX) and _about(rule, unlet))
+            ],
         )
+    if new_rules:
+        made = {rule.name for rule in new_rules}
+        # One rule per sender: whatever else matched these senders goes.
+        filed = {sender for senders in folders.values() for sender in senders}
+        rules.change_rules(
+            ctx.config.home,
+            lambda existing: [
+                *(r for r in existing if r.name not in made and not _about(r, filed)),
+                *new_rules,
+            ],
+        )
+    for sender, kept in flips.items():
+        move_sender(ctx, sender, reads=not kept, folder=job.current[sender][0])
     _jobs.pop(str(ctx.config.home), None)
     return moved
+
+
+def move_sender(
+    ctx: Context, sender: str, *, reads: bool, folder: str | None = None, keep_folder: bool = True
+) -> str:
+    """One sender to the side the AI reads or the side it ignores, the one way every screen
+    and agent does it. A sender has one rule, so whatever rules it had are replaced:
+
+    - to the AI, into a folder the AI reads: its rule files it there and lets the AI read it;
+    - to the AI, from a folder the AI skips as a whole, or from none: a rule lets it through;
+    - away from the AI: its rule files it in `folder`, its old folder, or Automated.
+
+    Mail already filed stays where it is; the rule decides what's to come. Says what it did."""
+    sender = sender.strip().lower()
+    if "@" not in sender:
+        raise CommandError("mail.sender", "That isn't an email address.", 422)
+    existing = rules.load_rules(ctx.config.home)
+    mine = [rule for rule in existing if _about(rule, {sender})]
+    was = next((rule.actions.category for rule in mine if rule.actions.category), None)
+    skipped = {
+        row["name"]
+        for row in ctx.bus.db.fetch_all("SELECT name FROM mail_categories WHERE ai_reads = 0")
+    }
+    target = (folder or (was if keep_folder else "") or "").strip()[:64]
+    if reads:
+        if target and target not in skipped:
+            rule = MailRule(
+                name=f"{target}: {sender}"[:120],
+                conditions=[RuleCondition(field="sender_exact", value=sender)],
+                actions=RuleActions(category=target),
+            )
+            said = f"{sender}: filed in {target}, and the AI reads it"
+        else:
+            rule = MailRule(
+                name=f"{sort_rules.READS_PREFIX}{sender}"[:120],
+                conditions=[RuleCondition(field="sender_exact", value=sender)],
+                actions=RuleActions(),
+            )
+            said = f"{sender}: stays in the Inbox, and the AI reads it"
+    else:
+        target = target or AUTOMATED
+        rule = MailRule(
+            name=f"{sort_rules.PREFIX}{target}: {sender}"[:120],
+            conditions=[RuleCondition(field="sender_exact", value=sender)],
+            actions=RuleActions(category=target, skip_agent=True),
+        )
+        with ctx.bus.unit_of_work() as work:
+            # A new folder for it; one under Automated is skipped whole, like Automated.
+            reads_whole = 0 if target.split("/")[0] == AUTOMATED else 1
+            work.tx.execute(
+                "INSERT OR IGNORE INTO mail_categories (name, source, in_priority, proposed, why,"
+                " created, mode, description, ai_reads)"
+                " VALUES (?, 'user', 0, 0, ?, ?, 'exact', ?, ?)",
+                (target, "Sorted before the AI read it", _now(), target, reads_whole),
+            )
+        said = f"{sender}: filed in {target}, kept from the AI"
+    rules.change_rules(
+        ctx.config.home,
+        lambda current: [*(r for r in current if not _about(r, {sender})), rule],
+    )
+    with ctx.bus.unit_of_work() as work:
+        # A folder named after its first sender makes a rule of its own for it; this one
+        # replaces it, so the sender still has exactly one.
+        work.tx.execute(
+            "UPDATE mail_categories SET sender = NULL WHERE LOWER(sender) = ?", (sender,)
+        )
+        work.emit("rules.changed", {"count": 1}, source="mail", trace_id=ctx.trace_id)
+        work.emit("categories.changed", {}, source="mail", trace_id=ctx.trace_id)
+    _jobs.pop(str(ctx.config.home), None)
+    return said

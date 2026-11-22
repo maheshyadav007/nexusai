@@ -86,8 +86,8 @@ def test_an_experiment_scores_senders_saves_choices_and_deletes_the_mail(lab: An
     rows = report["senders"]
     assert [row["count"] for row in rows] == sorted((row["count"] for row in rows), reverse=True)
     ignored = [row for row in rows if row["side"] == "ignores"]
-    # The five biggest the AI ignores start as their own categories.
-    assert [row["own"] for row in ignored[:6]] == [True] * 5 + [False]
+    # The three biggest the AI ignores start as their own categories.
+    assert [row["own"] for row in ignored[:4]] == [True] * 3 + [False]
     tool, person = ignored[0], next(row for row in rows if row["side"] == "reads")
     finish = {
         "senders": [

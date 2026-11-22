@@ -112,6 +112,9 @@ TOOL_ENTRIES = (
     ToolEntry("search_mail", MAIL, "Search mail", "Find mail and attachments.", "read"),
     ToolEntry("read_thread", MAIL, "Read mail", "Open a conversation.", "read"),
     ToolEntry(
+        "read_matter", MAIL, "Read matters", "See everything about one thing going on.", "read"
+    ),
+    ToolEntry(
         "read_recipients",
         MAIL,
         "See who mail went to",
@@ -150,6 +153,9 @@ TOOL_ENTRIES = (
     ),
     ToolEntry("list_rules", CATEGORIES, "See rules", "Read your mail rules.", "read"),
     ToolEntry("save_rule", CATEGORIES, "Write rules", "Create or change a mail rule.", "data"),
+    ToolEntry(
+        "move_sender", CATEGORIES, "Move senders", "Choose whether the AI reads a sender.", "data"
+    ),
     ToolEntry("delete_rules", CATEGORIES, "Remove rules", "Delete mail rules.", "data"),
     ToolEntry("list_tasks", PLANNER, "See tasks", "Read your task list.", "read"),
     ToolEntry("create_tasks", PLANNER, "Add tasks", "Add tasks when you ask.", "data"),

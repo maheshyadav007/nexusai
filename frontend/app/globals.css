@@ -30,6 +30,12 @@ body {
     height: 2px;
     transform: translateY(-50%);
   }
+  /* The week strip: as many days as are loaded, each one wide. */
+  .nx-days {
+    display: grid;
+    grid-template-columns: repeat(var(--nx-days, 7), var(--layout-day));
+    width: calc(var(--nx-days, 7) * var(--layout-day));
+  }
   .nx-track-now {
     position: absolute;
     top: 0;

@@ -1367,6 +1367,15 @@ class PreviewMail(BaseModel):
     thread: int
 
 
+class PreviewAgent(BaseModel):
+    """What the brief writer or Posty would be sent, for a message like this one."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    agent: Literal["daily-prep", "session"]
+    text: str = Field(default="", max_length=2000)
+
+
 class MailPreview(BaseModel):
     layers: list[KnowledgeLayer]
     given: str
@@ -1700,7 +1709,19 @@ class SeeAlerts(BaseModel):
 # Matters: one record for each real thing going on (docs/MATTERS_PLAN.md).
 MatterState = Literal["waiting_on_you", "waiting_on_others", "fyi", "done"]
 MatterEventKind = Literal[
-    "started", "joined", "mail", "sent", "task", "due", "closed", "done", "reopened", "moved"
+    "started",
+    "joined",
+    "mail",
+    "sent",
+    "task",
+    "due",
+    "closed",
+    "done",
+    "reopened",
+    "moved",
+    "merged",
+    "linked",
+    "kept",
 ]
 MatterMarkKind = Literal["in", "sent", "due", "reminder", "closed"]
 
@@ -1712,6 +1733,8 @@ class MatterWork(BaseModel):
     when: str | None = None
     thread: int | None = None
     proposed: bool = False
+    # A reminder that belongs to a task names it: it's listed under it, and goes with it.
+    parent: int | None = None
 
 
 class MatterRow(BaseModel):
@@ -1787,11 +1810,99 @@ class MatterThread(BaseModel):
     why: str
 
 
+class MatterLinkRow(BaseModel):
+    """Another matter this one is like, without being the same thing."""
+
+    matter: int
+    title: str
+    state: MatterState
+    why: str
+
+
+class MatterFile(BaseModel):
+    ref: str
+    title: str
+    # The email it came with, when it came by mail.
+    source: SourceRef | None = None
+
+
 class MatterDetail(BaseModel):
     matter: MatterRow
+    # The latest changes, oldest first; `earlier` says there are more before them.
     events: list[MatterChange]
+    earlier: bool = False
     threads: list[MatterThread]
     people: list[str]
+    related: list[MatterLinkRow] = Field(default_factory=list)
+    files: list[MatterFile] = Field(default_factory=list)
+
+
+class GetMatterEvents(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    # The oldest change shown so far; the page before it comes back.
+    before: int
+
+
+class MatterEvents(BaseModel):
+    events: list[MatterChange]
+    earlier: bool
+
+
+class MatterItem(BaseModel):
+    """Something else open in the matter, offered when one thing in it is finished."""
+
+    ref: str
+    kind: Literal["task", "reminder", "deadline", "thread"]
+    title: str
+    when: str | None = None
+    # Ticked to start with: the same email asked for it, so it's most likely finished too.
+    suggested: bool = False
+    why: str = ""
+
+
+class GetMatterRelated(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # What was just finished, as "task:88" or "thread:12".
+    ref: str = Field(max_length=40)
+
+
+class MatterRelated(BaseModel):
+    matter: int | None = None
+    title: str = ""
+    items: list[MatterItem] = Field(default_factory=list)
+
+
+class CloseMatterItems(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    trigger: str = Field(max_length=40)
+    close: list[str] = Field(default_factory=list, max_length=100)
+    # Left open on purpose, so they aren't offered again for the same thing.
+    keep: list[str] = Field(default_factory=list, max_length=100)
+
+
+class ReopenMatterItems(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    refs: list[str] = Field(max_length=100)
+
+
+class MergeMatters(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    into: int
+
+
+class AttachToMatter(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    matter: int
+    ref: str = Field(max_length=40)
+    why: str = Field(default="", max_length=300)
 
 
 class GetMattersBrief(BaseModel):
@@ -1803,6 +1914,8 @@ class GetMattersWeek(BaseModel):
 
     # The Monday the week starts on; the current week when left out.
     start: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    # How many days from there. The Week tab loads more as it's scrolled, up to half a year.
+    days: int = Field(default=7, ge=1, le=186)
 
 
 class ListMatters(BaseModel):

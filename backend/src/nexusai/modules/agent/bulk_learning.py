@@ -477,7 +477,10 @@ def finish_or_ask(ctx: Context) -> None:
         "SELECT 1 FROM mail_learning_groups WHERE account=? AND learned=1 AND uncertain=1 LIMIT 1",
         (account,),
     )
-    if unsure:
+    # Once sorted, the person already chose what the AI reads. Rating each unsure group on top
+    # of that was a long list of questions for little gain: the guesses are kept, and corrections
+    # on an email teach the rest.
+    if unsure and sorting.decided(ctx) != "done":
         with ctx.bus.db.transaction() as tx:
             tx.execute(
                 "UPDATE mail_learning_reviews SET state='asking',updated=? WHERE account=?",

@@ -4,14 +4,13 @@ import { useSessions } from "@/ui/client/sessions";
 import { usePlannerCounts, useWaitingCount } from "@/ui/client/work";
 import { MailNavMenu } from "./MailNavMenu";
 import type { MarkFolderRead } from "@/ui/client/contracts.generated";
-import { CategoryNavActions } from "./CategoryNav";
+import { CategoryNav, NewCategory } from "./CategoryNav";
 import { CustomMailNav } from "./CustomMailNav";
-import { CategoryNav } from "./CategoryNav";
-import { FolderNav } from "./FolderNav";
+import { FolderNav, SpamNav } from "./FolderNav";
 import { SidebarFold } from "./SidebarFold";
-import { categoryHref, customCategories, customFolders, folderHref, isCurrentMail, keptFromAi } from "./customMail";
+import { categoryHref, customCategories, folderHref, isCurrentMail, keptFromAi, spamFolders } from "./customMail";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useId, useState } from "react";
 import { useCategories, useDrafts, useMailFolders } from "@/ui/client/mail";
 import appConfig from "@/app.config.json";
@@ -84,30 +83,47 @@ function useUnreadCounts(): Readonly<Record<string, number>> {
   return { priority: found.priority ?? 0, important: found.important ?? 0, starred: found.starred ?? 0, "all-mail": found.all ?? 0, sent: found.sent ?? 0, drafts: found.drafts ?? 0, archive: found.archive ?? 0, trash: found.trash ?? 0 };
 }
 
-/** What the AI skips, folded: Automated with the tools filed under it, and Calendar. */
+/** The person's folders and their mail account's labels, under one heading that can add one. */
+function FoldersNav() {
+  const pathname = usePathname();
+  return (
+    <SidebarFold id="folders" label={t("nav.categories")} open actions={<NewCategory />} holdsActive={pathname.startsWith("/mail/category/") || pathname.startsWith("/mail/folder/")}>
+      <CustomMailNav collapsed={false} after={<FolderNav collapsed={false} />} />
+    </SidebarFold>
+  );
+}
+
+/** Opens the Sort page again, where each sender stands now, to move any across. */
+function SortAgain() {
+  const router = useRouter();
+  return <IconButton icon="customize" label={t("nav.sortAgain")} className="-my-1 p-1" onClick={() => router.push("/mail/sort")} />;
+}
+
+/** What the AI skips: Automated with the tools filed under it, and Calendar. */
 function KeptNav() {
   const categories = useCategories();
   const pathname = usePathname();
   const kept = customCategories(categories.data?.categories ?? []).filter(keptFromAi);
   if (!kept.length) return null;
   return (
-    <SidebarFold id="kept" icon="keptFromAi" label={t("nav.kept")} count={kept.reduce((n, item) => n + (item.unread ?? 0), 0)} holdsActive={kept.some((item) => isCurrentMail(pathname, categoryHref(item.name)))}>
-      <CategoryNav collapsed={false} pick={keptFromAi} />
+    <SidebarFold id="kept" label={t("nav.kept")} open actions={<SortAgain />} holdsActive={kept.some((item) => isCurrentMail(pathname, categoryHref(item.name)))}>
+      <CategoryNav collapsed={false} pick={keptFromAi} label={t("nav.kept")} />
     </SidebarFold>
   );
 }
 
-/** What's needed now and then: the views and folders that don't earn a row of their own. */
+/** The system folders, needed now and then: Important, All mail, Archive, Spam and Trash. The
+ *  person's own folders and labels sit with their folders above, never in here. */
 function MoreNav({ items, row }: { items: NavItem[]; row: (item: NavItem) => React.ReactNode }) {
   const pathname = usePathname();
   const folders = useMailFolders();
-  const onServer = customFolders(folders.data?.folders ?? [], pathname);
-  if (!items.length && !onServer.length) return null;
-  const holdsActive = items.some((item) => isCurrentMail(pathname, item.href)) || onServer.some((row) => isCurrentMail(pathname, folderHref(row.name)));
+  const spam = spamFolders(folders.data?.folders ?? [], pathname);
+  if (!items.length && !spam.length) return null;
+  const holdsActive = items.some((item) => isCurrentMail(pathname, item.href)) || spam.some((folder) => isCurrentMail(pathname, folderHref(folder.name)));
   return (
-    <SidebarFold id="more" icon="moreFolders" label={t("nav.more")} holdsActive={holdsActive}>
+    <SidebarFold id="more" label={t("nav.more")} holdsActive={holdsActive}>
       <ul className="flex flex-col gap-px">{items.map(row)}</ul>
-      <FolderNav collapsed={false} />
+      <SpamNav />
     </SidebarFold>
   );
 }
@@ -121,6 +137,7 @@ export function NavSidebar({ counts }: { counts?: Readonly<Record<string, number
   const layout = useSidebar();
   const sections = arrange(NAV_SECTIONS, layout.data).filter((section) => !section.hidden);
   const [collapsed, setCollapsed] = useState(false);
+  const tools = NAV_BOTTOM.filter((item) => item.id !== "settings");
 
   useEffect(() => {
     try {
@@ -171,16 +188,20 @@ export function NavSidebar({ counts }: { counts?: Readonly<Record<string, number
               <section key={section.id} aria-label={t(section.label)} className={mail ? "flex shrink-0 flex-col gap-1" : "shrink-0 border-t border-line-subtle pt-2"}>
                 {collapsed || !section.heading ? null : <h2 className="mb-1 px-2 text-sm text-ink-muted">{t(section.label)}</h2>}
                 <ul className="flex flex-col gap-px">{daily.map(row)}</ul>
-                {mail ? <CategoryNavActions collapsed={collapsed} /> : null}
-                {mail ? <CustomMailNav collapsed={collapsed} /> : null}
-                {mail && !collapsed ? <KeptNav /> : null}
-                {mail && !collapsed ? <MoreNav items={items.filter((item) => item.more)} row={row} /> : null}
+                {mail && !collapsed ? <div className="mt-2 flex flex-col gap-3"><FoldersNav /><KeptNav /><MoreNav items={items.filter((item) => item.more)} row={row} /></div> : null}
               </section>
             );
           })}
+          {/* Little used, so they have a section of their own that stays folded; the narrow rail
+              still shows each icon. */}
+          <section aria-label={t("nav.tools")} className="shrink-0 border-t border-line-subtle pt-2">
+            {collapsed ? <ul className="flex flex-col gap-px">{tools.map(row)}</ul> : <SidebarFold id="tools" label={t("nav.tools")} holdsActive={tools.some((item) => isCurrentMail(pathname, item.href))}><ul className="flex flex-col gap-px">{tools.map(row)}</ul></SidebarFold>}
+          </section>
         </div>
       </div>
-      <ul className="flex shrink-0 flex-col gap-px border-t border-line-subtle p-2">{NAV_BOTTOM.filter(item => item.id !== "settings").map(row)}<li><AppMenu collapsed={collapsed} /></li></ul>
+      <div className="shrink-0 border-t border-line-subtle p-2">
+        <AppMenu collapsed={collapsed} />
+      </div>
     </nav>
   );
 }

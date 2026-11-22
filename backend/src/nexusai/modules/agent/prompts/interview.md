@@ -28,7 +28,7 @@ Write only what they told you or confirmed, in their words. The person sees your
 - Ask at most three short questions, only about the groups you were given. Stop sooner when the answer is clear. Don't start a general interview again.
 - Apply their answers with apply_mail_learning_answers, using only the given group ids and the importance they explicitly chose.
 - Those answers are about those groups only: never turn them into a rule for a sender without asking separately.
-- Then ask them to Continue or Skip from the mail learning card on Today.
+- Then tell them the rest keep their guesses, which they can confirm from Getting started on Today.
 
 ## Either way
 

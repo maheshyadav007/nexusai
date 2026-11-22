@@ -21,6 +21,16 @@ Status, 2026-11-21: reviewed and kept, except the graph view (dropped). **Built 
 
 ---
 
+## Object model (built 2026-11-22)
+
+- **Ownership is a tree:** a task's matter is `tasks.matter`, a reminder's parent is `reminders.task` or `reminders.matter`. Every task from mail keeps `tasks.source_message`, the email that asked for it.
+- **Every other link** is a row in `links` (`modules/agent/links.py`): related, merged, uses. Links are ended with a reason, never deleted.
+- **Kinds** are declared once in `modules/agent/kinds.py`; objects are named `task:88`, `thread:12`, `doc:5` on screen, in prompts and in links.
+- **Children follow their parent** (planner `_children_follow`): a task's reminders close, reopen and move with it.
+- **Siblings are asked:** `matters.related` lists the rest of the matter after something finishes; `matters.closeItems` closes what the person ticks and remembers what they kept (`matter_kept`). The sheet is `RestOfMatter.tsx`, triggered from the shared task and status hooks. An agent that finishes a task only tells the person what's still open.
+- **The AI sees related matters** (`matters.context_for`) and may pick one by number (`record_triage.matter`, checked against the shortlist) and point a task at the open one it updates (`tasks[].updates`). A shared sender alone shows a matter to the AI but never joins or relates it by code.
+- **Timeline** pages oldest first (`matters.get` gives the newest page, `matters.events` the ones before it).
+
 ## 1. What "best mail app in the world" means here
 
 These are the outcomes. Every design choice below should make at least one of them better, and none worse.

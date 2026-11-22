@@ -249,7 +249,11 @@ class Engine:
     def match(self, parsed: ParsedMessage) -> RuleMatch | None:
         if not self.on:
             return None
-        return evaluate(parsed, list(self.rules), self.own_domain, self.folder_modes)
+        # What keeps mail from the AI is checked before what lets it read, each in its own
+        # order: most mail is tools' mail, so that's sorted first, and mail no rule claims
+        # reaches the AI.
+        ordered = sorted(self.rules, key=lambda rule: not rule.actions.skip_agent)
+        return evaluate(parsed, ordered, self.own_domain, self.folder_modes)
 
     def decide(self, emails: Sequence[ParsedMessage]) -> list[Decision]:
         return [self._decide(parsed) for parsed in emails]
@@ -343,6 +347,13 @@ def change_rules(home: Path, change: Callable[[list[MailRule]], list[MailRule]])
         _write(home, RuleSet(rules=change(load_rules(home))))
 
 
+def _reads(folder: Any) -> bool:
+    try:
+        return bool(folder["ai_reads"])
+    except (KeyError, IndexError):
+        return True
+
+
 def for_folders(rules: list[MailRule], folders: list[Any], starters: set[str]) -> list[MailRule]:
     """Personal rules precede starter/header rules; folder ties follow sidebar position."""
     settings = {row["name"]: row for row in folders}
@@ -352,7 +363,9 @@ def for_folders(rules: list[MailRule], folders: list[Any], starters: set[str]) -
         folder = settings.get(category)
         if folder is not None and folder["mode"] == "smart":
             continue
-        if folder is not None:
+        # A folder the AI skips as a whole, like Automated, keeps all it's given. Elsewhere each
+        # sender's own rule says whether the AI reads it, as the person chose when sorting.
+        if folder is not None and not _reads(folder):
             rule = rule.model_copy(
                 update={
                     "actions": rule.actions.model_copy(

@@ -10,7 +10,6 @@ import { useDateOnly, useDateTime } from "@/ui/client/format";
 import { useMatterDone, useMatterReopen } from "@/ui/client/work";
 import { useOpenSource } from "@/ui/features/sources/context";
 import { fullHref, type PreviewSource } from "@/ui/features/sources/kinds";
-import { Badge } from "@/ui/primitives/Badge";
 import { quickLook } from "@/ui/primitives/SourceRef";
 import { useToast } from "@/ui/primitives/Toast";
 import type { MarkShape, MarkTone } from "@/ui/primitives/Track";
@@ -18,13 +17,6 @@ import { t, tn, type StringKey } from "@/ui/strings";
 
 export type TodayView = "brief" | "week" | "matters";
 export const VIEWS: readonly TodayView[] = ["brief", "week", "matters"];
-
-const STATE_TONE: Record<MatterState, "accent" | "neutral" | "warning" | "success"> = {
-  waiting_on_you: "accent",
-  waiting_on_others: "neutral",
-  fyi: "warning",
-  done: "success",
-};
 
 /** The state as quiet text, with a dot only when it's the person's move. */
 export function StateText({ state }: { state: MatterState }) {
@@ -34,10 +26,6 @@ export function StateText({ state }: { state: MatterState }) {
       {t(`matters.state.${state}` as StringKey)}
     </span>
   );
-}
-
-export function StateBadge({ state }: { state: MatterState }) {
-  return <Badge tone={STATE_TONE[state]}>{t(`matters.state.${state}` as StringKey)}</Badge>;
 }
 
 /** Each kind of change has a look, the same on the brief, the timeline and the week. */
@@ -53,6 +41,9 @@ export const KIND_MARK: Record<MatterEventKind, { shape: MarkShape; tone: MarkTo
   done: { shape: "dot", tone: "success" },
   reopened: { shape: "ring", tone: "warning" },
   moved: { shape: "ring", tone: "ink" },
+  merged: { shape: "ring", tone: "ink" },
+  linked: { shape: "ring", tone: "ink" },
+  kept: { shape: "ring", tone: "warning" },
 };
 
 export const kindLabel = (kind: MatterEventKind) => t(`matters.kind.${kind}` as StringKey);
@@ -110,8 +101,8 @@ export function useMatterDoneWithUndo(): (matter: Pick<MatterRow, "id" | "title"
 }
 
 export function countsOf(matter: MatterRow): string {
+  // Emails only: how many conversations they came in is under "why they're together".
   const parts = [tn("matters.emails", matter.emails ?? 0)];
-  if ((matter.threads ?? 0) > 1) parts.push(tn("matters.threads", matter.threads ?? 0));
   if (matter.state === "waiting_on_others" && (matter.quiet_days ?? 0) > 0) parts.push(tn("matters.quiet", matter.quiet_days ?? 0));
   return parts.join(" · ");
 }

@@ -34,7 +34,7 @@ def _summary(key: str, raw: bytes, named: set[str]) -> dict[str, Any]:
 # The sender list: one row per sender, on the side the AI reads or the side it ignores.
 
 # The biggest senders the AI ignores start out as their own categories.
-TOP_CATEGORIES = 5
+TOP_CATEGORIES = 3
 
 
 def describe_senders(report: grouping.SenderReport, read: Callable[[str], bytes]) -> dict[str, Any]:
@@ -60,6 +60,7 @@ def describe_senders(report: grouping.SenderReport, read: Callable[[str], bytes]
                 "own": row.sender in own,
                 "examples": [pattern for pattern, _ in row.examples],
                 "emails": [_summary(key, read(key), through) for key in row.members[:SAMPLES]],
+                "folder": "",
             }
         )
     return {

@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 from nexusai.kernel.database import Migration
 from nexusai.kernel.module import Context
+from nexusai.modules.agent.kinds import KINDS, WORK
 
 MIGRATION = Migration(
     "agent_conversation_closed_001",
@@ -17,13 +18,17 @@ CREATE TABLE conversation_closed (
 CREATE INDEX conversation_closed_thread ON conversation_closed (thread);
 """,
 )
-# What each kind of work is, and how it's closed and opened again.
+# What each kind of work is, and how it's closed and opened again, as kinds.py declares it.
 _WORK = {
-    "task": ("tasks", "status != 'done'", "status = 'done', completed = ?2", "status = 'todo', completed = NULL"),
-    "reminder": ("reminders", "fired = 0", "fired = 1", "fired = 0"),
-    "deadline": ("work_board", "done = 0 AND kind = 'deadline'", "done = 1", "done = 0"),
-}  # fmt: skip
-_EVENTS = {"task": "tasks.changed", "reminder": "reminders.changed", "deadline": "board.changed"}
+    name: (
+        KINDS[name].table,
+        KINDS[name].still_open or "",
+        KINDS[name].close or "",
+        KINDS[name].reopen or "",
+    )
+    for name in WORK
+}
+_EVENTS = {name: KINDS[name].event for name in WORK}
 
 
 def _now() -> str:

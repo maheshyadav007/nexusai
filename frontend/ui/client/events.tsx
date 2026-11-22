@@ -20,6 +20,7 @@ const INVALIDATES: Record<string, readonly string[]> = {
   "mail.pulled": ["mail-status", "cockpit", "pipelines", "mail-folders"],
   "mail.historyFinished": ["mail-status", "mail-sort", "cockpit", "pipelines", "mail-folders", "cockpit-events"],
   "mail.sortChanged": ["mail-sort"],
+  "mail.sorted": ["mail-sort", "categories", "mail-organization"],
   "pst.searchChanged": ["pst-search", "jobs", "cockpit"],
   "pst.uploadProgress": ["jobs", "cockpit"],
   "triggers.changed": ["triggers", "schedules"],

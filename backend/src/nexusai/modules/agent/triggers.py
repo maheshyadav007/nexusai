@@ -427,7 +427,7 @@ class Triggers:
             request = replace(
                 request,
                 task=(request.task or "")
-                + "\nAsk at most three questions, only about these new uncertainties. Notes are guesses. After their explicit answers, call apply_mail_learning_answers using only the supplied group ids and their chosen importance. Then ask them to continue or skip from the mail learning card on Today.\n"
+                + "\nAsk at most three questions, only about these new uncertainties. Notes are guesses. After their explicit answers, call apply_mail_learning_answers using only the supplied group ids and their chosen importance. Then tell them the rest keep their guesses, which they can confirm from Getting started on Today.\n"
                 + untrusted(json.dumps(unclear)),
                 context={
                     **(request.context or {}),
@@ -961,6 +961,10 @@ class Triggers:
         if self.runtime.active_turn(session) is not None or not self._model_ready():
             return
         own = {"mode": schedule["context_mode"], "keep_messages": schedule["keep_messages"]}
+        # Each morning starts afresh: the brief it last wrote is in its prompt already, and
+        # earlier mornings' reading would only crowd out today's.
+        if is_brief and own["keep_messages"] is None:
+            own["keep_messages"] = 0
         prompt = schedule["prompt"] or (
             "Write my morning brief from what's on my plate."
             if is_brief

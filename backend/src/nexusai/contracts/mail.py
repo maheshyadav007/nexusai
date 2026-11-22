@@ -151,6 +151,8 @@ class MailFolder(BaseModel):
     on_server: int = 0
     here: int = 0
     unread: int = 0
+    # Gmail's own Starred and Important: the app's views of the same names stand for them.
+    shown_elsewhere: bool = False
 
 
 class MailFolders(BaseModel):
@@ -388,6 +390,21 @@ class MailDone(BaseModel):
     ok: bool = True
 
 
+class ThreadToInbox(BaseModel):
+    """Back to the Inbox the person sees, for the AI to read. With always, the sender's mail to
+    come gets there too."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    always: bool = False
+
+
+class ThreadInInbox(BaseModel):
+    # Who "always" would apply to; empty when the conversation has no sender to go by.
+    sender: str = ""
+
+
 class RuleCondition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -447,6 +464,9 @@ class MailCategory(BaseModel):
     updated: str | None = None
     # False for folders the AI skips, like Automated and what the Sort step files under it.
     ai_reads: bool = True
+    # Of its conversations, how many a sorting rule keeps from the AI. Sorting decides by
+    # sender, so a folder can hold both: Shopping's store mail kept, a delivery question read.
+    kept: int = 0
 
 
 class ListCategories(BaseModel):
@@ -526,7 +546,8 @@ class GetRules(BaseModel):
 class RuleSet(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    rules: list[MailRule] = Field(max_length=500)
+    # Sorting writes one per sender, so a big mailbox has thousands.
+    rules: list[MailRule] = Field(max_length=5000)
 
 
 class Recipient(BaseModel):
@@ -852,7 +873,8 @@ class GetMailSort(BaseModel):
 
 
 class PrepareMailSort(BaseModel):
-    pass
+    # Opened again after sorting: every sender, each on the side its rule puts it now.
+    again: bool = False
 
 
 class SkipMailSort(BaseModel):
@@ -889,6 +911,9 @@ class SortSender(BaseModel):
     own: bool
     examples: list[str]
     emails: list[SortEmail]
+    # The folder a rule already files this sender's mail into, when one does. Its side is
+    # the rule's, so the page shows what's true now.
+    folder: str = ""
 
 
 class MailSort(BaseModel):
@@ -904,6 +929,9 @@ class MailSort(BaseModel):
     # Emails the person's own rules already file, left as they are and out of the list.
     already_sorted: int = 0
     senders: list[SortSender] = Field(default_factory=list)
+    # Once sorted or skipped, the page can still be opened to change it; this is how far the
+    # look at the mailbox for that has got.
+    review: Literal["none", "preparing", "ready", "failed"] = "none"
 
 
 class SortSenderChoice(BaseModel):

@@ -6,8 +6,14 @@ const LISTED_ELSEWHERE = new Set(["inbox", "sent", "drafts", "archive", "trash",
 export const AUTOMATED = "Automated";
 export const CALENDAR = "Calendar";
 
-/** A category the AI skips: Automated, Calendar, what's filed under them, or one set that way. */
-export const keptFromAi = (item: MailCategory) => item.ai_reads === false || [AUTOMATED, CALENDAR].some((name) => item.name === name || item.name.startsWith(`${name}/`));
+/** A folder the AI skips: Automated, Calendar and what's filed under them, one set that way, or
+ *  one whose every conversation a sorting rule keeps from the AI. Sorting decides by sender, so
+ *  a folder that also holds mail the AI reads stays with the person's folders. */
+export const keptFromAi = (item: MailCategory) =>
+  item.ai_reads === false || [AUTOMATED, CALENDAR].some((name) => item.name === name || item.name.startsWith(`${name}/`)) || ((item.count ?? 0) > 0 && (item.kept ?? 0) >= (item.count ?? 0));
+
+/** Some of it kept from the AI by sorting rules, and some read. */
+export const partlyKept = (item: MailCategory) => !keptFromAi(item) && (item.kept ?? 0) > 0;
 
 export const categoryHref = (name: string) => `/mail/category/${encodeURIComponent(name)}`;
 export const folderHref = (name: string) => `/mail/folder/${encodeURIComponent(name)}`;
@@ -15,9 +21,18 @@ export const isCurrentMail = (pathname: string, href: string) => pathname === hr
 
 export const customCategories = (categories: readonly MailCategory[]) => categories.filter((item) => !item.proposed && (item.count ?? 0) > 0);
 
-export const customFolders = (folders: readonly MailFolder[], pathname: string) => folders.filter((row) =>
-  !LISTED_ELSEWHERE.has(row.role) && ((row.here ?? 0) > 0 || (row.on_server ?? 0) > 0 || isCurrentMail(pathname, folderHref(row.name))),
-);
+const holdsMail = (row: MailFolder, pathname: string) => (row.here ?? 0) > 0 || (row.on_server ?? 0) > 0 || isCurrentMail(pathname, folderHref(row.name));
+
+/** The server's folders and Gmail's labels that are the person's own: not the fixed ones, not
+ * Spam, and not Gmail's Starred and Important, which the app's views of those names stand for. A
+ * label named like one of the person's folders shows once, as that folder. */
+export const customFolders = (folders: readonly MailFolder[], pathname: string, categories: readonly MailCategory[] = []) => {
+  const taken = new Set(categories.map((item) => item.name.toLocaleLowerCase()));
+  return folders.filter((row) => !LISTED_ELSEWHERE.has(row.role) && row.role !== "junk" && !row.shown_elsewhere && !taken.has(row.name.toLocaleLowerCase()) && holdsMail(row, pathname));
+};
+
+/** Spam, which waits under More with the other system folders. */
+export const spamFolders = (folders: readonly MailFolder[], pathname: string) => folders.filter((row) => row.role === "junk" && holdsMail(row, pathname));
 
 /** Keep the open folder reachable without growing the five-row preview. */
 export function previewMailHrefs(hrefs: readonly string[], pathname: string): Set<string> {

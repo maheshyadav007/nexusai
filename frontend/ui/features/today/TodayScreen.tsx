@@ -1,6 +1,5 @@
 "use client";
 
-import { MailOrganizationCard } from "./MailOrganizationCard";
 import { SortMailCard } from "./SortMailCard";
 import Link from "next/link";
 import appConfig from "@/app.config.json";
@@ -11,7 +10,7 @@ import { useCategories, useDecideCategory, useDecidePriority, useMailStatus, use
 import { groupApprovals, useApprovals, useDecideApprovals, useSessions } from "@/ui/client/sessions";
 import { useLeadName } from "@/ui/client/home";
 import { useProfile } from "@/ui/client/onboarding";
-import { useChannel, useCockpit, useDecideMemory, useDecideSuggestion, useSuggestions, useDismissChannel, useMarkTodaySeen, useMemory, useReactToBrief, useReminders, useRemoveReminder, useRemoveTask, useRespondChannel, useSaveReminder, useSaveTask, useTasks, useToday, useWaitingCount, useAgentName } from "@/ui/client/work";
+import { useChannel, useCockpit, useMattersBrief, useDecideMemory, useDecideSuggestion, useSuggestions, useDismissChannel, useMarkTodaySeen, useMemory, useReactToBrief, useReminders, useRemoveReminder, useRemoveTask, useRespondChannel, useSaveReminder, useSaveTask, useTasks, useToday, useWaitingCount, useAgentName } from "@/ui/client/work";
 import { AskAgent } from "@/ui/features/agent/AskAgent";
 import { useAssistant } from "@/ui/features/assistant/AssistantProvider";
 import { ApprovalGroupCard, QuestionCard } from "@/ui/features/assistant/Cards";
@@ -316,6 +315,8 @@ function WaitingOnYou() {
     });
   const row = (item: WaitingItem) => ({ item, selecting, selected: picked.has(item.key), onToggle: () => toggle(item.key) });
   if (channel.isError) return <ErrorState title={t("channel.error")} onRetry={() => void channel.refetch()} />;
+  // Nothing waiting is said once, by the page, not by an empty panel.
+  if (!channel.isSuccess || count === 0) return null;
   return (
     <Panel id="today-needs" icon="approvals" title={t("today.needsYou")} count={count} urgent={count > 0} {...(count ? { hint: t("today.needsYou.hint") } : {})} action={allItems.length > 1 && !selecting ? <Button variant="quiet" className="py-px" data-testid="bulk-select" onClick={() => setSelecting(true)}>{t("today.select")}</Button> : undefined}>
       {selecting ? (
@@ -324,8 +325,6 @@ function WaitingOnYou() {
           {allItems.filter((item) => picked.has(item.key)).some((item) => !item.doIt) ? <p className="text-sm text-ink-muted">{t("today.select.review")}</p> : null}
         </>
       ) : null}
-      {channel.isPending ? <Skeleton className="h-6 w-full" /> : null}
-      {channel.isSuccess && count === 0 ? <p className="text-md text-ink-muted">{t("today.nothingWaiting")}</p> : null}
       <Presence>
         {groups.map((group) => {
           const item = approvalItem(group);
@@ -493,9 +492,9 @@ function DueToday({ items }: { items: readonly DueItem[] }) {
     if (task) saveTask.mutate({ id: task.id, title: task.title, notes: task.notes, status: "done", due: task.due ?? null, thread: task.thread ?? null, proposed: false });
   };
   const overdue = items.some((item) => item.overdue);
+  if (!items.length) return null;
   return (
     <Panel id="today-due" icon="reminders" title={t("today.due")} count={items.length} urgent={overdue} {...(items.length ? { hint: t("today.due.hint") } : {})}>
-      {items.length === 0 ? <p className="text-md text-ink-muted">{t("today.due.empty")}</p> : null}
       <ul className="flex flex-col">
         {items.map((item) => (
           <li key={`${item.kind}-${item.title}-${item.when}`} data-testid="due-item" className="flex flex-col gap-2 border-t border-line-subtle py-3">
@@ -572,15 +571,18 @@ export function TodayScreen() {
   const cockpit = useCockpit();
   const due = today.data?.due ?? [];
   const { view, go } = useTodayView();
+  const matters = useMattersBrief();
+  const open = matters.data ? matters.data.needs_you.length + matters.data.waiting.length + matters.data.fyi.length : null;
+  const clear = Boolean(today.data) && !noMail && needed === 0 && due.length === 0 && open === 0 && !today.data?.needs_you.length;
   const brief = (
     <div className="flex flex-col gap-6">
       <MorningBrief />
       <RunningBrief />
       <FinishSetup />
-      <MailOrganizationCard />
       {today.isError ? <ErrorState title={t("today.error")} onRetry={() => void today.refetch()} /> : null}
       {today.isPending ? <Skeleton className="h-6 w-full" /> : null}
       {today.data && noMail ? <EmptyState icon="today" title={t("today.empty.title")} description={t("today.empty.description")} action={<TextLink href="/connectors?connector=email">{t("mail.noAccount.action")}</TextLink>} /> : null}
+      {clear ? <p data-testid="today-clear" className="flex items-center gap-2 text-md text-ink-secondary"><Icon name="check" className="h-4 w-4 text-status-success" />{t("today.clear")}</p> : null}
       <div className="today-columns grid items-start gap-6">
         <div className="flex min-w-0 flex-col gap-6">
           <WaitingOnYou />

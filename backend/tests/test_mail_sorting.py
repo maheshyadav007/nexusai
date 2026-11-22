@@ -1,6 +1,7 @@
 """Sorting a new mailbox before the AI reads it: what's kept from the AI is filed, gets rules,
 and leaves meaning search, while mail that names the person still reaches the AI."""
 
+import json
 import time
 from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
@@ -9,7 +10,14 @@ from typing import Any
 import pytest
 
 from fake_mail import make_mail
-from nexusai.contracts.mail import ApplyMailSort, MailSort, SortSenderChoice
+from nexusai.contracts.mail import (
+    ApplyMailSort,
+    MailRule,
+    MailSort,
+    RuleActions,
+    RuleCondition,
+    SortSenderChoice,
+)
 from nexusai.kernel.module import Context
 from nexusai.modules.mail import rules, sorting, store
 from nexusai.modules.mail.parse import parse_message
@@ -202,7 +210,11 @@ def test_mail_its_own_rules_already_file_is_left_as_it_is(ctx: Context, mailbox:
     )
     status = ready(ctx)
     assert status.already_sorted == 9
-    assert not [row for row in status.senders if row.sender == "ci@tools.example"]
+    # Listed where its rule files it, and left as it is unless it's moved across.
+    tool = build_bot(status)
+    assert (tool.side, tool.folder) == ("ignores", "Builds")
+    sorting.apply(ctx, named("Builds"))
+    assert [r.name for r in rules.load_rules(ctx.config.home)] == ["Builds"]
 
 
 def test_senders_given_one_name_share_a_category(ctx: Context) -> None:  # noqa: F811
@@ -231,10 +243,10 @@ def test_only_the_biggest_tools_get_a_folder_and_the_rest_go_into_automated(ctx:
             stored(ctx, f"Report {n} ready", f"tool{tool}@tools{tool}.example")
     status = ready(ctx)
     automated = [row for row in status.senders if row.side == "ignores"]
-    assert len(automated) == 7 and sum(row.own for row in automated) == 5
+    assert len(automated) == 7 and sum(row.own for row in automated) == 3
     sorting.apply(ctx, ApplyMailSort())
     names = {row["name"] for row in ctx.bus.db.fetch_all("SELECT name FROM mail_categories")}
-    assert len([name for name in names if name.startswith("Automated/")]) == 5
+    assert len([name for name in names if name.startswith("Automated/")]) == 3
     smallest = ctx.bus.db.fetch_all(
         "SELECT DISTINCT t.category FROM threads t JOIN messages m ON m.thread_id = t.id"
         " WHERE m.from_addr = 'tool0@tools0.example'"
@@ -257,3 +269,167 @@ def test_after_sorting_the_ai_suggests_no_folders(ctx: Context) -> None:  # noqa
         tx.execute("UPDATE mail_sorting SET state = 'done'")
     Triage(ctx)._suggest_category(suggestion, 1)
     assert not ctx.bus.db.fetch_all("SELECT 1 FROM mail_categories")
+
+
+def test_move_to_inbox_brings_a_sorted_conversation_back_to_the_ai(
+    ctx: Context,  # noqa: F811
+    mailbox: Any,
+) -> None:
+    from nexusai.contracts.mail import ThreadToInbox
+    from nexusai.modules.mail.module import READS_PREFIX, to_inbox
+    from nexusai.modules.mail.store import FOLDER_FILTERS
+
+    ready(ctx)
+    sorting.apply(ctx, named("Builds"))
+    thread = mailbox["builds"][0].thread
+    assert to_inbox(ThreadToInbox(id=thread), ctx).sender == "ci@tools.example"
+    row = ctx.bus.db.fetch_all("SELECT * FROM threads WHERE id = ?", (thread,))[0]
+    assert (
+        row["category"] is None and row["latest_rule"] is None and row["category_source"] == "user"
+    )
+    inbox = ctx.bus.db.fetch_all(
+        f"SELECT id FROM threads WHERE {FOLDER_FILTERS['priority']} AND id = ?", (thread,)
+    )  # noqa: S608
+    asked = ctx.bus.db.fetch_all("SELECT payload FROM events WHERE type = 'mail.needsTriage'")
+    assert inbox and [json.loads(event["payload"])["thread_id"] for event in asked] == [thread]
+    # Only this one: the sender's rule still files what comes next, until they say always.
+    assert any(r.name.startswith("Sorted: ") for r in rules.load_rules(ctx.config.home))
+    assert stored(ctx, "Build 200 passed", "ci@tools.example").skip_agent
+
+    to_inbox(ThreadToInbox(id=thread, always=True), ctx)
+    saved = rules.load_rules(ctx.config.home)
+    sender_rules = [r for r in saved if any(c.field == "sender_exact" for c in r.conditions)]
+    assert [r.name for r in sender_rules] == [f"{READS_PREFIX}ci@tools.example"]
+    assert saved[0].name == f"{READS_PREFIX}ci@tools.example"
+    assert not stored(ctx, "Build 201 passed", "ci@tools.example").skip_agent
+
+
+def test_gmails_own_starred_and_important_are_left_to_the_apps_views(ctx: Context) -> None:  # noqa: F811
+    from nexusai.contracts.mail import ListMailFolders
+    from nexusai.modules.mail.module import mail_folders
+
+    with ctx.bus.db.transaction() as tx:
+        for name, role in [("[Gmail]/Starred", "other"), ("[Gmail]/Important", "other"),
+                           ("[Gmail]/All Mail", "all"), ("Projects/Aurora", "other")]:  # fmt: skip
+            tx.execute(
+                "INSERT INTO mail_folders (account, name, role) VALUES ('test', ?, ?)", (name, role)
+            )
+    found = {row.name: row.shown_elsewhere for row in mail_folders(ListMailFolders(), ctx).folders}
+    assert found == {
+        "[Gmail]/Starred": True,
+        "[Gmail]/Important": True,
+        "[Gmail]/All Mail": False,
+        "Projects/Aurora": False,
+    }
+
+
+def reviewed(ctx: Context) -> MailSort:  # noqa: F811
+    """The page opened again after sorting, once its fresh look at the mail is done."""
+    sorting.prepare(ctx, again=True)
+    deadline = time.monotonic() + 60
+    while time.monotonic() < deadline:
+        status = sorting.status(ctx)
+        if status.review in {"ready", "failed"}:
+            return status
+        time.sleep(0.05)
+    raise AssertionError("The mail was never looked at again")
+
+
+def test_the_page_opens_again_with_each_sender_where_its_rule_puts_it(
+    ctx: Context,  # noqa: F811
+    mailbox: Any,
+) -> None:
+    ready(ctx)
+    sorting.apply(ctx, named("Builds"))
+    again = reviewed(ctx)
+    # Still sorted, so Today doesn't ask again; the page lists every sender as things are now.
+    assert again.state == "done" and again.review == "ready"
+    tool = build_bot(again)
+    kim = next(row for row in again.senders if row.sender == "kim@else.example")
+    assert (tool.side, tool.folder) == ("ignores", "Automated/Builds")
+    assert (kim.side, kim.folder) == ("reads", "")
+    # Moved across from a folder the AI skips as a whole, its sorting rule goes and one lets it
+    # in, as Move to Inbox does.
+    sorting.apply(ctx, named("Builds", side="reads"))
+    found = [r for r in rules.load_rules(ctx.config.home) if "ci@tools.example" in r.name]
+    assert [r.name for r in found] == ["AI reads: ci@tools.example"]
+    assert build_bot(reviewed(ctx)).side == "reads"
+
+
+def test_a_rule_changed_elsewhere_shows_when_the_page_opens_again(
+    ctx: Context,  # noqa: F811
+    mailbox: Any,
+) -> None:
+    ready(ctx)
+    sorting.apply(ctx, named("Builds"))
+    kim = "kim@else.example"
+    assert next(r for r in reviewed(ctx).senders if r.sender == kim).side == "reads"
+    # A rule made on the Rules page, after sorting.
+    rules.change_rules(
+        ctx.config.home,
+        lambda existing: [
+            *existing,
+            MailRule(
+                name=f"Friends: {kim}",
+                conditions=[RuleCondition(field="sender", value=kim)],
+                actions=RuleActions(category="Friends", skip_agent=True),
+            ),
+        ],
+    )
+    row = next(r for r in reviewed(ctx).senders if r.sender == kim)
+    assert (row.side, row.folder) == ("ignores", "Friends")
+
+
+def test_what_keeps_mail_from_the_ai_is_checked_first_and_the_rest_reaches_it(
+    ctx: Context,  # noqa: F811
+) -> None:
+    rules.change_rules(
+        ctx.config.home,
+        lambda existing: [
+            # Saved first, yet checked after the rule that keeps the same mail away.
+            MailRule(
+                name="Builds read",
+                conditions=[RuleCondition(field="sender_exact", value="ci@tools.example")],
+                actions=RuleActions(category="Builds"),
+            ),
+            MailRule(
+                name="Tool tag kept",
+                conditions=[RuleCondition(field="subject", value="[CI]")],
+                actions=RuleActions(category="Tools", skip_agent=True),
+            ),
+        ],
+    )
+    tagged = stored(ctx, "[CI] Build 7 passed", "ci@tools.example")
+    plain = stored(ctx, "Build 8 passed", "ci@tools.example")
+    stranger = stored(ctx, "Hello", "Ann <ann@new.example>", "Are you free?")
+    assert tagged.skip_agent and tagged.rule == "Tool tag kept"
+    assert not plain.skip_agent and plain.rule == "Builds read"
+    # No rule claims it, so the AI reads it.
+    assert not stranger.skip_agent and stranger.rule is None
+
+
+def test_a_sender_always_has_one_rule_whichever_side_it_is_moved_to(
+    ctx: Context,  # noqa: F811
+    mailbox: Any,
+) -> None:
+    ready(ctx)
+    sorting.apply(ctx, named("Builds"))
+    sender = "ci@tools.example"
+
+    def mine() -> list[MailRule]:
+        return [
+            r
+            for r in rules.load_rules(ctx.config.home)
+            if any(c.value == sender for c in r.conditions)
+        ]
+
+    for reads, folder in [(True, None), (False, "Tools"), (True, None), (False, None)]:
+        sorting.move_sender(ctx, sender, reads=reads, folder=folder)
+        assert len(mine()) == 1
+        assert mine()[0].actions.skip_agent is not reads
+    # Kept from the AI the last time, in the folder it had.
+    assert mine()[0].actions.category == "Tools"
+    # Moved to the AI out of a folder it reads, it stays filed there.
+    sorting.move_sender(ctx, sender, reads=True)
+    assert (mine()[0].actions.category, mine()[0].actions.skip_agent) == ("Tools", False)
+    assert build_bot(reviewed(ctx)).side == "reads"

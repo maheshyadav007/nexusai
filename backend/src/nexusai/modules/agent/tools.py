@@ -43,6 +43,7 @@ from nexusai.modules.agent import (
     channel,
     citations,
     mail_agent,
+    matters,
     memory,
     policy,
     prompts_builder,
@@ -565,6 +566,14 @@ class _Search(BaseModel):
 MAX_THREADS_PER_READ = 10
 
 
+class _ReadMatter(BaseModel):
+    matter_id: int | None = Field(default=None, description="The matter's number, if known.")
+    thread_id: int | None = Field(
+        default=None, description="Or a conversation's ID: its matter is read."
+    )
+    tool_call_id: Annotated[str, InjectedToolCallId]
+
+
 class _ReadThread(BaseModel):
     thread_ids: list[int] = Field(
         min_length=1,
@@ -895,9 +904,14 @@ class _RecordTriage(BaseModel):
     deadlines: list[dict[str, Any]] = Field(
         default_factory=list, description='As {"what": ..., "due": "YYYY-MM-DD"}.'
     )
+    matter: int | None = Field(
+        default=None,
+        description="The number of the listed matter this email is about, or null when none is.",
+    )
     tasks: list[dict[str, Any]] = Field(
         default_factory=list,
-        description='What the person should do, as {"title": ..., "due": "YYYY-MM-DD" or null}.',
+        description='What the person should do, as {"title": ..., "due": "YYYY-MM-DD" or null,'
+        ' "updates": "task:88" when it is an open task already listed}.',
     )
     reminders: list[dict[str, Any]] = Field(
         default_factory=list, description='As {"title": ..., "when": "YYYY-MM-DDTHH:MM"}.'
@@ -936,6 +950,7 @@ MAIL_AGENT_TOOLS = frozenset(
         "record_triage",
         "search_mail",
         "read_thread",
+        "read_matter",
         "read_recipients",
         "list_mail",
         "semantic_search",
@@ -1002,6 +1017,7 @@ BRIEF_TOOLS = frozenset(
         "read_plate",
         "update_brief",
         "read_thread",
+        "read_matter",
         "read_recipients",
         "search_mail",
         "semantic_search",
@@ -1025,6 +1041,7 @@ BRIEF_AGENT_ONLY = frozenset({"read_plate", "update_brief"})
 ORGANIZER_TOOLS = frozenset(
     {
         "list_tasks",
+        "read_matter",
         "create_tasks",
         "update_tasks",
         "delete_tasks",
@@ -1081,7 +1098,7 @@ ALWAYS_SHOWN = frozenset({"ask_user", "remember", "list_memory", "load_skill"})
 # What session.md has it reach for first is shown, so a smaller model needn't search for its steps:
 # the work board, documents, and every list it checks before making something.
 LEAD_SHOWN = ALWAYS_SHOWN | {
-    "read_work_board", "search_mail", "semantic_search", "search_documents", "read_thread",
+    "read_work_board", "read_matter", "search_mail", "semantic_search", "search_documents", "read_thread",
     "list_mail", "update_mail", "draft_reply", "draft_forward", "list_drafts",
     "list_tasks", "list_reminders", "list_categories",
     "list_rules", "list_schedules", "list_panels", "propose_preference",
@@ -1296,7 +1313,7 @@ def build_tools(
             if not turns or turns[0]["origin"] != "person":
                 return "Wait for the person to answer before changing learned guesses."
             bulk_learning.save_answers(ctx, reviews[0]["account"], importance)
-            return "Saved the person's answers. They can continue from the mail learning card on Today."
+            return "Saved the person's answers. The rest keep their guesses, which they can confirm from Getting started on Today."
 
         return _guarded(
             ctx,
@@ -1724,6 +1741,32 @@ def build_tools(
         with ctx.bus.unit_of_work() as work:
             channel.notify(ctx, work, text, "", f"/agent/sessions/{session}", "agent", False)
         return "Sent."
+
+    def read_matter(
+        tool_call_id: str, matter_id: int | None = None, thread_id: int | None = None
+    ) -> str:
+        found = matter_id or (matters.matter_of(ctx.bus.db, thread_id) if thread_id else None)
+        if not found:
+            return "That conversation isn't part of a matter. Read it with read_thread."
+        try:
+            whole = matters.detail(ctx, found)
+        except CommandError as error:
+            return error.message
+        m = whole.matter
+        lines = [f'Matter {m.id}: "{m.title}" · {m.state} · due {m.due or "none"}']
+        lines += [
+            f"- conversation {citations.mark(citations.MAIL, t.id)}: {t.subject} ({t.status})"
+            for t in whole.threads
+        ]
+        lines += [
+            f'- open {w.kind}:{w.id} "{w.title}"' + (f" due {w.when}" if w.when else "")
+            for w in m.work
+        ]
+        lines += [f"- related matter {r.matter}: {r.title} ({r.why})" for r in whole.related]
+        lines += [f"- file: {f.title}" for f in whole.files]
+        lines.append("What happened, oldest first:")
+        lines += [f"  {e.time[:10]} {e.kind}: {e.text}" for e in whole.events[-20:]]
+        return "\n".join(lines)
 
     def read_work_board(tool_call_id: str) -> str:
         items = channel.board(ctx.bus.db).items
@@ -2264,6 +2307,13 @@ def build_tools(
             _Say,
             "Raise a notification that interrupts the person. Only for what can't wait until they "
             "next look.",
+        ),
+        (
+            read_matter,
+            _ReadMatter,
+            "Read a matter: one real thing going on, with its conversations, open tasks and "
+            "reminders, related matters, files and what happened, oldest first. Use it when a "
+            "question is about the whole thing, not one email.",
         ),
         (
             read_work_board,
