@@ -41,6 +41,7 @@ export const LUCIDE = {
   folder: Folder,
   folderRule: Split,
   folderSmart: Sparkle,
+  label: Tag,
   keptFromAi: EyeOff,
   automated: Bot,
   calendar: CalendarClock,

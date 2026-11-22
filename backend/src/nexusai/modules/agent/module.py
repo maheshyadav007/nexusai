@@ -20,6 +20,7 @@ from nexusai.contracts.agent import (
     AgentRegistry,
     AnswerSession,
     ApprovalList,
+    AttachToMatter,
     BoardList,
     BriefReacted,
     CancelTeamTask,
@@ -27,6 +28,7 @@ from nexusai.contracts.agent import (
     ChangeLearnedNote,
     ChannelList,
     ChooseVersion,
+    CloseMatterItems,
     Cockpit,
     CockpitEvents,
     CompactResult,
@@ -53,6 +55,11 @@ from nexusai.contracts.agent import (
     GetGeneration,
     GetGuardRules,
     GetMailAgentSettings,
+    GetMatter,
+    GetMatterEvents,
+    GetMatterRelated,
+    GetMattersBrief,
+    GetMattersWeek,
     GetModelCall,
     GetPermissions,
     GetPreferences,
@@ -78,6 +85,7 @@ from nexusai.contracts.agent import (
     ListChannel,
     ListJobs,
     ListMailSuggestions,
+    ListMatters,
     ListMemory,
     ListPipelines,
     ListPrompts,
@@ -91,7 +99,16 @@ from nexusai.contracts.agent import (
     MailPreview,
     MailSuggestionList,
     MarkTodaySeen,
+    MatterAction,
+    MatterDetail,
+    MatterDone,
+    MatterEvents,
+    MatterList,
+    MatterRelated,
+    MattersBrief,
+    MattersWeek,
     MemoryList,
+    MergeMatters,
     ModelCallView,
     NoteOnTeamTask,
     PausePipeline,
@@ -104,6 +121,7 @@ from nexusai.contracts.agent import (
     PreferencePreview,
     PreferenceSimulation,
     PreferenceVersions,
+    PreviewAgent,
     PreviewMail,
     PreviewPreference,
     PromptFile,
@@ -123,6 +141,7 @@ from nexusai.contracts.agent import (
     RemoveTrigger,
     RenameAgent,
     RenameSession,
+    ReopenMatterItems,
     ResetAgentName,
     RespondChannel,
     RestorePreference,
@@ -170,6 +189,7 @@ from nexusai.contracts.agent import (
     TriageExisting,
     TriggerList,
     UndoActivity,
+    UnlinkThread,
     UpcomingRun,
     UsageView,
 )
@@ -187,12 +207,15 @@ from nexusai.modules.agent import (
     citations,
     cockpit,
     context,
+    conversations,
     facts,
     feedback,
     gateway,
     guard,
     knowledge,
+    links,
     mail_agent,
+    matters,
     memory,
     monitor,
     personalization,
@@ -244,6 +267,10 @@ agent_module = Module(
         runtime.RETRY_MIGRATION,
         runtime.COMPACTIONS_MIGRATION,
         citations.MIGRATION,
+        conversations.MIGRATION,
+        matters.MIGRATION,
+        matters.KEPT_MIGRATION,
+        links.MIGRATION,
         runtime.TRIGGER_MIGRATION,
         memory.MIGRATION,
         channel.MIGRATION,
@@ -315,6 +342,9 @@ def _startup(ctx: Context) -> None:
         scheduler.start_built_ins(ctx)
         _scheduler = scheduler.Scheduler(ctx)
         _scheduler.start()
+        # What was open before matters existed becomes matters, once, and work takes its matter.
+        matters.backfill(ctx)
+        matters.adopt_all(ctx)
         # Mail may have finished coming down while this wasn't running, or before it existed.
         synced = cast(MailStatus, mail.get_status(GetMailStatus(), ctx))
         _triggers.consider_learning(history_finished=synced.history_finished)
@@ -507,11 +537,73 @@ def person_replied(event: AppEvent, ctx: Context) -> None:
 @agent_module.on("mail.received", "agent.they_answered")
 def they_answered(event: AppEvent, ctx: Context) -> None:
     mail_agent.they_answered(ctx, int(event.payload["message_id"]), int(event.payload["thread_id"]))
+    # Mail the agent never sees, like a review tool's "approved change 88213", still joins
+    # the matter it's about. The agent links the rest after judging it.
+    if event.payload.get("rule"):
+        matters.link(ctx, int(event.payload["thread_id"]), start=False)
+
+
+def conversation_work(event: AppEvent, ctx: Context) -> None:
+    """Done, from anywhere, closes the conversation's work; opening it again brings that back."""
+    if event.payload.get("field") != "status":
+        return
+    thread, value, old = (
+        int(event.payload["thread_id"]),
+        event.payload.get("value"),
+        event.payload.get("old_value"),
+    )
+    if value == "resolved" and old != "resolved":
+        closed = conversations.close_work(ctx, thread)
+        matters.note(ctx, thread, "closed", "Conversation marked done",
+                     f"Closed {closed} open item{'' if closed == 1 else 's'} with it" if closed else "", "person")  # fmt: skip
+    elif old == "resolved" and value != "resolved":
+        conversations.reopen_work(ctx, thread)
+        matters.note(ctx, thread, "reopened", "Conversation opened again", by="person")
+
+
+def conversation_task(event: AppEvent, ctx: Context) -> None:
+    if not event.payload.get("id"):
+        return
+    now, before = event.payload.get("changes", {}), event.payload.get("old", {})
+    if event.payload.get("by") != "person":
+        # An agent finished a task. It never closes the rest of the matter by itself: it says
+        # what's still open there, and the person decides.
+        if now.get("status") == "done" and before.get("status") != "done":
+            _tell_what_else_is_open(ctx, int(event.payload["id"]))
+        return
+    if now.get("status") == "done" and before.get("status") != "done":
+        title = ctx.bus.db.fetch_all("SELECT title FROM tasks WHERE id = ?", (event.payload["id"],))
+        if title:
+            matters.note(
+                ctx,
+                event.payload.get("thread"),
+                "closed",
+                f'Task done: "{title[0]["title"]}"',
+                by="person",
+            )
+        conversations.task_finished(ctx, int(event.payload["id"]))
+    elif before.get("status") == "done" and now.get("status") not in {None, "done"}:
+        conversations.task_reopened(ctx, int(event.payload["id"]))
+
+
+def _tell_what_else_is_open(ctx: Context, task: int) -> None:
+    rest = matters.related_open(ctx, f"task:{task}")
+    if not rest.items:
+        return
+    names = "; ".join(item.title for item in rest.items[:5])
+    channel.post(
+        ctx,
+        "tell",
+        cards.name(ctx.bus.db, mail_agent.AGENT),
+        f'I finished a task in "{rest.title}". Still open there: {names}. Open the matter to close the rest.',
+    )
 
 
 @agent_module.on("thread.updated", "agent.learn_from_corrections")
 def learn_from_corrections(event: AppEvent, ctx: Context) -> None:
     """What the person changes teaches the agent. What an agent changes doesn't count."""
+    # Here rather than a listener of its own: each listener slows every event for the rest.
+    conversation_work(event, ctx)
     if event.payload.get("by", "person") != "person":
         return
     thread = int(event.payload["thread_id"])
@@ -1223,6 +1315,11 @@ def mail_agent_knowledge(query: GetAgentKnowledge, ctx: Context) -> AgentKnowled
     return knowledge.view(ctx)
 
 
+@agent_module.query("agent.preview")
+def agent_preview(query: PreviewAgent, ctx: Context) -> MailPreview:
+    return knowledge.agent_preview(ctx, query.agent, query.text)
+
+
 @agent_module.query("mailAgent.preview")
 def mail_agent_preview(query: PreviewMail, ctx: Context) -> MailPreview:
     return knowledge.preview(ctx, query.thread)
@@ -1844,6 +1941,86 @@ def _since_last_look(ctx: Context) -> SinceLastLook:
     )
 
 
+def _seen(ctx: Context) -> str | None:
+    rows = ctx.bus.db.fetch_all("SELECT value FROM agent_defaults WHERE key = ?", (LAST_SEEN,))
+    return rows[0]["value"] if rows else None
+
+
+@agent_module.query("matters.brief")
+def matters_brief(query: GetMattersBrief, ctx: Context) -> MattersBrief:
+    return matters.brief(ctx, _seen(ctx))
+
+
+@agent_module.query("matters.week")
+def matters_week(query: GetMattersWeek, ctx: Context) -> MattersWeek:
+    return matters.week(ctx, query.start, query.days)
+
+
+@agent_module.query("matters.list")
+def matters_list(query: ListMatters, ctx: Context) -> MatterList:
+    return MatterList(matters=matters._matters(ctx, query.include_done))
+
+
+@agent_module.query("matters.get")
+def matters_get(query: GetMatter, ctx: Context) -> MatterDetail:
+    return matters.detail(ctx, query.id)
+
+
+@agent_module.command("matters.done")
+def matters_done(command: MatterAction, ctx: Context) -> MatterDone:
+    return MatterDone(closed=matters.done(ctx, command.id))
+
+
+@agent_module.command("matters.reopen")
+def matters_reopen(command: MatterAction, ctx: Context) -> AgentDone:
+    matters.reopen(ctx, command.id)
+    return AgentDone()
+
+
+@agent_module.command("matters.unlink")
+def matters_unlink(command: UnlinkThread, ctx: Context) -> MatterDone:
+    matters.unlink(ctx, command.thread)
+    return MatterDone()
+
+
+@agent_module.query("matters.events")
+def matters_events(query: GetMatterEvents, ctx: Context) -> MatterEvents:
+    return matters.events(ctx, query.id, query.before)
+
+
+@agent_module.query("matters.related")
+def matters_related(query: GetMatterRelated, ctx: Context) -> MatterRelated:
+    return matters.related_open(ctx, query.ref)
+
+
+@agent_module.command("matters.closeItems")
+def matters_close_items(command: CloseMatterItems, ctx: Context) -> MatterDone:
+    return MatterDone(closed=matters.close_items(ctx, command.trigger, command.close, command.keep))
+
+
+@agent_module.command("matters.reopenItems")
+def matters_reopen_items(command: ReopenMatterItems, ctx: Context) -> MatterDone:
+    return MatterDone(closed=matters.reopen_items(ctx, command.refs))
+
+
+@agent_module.command("matters.merge")
+def matters_merge(command: MergeMatters, ctx: Context) -> MatterDone:
+    matters.merge(ctx, command.id, command.into)
+    return MatterDone()
+
+
+@agent_module.command("matters.unmerge")
+def matters_unmerge(command: MatterAction, ctx: Context) -> MatterDone:
+    matters.unmerge(ctx, command.id)
+    return MatterDone()
+
+
+@agent_module.command("matters.attach")
+def matters_attach(command: AttachToMatter, ctx: Context) -> MatterDone:
+    matters.attach(ctx, command.matter, command.ref, command.why)
+    return MatterDone()
+
+
 @agent_module.command("today.markSeen")
 def mark_today_seen(command: MarkTodaySeen, ctx: Context) -> AgentDone:
     scheduler.set_default(ctx, LAST_SEEN, datetime.now(UTC).isoformat())
@@ -2075,6 +2252,7 @@ def act_agent_queue(command: QueueAction, ctx: Context) -> AgentDone:
 
 @agent_module.on("tasks.changed", "agent.observe_task_outcomes")
 def observe_task_outcomes(event: AppEvent, ctx: Context) -> None:
+    conversation_task(event, ctx)
     if event.payload.get("by") != "person" or not event.payload.get("id"):
         return
     changes = event.payload.get("changes", {})

@@ -6,6 +6,7 @@ import { EventsProvider } from "./client/events";
 import { ToastProvider } from "./primitives/Toast";
 import { DesktopFrame } from "./shell/DesktopFrame";
 import { DefaultModel } from "./features/onboarding/DefaultModel";
+import { RestOfMatter } from "./features/today/matters/RestOfMatter";
 import { ConnectionBanner } from "./shell/ConnectionBanner";
 import { ThemeProvider } from "./theme/ThemeProvider";
 
@@ -25,6 +26,7 @@ export function Providers({ children }: { children: ReactNode }) {
             <DesktopFrame />
             <DefaultModel />
             <ConnectionBanner />
+            <RestOfMatter />
             {children}
           </ToastProvider>
         </ThemeProvider>

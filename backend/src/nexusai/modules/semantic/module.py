@@ -395,9 +395,24 @@ class Engine:
 
     # Indexing, newest first
 
+    def _mail_sorted(self) -> bool:
+        """Sorted or skipped, or a Home that finished setting up before sorting existed."""
+        return bool(
+            self.db.fetch_all(
+                "SELECT 1 WHERE EXISTS (SELECT 1 FROM mail_sorting)"
+                " OR EXISTS (SELECT 1 FROM onboarding WHERE completed = 1)"
+            )
+        )
+
     def _refill(self, model: str) -> None:
         """What has no vectors yet: mail, then uploads, then attachments. Nothing is read twice."""
-        rows = self.db.fetch_all(f"SELECT id FROM messages WHERE {KEPT_MAIL} ORDER BY id DESC")  # noqa: S608
+        # Mail waits for sorting, so what the person keeps from the AI is never embedded.
+        sorted_ = self._mail_sorted()
+        rows = (
+            self.db.fetch_all(f"SELECT id FROM messages WHERE {KEPT_MAIL} ORDER BY id DESC")  # noqa: S608
+            if sorted_
+            else []
+        )
         done = self.stores[MAIL].done_refs(model)
         items = [(MAIL, str(r["id"])) for r in rows if str(r["id"]) not in done]
         done = self.stores[DOCUMENT].done_refs(model)
@@ -414,7 +429,7 @@ class Engine:
             " WHERE p.kind = 'attachment' AND p.text IS NOT NULL AND p.text != ''"
             f" AND {KEPT_MAIL_M} ORDER BY p.message DESC"
         )
-        for row in rows:
+        for row in rows if sorted_ else []:
             ref = f"m:{row['message']}:{row['part_index']}"
             if ref not in done:
                 items.append((DOCUMENT, ref))
@@ -736,8 +751,8 @@ def import_files(command: ImportModel, ctx: Context) -> SemanticStatus:
     return current.status()
 
 
-@semantic_module.on("mail.received", "semantic.new_mail")
-@semantic_module.on("mail.changed", "semantic.changed_mail")
+# One listener for all mail events, sorting included: each listener slows every event.
+@semantic_module.on("mail.*", "semantic.mail")
 @semantic_module.on("document.indexed", "semantic.new_document")
 @semantic_module.on("documents.changed", "semantic.changed_document")
 def something_new(event: AppEvent, ctx: Context) -> None:

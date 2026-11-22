@@ -278,8 +278,9 @@ def test_download_progress_counts_what_has_come_down(
         wait(lambda: client.post("/api/queries/mail.status").json()["messages"] == 5, "history")
         bus = client.app.state.bus  # type: ignore[attr-defined]
         steps = [e.payload for e in bus.events_since(0) if e.type == "mail.syncProgress"]
-        assert steps[0] == {"total": 5, "done": 2}
-        assert {"total": 5, "done": 4} in steps
+        # The goal shows before the first request comes back, then each step of the way.
+        assert steps[0] == {"total": 5, "done": 0}
+        assert {"total": 5, "done": 2} in steps and {"total": 5, "done": 4} in steps
         wait(lambda: client.post("/api/queries/mail.status").json()["state"] == "live", "live")
         finished = client.post("/api/queries/mail.status").json()
         assert (finished["total"], finished["done"]) == (0, 0)

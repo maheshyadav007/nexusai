@@ -43,7 +43,7 @@ DATA_TOOLS = {
     "delete_reminders", "create_categories", "delete_categories", "merge_categories",
     "reorder_categories", "delete_rules", "update_memory", "forget_memory", "remember",
     "save_personal_prompt", "delete_documents", "remove_panels", "remove_schedules", "run_schedule",
-    "recommend_mail_change", "fold_suggested_categories", "recommend_priority", "suggest", "tell", "notify_person", "use", "write_work_board", "update_category", "save_rule",
+    "recommend_mail_change", "fold_suggested_categories", "recommend_priority", "suggest", "tell", "notify_person", "use", "write_work_board", "update_category", "save_rule", "move_sender",
     "update_documents", "save_panel", "create_schedule", "update_schedule", "apply_mail_learning_answers",
     "propose_skill", "update_brief",
 }  # fmt: skip
@@ -52,7 +52,7 @@ READ_TOOLS = {
     "read_file", "list_folder", "search_mail", "read_thread", "read_recipients", "search_documents", "read_document",
     "list_documents", "list_tasks", "list_reminders", "list_categories", "list_rules",
     "list_drafts", "list_memory", "list_panels", "list_schedules", "read_database", "semantic_search",
-    "read_work_board", "list_mail", "read_plate",
+    "read_work_board", "list_mail", "read_plate", "read_matter",
 }  # fmt: skip
 
 

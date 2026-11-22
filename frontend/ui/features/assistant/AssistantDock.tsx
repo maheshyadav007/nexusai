@@ -138,7 +138,8 @@ export function AssistantDock() {
   // A chat waiting on the person, such as the first meeting, is what the pill opens.
   const waitingChat = (sessions.data?.sessions ?? []).find((row) => row.status === "waiting" && row.id !== MAIL_AGENT);
   // The session page already is this conversation, and two live views of one chat would fight.
-  if (pathname.startsWith("/agent/sessions/")) return null;
+  // Sorting is one focused step, and the pill would sit on its "Sort my mail" button.
+  if (pathname.startsWith("/agent/sessions/") || pathname === "/mail/sort") return null;
   return (
     <Presence>
       {assistant.open ? (

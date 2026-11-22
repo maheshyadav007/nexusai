@@ -1,5 +1,6 @@
 import json
 import socket
+import threading
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import replace
@@ -356,6 +357,70 @@ def test_reconnects_when_the_connection_drops(client: TestClient, fake: FakeMail
     wait(lambda: fake.state.logins > logins, "reconnect")
     fake.state.deliver(make_mail(subject="After reconnect"))
     assert thread_with(client, "After reconnect")
+
+
+def test_a_connection_lost_mid_download_picks_up_where_it_stopped(
+    client: TestClient, fake: FakeMail
+) -> None:
+    fill(fake, 250)
+    fake.state.drop_fetches = 2
+    save(client, fake, pull_limit=250)
+    wait(lambda: status(client)["history_finished"], "the download to finish after the drops")
+    assert status(client)["pulled"] == 250
+    # Each email once, however many times a batch had to be fetched again.
+    assert len({row["subject"] for row in threads(client)}) == len(threads(client))
+    # It went offline in between, and came back without being asked.
+    states = [row["payload"]["state"] for row in events(client, "mail.syncChanged")]
+    assert "offline" in states
+
+
+def test_try_now_cuts_the_wait_before_the_next_try(client: TestClient, fake: FakeMail) -> None:
+    from nexusai.modules.mail import module as mail
+
+    connect(client, fake)
+    running = mail._sync
+    assert running is not None
+    waited = threading.Thread(target=running._rest, args=(30,))
+    started = time.monotonic()
+    waited.start()
+    # "Try now" on the download wakes the sync, which is all the wait listens for.
+    client.post("/api/commands/pipelines.run", json={"id": "mail-sync"})
+    waited.join(timeout=5)
+    assert not waited.is_alive() and time.monotonic() - started < 5
+
+
+def test_a_busy_server_is_waited_out_but_a_wrong_password_stops() -> None:
+    from nexusai.modules.mail.imap import ServerBusy, SignInFailed, refusal
+
+    for said in (
+        "[ALERT] Too many simultaneous connections. (Failure)",
+        "[UNAVAILABLE] Temporary System Error",
+        "Account exceeded command or bandwidth limits.",
+    ):
+        assert isinstance(refusal(Exception(said)), ServerBusy), said
+    assert isinstance(
+        refusal(Exception("[AUTHENTICATIONFAILED] Invalid credentials")), SignInFailed
+    )
+    # imaplib passes the server's words as bytes; the person reads them as text.
+    busy = refusal(Exception(b"[ALERT] Too many simultaneous connections. (Failure)"))
+    assert str(busy) == "[ALERT] Too many simultaneous connections. (Failure)"
+    assert str(refusal(Exception("b'[UNAVAILABLE] Try later'"))) == "[UNAVAILABLE] Try later"
+
+
+def test_a_sign_in_turned_away_for_now_is_tried_again(
+    client: TestClient, fake: FakeMail, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from nexusai.modules.mail import sync
+
+    # Gmail asks for minutes; the test can't wait that long.
+    monkeypatch.setattr(sync, "BUSY_RETRY_SECONDS", 0.1)
+    fill(fake, 3)
+    fake.state.busy_logins = 2
+    save(client, fake)
+    wait(lambda: status(client)["history_finished"], "the download after the server let it in")
+    assert status(client)["pulled"] == 3
+    states = [row["payload"]["state"] for row in events(client, "mail.syncChanged")]
+    assert "offline" in states and "failed" not in states
 
 
 def test_replies_join_by_references_and_out_of_order_merges(
@@ -828,6 +893,26 @@ def test_only_the_newest_come_down_and_get_more_carries_on(
     assert len(events(client, "mail.received")) == 1
 
 
+def test_the_total_holds_still_while_a_limited_download_runs_and_sorting_starts_after(
+    client: TestClient, fake: FakeMail
+) -> None:
+    fill(fake, 30)
+    save(client, fake, pull_limit=12)
+    seen = set()
+    while not status(client)["history_finished"]:
+        now = status(client)
+        if now["total"]:
+            seen.add(now["total"])
+            assert now["done"] <= now["total"]
+    # A batch on its way used to be counted twice, so the total crept up as mail came down.
+    assert seen <= {12}
+    # Sorting needs all the mail, so it starts by itself once the download ends.
+    wait(
+        lambda: client.post("/api/queries/mail.sort.get", json={}).json()["state"] == "ready",
+        "sorting to be ready",
+    )
+
+
 def test_stop_ends_history_but_new_mail_keeps_coming(client: TestClient, fake: FakeMail) -> None:
     fill(fake, 3)
     connect(client, fake)
@@ -1283,3 +1368,34 @@ def test_historical_chunks_do_not_emit_live_bulk_arrival(
     )
     assert not events(client, "mail.bulkArrived")
     assert events(client, "mail.historyFinished")
+
+
+def test_a_folder_counts_what_its_sorting_rules_keep_from_the_ai(
+    client: TestClient, fake: FakeMail
+) -> None:
+    kept = {
+        "name": "Shopping: offers@store.example",
+        "conditions": [{"field": "sender", "value": "offers@store.example"}],
+        "actions": {"category": "Shopping", "skip_agent": True},
+    }
+    read = {
+        "name": "Shopping: orders",
+        "conditions": [{"field": "subject", "value": "order"}],
+        "actions": {"category": "Shopping"},
+    }
+    assert client.post("/api/commands/rules.save", json={"rules": [kept, read]}).status_code == 200
+    connect(client, fake)
+    fake.state.deliver(make_mail(subject="Weekend sale", sender="offers@store.example"))
+    fake.state.deliver(make_mail(subject="Where is my order?"))
+    shopping = wait(
+        lambda: next(
+            (
+                c
+                for c in client.post("/api/queries/categories.list").json()["categories"]
+                if c["name"] == "Shopping" and c["count"] == 2
+            ),
+            None,
+        ),
+        "both filed",
+    )
+    assert shopping["kept"] == 1

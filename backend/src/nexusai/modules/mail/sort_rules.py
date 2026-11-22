@@ -15,6 +15,8 @@ from nexusai.modules.mail.parse import ParsedMessage, tags_of
 from nexusai.modules.mail.rules import is_reply
 
 PREFIX = "Sorted: "
+# A rule the person asked for, so a sender's mail reaches the AI whatever else would match it.
+READS_PREFIX = "AI reads: "
 # A tag names a category when this share of the category's mail carries it, and this share of
 # all the mail carrying it is the category's. A tag every tool uses, like [Reminder], fails that.
 MOSTLY = 0.75

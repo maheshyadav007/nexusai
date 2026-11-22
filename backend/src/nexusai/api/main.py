@@ -1,5 +1,7 @@
 import io
+import os
 import sys
+import threading
 
 import uvicorn
 
@@ -27,6 +29,15 @@ def run() -> None:
         # Longer than the frontend keeps an idle connection, so it never reuses one just closed.
         timeout_keep_alive=KEEP_ALIVE_SECONDS,
     )
+    # The Home is closed by now. A worker thread still waiting on a model or mail server would
+    # otherwise hold the process open at exit, unseen and still connected, so it's let go.
+    lingering = [
+        t for t in threading.enumerate() if t is not threading.main_thread() and not t.daemon
+    ]
+    if lingering:
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(0)
 
 
 if __name__ == "__main__":

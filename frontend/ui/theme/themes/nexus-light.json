@@ -124,7 +124,9 @@
     "quick": "720px",
     "quickHeight": "460px",
     "thumb": "112px",
-    "thumbWide": "240px"
+    "thumbWide": "240px",
+    "day": "112px",
+    "timeline": "480px"
   },
   "scale": {
     "density": {

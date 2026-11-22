@@ -1,6 +1,6 @@
 # Matters: one record for each real thing going on
 
-Status: plan, 2026-11-21. Nothing here is built yet. Read section 0 first if you are picking this up in a new session.
+Status, 2026-11-21: reviewed and kept, except the graph view (dropped). **Built on the `conversations` branch:** phase 1 (resends join, one task per conversation, Done closes the work), phase 2 in a lean form (`modules/agent/matters.py`: `matters`, `matter_threads`, `matter_events`; state, due, people and work are read from the conversations each time instead of stored; code-only links by shared id or same sender and subject; rule-filed mail can join but never start a matter; one-time backfill), and phase 6's Today as three tabs: **Brief** (the day's changes, marked when unseen, plus matters by who moves next), **Week** (one lane per matter) and **Matters** (list and timeline, Done with Undo, Not part of this). Next: phase 3 (the model picks from the candidates), then `matter_people`, `matter_relations` and `brief_lines`. Read section 0 first if you are picking this up in a new session.
 
 > **The idea.** The person doesn't care about emails. They care about the *things going on*: Priya's budget decision, the Q4 timesheet, the visa renewal, the PLM release. Today NexusAI tracks emails and threads, so the same thing arriving as three emails becomes three things: three tasks, three reminders, three brief lines. This plan adds one durable record per real thing, a **Matter**. Every email, thread, task, reminder, draft and brief line attaches to it, and every change to it is logged with the email that caused it. The inbox stays for reading mail; Today becomes a live board of matters.
 
@@ -20,6 +20,16 @@ Status: plan, 2026-11-21. Nothing here is built yet. Read section 0 first if you
 4. Every phase lists its files, tests and acceptance checks. Don't start the next phase until the current one passes its check on real mail.
 
 ---
+
+## Object model (built 2026-11-22)
+
+- **Ownership is a tree:** a task's matter is `tasks.matter`, a reminder's parent is `reminders.task` or `reminders.matter`. Every task from mail keeps `tasks.source_message`, the email that asked for it.
+- **Every other link** is a row in `links` (`modules/agent/links.py`): related, merged, uses. Links are ended with a reason, never deleted.
+- **Kinds** are declared once in `modules/agent/kinds.py`; objects are named `task:88`, `thread:12`, `doc:5` on screen, in prompts and in links.
+- **Children follow their parent** (planner `_children_follow`): a task's reminders close, reopen and move with it.
+- **Siblings are asked:** `matters.related` lists the rest of the matter after something finishes; `matters.closeItems` closes what the person ticks and remembers what they kept (`matter_kept`). The sheet is `RestOfMatter.tsx`, triggered from the shared task and status hooks. An agent that finishes a task only tells the person what's still open.
+- **The AI sees related matters** (`matters.context_for`) and may pick one by number (`record_triage.matter`, checked against the shortlist) and point a task at the open one it updates (`tasks[].updates`). A shared sender alone shows a matter to the AI but never joins or relates it by code.
+- **Timeline** pages oldest first (`matters.get` gives the newest page, `matters.events` the ones before it).
 
 ## 1. What "best mail app in the world" means here
 
@@ -59,6 +69,13 @@ Brief: daily-prep schedule ──► brief_task() ──► update_brief (whole 
 3. **The duplicate check is per thread.** `planner.has_task(db, title, thread)` compares titles only within the same thread (fuzzy), and `planner.has_reminder` compares exact titles within the same thread.
 4. **The brief is rewritten whole, once a morning** (`prompts/daily-prep.md`, `mail_agent.brief_task`). An important email at 11:00 isn't in the brief until the next morning, unless someone asks.
 5. **Nothing connects related items.** Closing a task doesn't touch its reminder, the waiting status of the other thread, or the brief line.
+
+### Seen on the real mailbox (2026-11-21, read-only, no model)
+
+- Google Cloud "verification past due" came twice, a week apart, as two threads: two tasks and two deadlines.
+- "[GitHub] Please verify your device" got two open tasks in the **same** thread in different words; one title had a `[mail:15937]` marker in it.
+- Every task from mail also had a work-board deadline, so Due today showed each one twice.
+- The corp sample (`evals/corp_mailbox.json`) shows what only matters can fix: change 88213 arrives from Karthik, Swarm approval and Swarm comment; Carrier X and Orion each span three senders and subjects.
 
 ### What already helps
 
@@ -105,7 +122,7 @@ Rules of thumb:
 
 ## 4. Data model
 
-SQLite, in the mail module's database. Everything is a plain table, and the graph view later is just a query over these tables.
+SQLite, in the mail module's database. Everything is a plain table.
 
 ```sql
 -- One record per real-world thing.
@@ -193,13 +210,6 @@ CREATE TABLE brief_lines (
   seen TEXT                            -- when the person last saw this version
 );
 ```
-
-### Graph-ready by design
-
-- **Nodes:** matter, thread, message, person, task, reminder, document (attachments) and, later, calendar events.
-- **Edges:** `matter_threads`, thread→message (`messages.thread_id`), `matter_people`, work→matter, `matter_relations`, and attachments to their message.
-- A `matter.graph` query returns `{nodes, edges}` for any matter, two hops out. The Obsidian-style view later is only a renderer over that query, with no new data needed.
-- Times on events give the "valid from / valid to" history that temporal knowledge graphs use. We can show "what did we know on Tuesday" without extra work.
 
 ---
 
@@ -446,9 +456,9 @@ Each **matter card** has:
 - **Tasks and Reminders screens:** each row shows its matter, and filtering by matter works.
 - **Chat (Posty):** "What's going on with the budget?" answers from the matter: state, timeline and open work, with markers. "Close everything about the timesheet" uses the same cascade sheet.
 
-### Later: the graph
+### People
 
-The matter page gets a "Map" tab drawing `matter.graph` (section 4). People pages ("everything open with Priya") come from `matter_people`. Neither needs new data.
+People pages ("everything open with Priya") come from `matter_people`.
 
 ---
 
@@ -558,10 +568,6 @@ Each phase ships alone, keeps all tests green, and is checked on real mail (with
 ### Phase 7: Promises and chasing
 
 - **Build:** judge sent mail for commitments; waiting-on-others with chase drafts (section 9).
-
-### Phase 8: The map
-
-- **Build:** the `matter.graph` query and the Map tab; people pages.
 
 ---
 

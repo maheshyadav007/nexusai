@@ -51,6 +51,7 @@ from nexusai.modules.agent import cards, citations, memory, scheduler, signals
 from nexusai.modules.documents import module as documents_module
 from nexusai.modules.mail import module as mail
 from nexusai.modules.mail import rules as mail_rules
+from nexusai.modules.mail import sorting as mail_sorting
 from nexusai.modules.panels import module as panels
 from nexusai.modules.planner import module as planner
 from nexusai.modules.semantic import module as semantic
@@ -238,6 +239,16 @@ class _Rule(_Call):
     skip_agent: bool = Field(default=False, description="Don't use the model on matching mail.")
     notify: bool = False
     enabled: bool = True
+
+
+class _MoveSender(_Call):
+    sender: str = Field(description="The sender's email address.")
+    side: Literal["reads", "ignores"] = Field(
+        description="reads: the AI reads its mail. ignores: it's kept from the AI."
+    )
+    folder: str | None = Field(
+        default=None, description="Where to file it. Left out, it keeps its folder, or Automated."
+    )
 
 
 class _RuleNames(_Call):
@@ -909,6 +920,14 @@ def specs(
 
         detail = " and ".join(f"{c.field} has “{c.value}”" for c in conditions)
         return guard(tool_call_id, "save_rule", "data", f"Save rule: {name}", detail, work)
+
+    def move_sender(sender: str, side: str, tool_call_id: str, folder: str | None = None) -> str:
+        def work() -> str:
+            return mail_sorting.move_sender(ctx, sender, reads=side == "reads", folder=folder)
+
+        where = "the AI reads it" if side == "reads" else "kept from the AI"
+        detail = f"{sender}: {where}" + (f", filed in {folder}" if folder else "")
+        return guard(tool_call_id, "move_sender", "data", f"Move a sender: {sender}", detail, work)
 
     def delete_rules(names: list[str], tool_call_id: str) -> str:
         def work() -> str:
@@ -1606,6 +1625,12 @@ def specs(
             _Rule,
             "Create or replace a rule that handles matching mail with no model involved. Good for "
             "mail that's always handled the same way.",
+        ),
+        (
+            move_sender,
+            _MoveSender,
+            "Move one sender to the side the AI reads or the side it ignores, as the Sort page "
+            "does. Its rules are replaced by one, so it never has two. Mail already filed stays.",
         ),
         (delete_rules, _RuleNames, "Remove mail rules in one call."),
         (

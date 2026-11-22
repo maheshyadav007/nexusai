@@ -1,10 +1,9 @@
-"""What a sorting page shows for the grouping engine's report: each group with sample emails and
-the folder it starts in, then the biggest senders left in no group.
+"""What a sorting page shows: every sender with its score, its side and sample emails, the same
+for the app's sorting page and the Sort lab.
 
 Only the engine and the parser, so the Sort lab can use it without the database or the keychain.
 """
 
-import json
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
@@ -13,14 +12,6 @@ from nexusai.modules.mail import grouping
 from nexusai.modules.mail.parse import parse_message
 
 SAMPLES = 10
-MISSED_SENDERS = 40
-# Where each section of the engine's report starts out.
-FOLDER_OF = {
-    "automated": "automated",
-    "calendar": "calendar",
-    "people": "inbox",
-    "too_few": "inbox",
-}
 
 
 def _summary(key: str, raw: bytes, named: set[str]) -> dict[str, Any]:
@@ -40,86 +31,10 @@ def _summary(key: str, raw: bytes, named: set[str]) -> dict[str, Any]:
     }
 
 
-def describe(
-    report: grouping.Report,
-    read: Callable[[str], bytes],
-    covered: frozenset[str] = frozenset(),
-) -> tuple[dict[str, Any], dict[str, list[str]]]:
-    """What a sorting page shows, and every email behind each entry: the engine's groups with
-    sample emails and the folder they start in, then the biggest senders left in no group. Mail
-    in `covered` is already filed by the person's own rules, so it is in no entry."""
-    # Mentions count only outside groups that name the person in nearly every email.
-    ignored = {group.id for group in report.groups if group.mentions_ignored}
-    named = {
-        key
-        for key, decision in report.decisions.items()
-        if decision.named and decision.group not in ignored
-    }
-    members: dict[str, list[str]] = {}
-    groups = []
-    for group in report.groups:
-        kept = [key for key in group.members if key not in covered]
-        if not kept:
-            continue
-        data = json.loads(grouping.to_json(grouping.Report("", "", [group], {})))["groups"][0]
-        data["folder"] = FOLDER_OF[group.section]
-        data["count"] = len(kept)
-        data["emails"] = [_summary(key, read(key), named) for key in kept[:SAMPLES]]
-        groups.append(data)
-        members[group.id] = kept
-    loose = [
-        key
-        for key, decision in report.decisions.items()
-        if decision.group is None and key not in covered
-    ]
-    by_sender: dict[str, list[dict[str, Any]]] = {}
-    for key in loose:
-        summary = _summary(key, read(key), named)
-        by_sender.setdefault(summary["sender"], []).append(summary)
-    # The person's own mail is theirs, never something to sort.
-    by_sender.pop(report.owner, None)
-    missed = sorted(by_sender.items(), key=lambda item: -len(item[1]))[:MISSED_SENDERS]
-    own_domain = report.owner.partition("@")[2]
-    endings = grouping._endings(
-        {sender.partition("@")[2] for sender in by_sender}
-        | {sender.partition("@")[2] for group in report.groups for sender in group.senders}
-    )
-
-    def label(sender: str) -> str:
-        """Named like the engine names a group: the domain outside the company."""
-        local, _, domain = sender.partition("@")
-        return local if domain == own_domain else grouping._site(domain, endings)
-
-    shown = []
-    for sender, items in missed:
-        if len(items) < 2:
-            continue
-        shown.append(
-            {
-                "sender": sender,
-                "label": label(sender),
-                "count": len(items),
-                "emails": items[:SAMPLES],
-            }
-        )
-        members[f"miss:{sender}"] = [item["key"] for item in items]
-    found = {
-        "owner": report.owner,
-        "owner_name": report.owner_name,
-        "total": len(report.decisions),
-        "reach_ai": sum(decision.reaches_ai for decision in report.decisions.values()),
-        "ungrouped": len(loose),
-        "already_sorted": len(covered),
-        "groups": groups,
-        "missed": shown,
-    }
-    return found, members
-
-
 # The sender list: one row per sender, on the side the AI reads or the side it ignores.
 
 # The biggest senders the AI ignores start out as their own categories.
-TOP_CATEGORIES = 5
+TOP_CATEGORIES = 3
 
 
 def describe_senders(report: grouping.SenderReport, read: Callable[[str], bytes]) -> dict[str, Any]:
@@ -145,6 +60,7 @@ def describe_senders(report: grouping.SenderReport, read: Callable[[str], bytes]
                 "own": row.sender in own,
                 "examples": [pattern for pattern, _ in row.examples],
                 "emails": [_summary(key, read(key), through) for key in row.members[:SAMPLES]],
+                "folder": "",
             }
         )
     return {

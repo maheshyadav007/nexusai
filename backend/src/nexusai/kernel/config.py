@@ -26,7 +26,8 @@ class MailConfig:
     connect_timeout_seconds: float
     initial_batch: int
     backfill_batch: int
-    progress_every: int
+    # Emails fetched in one request to the server.
+    fetch_batch: int
     starter_categories: tuple[dict[str, str], ...]
     # The rule engine. Off, every email reaches the AI and no rule files any.
     rules_on: bool

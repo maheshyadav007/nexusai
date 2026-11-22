@@ -95,7 +95,7 @@ export function CountPop({ value, className = "" }: { value: number; className?:
   }, [value]);
   return (
     <motion.span key={value} initial={changed ? { scale: 0.7, opacity: 0.4 } : false} animate={{ scale: 1, opacity: 1 }} transition={feel.quick} className={`inline-block tabular-nums ${className}`}>
-      {value}
+      {value.toLocaleString()}
     </motion.span>
   );
 }

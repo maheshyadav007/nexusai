@@ -2,6 +2,7 @@
 
 import socketserver
 import threading
+import time
 from dataclasses import dataclass, field
 
 from fake_mail import PASSWORD, USER
@@ -51,7 +52,8 @@ class _Handler(socketserver.StreamRequestHandler):
             elif command == "PASS":
                 if state.busy:
                     self.reply("-ERR [IN-USE] mailbox locked")
-                elif user == USER and parts[1] == PASSWORD:
+                # A server can sign in someone else, like the company mockup's admin / admin.
+                elif (user, parts[1]) == getattr(self.server, "login", (USER, PASSWORD)):
                     with state.lock:
                         snapshot = list(state.mails)
                     self.reply("+OK signed in")
@@ -63,6 +65,8 @@ class _Handler(socketserver.StreamRequestHandler):
                     self.reply(f"{number} {name}")
                 self.reply(".")
             elif command == "RETR":
+                # A server can be slow on purpose, like a real one far away.
+                time.sleep(getattr(self.server, "delay", 0.0))
                 name, raw = snapshot[int(parts[1]) - 1]
                 if name in state.refuse:
                     self.reply("-ERR can't read that one")
@@ -101,9 +105,16 @@ class FakePop3:
         self.server.server_close()
 
 
-def start_fake_pop3() -> FakePop3:
-    server = _Threaded(("127.0.0.1", 0), _Handler)
+def start_fake_pop3(
+    port: int = 0, login: tuple[str, str] = (USER, PASSWORD), mails: list[bytes] | None = None
+) -> FakePop3:
+    """A running server. Mail given here is all in place before it answers anyone, as on a real
+    server; a client that signed in halfway through loading would see half a mailbox."""
     state = Pop3State()
+    for raw in mails or []:
+        state.deliver(raw)
+    server = _Threaded(("127.0.0.1", port), _Handler)
+    server.login = login  # type: ignore[attr-defined]
     server.state = state  # type: ignore[attr-defined]
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return FakePop3(server.server_address[1], state, server)

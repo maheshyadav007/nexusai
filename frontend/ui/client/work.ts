@@ -2,12 +2,13 @@
 
 import type { SimulatePreference, ExpireLearnedNote, QueueAction, SavePreference, RestorePreference, RecordInteraction, PromptHistory, RestorePrompt, PreviewPreference } from "./contracts.generated";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { command, query } from "./api";
 import type { RenameAgent, SetMascot, ContextSettings, SaveTrigger, GetCockpitEvents, MailAgentSettings, QuietHours, Schedule, SaveMemory, SavePrompt, SaveReminder, SaveTask, SendCheckSettings, SetSessionContext, GuardRules, SaveModelProvider, ListProviderModels } from "./contracts.generated";
 import { useHomeReady } from "./home";
 import { useGenerationCommand } from "./generation";
 import { useCategories } from "./mail";
+import { askAboutRest } from "./rest";
 import { useApprovals } from "./sessions";
 
 function useReady<T>(key: readonly unknown[], fn: () => Promise<T>) {
@@ -26,6 +27,30 @@ function useCommand<I, R>(keys: readonly string[], run: (input: I) => Promise<R>
 }
 
 export const useToday = () => useReady(["today"], () => query("today.view", {}));
+// Matters: one record for each real thing going on. Every change to its work changes these too.
+const MATTER_KEYS = ["matters", "tasks", "reminders", "today", "threads", "thread", "board"];
+export const useMattersBrief = () => useReady(["matters", "brief"], () => query("matters.brief", {}));
+/** The matters from a day for so many days. While more days load, the ones shown stay. */
+export function useMattersWeek(start: string, days: number) {
+  const ready = useHomeReady();
+  return useQuery({ queryKey: ["matters", "week", start, days], queryFn: () => query("matters.week", { start, days }), enabled: ready, placeholderData: keepPreviousData });
+}
+export const useMatterList = (includeDone: boolean) => useReady(["matters", "list", includeDone], () => query("matters.list", { include_done: includeDone }));
+export function useMatter(id: number | null) {
+  const ready = useHomeReady();
+  return useQuery({ queryKey: ["matters", "one", id], queryFn: () => query("matters.get", { id: id as number }), enabled: ready && id !== null });
+}
+export const useMatterDone = () => useCommand(MATTER_KEYS, (id: number) => command("matters.done", { id }));
+export const useMatterReopen = () => useCommand(MATTER_KEYS, (id: number) => command("matters.reopen", { id }));
+export const useUnlinkThread = () => useCommand(MATTER_KEYS, (thread: number) => command("matters.unlink", { thread }));
+export const useMatterRelated = (ref: string | null) => {
+  const ready = useHomeReady();
+  return useQuery({ queryKey: ["matters", "related", ref], queryFn: () => query("matters.related", { ref: ref as string }), enabled: ready && Boolean(ref), staleTime: 0 });
+};
+export const useCloseMatterItems = () => useCommand(MATTER_KEYS, (input: { trigger: string; close: string[]; keep: string[] }) => command("matters.closeItems", input));
+export const useReopenMatterItems = () => useCommand(MATTER_KEYS, (refs: string[]) => command("matters.reopenItems", { refs }));
+export const useMergeMatter = () => useCommand(MATTER_KEYS, (input: { id: number; into: number }) => command("matters.merge", input));
+export const useUnmergeMatter = () => useCommand(MATTER_KEYS, (id: number) => command("matters.unmerge", { id }));
 export const useChannel = () => useReady(["channel"], () => query("channel.list", {}));
 export const useRespondChannel = () => useCommand(["channel"], (input: { id: number; answer: string }) => command("channel.respond", input));
 export const useDismissChannel = () => useCommand(["channel"], (id: number) => command("channel.dismiss", { id }));
@@ -48,9 +73,14 @@ export function useSaveTask() {
       const before = value?.tasks.find((task) => task.id === input.id);
       if (before) client.setQueryData<typeof value>(key, (data) => data ? { ...data, tasks: data.tasks.map((task) => task.id === input.id ? before : task) } : data);
     }),
+    // Finishing a task asks about the rest of its matter, wherever it was ticked.
+    onSuccess: (_done, input) => {
+      if (input.id && input.status === "done") askAboutRest(`task:${input.id}`);
+    },
     onSettled: () => {
       void client.invalidateQueries({ queryKey: ["tasks"] });
       void client.invalidateQueries({ queryKey: ["today"] });
+      void client.invalidateQueries({ queryKey: ["matters"] });
     },
   });
 }

@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import threading
+import time
 import uuid
 from collections.abc import AsyncIterator, Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -57,6 +58,8 @@ from nexusai.modules.mail import accounts, store
 from nexusai.modules.semantic import module as semantic
 
 log = structlog.get_logger()
+# How long quitting waits for running turns before letting them go.
+CLOSE_SECONDS = 10.0
 MIGRATION = Migration(
     "agent_sessions_001",
     """
@@ -200,7 +203,13 @@ class SessionRuntime:
             controls = [live.control for live in self.live.values()]
         for control in controls:
             control.stop()
-        self.pool.shutdown(wait=True, cancel_futures=True)
+        # A turn waiting on a slow model or mail server can't stop at once, and quitting must
+        # still quit: what hasn't finished in a few seconds is let go and resumes on next start.
+        # Waiting for it without a limit kept a stopped app running, still connected to mail.
+        self.pool.shutdown(wait=False, cancel_futures=True)
+        deadline = time.monotonic() + CLOSE_SECONDS
+        for worker in list(getattr(self.pool, "_threads", ())):
+            worker.join(max(deadline - time.monotonic(), 0))
         self.connection.close()
 
     # Records

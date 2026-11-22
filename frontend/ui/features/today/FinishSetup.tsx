@@ -48,8 +48,10 @@ function useSteps(): { steps: Step[]; loaded: boolean; failed: boolean } {
   const assistant = useAssistant();
   const client = useQueryClient();
   const organization = useQuery({ queryKey: ["mail-organization"], queryFn: () => query("mail.organization", {}), enabled: ready, refetchInterval: 5000 });
-  const sorting = useQuery({ queryKey: ["mail-sort"], queryFn: () => query("mail.sort.get", {}), enabled: ready, refetchInterval: 15000 });
+  const sorting = useQuery({ queryKey: ["mail-sort"], queryFn: () => query("mail.sort.get", {}), enabled: ready });
   const retry = useMutation({ mutationFn: () => command("mailAgent.retryLearning", {}), onSuccess: () => client.invalidateQueries({ queryKey: ["mail-organization"] }) });
+  // Mail that wasn't sorted can leave a few unsure groups. Their guesses are kept in one press.
+  const keep = useMutation({ mutationFn: () => command("mail.learning.finish", { importance: {} }), onSuccess: () => Promise.all(["mail-organization", "threads", "today"].map((key) => client.invalidateQueries({ queryKey: [key] }))) });
 
   const hasMail = Boolean(mail.data?.account);
   const hasModel = Boolean(model.data?.connected);
@@ -68,7 +70,8 @@ function useSteps(): { steps: Step[]; loaded: boolean; failed: boolean } {
   const reading: Step = { id: "reading", title: "start.reading.title", detail: t("start.reading.waiting"), tone: "idle", extra: <SearchProgress /> };
   if (!hasMail) reading.detail = t("start.reading.needsMail");
   else if (state === "failed") Object.assign(reading, { detail: t("start.reading.failed"), tone: "failed", action: { label: "start.retry", run: () => retry.mutate(), loading: retry.isPending }, extra: retry.error ? <p role="alert" className="text-sm text-status-danger">{retry.error.message}</p> : null });
-  else if (learned) Object.assign(reading, { detail: t(state === "asking" ? "start.reading.asking" : "start.reading.done"), tone: state === "asking" ? "waiting" : "done" });
+  else if (state === "asking") Object.assign(reading, { detail: t("start.reading.asking", { name: lead }), tone: "waiting", action: { label: "start.reading.keep", run: () => keep.mutate(), loading: keep.isPending } });
+  else if (learned) Object.assign(reading, { detail: t("start.reading.done"), tone: "done" });
   else if (downloading) Object.assign(reading, { detail: t("start.reading.downloading", { done: (mail.data?.done ?? 0).toLocaleString(), total: (mail.data?.total ?? 0).toLocaleString() }), tone: "running" });
   // Reading waits until the person has sorted, so the AI never reads what they keep from it.
   else if (sorting.data?.state === "ready" || sorting.data?.state === "preparing") Object.assign(reading, { detail: t("start.reading.sorting", { name: lead }), tone: "waiting", action: { label: "mail.sort.card.open", href: "/mail/sort" } });
@@ -78,6 +81,9 @@ function useSteps(): { steps: Step[]; loaded: boolean; failed: boolean } {
   const questions: Step = { id: "questions", title: "start.questions.title", detail: t("start.questions.later"), tone: "idle" };
   if (met) Object.assign(questions, { detail: t("start.questions.done"), tone: "done" });
   else if (meeting) Object.assign(questions, { detail: t("start.questions.open", { name: lead }), tone: "waiting", action: { label: "start.open", href: `/agent/sessions/${meeting.id}` } });
+  // Once the mail is read it starts by itself, with questions about that mail. A button before
+  // then started a second meeting on top of the one that followed.
+  else if (hasModel && hasMail && !learned && state !== "failed") Object.assign(questions, { detail: t("start.questions.after", { name: lead }), tone: "idle" });
   else if (hasModel) Object.assign(questions, { detail: t("start.questions.ready"), tone: "waiting", action: { label: "start.begin", run: () => assistant.start({ title: t("setup.interview.label", { agent: agentName("interview") }), agent: "interview" }) } });
   steps.push(questions);
 

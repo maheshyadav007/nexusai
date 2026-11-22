@@ -106,14 +106,94 @@ test("new mail is judged, and reaches Today, the thread and the channel", async 
   await expect(page.getByTestId("context-chip")).toHaveCount(0);
 });
 
+test("Today shows one matter per thing, as a brief, a week and a timeline", async ({ page }) => {
+  const shots = process.env.E2E_SHOTS;
+  // The page scrolls inside its frame, so a tall window shows all of it in one picture.
+  if (shots) await page.setViewportSize({ width: 1440, height: 1700 });
+  const ticket = `INC-${Math.floor(1000 + Math.random() * 8000)}`;
+  const first = unique(`${ticket} VPN drops`);
+  await deliver(page, { subject: first, body: "The VPN drops every hour." });
+  await deliver(page, { subject: unique(`Update on ${ticket}`), sender: "Helpdesk <helpdesk@example.com>", body: "Still looking. Could you send logs?" });
+  await page.goto("/today");
+  const row = page.getByTestId("matter-row").filter({ hasText: first });
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await expect(row).toContainText("2 emails", { timeout: 30_000 });
+  await expect(page.getByTestId("matter-change").filter({ hasText: first }).first()).toBeVisible();
+  await noViolations(page);
+  if (shots) await page.screenshot({ path: `${shots}/brief.png`, fullPage: true });
+
+  await page.getByRole("tab", { name: "Week" }).click();
+  await expect(page).toHaveURL(/view=week/);
+  await expect(page.getByTestId("week-lane").filter({ hasText: first })).toBeVisible();
+  await noViolations(page);
+  if (shots) await page.screenshot({ path: `${shots}/week.png`, fullPage: true });
+
+  await page.getByTestId("week-lane").filter({ hasText: first }).getByRole("button").first().click();
+  await expect(page).toHaveURL(/view=matters&matter=\d+/);
+  const header = page.getByTestId("matter-header");
+  await expect(header).toContainText(first);
+  await expect(page.getByTestId("matter-timeline")).toContainText(`Both mention ${ticket.replace("-", "")}`);
+  // The timeline reads top to bottom as it happened: it starts with the first email.
+  const timeline = page.getByTestId("matter-timeline");
+  await expect(timeline.getByText("Started").first()).toBeVisible();
+  const order = await timeline.evaluate((list) => list.textContent ?? "");
+  expect(order.indexOf("Started")).toBeGreaterThan(-1);
+  expect(order.indexOf("Started")).toBeLessThan(order.indexOf("Linked"));
+
+  // Two to-dos in one matter. Finishing one asks about the other, which had its own ask.
+  const id = Number(new URL(page.url()).searchParams.get("matter"));
+  const detail = await (await page.request.post("/api/queries/matters.get", { data: { id } })).json();
+  const [one, two] = detail.threads.map((thread: { id: number }) => thread.id);
+  const send = unique("Send the VPN logs");
+  const check = unique("Check the new VPN client");
+  await page.request.post("/api/commands/tasks.save", { data: { title: send, thread: two } });
+  await page.request.post("/api/commands/tasks.save", { data: { title: check, thread: one } });
+  await page.reload();
+  await page.getByRole("checkbox", { name: send }).click();
+  const sheet = page.getByRole("dialog", { name: /^Also in/ });
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByRole("checkbox", { name: check })).not.toBeChecked();
+  await noViolations(page);
+  if (shots) await page.screenshot({ path: `${shots}/rest-of-matter.png` });
+  await sheet.getByRole("checkbox", { name: check }).click();
+  await sheet.getByTestId("rest-close").click();
+  await expect(page.getByText("Closed 1 more.")).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: check })).toHaveCount(0);
+
+  await noViolations(page);
+  if (shots) {
+    await page.screenshot({ path: `${shots}/matter.png`, fullPage: true });
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.screenshot({ path: `${shots}/matter-dark.png`, fullPage: true });
+    await page.getByRole("tab", { name: "Week" }).click();
+    await page.screenshot({ path: `${shots}/week-dark.png`, fullPage: true });
+    await page.getByRole("tab", { name: "Matters" }).click();
+    await page.emulateMedia({ colorScheme: "light" });
+  }
+
+  await header.getByTestId("matter-done").click();
+  // Two toasts can offer Undo now; the matter's own button is the one meant here.
+  await header.getByRole("button", { name: "Undo" }).click();
+  await expect(header.getByTestId("matter-done")).toBeVisible();
+});
+
 test("a proposed task is accepted, finished, and removed", async ({ page }) => {
   await page.goto("/planner/tasks");
   await page.getByRole("radio", { name: /^Suggested/ }).click();
   const proposed = page.getByTestId("task").filter({ hasText: "Reply to this mail" }).first();
   await expect(proposed).toBeVisible();
   await noViolations(page);
+  // Accepting one takes it out of Suggested. Others from earlier tests are accepted too, so
+  // the tests after this start with none waiting.
+  const accept = page.getByRole("button", { name: "Accept" });
+  const waiting = await accept.count();
   await proposed.getByRole("button", { name: "Accept" }).click();
-  await expect(page.getByRole("button", { name: "Accept" })).toHaveCount(0);
+  await expect(accept).toHaveCount(waiting - 1);
+  while ((await accept.count()) > 0) {
+    const left = await accept.count();
+    await accept.first().click();
+    await expect(accept).toHaveCount(left - 1);
+  }
   await page.getByRole("radio", { name: /^To do/ }).click();
 
   const title = unique("Send the report");
@@ -467,8 +547,9 @@ test("several things on Needs you can be done or declined together", async ({ pa
   const [one, two, three] = [unique("Bulk one"), unique("Bulk two"), unique("Bulk three")];
   for (const title of [one, two, three]) await proposeTask(page, title);
   await page.goto("/today");
-  await expect(page.getByTestId("proposal").filter({ hasText: three })).toBeVisible();
+  // Selecting unfolds the list, however many suggestions earlier tests left.
   await page.getByTestId("bulk-select").click();
+  await expect(page.getByTestId("proposal").filter({ hasText: three })).toBeVisible();
   await page.getByRole("checkbox", { name: `Select ${one}` }).click();
   await page.getByRole("checkbox", { name: `Select ${two}` }).click();
   await noViolations(page);

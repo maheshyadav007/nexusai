@@ -93,6 +93,32 @@ def snapshot(ctx: Context) -> str:
     )
 
 
+def coverage(ctx: Context) -> str:
+    """Whether the plate is complete, in a sentence: mail still coming in or being judged means
+    the brief should say its picture is partial."""
+    from typing import cast
+
+    from nexusai.contracts.mail import GetMailStatus, MailStatus
+    from nexusai.modules.mail import module as mail
+
+    pending = ctx.bus.db.fetch_all(
+        "SELECT COUNT(*) n FROM trigger_runs WHERE trigger='mail-received' AND status IN ('pending','running')"
+    )[0]["n"]
+    sync = cast(MailStatus, mail.get_status(GetMailStatus(), ctx))
+    syncing = bool(sync.account and (sync.state != "live" or sync.backfill_remaining))
+    if not pending and not syncing:
+        return "Coverage: all mail is in and judged, so this is the whole picture."
+    reasons = [
+        f"{pending} emails are still being judged" if pending else "",
+        "mail is still coming in" if syncing else "",
+    ]
+    return (
+        "Coverage: partial, because "
+        + " and ".join(r for r in reasons if r)
+        + ". Say so in the brief."
+    )
+
+
 def save(ctx: Context, session: str, text: str) -> str:
     """The brief agent's update_brief. One brief per run: saving again in the same run replaces it."""
     turns = ctx.bus.db.fetch_all(

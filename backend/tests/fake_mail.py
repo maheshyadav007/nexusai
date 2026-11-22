@@ -4,6 +4,7 @@ import base64
 import json
 import os
 import re
+import socket
 import socketserver
 import threading
 import time
@@ -84,6 +85,11 @@ class ImapState:
         self.logins = 0
         self.gmail = False
         self.fetched_bodies = 0
+        # Cuts the connection in the middle of the next this many body fetches, like a network
+        # that drops out while mail is coming down.
+        self.drop_fetches = 0
+        # Turns this many sign-ins away the way Gmail does when it's limiting an account.
+        self.busy_logins = 0
 
     def deliver(self, raw: bytes, box: str = "INBOX", flags: set[str] | None = None) -> int:
         with self.lock:
@@ -177,7 +183,12 @@ class _ImapHandler(socketserver.StreamRequestHandler):
             elif command == "LOGIN":
                 parts = re.findall(r'"([^"]*)"|(\S+)', args)
                 user, password = [a or b for a, b in parts][:2]
-                if user == USER and password == PASSWORD:
+                with self.state.lock:
+                    busy = self.state.busy_logins > 0
+                    self.state.busy_logins -= int(busy)
+                if busy:
+                    self.push(f"{tag} NO [ALERT] Too many simultaneous connections. (Failure)\r\n")
+                elif user == USER and password == PASSWORD:
                     self.state.logins += 1
                     ok("LOGIN completed")
                 else:
@@ -309,6 +320,12 @@ class _ImapHandler(socketserver.StreamRequestHandler):
                     with self.write_lock:
                         self.wfile.write(head.encode() + header + b")\r\n")
                 elif "BODY" in spec.upper():
+                    with self.state.lock:
+                        dropping = self.state.drop_fetches > 0
+                        self.state.drop_fetches -= int(dropping)
+                    if dropping:
+                        self.connection.shutdown(socket.SHUT_RDWR)
+                        return
                     self.state.fetched_bodies += 1
                     head = f"* {position} FETCH (UID {mail.uid} FLAGS ({flags}) BODY[] {{{len(mail.raw)}}}\r\n"
                     with self.write_lock:
@@ -369,7 +386,8 @@ class _SmtpHandler(socketserver.StreamRequestHandler):
                 import base64
 
                 decoded = base64.b64decode(text.split()[2]).split(b"\0")
-                good = decoded[1].decode() == USER and decoded[2].decode() == PASSWORD
+                login = getattr(self.server, "login", (USER, PASSWORD))
+                good = (decoded[1].decode(), decoded[2].decode()) == login
                 reply("235 ok" if good else "535 bad credentials")
             elif upper.startswith("MAIL FROM"):
                 envelope = {"from": text, "to": []}

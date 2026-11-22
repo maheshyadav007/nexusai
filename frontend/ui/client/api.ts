@@ -2,6 +2,7 @@ import type { AgentMap, GetAgentMap, GetRunTree, ListRuns, RunList, RunSpan, See
 import type { AddSkill, DecideSkill, ListSkills, SkillList, SkillName } from "./contracts.generated";
 import type { CancelTeamTask, CardList, GetTeamTask, ListCards, ListTeamTasks, NoteOnTeamTask, RenameAgent, ResetAgentName, RetryTeamTask, SetMascot, TeamTaskList, TeamTaskView } from "./contracts.generated";
 import type { MarkFolderRead } from "./contracts.generated";
+import type { AttachToMatter, CloseMatterItems, GetMatter, GetMatterEvents, GetMatterRelated, GetMattersBrief, GetMattersWeek, ListMatters, MatterAction, MatterDetail, MatterDone, MatterEvents, MatterList, MatterRelated, MattersBrief, MattersWeek, MergeMatters, ReopenMatterItems, UnlinkThread } from "./contracts.generated";
 import type { MailOrganization, FinishMailLearning, MergeCategories, SortCategory, CategorySortEstimate } from "./contracts.generated";
 import type { ApplyMailSort, GetMailSort, MailSort, MailSortApplied, PrepareMailSort, SkipMailSort } from "./contracts.generated";
 import type {SimulatePreference, PreferenceSimulation} from "./contracts.generated";
@@ -201,6 +202,8 @@ import type {
   MailStatus,
   MailTestResult,
   MoveThread,
+  ThreadInInbox,
+  ThreadToInbox,
   RemoveDraft,
   RemoveMailAccount,
   ReplyContext,
@@ -292,6 +295,7 @@ interface Commands {
   "mail.markFolderRead": [MarkFolderRead, MailDone];
   "thread.setFlag": [SetThreadFlag, MailDone];
   "thread.move": [MoveThread, MailDone];
+  "thread.toInbox": [ThreadToInbox, ThreadInInbox];
   "thread.setStatus": [SetThreadStatus, MailDone];
   "thread.setImportance": [SetThreadImportance, MailDone];
   "thread.setCategory": [SetThreadCategory, MailDone];
@@ -382,6 +386,14 @@ interface Commands {
   "triggers.save": [SaveTrigger, TriggerList];
   "triggers.remove": [RemoveTrigger, TriggerList];
   "today.markSeen": [MarkTodaySeen, AgentDone];
+  "matters.done": [MatterAction, MatterDone];
+  "matters.reopen": [MatterAction, AgentDone];
+  "matters.unlink": [UnlinkThread, MatterDone];
+  "matters.closeItems": [CloseMatterItems, MatterDone];
+  "matters.reopenItems": [ReopenMatterItems, MatterDone];
+  "matters.merge": [MergeMatters, MatterDone];
+  "matters.unmerge": [MatterAction, MatterDone];
+  "matters.attach": [AttachToMatter, MatterDone];
   "semantic.rebuild": [RebuildIndex, SemanticStatus];
   "connectors.test": [TestConnector, ConnectorTest];
   "connectors.add": [AddConnector, Connectors];
@@ -466,6 +478,12 @@ interface Queries {
   "tools.catalog": [GetToolCatalog, ToolCatalog];
   "categories.list": [ListCategories, CategoryList];
   "today.view": [GetToday, TodayView];
+  "matters.brief": [GetMattersBrief, MattersBrief];
+  "matters.week": [GetMattersWeek, MattersWeek];
+  "matters.list": [ListMatters, MatterList];
+  "matters.get": [GetMatter, MatterDetail];
+  "matters.events": [GetMatterEvents, MatterEvents];
+  "matters.related": [GetMatterRelated, MatterRelated];
   "channel.list": [ListChannel, ChannelList];
   "board.list": [ListBoard, BoardList];
   "agentChannel.list": [ListAgentChannel, AgentChannelList];

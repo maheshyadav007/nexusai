@@ -71,6 +71,53 @@ def sync(ctx: Context) -> None:
         )
 
 
+MOST_GUESSES = 5
+# Words too common to show a guess is about the task.
+FILLER = frozenset(
+    [
+        "with",
+        "that",
+        "this",
+        "from",
+        "your",
+        "they",
+        "their",
+        "them",
+        "have",
+        "about",
+        "what",
+        "when",
+        "where",
+        "which",
+        "mail",
+        "email",
+        "emails",
+        "will",
+        "would",
+        "could",
+        "should",
+        "there",
+        "here",
+        "been",
+        "were",
+        "also",
+        "just",
+        "into",
+        "than",
+        "then",
+    ]
+)
+
+
+def _meaningful(text: str) -> set[str]:
+    return set(re.findall(r"\w{4,}", text.casefold())) - FILLER
+
+
+def _about(asked: set[str], said: set[str]) -> bool:
+    """Whether they share a word, counting one that starts another: engineer, engineering."""
+    return any(a.startswith(b) or b.startswith(a) for a in asked for b in said)
+
+
 def layer(ctx: Context, account: str | None, task: str, limit: int) -> str:
     sync(ctx)
     stamp = datetime.now(UTC).isoformat()
@@ -79,6 +126,7 @@ def layer(ctx: Context, account: str | None, task: str, limit: int) -> str:
         (account, stamp),
     )
     words = set(re.findall(r"\w{3,}", task.casefold()))
+    asked = _meaningful(task)
     rows.sort(
         key=lambda r: (
             r["status"] != "confirmed",
@@ -91,6 +139,12 @@ def layer(ctx: Context, account: str | None, task: str, limit: int) -> str:
     for row in rows:
         text = f"- {row['text']} [source mail:{row['thread']}; observed:{row['seen_at']}; version:{row['revision']}]"
         if used + len(text) > limit:
+            continue
+        # A guess from one email earns its place only when it's about what's in front of the
+        # agent, and only a few: otherwise every run carries a list of unrelated trivia.
+        if row["status"] != "confirmed" and (
+            len(inferred) >= MOST_GUESSES or not _about(asked, _meaningful(row["text"]))
+        ):
             continue
         (confirmed if row["status"] == "confirmed" else inferred).append(text)
         used += len(text)

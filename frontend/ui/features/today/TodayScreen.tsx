@@ -1,6 +1,5 @@
 "use client";
 
-import { MailOrganizationCard } from "./MailOrganizationCard";
 import { SortMailCard } from "./SortMailCard";
 import Link from "next/link";
 import appConfig from "@/app.config.json";
@@ -11,7 +10,7 @@ import { useCategories, useDecideCategory, useDecidePriority, useMailStatus, use
 import { groupApprovals, useApprovals, useDecideApprovals, useSessions } from "@/ui/client/sessions";
 import { useLeadName } from "@/ui/client/home";
 import { useProfile } from "@/ui/client/onboarding";
-import { useChannel, useCockpit, useDecideMemory, useDecideSuggestion, useSuggestions, useDismissChannel, useMarkTodaySeen, useMemory, useReactToBrief, useReminders, useRemoveReminder, useRemoveTask, useRespondChannel, useSaveReminder, useSaveTask, useTasks, useToday, useWaitingCount, useAgentName } from "@/ui/client/work";
+import { useChannel, useCockpit, useMattersBrief, useDecideMemory, useDecideSuggestion, useSuggestions, useDismissChannel, useMarkTodaySeen, useMemory, useReactToBrief, useReminders, useRemoveReminder, useRemoveTask, useRespondChannel, useSaveReminder, useSaveTask, useTasks, useToday, useWaitingCount, useAgentName } from "@/ui/client/work";
 import { AskAgent } from "@/ui/features/agent/AskAgent";
 import { useAssistant } from "@/ui/features/assistant/AssistantProvider";
 import { ApprovalGroupCard, QuestionCard } from "@/ui/features/assistant/Cards";
@@ -38,10 +37,13 @@ import { TextLink } from "@/ui/primitives/TextLink";
 import { useToast } from "@/ui/primitives/Toast";
 import { t, tn, type StringKey } from "@/ui/strings";
 import { FinishSetup } from "./FinishSetup";
+import { MatterGroups, RunningBrief } from "./matters/BriefTab";
+import { MattersTab } from "./matters/MattersTab";
+import { useTodayView, type TodayView } from "./matters/parts";
+import { WeekTab } from "./matters/WeekTab";
+import { Tabs } from "@/ui/primitives/Tabs";
 
 const MAIL_AGENT = "mail-agent";
-// How long a conversation can sit quietly before it's worth a nudge.
-const QUIET_DAYS = 3;
 
 /** A part of the day: what it is, how many, and what can be done about it, all at a glance. */
 function Panel({ id, icon, title, count, urgent = false, hint, action, children }: { id?: string; icon: IconName; title: string; count?: number; urgent?: boolean; hint?: string; action?: ReactNode; children: ReactNode }) {
@@ -76,57 +78,6 @@ function Stat({ href, label, value, urgent = false, alarming = false }: { href: 
   );
 }
 
-const NEXT_ACTION_LABEL: Partial<Record<string, StringKey>> = { reply: "today.action.reply", do: "today.action.do", decide: "today.action.decide", read: "today.action.read" };
-
-// The first screen shows a few, not twenty: the rest are a click away and nothing is lost.
-const FIRST_SHOWN = 5;
-
-function ThreadList({ id, icon, title, hint, urgent = false, threads, empty, chase = false }: { id?: string; icon: IconName; title: string; hint?: string; urgent?: boolean; threads: readonly TodayThread[]; empty: string; chase?: boolean }) {
-  const format = useShortDate();
-  const setStatus = useSetStatus();
-  const setImportance = useSetImportance();
-  const [all, setAll] = useState(false);
-  const preview = useOpenSource();
-  const shown = all ? threads : threads.slice(0, FIRST_SHOWN);
-  const sources: PreviewSource[] = shown.map((thread) => ({ ...mailSource(thread.id), title: thread.subject || t("mail.noSubject"), detail: thread.people[0] ?? "", date: thread.last_date }));
-  return (
-    <Panel {...(id ? { id } : {})} icon={icon} title={title} count={threads.length} urgent={urgent && threads.length > 0} {...(hint && threads.length ? { hint } : {})}>
-      {threads.length === 0 ? <p className="text-md text-ink-muted">{empty}</p> : null}
-      <ul className="flex flex-col">
-        {shown.map((thread, index) => {
-          const action = thread.next_action ? NEXT_ACTION_LABEL[thread.next_action] : undefined;
-          const source = sources[index] as PreviewSource;
-          return (
-            <li key={thread.id} className="flex flex-col gap-2 border-t border-line-subtle py-3">
-              <a href={fullHref(source)} {...quickLook(() => preview.open(source, sources), () => preview.openFull(source))} data-testid="today-thread" className="focus-ring flex min-w-0 flex-col gap-px rounded-sm transition-colors duration-fast hover:text-accent-default">
-                <span className="flex items-baseline justify-between gap-3">
-                  <span className="flex min-w-0 items-center gap-2">
-                    {thread.importance === "high" ? <span aria-label={t("today.important")} role="img" className="h-2 w-2 shrink-0 rounded-full bg-accent-default" /> : null}
-                    <span className="truncate text-md font-medium text-ink-primary">{thread.subject || t("mail.noSubject")}</span>
-                    {action ? <Badge tone="accent">{t(action)}</Badge> : null}
-                  </span>
-                  <span className="shrink-0 text-sm tabular-nums text-ink-muted">{format(thread.last_date)}</span>
-                </span>
-                {thread.why ? <span className="truncate text-sm text-ink-secondary">{thread.why}</span> : null}
-              </a>
-              <span className="flex flex-wrap items-center gap-2">
-                {chase ? <AskAgent context={[`mail:${thread.id}`]} title={t("today.chase.title")} label={t("today.chase.draft")} text={t("today.chase.ask")} /> : <Link href={`${fullHref(mailSource(thread.id))}?draft`} data-testid="today-draft" className="focus-ring press ai-glow relative inline-flex items-center rounded-md px-3 py-2 text-md font-medium text-ink-primary">{t("mail.draftReply")}</Link>}
-                <Button variant="quiet" onClick={() => setStatus.mutate({ id: thread.id, status: "resolved" })}>{t("today.done")}</Button>
-                {thread.importance !== "low" && !chase ? <Button variant="quiet" onClick={() => setImportance.mutate({ id: thread.id, importance: "low" })}>{t("today.notImportant")}</Button> : null}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-      {threads.length > FIRST_SHOWN ? (
-        <Button variant="quiet" className="self-start" onClick={() => setAll(!all)}>
-          {all ? t("today.showFewer") : t("today.showMore", { count: threads.length - FIRST_SHOWN })}
-        </Button>
-      ) : null}
-    </Panel>
-  );
-}
-
 function AskRow({ message }: { message: ChannelMessage }) {
   const respond = useRespondChannel();
   const dismiss = useDismissChannel();
@@ -153,6 +104,8 @@ function AskRow({ message }: { message: ChannelMessage }) {
 /** One thing waiting on the person, however it came to be, so it can be done alone or in bulk. */
 // Past this many of one kind, they fold into one row: twenty memory notes read as one decision.
 const GROUP_AT = 3;
+// Up to this many suggestions show as they are; more fold into one line to open.
+const SUGGESTIONS_SHOWN = 3;
 
 /** Many proposals of one kind as one row: accept them all, or open the list to go one by one. */
 function ProposalGroup({ testid, icon, title, accept, items, children }: { testid: string; icon: IconName; title: string; accept: string; items: readonly WaitingItem[]; children: ReactNode }) {
@@ -322,6 +275,9 @@ function WaitingOnYou() {
   const priorityPicks: readonly MailCategory[] = (categories.data?.categories ?? []).filter((item) => item.priority_suggested);
   const count = useWaitingCount();
   const [selecting, setSelecting] = useState(false);
+  // What only an agent can't settle (approvals, questions) shows first. Suggestions can wait, so
+  // past a few they fold into one line: twelve memories and four folders read as one decision.
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
   const groups = groupApprovals(pending);
   const groupKey = (group: readonly ToolApproval[]) => `approval-${group[0]?.session}-${group[0]?.tool}`;
@@ -338,6 +294,8 @@ function WaitingOnYou() {
     return { key: groupKey(group), title: group[0]?.tool_label ?? group[0]?.tool ?? "", ...(careful ? {} : { doIt: () => decideApprovals.mutateAsync({ allow: ids }) }), decline: () => decideApprovals.mutateAsync({ deny: ids }) };
   };
   const askItem = (message: ChannelMessage): WaitingItem => ({ key: `ask-${message.id}`, title: message.text, decline: () => dismiss.mutateAsync(message.id) });
+  const suggestionCount = proposedTasks.length + proposedReminders.length + proposedCategories.length + priorityPicks.length + (suggestions.data?.suggestions.length ?? 0) + proposedMemories.length;
+  const folded = !selecting && suggestionCount > SUGGESTIONS_SHOWN;
   const allItems: readonly WaitingItem[] = [
     ...groups.map(approvalItem),
     ...asks.map(askItem),
@@ -357,6 +315,8 @@ function WaitingOnYou() {
     });
   const row = (item: WaitingItem) => ({ item, selecting, selected: picked.has(item.key), onToggle: () => toggle(item.key) });
   if (channel.isError) return <ErrorState title={t("channel.error")} onRetry={() => void channel.refetch()} />;
+  // Nothing waiting is said once, by the page, not by an empty panel.
+  if (!channel.isSuccess || count === 0) return null;
   return (
     <Panel id="today-needs" icon="approvals" title={t("today.needsYou")} count={count} urgent={count > 0} {...(count ? { hint: t("today.needsYou.hint") } : {})} action={allItems.length > 1 && !selecting ? <Button variant="quiet" className="py-px" data-testid="bulk-select" onClick={() => setSelecting(true)}>{t("today.select")}</Button> : undefined}>
       {selecting ? (
@@ -365,8 +325,6 @@ function WaitingOnYou() {
           {allItems.filter((item) => picked.has(item.key)).some((item) => !item.doIt) ? <p className="text-sm text-ink-muted">{t("today.select.review")}</p> : null}
         </>
       ) : null}
-      {channel.isPending ? <Skeleton className="h-6 w-full" /> : null}
-      {channel.isSuccess && count === 0 ? <p className="text-md text-ink-muted">{t("today.nothingWaiting")}</p> : null}
       <Presence>
         {groups.map((group) => {
           const item = approvalItem(group);
@@ -395,7 +353,14 @@ function WaitingOnYou() {
           );
         })}
       </Presence>
-      <ul className="flex flex-col gap-3">
+      {folded ? (
+        <div data-testid="suggestions-fold" className="flex items-center gap-3 rounded-lg border border-line-subtle bg-surface-raised p-3">
+          <Icon name="thinking" className="h-4 w-4 shrink-0 text-ink-muted" />
+          <span className="min-w-0 flex-1 text-md text-ink-primary">{tn("today.suggestions.count", suggestionCount, { name: lead })}</span>
+          <Button variant="quiet" aria-expanded={showSuggestions} onClick={() => setShowSuggestions(!showSuggestions)}>{t(showSuggestions ? "today.group.hide" : "today.group.review")}</Button>
+        </div>
+      ) : null}
+      {folded && !showSuggestions ? null : <ul className="flex flex-col gap-3">
         <Presence>
           {(() => {
             const rows = proposedTasks.map((task) => {
@@ -438,7 +403,7 @@ function WaitingOnYou() {
             );
           })()}
         </Presence>
-      </ul>
+      </ul>}
     </Panel>
   );
 }
@@ -527,9 +492,9 @@ function DueToday({ items }: { items: readonly DueItem[] }) {
     if (task) saveTask.mutate({ id: task.id, title: task.title, notes: task.notes, status: "done", due: task.due ?? null, thread: task.thread ?? null, proposed: false });
   };
   const overdue = items.some((item) => item.overdue);
+  if (!items.length) return null;
   return (
     <Panel id="today-due" icon="reminders" title={t("today.due")} count={items.length} urgent={overdue} {...(items.length ? { hint: t("today.due.hint") } : {})}>
-      {items.length === 0 ? <p className="text-md text-ink-muted">{t("today.due.empty")}</p> : null}
       <ul className="flex flex-col">
         {items.map((item) => (
           <li key={`${item.kind}-${item.title}-${item.when}`} data-testid="due-item" className="flex flex-col gap-2 border-t border-line-subtle py-3">
@@ -602,10 +567,36 @@ export function TodayScreen() {
   // Marked on leaving, so what came in stays listed while the person is reading it.
   useEffect(() => () => markSeen(), [markSeen]);
   const noMail = mail.data?.state === "off" && !today.data?.needs_you.length && !today.data?.waiting.length;
-  const waitingOnOthers = (today.data?.waiting ?? []).filter((thread) => (thread.quiet_days ?? 0) >= QUIET_DAYS);
   const needed = useWaitingCount();
   const cockpit = useCockpit();
   const due = today.data?.due ?? [];
+  const { view, go } = useTodayView();
+  const matters = useMattersBrief();
+  const open = matters.data ? matters.data.needs_you.length + matters.data.waiting.length + matters.data.fyi.length : null;
+  const clear = Boolean(today.data) && !noMail && needed === 0 && due.length === 0 && open === 0 && !today.data?.needs_you.length;
+  const brief = (
+    <div className="flex flex-col gap-6">
+      <MorningBrief />
+      <RunningBrief />
+      <FinishSetup />
+      {today.isError ? <ErrorState title={t("today.error")} onRetry={() => void today.refetch()} /> : null}
+      {today.isPending ? <Skeleton className="h-6 w-full" /> : null}
+      {today.data && noMail ? <EmptyState icon="today" title={t("today.empty.title")} description={t("today.empty.description")} action={<TextLink href="/connectors?connector=email">{t("mail.noAccount.action")}</TextLink>} /> : null}
+      {clear ? <p data-testid="today-clear" className="flex items-center gap-2 text-md text-ink-secondary"><Icon name="check" className="h-4 w-4 text-status-success" />{t("today.clear")}</p> : null}
+      <div className="today-columns grid items-start gap-6">
+        <div className="flex min-w-0 flex-col gap-6">
+          <WaitingOnYou />
+          {today.data && !noMail ? <MatterGroups /> : null}
+        </div>
+        <div className="flex min-w-0 flex-col gap-6">
+          <DueToday items={due} />
+          {today.data && !noMail ? <SinceYouLooked /> : null}
+          {today.data?.automated_count ? <TextLink className="self-start text-md" href="/mail/all">{tn("today.automated", today.data.automated_count)}</TextLink> : null}
+          <StatusLine />
+        </div>
+      </div>
+    </div>
+  );
   return (
     <div className="today-container mx-auto flex max-w-page flex-col gap-6 p-6">
       <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
@@ -620,27 +611,18 @@ export function TodayScreen() {
           <Stat href="/cockpit" label={t("today.stat.working")} value={cockpit.data?.jobs.length ?? 0} />
         </nav>
       </header>
-      <MorningBrief />
-      <FinishSetup />
+      {/* Until it's sorted the AI reads nothing, so this comes before everything else. */}
       <SortMailCard />
-      <MailOrganizationCard />
-      {today.isError ? <ErrorState title={t("today.error")} onRetry={() => void today.refetch()} /> : null}
-      {today.isPending ? <Skeleton className="h-6 w-full" /> : null}
-      {today.data && noMail ? <EmptyState icon="today" title={t("today.empty.title")} description={t("today.empty.description")} action={<TextLink href="/connectors?connector=email">{t("mail.noAccount.action")}</TextLink>} /> : null}
-      <div className="today-columns grid items-start gap-6">
-        <div className="flex min-w-0 flex-col gap-6">
-          <WaitingOnYou />
-          {today.data && !noMail ? <ThreadList id="today-important" icon="priority" title={t("today.importantMail")} hint={t("today.important.hint")} urgent threads={today.data.needs_you} empty={t("today.needsYou.empty")} /> : null}
-          {today.data?.follow_ups?.length ? <ThreadList chase icon="followUp" title={t("today.followUps")} threads={today.data.follow_ups} empty="" /> : null}
-          {waitingOnOthers.length ? <ThreadList icon="sent" title={t("today.waiting")} threads={waitingOnOthers} empty="" /> : null}
-        </div>
-        <div className="flex min-w-0 flex-col gap-6">
-          <DueToday items={due} />
-          {today.data && !noMail ? <SinceYouLooked /> : null}
-          {today.data?.automated_count ? <TextLink className="self-start text-md" href="/mail/all">{tn("today.automated", today.data.automated_count)}</TextLink> : null}
-          <StatusLine />
-        </div>
-      </div>
+      <Tabs
+        label={t("matters.tabs")}
+        value={view}
+        onValueChange={(next) => go(next as TodayView)}
+        tabs={[
+          { value: "brief", label: t("matters.tab.brief"), content: brief },
+          { value: "week", label: t("matters.tab.week"), content: <WeekTab /> },
+          { value: "matters", label: t("matters.tab.matters"), content: <MattersTab /> },
+        ]}
+      />
     </div>
   );
 }

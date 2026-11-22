@@ -59,6 +59,7 @@ export const HEROICONS = {
   folder: FolderIcon,
   folderRule: FolderIcon,
   folderSmart: SmartFolder,
+  label: TagIcon,
   keptFromAi: EyeSlashIcon,
   automated: CpuChipIcon,
   calendar: CalendarDaysIcon,

@@ -403,22 +403,31 @@ def test_hand_entered_model_server_can_be_plain_http(config: Config, model_url: 
         assert test.post("/api/commands/models.provider.save", json=body).status_code == 422
 
 
+@pytest.mark.parametrize(("size", "requests"), [(10, [10, 10, 10, 5]), (100, [35])])
 def test_download_progress_moves_during_a_batch(
-    client: TestClient, pop3: FakePop3, monkeypatch: pytest.MonkeyPatch
+    config: Config,
+    pop3: FakePop3,
+    smtp: FakeMail,
+    monkeypatch: pytest.MonkeyPatch,
+    size: int,
+    requests: list[int],
 ) -> None:
+    """Mail comes down fetch_batch at a time, one request each, and the total is known first."""
     for number in range(35):
         pop3.state.deliver(make_mail(f"Mail {number}"))
     seen: list[tuple[int, int]] = []
     real = Pop3Session.fetch
+    settings = with_servers(config, pop3, smtp)
+    app = create_app(replace(settings, mail=replace(settings.mail, fetch_batch=size)))
+    with TestClient(app, base_url="http://127.0.0.1:4100") as client:
 
-    def noting(session: Pop3Session, uids: list[int]) -> Any:
-        found = real(session, uids)
-        seen.append((len(uids), status(client)["total"]))
-        return found
+        def noting(session: Pop3Session, uids: list[int]) -> Any:
+            found = real(session, uids)
+            seen.append((len(uids), status(client)["total"]))
+            return found
 
-    monkeypatch.setattr(Pop3Session, "fetch", noting)
-    connect(client)
-    wait(lambda: len(threads(client)) == 35, "all the mail")
-    # Ten at a time, and the total is known from the start.
-    assert [count for count, _ in seen[:4]] == [10, 10, 10, 5]
-    assert {total for _, total in seen[:4]} == {35}
+        monkeypatch.setattr(Pop3Session, "fetch", noting)
+        connect(client)
+        wait(lambda: len(threads(client)) == 35, "all the mail")
+    assert [count for count, _ in seen[: len(requests)]] == requests
+    assert {total for _, total in seen[: len(requests)]} == {35}

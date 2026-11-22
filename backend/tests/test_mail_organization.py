@@ -292,6 +292,18 @@ def test_interview_precedes_marks_and_only_recent_mail_can_create_work(ctx: Cont
     ]
 
 
+def test_once_sorted_unsure_groups_keep_their_guesses_without_asking(ctx: Context) -> None:
+    """Sorting already chose what the AI reads, so nobody is asked to rate each unsure group."""
+    from nexusai.modules.mail import sorting
+
+    add(ctx, "New obligation", days=1)
+    sorting._decide(ctx, "done")
+    bulk_learning.queue(ctx)
+    learn_all(ctx, uncertain=True)
+    bulk_learning.finish_or_ask(ctx)
+    assert bulk_learning.overview(ctx)["state"] == "done"
+
+
 def test_promotions_and_confirmed_low_mail_are_not_raised_by_guesses(ctx: Context) -> None:
     """Regression: "valid by 30 Nov" or "expires" used to raise promotions to high."""
     sale = add(
@@ -582,7 +594,7 @@ def test_personalized_folder_settings_reach_mail_context(ctx: Context) -> None:
     _, _, task = mail_agent.task_for(ctx, first.thread)
     assert "Standards discussions I follow" in task and "[STD]" in task
     assert "Only original research on wireless networks" in task
-    assert "do not assign these as Smart folders" in task
+    assert "never assign these as Smart folders" in task
 
 
 def test_no_starter_categories_ship(ctx: Context) -> None:

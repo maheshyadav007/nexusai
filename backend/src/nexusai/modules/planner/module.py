@@ -1,7 +1,7 @@
 """The person's own to-dos and reminders. The agent may only propose them."""
 
 import calendar
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, cast, get_args
 
 from nexusai.contracts.notifications import NotificationRequested
@@ -63,6 +63,19 @@ UPDATE reminders SET repeat = CASE LOWER(TRIM(repeat))
   ELSE 'none' END;
 UPDATE reminders SET repeat_day = CAST(SUBSTR(due_at, 9, 2) AS INTEGER)
   WHERE repeat IN ('month', 'year');
+""",
+        ),
+        Migration(
+            "planner_matters_001",
+            # Work belongs to a matter, and remembers the email that asked for it. A reminder
+            # that goes with a task keeps its task as its parent instead.
+            """
+ALTER TABLE tasks ADD COLUMN matter INTEGER;
+ALTER TABLE tasks ADD COLUMN source_message INTEGER;
+ALTER TABLE reminders ADD COLUMN matter INTEGER;
+CREATE INDEX tasks_matter ON tasks (matter);
+CREATE INDEX reminders_matter ON reminders (matter);
+CREATE INDEX reminders_task ON reminders (task);
 """,
         ),
         Migration(
@@ -245,6 +258,8 @@ def _change(ctx: Context, table: str, identifier: int, values: dict[str, Any], k
             raise CommandError(
                 f"{kind}.not_found", f"{kind.capitalize()} {identifier} is gone.", 404
             )
+        if table == "tasks" and before:
+            _children_follow(work, identifier, dict(before), named)
         work.emit(
             f"{table}.changed",
             {
@@ -257,6 +272,45 @@ def _change(ctx: Context, table: str, identifier: int, values: dict[str, Any], k
             source="planner",
             trace_id=ctx.trace_id,
         )
+
+
+def _children_follow(work: Any, task: int, before: dict[str, Any], after: dict[str, Any]) -> None:
+    """A task's reminders go with it: finished with it, back with it, and moved by as many days
+    as its due date moved. Nobody is asked, since they were only ever about this task."""
+    status = after.get("status")
+    if status == "done" and before["status"] != "done":
+        moved = work.tx.execute(
+            "UPDATE reminders SET fired = 1, updated = ? WHERE task = ? AND fired = 0",
+            (_now(), task),
+        ).rowcount
+    elif status not in {None, "done"} and before["status"] == "done":
+        # Only the ones still ahead: one that's passed would only ring at once.
+        moved = work.tx.execute(
+            "UPDATE reminders SET fired = 0, updated = ? WHERE task = ? AND fired = 1 AND due_at > ?",
+            (_now(), task, datetime.now().strftime("%Y-%m-%dT%H:%M")),
+        ).rowcount
+    elif after.get("due") and before["due"] and after["due"] != before["due"]:
+        try:
+            days = (
+                date.fromisoformat(after["due"][:10]) - date.fromisoformat(before["due"][:10])
+            ).days
+        except ValueError:
+            return
+        moved = 0
+        for row in work.tx.execute(
+            "SELECT id, due_at FROM reminders WHERE task = ? AND fired = 0", (task,)
+        ).fetchall():
+            shifted = (datetime.fromisoformat(row["due_at"]) + timedelta(days=days)).strftime(
+                "%Y-%m-%dT%H:%M"
+            )
+            moved += work.tx.execute(
+                "UPDATE reminders SET due_at = ?, updated = ? WHERE id = ?",
+                (shifted, _now(), row["id"]),
+            ).rowcount
+    else:
+        return
+    if moved:
+        work.emit("reminders.changed", {}, source="planner")
 
 
 def change_task(ctx: Context, identifier: int, values: dict[str, Any]) -> None:
@@ -310,13 +364,26 @@ def add_task(
     source: str,
     proposed: bool,
     notes: str = "",
+    matter: int | None = None,
+    source_message: int | None = None,
 ) -> int:
     due = due_of(due)
     with ctx.bus.unit_of_work() as work:
         cursor = work.tx.execute(
-            "INSERT INTO tasks (title, notes, status, due, thread, source, proposed, created, updated)"
-            " VALUES (?, ?, 'todo', ?, ?, ?, ?, ?, ?)",
-            (title, notes, due, thread, source, int(proposed), _now(), _now()),
+            "INSERT INTO tasks (title, notes, status, due, thread, source, proposed, created, updated,"
+            " matter, source_message) VALUES (?, ?, 'todo', ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                title,
+                notes,
+                due,
+                thread,
+                source,
+                int(proposed),
+                _now(),
+                _now(),
+                matter,
+                source_message,
+            ),
         )
         work.emit("tasks.changed", {}, source="planner", trace_id=ctx.trace_id)
     return int(cursor.lastrowid or 0)
@@ -331,13 +398,14 @@ def add_reminder(
     task: int | None,
     source: str,
     proposed: bool,
+    matter: int | None = None,
 ) -> int:
     repeat = repeat_of(repeat)
     when = when_of(when)
     with ctx.bus.unit_of_work() as work:
         cursor = work.tx.execute(
             "INSERT INTO reminders (title, due_at, repeat, repeat_day, thread, task, source,"
-            " proposed, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " proposed, created, updated, matter) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 title,
                 when,
@@ -349,6 +417,7 @@ def add_reminder(
                 int(proposed),
                 _now(),
                 _now(),
+                None if task else matter,
             ),
         )
         work.emit("reminders.changed", {}, source="planner", trace_id=ctx.trace_id)
@@ -370,6 +439,7 @@ def save_task(command: SaveTask, ctx: Context) -> PlannerDone:
         add_task(ctx, command.title, command.due, command.thread, "user", False, command.notes)
         return PlannerDone()
     with ctx.bus.unit_of_work() as work:
+        before = work.tx.execute("SELECT * FROM tasks WHERE id = ?", (command.id,)).fetchone()
         work.tx.execute(
             "UPDATE tasks SET title = ?, notes = ?, status = ?, due = ?, thread = ?, proposed = ?,"
             " updated = ?, completed = CASE WHEN ? = 'done' THEN COALESCE(completed, ?) END"
@@ -387,7 +457,25 @@ def save_task(command: SaveTask, ctx: Context) -> PlannerDone:
                 command.id,
             ),
         )
-        work.emit("tasks.changed", {}, source="planner", trace_id=ctx.trace_id)
+        if before:
+            _children_follow(
+                work, command.id, dict(before), {"status": command.status, "due": command.due}
+            )
+        # What changed, like a tool's change says, so ticking the last task of a conversation
+        # can finish the conversation too.
+        changes = {"status": command.status, "proposed": command.proposed}
+        work.emit(
+            "tasks.changed",
+            {
+                "id": command.id,
+                "by": ctx.actor,
+                "changes": changes,
+                "old": {key: before[key] for key in changes} if before else {},
+                "thread": before["thread"] if before else None,
+            },
+            source="planner",
+            trace_id=ctx.trace_id,
+        )
     return PlannerDone()
 
 

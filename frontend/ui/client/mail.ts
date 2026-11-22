@@ -4,12 +4,14 @@ import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } f
 import { ApiRequestError, command, query } from "./api";
 import type { ApiError, Importance, Draft, DraftAttachment, ListThreads, MailProfile, MoveThread, RuleSet, SaveCategory, SearchMail, SetThreadStatus, UpdateCategory } from "./contracts.generated";
 import { useHomeReady } from "./home";
+import { askAboutRest } from "./rest";
 
 export type FolderRole = NonNullable<ListThreads["folder"]>;
 export type ThreadStatus = SetThreadStatus["status"];
 
 export function useMailStatus() {
   const ready = useHomeReady();
+  // Kept current by events: mail.syncProgress arrives about once a second while mail comes down.
   return useQuery({ queryKey: ["mail-status"], queryFn: () => query("mail.status", {}), enabled: ready });
 }
 
@@ -98,7 +100,7 @@ export function useThread(id: number) {
   return useQuery({ queryKey: ["thread", id], queryFn: () => query("thread.get", { id }) });
 }
 
-function useThreadCommand<T>(run: (input: T) => Promise<unknown>) {
+function useThreadCommand<T, R = unknown>(run: (input: T) => Promise<R>) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: run,
@@ -115,8 +117,15 @@ export const useAddToFolder = () => useThreadCommand((input: { id: number; folde
 export const useRemoveFromFolder = () => useThreadCommand((input: { id: number; folder: string }) => command("thread.removeFromFolder", input));
 export const useAddCategory = () => useThreadCommand((input: { id: number; name: string }) => command("thread.addCategory", input));
 export const useRemoveThreadCategory = () => useThreadCommand((input: { id: number; name: string }) => command("thread.removeCategory", input));
+export const useToInbox = () => useThreadCommand((input: { id: number; always?: boolean }) => command("thread.toInbox", input));
 export const useMoveThread = () => useThreadCommand((input: MoveThread) => command("thread.move", input));
-export const useSetStatus = () => useThreadCommand((input: { id: number; status: ThreadStatus }) => command("thread.setStatus", input));
+export const useSetStatus = () =>
+  useThreadCommand(async (input: { id: number; status: ThreadStatus }) => {
+    const done = await command("thread.setStatus", input);
+    // A conversation marked done asks about the rest of its matter, like a finished task.
+    if (input.status === "resolved") askAboutRest(`thread:${input.id}`);
+    return done;
+  });
 export const useSetImportance = () => useThreadCommand((input: { id: number; importance: Importance }) => command("thread.setImportance", input));
 export const useSetCategory = () => useThreadCommand((input: { id: number; category: string | null }) => command("thread.setCategory", input));
 

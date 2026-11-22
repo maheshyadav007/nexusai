@@ -34,10 +34,19 @@ const config: Config = {
     maxWidth: { none: "none", full: "100%", ...layout },
     zIndex: { auto: "auto", ...vars("layer", light.layer) },
     extend: {
+      // Column layouts built from the theme's own sizes, named for what they lay out.
+      gridTemplateColumns: {
+        change: "var(--layout-guide) var(--space-4) minmax(0, 1fr)",
+        timeline: "var(--layout-guide) var(--space-4) minmax(0, 1fr)",
+        lane: "var(--layout-sidebar) minmax(0, 1fr)",
+        week: "repeat(7, minmax(0, 1fr))",
+        matters: "var(--layout-mailList) minmax(0, 1fr)",
+      },
       inset: layout,
       width: layout,
       height: layout,
       minHeight: layout,
+      minWidth: layout,
       maxHeight: layout,
       keyframes: {
         fade: { from: { opacity: "0" } },

@@ -25,6 +25,7 @@ Markdown bullets they can read in a minute:
 ## Where the facts come from
 
 - A morning run's message has what's on their plate. In any other run, get it with read_plate.
+- It's grouped by matter: one real thing going on, however many emails it took. Write one bullet per matter, never two for the same one, and cite its latest email.
 - Use read_thread when conversations need a closer look, giving it all of them in one call.
 - Use draft_reply where a reply is clearly needed, and say in the brief that you did. Nothing is sent without their approval.
 - Proposed work is awaiting acceptance, not a commitment already made.

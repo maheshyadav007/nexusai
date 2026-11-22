@@ -10,8 +10,14 @@ export interface TabItem {
   content: ReactNode;
 }
 
-export function Tabs({ label, tabs, defaultValue }: { label: string; tabs: readonly TabItem[]; defaultValue?: string }) {
-  const [current, setCurrent] = useState(defaultValue ?? tabs[0]?.value ?? "");
+/** Keeps its own place, or follows `value` and reports changes, when the page owns it (a URL). */
+export function Tabs({ label, tabs, defaultValue, value, onValueChange }: { label: string; tabs: readonly TabItem[]; defaultValue?: string; value?: string; onValueChange?: (value: string) => void }) {
+  const [own, setOwn] = useState(defaultValue ?? tabs[0]?.value ?? "");
+  const current = value ?? own;
+  const setCurrent = (next: string) => {
+    setOwn(next);
+    onValueChange?.(next);
+  };
   const group = useId();
   return (
     <RadixTabs.Root value={current} onValueChange={setCurrent}>

@@ -45,8 +45,9 @@ rules_on = true
 connect_timeout_seconds = 30
 initial_batch = 200
 backfill_batch = 100
-# How many emails come down between progress updates.
-progress_every = 10
+# Emails fetched in one request. Each request waits a round trip to the server, so ten at a time
+# made a large download mostly waiting; a dropped connection loses at most this many.
+fetch_batch = 100
 flag_window = 500
 # How many emails the connect form suggests downloading. New mail always comes down.
 suggested_pull = 5000
