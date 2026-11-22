@@ -7,7 +7,8 @@ import { AddBar, DuePicker } from "./AddBar";
 import { useRemoveTask, useSaveTask, useTasks } from "@/ui/client/work";
 import { AskAgent } from "@/ui/features/agent/AskAgent";
 import { Icon } from "@/ui/icons";
-import { RoundCheck } from "@/ui/primitives/Checkbox";
+import { useLeadName } from "@/ui/client/home";
+import { RoundCheck, SuggestedCheck } from "@/ui/primitives/Checkbox";
 import { Button } from "@/ui/primitives/Button";
 import { ContextMenu } from "@/ui/primitives/ContextMenu";
 import { EmptyState } from "@/ui/primitives/EmptyState";
@@ -53,6 +54,7 @@ function Check({ task, onChange }: { task: Task; onChange: (done: boolean) => vo
 }
 
 function TaskRow({ task }: { task: Task }) {
+  const lead = useLeadName();
   const save = useSaveTask();
   const remove = useRemoveTask();
   const formatDay = useDateOnly();
@@ -67,17 +69,18 @@ function TaskRow({ task }: { task: Task }) {
   return (
     <Rise as="li" settle="position">
       <ContextMenu items={[{ id: "done", label: t(done ? "menu.markOpen" : "menu.markDone"), onSelect: () => update({ status: done ? "todo" : "done" }) }, { id: "remove", label: t("menu.remove"), icon: "trash", danger: true, onSelect: () => remove.mutate(task.id) }]}>
-      <div>
+      {/* A suggestion wears the AI's edge until it's accepted, here and everywhere it shows. */}
+      <div className={task.proposed ? "ai-edge rounded-lg" : ""} data-suggested={task.proposed || undefined}>
       <ExpandRow
         variant="list"
         testid="task"
         label={t("tasks.details", { title: task.title })}
-        leading={task.proposed ? <Icon name="thinking" className="h-4 w-4 shrink-0 text-accent-default" /> : <Check task={task} onChange={(next) => update({ status: next ? "done" : "todo" })} />}
+        leading={task.proposed ? <SuggestedCheck round label={t("tasks.suggested.check")} /> : <Check task={task} onChange={(next) => update({ status: next ? "done" : "todo" })} />}
         title={<span className={done ? "text-ink-muted line-through" : ""}>{task.title}</span>}
         meta={
           <span className="flex min-w-0 items-center gap-2">
             {[
-              task.proposed ? <span key="proposed" className="text-accent-default">{t("tasks.proposed")}</span> : null,
+              task.proposed ? <span key="proposed" className="text-ink-secondary">{t("tasks.proposed", { name: lead })}</span> : null,
               task.due ? <span key="due" className={overdue ? "font-medium text-status-danger" : ""}>{formatDay(task.due)}</span> : null,
               task.source_ref ? <SourceChip key="source" source={task.source_ref} look="inline" /> : null,
               task.source === "agent" && !task.proposed ? <span key="agent">{t("tasks.byAgent")}</span> : null,

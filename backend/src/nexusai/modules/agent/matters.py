@@ -877,6 +877,14 @@ def related_open(ctx: Context, trigger: str) -> MatterRelated:
     threads = [t["id"] for t in _threads_of(db, matter)]
     items: list[MatterItem] = []
 
+    proposed = {
+        ref("task", r["id"])
+        for r in db.fetch_all("SELECT id FROM tasks WHERE proposed = 1 AND status != 'done'")
+    } | {
+        ref("reminder", r["id"])
+        for r in db.fetch_all("SELECT id FROM reminders WHERE proposed = 1 AND fired = 0")
+    }
+
     def offer(
         item: str,
         kind_of: str,
@@ -900,6 +908,7 @@ def related_open(ctx: Context, trigger: str) -> MatterRelated:
             MatterItem(
                 ref=item,
                 kind=kind_of,
+                proposed=item in proposed,
                 title=title,
                 when=when,
                 suggested=same_email or same_thread,
@@ -1148,6 +1157,9 @@ EVENT_WORDS = {
     "task": "added", "due": "date changed", "closed": "closed", "done": "done",
     "reopened": "opened again", "moved": "moved out", "merged": "merged", "linked": "file linked",
     "kept": "left open",
+    "suggested": "suggested",
+    "accepted": "accepted",
+    "declined": "declined",
 }  # fmt: skip
 
 

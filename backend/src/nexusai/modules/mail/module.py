@@ -1141,6 +1141,8 @@ _last_categories: dict[str, list[dict[str, Any]]] = {}
 SUGGESTED, DECLINED = 1, 2
 PRIORITY_SUGGESTED, PRIORITY_DECLINED = 1, 2
 UNORDERED = 1_000_000
+# Folders the AI skips whole, whatever is filed in them.
+KEPT_WHOLE = (sorting.AUTOMATED, sorting.CALENDAR)
 
 
 def _rename_extras(tx: Any, names: set[str], into: str | None) -> None:
@@ -1750,9 +1752,16 @@ def update_category(command: UpdateCategory, ctx: Context) -> CategoryList:
         if command.description is not None
         else (row["description"] if row else new_name)
     )
+    # Filed by its senders' own rules, as sorting does: those are its rules, and a guessed
+    # sender would give one of them a second.
+    by_senders = any(
+        rule.actions.category == command.name and rule.name != CATEGORY_RULE_PREFIX + command.name
+        for rule in rules.load_rules(ctx.config.home)
+    )
     if (
         mode == "exact"
         and not (sender or subject)
+        and not by_senders
         and command.name not in {"Updates", "Promotions", "Forums", "Social", rules.AUTOMATED}
     ):
         top = db.fetch_all(
@@ -1810,8 +1819,32 @@ def update_category(command: UpdateCategory, ctx: Context) -> CategoryList:
         subject if mode == "exact" else None,
         refile=False,
     )
+    if command.ai_reads is not None:
+        _set_reads(ctx, new_name, command.ai_reads)
     _categories_changed(ctx)
     return CategoryList(categories=category_rows(ctx))
+
+
+def _set_reads(ctx: Context, name: str, reads: bool) -> None:
+    """A whole folder to one side: the folder, and each sender a rule files there, each still
+    with one rule. What's under Automated and Calendar is always kept from the AI."""
+    if reads and any(name == top or name.startswith(f"{top}/") for top in KEPT_WHOLE):
+        raise CommandError(
+            "category.kept_whole",
+            f"{name.split('/')[0]} is always kept from the AI. Move its senders to another folder.",
+            409,
+        )
+    with ctx.bus.db.transaction() as tx:
+        tx.execute("UPDATE mail_categories SET ai_reads = ? WHERE name = ?", (int(reads), name))
+    senders = {
+        (condition.value or "").strip().lower()
+        for rule in rules.load_rules(ctx.config.home)
+        if rule.actions.category == name
+        for condition in rule.conditions
+        if condition.field in {"sender", "sender_exact"} and "@" in (condition.value or "")
+    }
+    for sender in sorted(senders):
+        sorting.move_sender(ctx, sender, reads=reads, folder=name)
 
 
 @mail_module.command("categories.merge")

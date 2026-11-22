@@ -11,7 +11,7 @@ import { NotificationCenter } from "./NotificationCenter";
 
 const STAGES = 4;
 
-export function TopBar({ activities, search }: { activities?: readonly Activity[]; search?: ReactNode }) {
+export function TopBar({ activities, search, waiting }: { activities?: readonly Activity[]; search?: ReactNode; waiting?: ReactNode }) {
   const jobs = useJobs();
   const live = (jobs.data?.jobs ?? []).map((job) => ({ id: job.id, title: job.title, detail: job.status, completed: job.progress != null && job.total ? Math.floor((job.progress / job.total) * STAGES) : 1 }));
   const shown = activities ?? live;
@@ -25,7 +25,7 @@ export function TopBar({ activities, search }: { activities?: readonly Activity[
   const content = <>
       <ActivityIsland activities={shown} />
       <div className="max-w-popover min-w-0 flex-1">{search}</div>
-      <div className="flex items-center gap-1"><ApprovalQueue /><NotificationCenter /></div>
+      <div className="flex items-center gap-1">{waiting ?? <ApprovalQueue />}<NotificationCenter /></div>
   </>;
   if (caption) return createPortal(content, caption);
   return (

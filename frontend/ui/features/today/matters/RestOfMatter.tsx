@@ -59,7 +59,8 @@ export function RestOfMatter() {
                 setTicked(next);
               }}
             />
-            <span className="pl-5 text-sm text-ink-muted">
+            <span className="flex flex-wrap items-center gap-2 pl-5 text-sm text-ink-muted">
+              {item.proposed ? <span className="ai-edge rounded-full px-2 text-xs text-ink-secondary">{t("rest.suggested")}</span> : null}
               {[t(`rest.kind.${item.kind}` as StringKey), item.when ? due(item.when).text : null, item.why].filter(Boolean).join(" · ")}
             </span>
           </li>

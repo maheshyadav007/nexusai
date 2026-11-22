@@ -1,5 +1,6 @@
 "use client";
 
+import { useLeadName } from "@/ui/client/home";
 import { useEffect, useState } from "react";
 import type { Reminder } from "@/ui/client/contracts.generated";
 import { useRelativeTime, useShortDate, useTimeOnly } from "@/ui/client/format";
@@ -41,6 +42,7 @@ function ReminderRow({ reminder }: { reminder: Reminder }) {
   const save = useSaveReminder();
   const snooze = useSnooze();
   const remove = useRemoveReminder();
+  const lead = useLeadName();
   const clock = useTimeOnly();
   const day = useShortDate();
   const relative = useRelativeTime();
@@ -50,7 +52,7 @@ function ReminderRow({ reminder }: { reminder: Reminder }) {
   const later = (target: Date) => snooze.mutate({ id: reminder.id, minutes: Math.max(1, Math.round((target.getTime() - Date.now()) / MINUTE)) });
   const sameDay = new Date(reminder.when).toDateString() === new Date().toDateString();
   return (
-    <Rise as="li" settle="position">
+    <Rise as="li" settle="position" className={reminder.proposed ? "ai-edge rounded-lg" : ""}>
       <ExpandRow
         variant="list"
         testid="reminder"
@@ -64,7 +66,7 @@ function ReminderRow({ reminder }: { reminder: Reminder }) {
         title={reminder.title}
         meta={(() => {
           const bits = [
-            reminder.proposed ? <span key="proposed" className="text-accent-default">{t("tasks.proposed")}</span> : null,
+            reminder.proposed ? <span key="proposed" className="text-ink-secondary">{t("tasks.proposed", { name: lead })}</span> : null,
             reminder.repeat !== "none" ? <span key="repeat" className="flex items-center gap-1"><Icon name="repeat" className="h-3 w-3" />{t(`reminders.repeat.${reminder.repeat}` as StringKey)}</span> : null,
             reminder.source_ref ? <SourceChip key="source" source={reminder.source_ref} look="inline" /> : null,
             reminder.source === "agent" && !reminder.proposed ? <span key="agent">{t("reminders.byAgent")}</span> : null,

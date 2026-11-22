@@ -1310,7 +1310,7 @@ class Triage:
             planner.add_task(
                 ctx, title, due, thread, "agent", True, matter=matter, source_message=source
             )
-            matters.note(ctx, thread, "task", f'To-do: "{title}"', why)
+            matters.note(ctx, thread, "suggested", f'To-do: "{title}"', why)
         for item in parsed.get("reminders") or []:
             if (
                 not isinstance(item, dict)
@@ -1333,7 +1333,7 @@ class Triage:
             planner.add_reminder(
                 ctx, title, when, "none", thread, None, "agent", True, matter=matter
             )
-            matters.note(ctx, thread, "task", f'Reminder: "{title}"', why)
+            matters.note(ctx, thread, "suggested", f'Reminder: "{title}"', why)
         for item in parsed.get("deadlines") or []:
             if not isinstance(item, dict) or not _title(item.get("what")):
                 continue
@@ -1354,7 +1354,7 @@ class Triage:
                 planner.add_task(
                     ctx, what, due, thread, "agent", True, matter=matter, source_message=source
                 )
-                matters.note(ctx, thread, "task", f'To-do: "{what}"', why)
+                matters.note(ctx, thread, "suggested", f'To-do: "{what}"', why)
         if parsed.get("draft"):
             self._draft(thread, str(parsed["draft"]), subject)
         if parsed.get("memory"):

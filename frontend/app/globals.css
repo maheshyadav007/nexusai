@@ -252,6 +252,14 @@ body[data-scroll-locked] .assistant-pill {
 .ai-glow:focus-visible::before {
   opacity: 0.65;
 }
+/* Something the AI suggested and the person hasn't accepted yet: the AI colours as a still,
+   thin edge, the same everywhere a suggestion shows. */
+.ai-edge {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(theme(colors.surface.raised), theme(colors.surface.raised)) padding-box,
+    linear-gradient(110deg, theme(colors.ai.one), theme(colors.ai.two), theme(colors.ai.three), theme(colors.ai.four)) border-box;
+}
 .ai-surface {
   --ai-colors: theme(colors.ai.one), theme(colors.ai.two), theme(colors.ai.three), theme(colors.ai.four), theme(colors.ai.one);
   position: relative;

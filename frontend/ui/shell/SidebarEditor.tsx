@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useCategories, useReorderCategories } from "@/ui/client/mail";
 import { useResetSidebar, useSidebar, useUpdateSidebar } from "@/ui/client/settings";
 import type { SidebarLayout } from "@/ui/client/contracts.generated";
 import { Button } from "@/ui/primitives/Button";
@@ -10,6 +11,8 @@ import { ScrollArea } from "@/ui/primitives/ScrollArea";
 import { Sortable } from "@/ui/primitives/Sortable";
 import { Switch } from "@/ui/primitives/Switch";
 import { t } from "@/ui/strings";
+import { customCategories, keptFromAi } from "./customMail";
+import { useHiddenFolders } from "./hiddenFolders";
 import { NAV_SECTIONS } from "./nav";
 import { arrange } from "./sidebarLayout";
 
@@ -49,6 +52,7 @@ export function SidebarEditor() {
           }))}
           onReorder={(ids) => update.mutate({ ...base, sections: ids })}
         />
+        <FolderChoices />
       </ScrollArea>
       <div className="mt-4">
         <Button loading={reset.isPending} onClick={() => reset.mutate(undefined)}>
@@ -56,5 +60,40 @@ export function SidebarEditor() {
         </Button>
       </div>
     </Dialog>
+  );
+}
+
+/** Which of the person's folders the sidebar shows, and in what order, for each of its two
+ *  groups. A hidden one keeps its mail and rules, and shows under "Show all". */
+function FolderChoices() {
+  const categories = useCategories();
+  const reorder = useReorderCategories();
+  const { hidden, setHidden } = useHiddenFolders();
+  const all = customCategories(categories.data?.categories ?? []);
+  if (!all.length) return null;
+  // One group's new order, with every other folder where it was.
+  const order = (group: readonly string[], ids: readonly string[]) => {
+    const names = (categories.data?.categories ?? []).map((item) => item.name);
+    const slots = names.map((name, index) => (group.includes(name) ? index : -1)).filter((index) => index >= 0);
+    const next = [...names];
+    slots.forEach((slot, at) => { next[slot] = ids[at] as string; });
+    reorder.mutate(next);
+  };
+  const group = (label: string, rows: typeof all) => rows.length ? (
+    <div className="flex flex-col gap-2 py-2">
+      <p className="text-sm font-medium text-ink-secondary">{label}</p>
+      <Sortable
+        label={label}
+        items={rows.map((item) => ({ id: item.name, label: item.name, content: <Switch label={item.name} checked={!hidden.has(item.name)} onChange={(show) => setHidden(item.name, !show)} /> }))}
+        onReorder={(ids) => order(rows.map((item) => item.name), ids)}
+      />
+    </div>
+  ) : null;
+  return (
+    <section aria-label={t("sidebar.editor.folders")} data-testid="sidebar-folders" className="mt-4 flex flex-col gap-1 border-t border-line-subtle pt-4">
+      <p className="text-sm text-ink-muted">{t("sidebar.editor.folders.note")}</p>
+      {group(t("sidebar.editor.folders"), all.filter((item) => !keptFromAi(item)))}
+      {group(t("sidebar.editor.kept"), all.filter(keptFromAi))}
+    </section>
   );
 }

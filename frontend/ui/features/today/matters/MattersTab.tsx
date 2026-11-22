@@ -4,13 +4,14 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { query } from "@/ui/client/api";
 import type { MatterChange, MatterDetail, MatterRow, MatterWork } from "@/ui/client/contracts.generated";
 import { useDateOnly, useShortDate, useTimeOnly } from "@/ui/client/format";
-import { useMatter, useMatterList, useMatterReopen, useMergeMatter, useSaveTask, useTasks, useUnlinkThread, useUnmergeMatter } from "@/ui/client/work";
+import { useMatter, useMatterList, useMatterReopen, useMergeMatter, useRemoveTask, useSaveTask, useTasks, useUnlinkThread, useUnmergeMatter } from "@/ui/client/work";
+import { useLeadName } from "@/ui/client/home";
 import { mailSource } from "@/ui/features/sources/kinds";
 import { SourceChip } from "@/ui/features/sources/SourceChip";
 import { Icon } from "@/ui/icons";
 import { Avatar } from "@/ui/primitives/Avatar";
 import { Button } from "@/ui/primitives/Button";
-import { Checkbox } from "@/ui/primitives/Checkbox";
+import { Checkbox, SuggestedCheck } from "@/ui/primitives/Checkbox";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Pressable, RowButton } from "@/ui/primitives/Pressable";
@@ -43,10 +44,31 @@ function ListItem({ matter, selected, onPick }: { matter: MatterRow; selected: b
 
 function WorkItem({ item }: { item: MatterWork }) {
   const due = useDue();
+  const lead = useLeadName();
   const tasks = useTasks(false);
   const save = useSaveTask();
+  const remove = useRemoveTask();
   const when = item.when ? due(item.when) : null;
   const meta = [t(`matters.work.${item.kind}` as StringKey), when?.text].filter(Boolean).join(" · ");
+  // Suggested by the AI: the same edge as everywhere, accepted or declined right here.
+  if (item.kind === "task" && item.proposed) {
+    const task = tasks.data?.tasks.find((row) => row.id === item.id);
+    return (
+      <li data-testid="matter-suggested" className="ai-edge flex flex-wrap items-center justify-between gap-3 rounded-md p-3">
+        <span className="flex min-w-0 items-start gap-2">
+          <span className="pt-px"><SuggestedCheck label={t("tasks.suggested.check")} /></span>
+          <span className="flex min-w-0 flex-col gap-1">
+            <span className="text-md text-ink-secondary">{item.title}</span>
+            <span className="text-sm text-ink-muted">{[t("tasks.proposed", { name: lead }), when?.text].filter(Boolean).join(" · ")}</span>
+          </span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1">
+          <Button variant="quiet" className="py-px" disabled={!task || remove.isPending} onClick={() => remove.mutate(item.id)}>{t("memory.decline")}</Button>
+          <Button variant="primary" className="py-px" disabled={!task || save.isPending} onClick={() => task && save.mutate({ id: task.id, title: task.title, notes: task.notes, status: task.status, due: task.due ?? null, thread: task.thread ?? null, proposed: false })}>{t("tasks.accept")}</Button>
+        </span>
+      </li>
+    );
+  }
   if (item.kind === "task") {
     const task = tasks.data?.tasks.find((row) => row.id === item.id);
     return (
