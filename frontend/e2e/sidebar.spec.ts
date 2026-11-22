@@ -94,6 +94,29 @@ test("five or fewer custom folders need no expansion button", async ({ page }) =
   await nav.getByRole("button", { name: "More" }).click();
   await expect(nav.locator('[data-testid="nav-folder"]')).toHaveCount(2);
   await expect(nav.getByRole("link", { name: "All mail", exact: true })).toBeVisible();
+  // More isn't remembered open: after a reload it starts folded again.
+  await page.reload();
+  await expect(nav.getByRole("button", { name: "More" })).toHaveAttribute("aria-expanded", "false");
+});
+
+test("Today counts decisions, matters waiting on you and on others, and Due stays hidden until ticked", async ({ page }) => {
+  await page.goto("/today");
+  const stats = page.getByRole("navigation", { name: "Your day at a glance" });
+  await expect(stats).toContainText("For your decision");
+  await expect(stats).toContainText("Waiting on you");
+  await expect(stats).toContainText("Waiting on others");
+  await expect(stats).not.toContainText("Due");
+  await page.getByRole("button", { name: "Customize", exact: true }).click();
+  await page.getByRole("checkbox", { name: "Due today" }).click();
+  await expect(stats).toContainText("Due");
+  await page.reload();
+  await expect(stats).toContainText("Due");
+  await page.getByRole("button", { name: "Customize", exact: true }).click();
+  await page.getByRole("checkbox", { name: "Due today" }).click();
+  await expect(stats).not.toContainText("Due");
+  // The shield opens what's waiting, or says nothing is.
+  await page.getByTestId("waiting-inbox").click();
+  await expect(page.getByRole("dialog", { name: "Waiting for you" })).toBeVisible();
 });
 
 test("account menu aligns above the user button and supports keyboard and collapsed navigation", async ({ page }) => {
@@ -157,4 +180,31 @@ test("long user names stay inside the footer and an empty profile has a usable f
   await expect(trigger).toHaveAccessibleName("Account menu for Y You");
   await trigger.click();
   await expect(page.getByRole("menuitem", { name: "Settings", exact: true })).toBeVisible();
+});
+
+test("a folder can be hidden from the sidebar, waits under Show all, and is edited in one place", async ({ page, request }) => {
+  await page.route("**/api/queries/categories.list", (route) => route.fulfill({ json: { categories: categories.slice(0, 3) } }));
+  await page.goto("/today");
+  const nav = page.getByRole("navigation", { name: "Main navigation" });
+  await expect(nav.locator('[data-testid="nav-category"]')).toHaveCount(3);
+  await nav.getByRole("link", { name: /^Finance/ }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Hide from sidebar" }).click();
+  await expect(nav.locator('[data-testid="nav-category"]')).toHaveCount(2);
+  // Hidden, not gone: one press away, and shown again from the same menu.
+  await nav.getByRole("button", { name: /Show all/ }).click();
+  await expect(nav.locator('[data-testid="nav-category"]')).toHaveCount(3);
+  await nav.getByRole("link", { name: /^Finance/ }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Show in sidebar" }).click();
+  // Nothing hidden and only three: no button needed.
+  await expect(nav.getByRole("button", { name: /Show all|Show less/ })).toHaveCount(0);
+  await expect(nav.locator('[data-testid="nav-category"]')).toHaveCount(3);
+  // Name, what goes in it, and whether the AI reads it, together.
+  await nav.getByRole("link", { name: /^Finance/ }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Edit folder…" }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit folder" });
+  await expect(dialog.getByRole("textbox", { name: "What goes here" })).toBeVisible();
+  await expect(dialog.getByRole("radio", { name: "AI reads" })).toBeChecked();
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toHaveCount(0);
+  await request.post("/api/commands/sidebar.reset", { data: {} });
 });

@@ -3,12 +3,13 @@
 import { useSessions } from "@/ui/client/sessions";
 import { usePlannerCounts, useWaitingCount } from "@/ui/client/work";
 import { MailNavMenu } from "./MailNavMenu";
-import type { MarkFolderRead } from "@/ui/client/contracts.generated";
+import type { MailCategory, MarkFolderRead } from "@/ui/client/contracts.generated";
 import { CategoryNav, NewCategory } from "./CategoryNav";
 import { CustomMailNav } from "./CustomMailNav";
 import { FolderNav, SpamNav } from "./FolderNav";
 import { SidebarFold } from "./SidebarFold";
 import { categoryHref, customCategories, folderHref, isCurrentMail, keptFromAi, spamFolders } from "./customMail";
+import { useHiddenFolders } from "./hiddenFolders";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useId, useState } from "react";
@@ -17,10 +18,11 @@ import appConfig from "@/app.config.json";
 import { Icon } from "@/ui/icons";
 import { useSidebar } from "@/ui/client/settings";
 import { AttentionCount } from "@/ui/primitives/AttentionCount";
+import { Button } from "@/ui/primitives/Button";
 import { IconButton } from "@/ui/primitives/IconButton";
 import { ActiveMark, CountPop } from "@/ui/primitives/Motion";
 import { Tooltip } from "@/ui/primitives/Tooltip";
-import { t } from "@/ui/strings";
+import { t, tn } from "@/ui/strings";
 import { NAV_BOTTOM, NAV_SECTIONS, NAV_TOP, type NavItem } from "./nav";
 import { AppMenu } from "./AppMenu";
 import { SidebarEditor } from "./SidebarEditor";
@@ -103,11 +105,16 @@ function SortAgain() {
 function KeptNav() {
   const categories = useCategories();
   const pathname = usePathname();
+  const { hidden } = useHiddenFolders();
+  const [all, setAll] = useState(false);
   const kept = customCategories(categories.data?.categories ?? []).filter(keptFromAi);
   if (!kept.length) return null;
+  const tucked = kept.filter((item) => hidden.has(item.name)).length;
+  const shown = (item: MailCategory) => keptFromAi(item) && (all || !hidden.has(item.name) || isCurrentMail(pathname, categoryHref(item.name)));
   return (
     <SidebarFold id="kept" label={t("nav.kept")} open actions={<SortAgain />} holdsActive={kept.some((item) => isCurrentMail(pathname, categoryHref(item.name)))}>
-      <CategoryNav collapsed={false} pick={keptFromAi} label={t("nav.kept")} />
+      <CategoryNav collapsed={false} pick={shown} label={t("nav.kept")} />
+      {tucked ? <Button variant="quiet" aria-expanded={all} className="shrink-0 self-start px-2 py-1 text-sm" onClick={() => setAll(!all)}>{all ? t("nav.folders.showLess") : tn("nav.kept.hidden", tucked)}</Button> : null}
     </SidebarFold>
   );
 }
@@ -121,7 +128,7 @@ function MoreNav({ items, row }: { items: NavItem[]; row: (item: NavItem) => Rea
   if (!items.length && !spam.length) return null;
   const holdsActive = items.some((item) => isCurrentMail(pathname, item.href)) || spam.some((folder) => isCurrentMail(pathname, folderHref(folder.name)));
   return (
-    <SidebarFold id="more" label={t("nav.more")} holdsActive={holdsActive}>
+    <SidebarFold id="more" label={t("nav.more")} remember={false} holdsActive={holdsActive}>
       <ul className="flex flex-col gap-px">{items.map(row)}</ul>
       <SpamNav />
     </SidebarFold>

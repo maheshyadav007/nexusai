@@ -133,7 +133,7 @@ export function MatterGroups() {
   return (
     <>
       <Group id="today-important" icon="priority" title={t("matters.group.needsYou")} urgent matters={data.needs_you} />
-      <Group icon="sent" title={t("matters.group.waiting")} matters={data.waiting} quiet />
+      <Group id="today-waiting" icon="sent" title={t("matters.group.waiting")} matters={data.waiting} quiet />
       <Group icon="info" title={t("matters.group.fyi")} matters={data.fyi} />
     </>
   );

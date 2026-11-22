@@ -481,9 +481,19 @@ def save_task(command: SaveTask, ctx: Context) -> PlannerDone:
 
 @planner_module.command("tasks.remove")
 def remove_task(command: TaskAction, ctx: Context) -> PlannerDone:
-    with ctx.bus.db.transaction() as tx:
-        tx.execute("DELETE FROM tasks WHERE id = ?", (command.id,))
-    _emit(ctx, "tasks")
+    with ctx.bus.unit_of_work() as work:
+        gone = work.tx.execute(
+            "SELECT title, thread, proposed FROM tasks WHERE id = ?", (command.id,)
+        ).fetchone()
+        work.tx.execute("DELETE FROM tasks WHERE id = ?", (command.id,))
+        # What went, so a suggestion turned down shows as declined where it was made.
+        removed = dict(gone) if gone else None
+        work.emit(
+            "tasks.changed",
+            {"removed": removed, "by": ctx.actor},
+            source="planner",
+            trace_id=ctx.trace_id,
+        )
     return PlannerDone()
 
 

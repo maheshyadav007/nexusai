@@ -3,8 +3,8 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { Tooltip } from "./Tooltip";
 
-export type MarkShape = "dot" | "ring" | "diamond" | "diamondRing";
-export type MarkTone = "ink" | "accent" | "warning" | "danger" | "success";
+export type MarkShape = "dot" | "ring" | "diamond" | "diamondRing" | "diamondDashed";
+export type MarkTone = "ink" | "accent" | "warning" | "danger" | "success" | "muted";
 
 const clamp = (value: number) => `${Math.min(Math.max(value, 0), 1) * 100}%`;
 
@@ -27,14 +27,15 @@ const TONES: Record<MarkTone, { fill: string; ring: string }> = {
   warning: { fill: "bg-status-warning", ring: "border-status-warning" },
   danger: { fill: "bg-status-danger", ring: "border-status-danger" },
   success: { fill: "bg-status-success", ring: "border-status-success" },
+  muted: { fill: "bg-ink-faint", ring: "border-ink-faint" },
 };
 
 /** The look of a mark on its own, for a key that explains a track. */
 export function MarkGlyph({ shape, tone }: { shape: MarkShape; tone: MarkTone }) {
   const colors = TONES[tone];
-  const diamond = shape === "diamond" || shape === "diamondRing";
+  const diamond = shape === "diamond" || shape === "diamondRing" || shape === "diamondDashed";
   const filled = shape === "dot" || shape === "diamond";
-  return <span aria-hidden className={`block h-3 w-3 shrink-0 ${diamond ? "rotate-45 scale-75" : "rounded-full"} ${filled ? colors.fill : `border-2 bg-surface-raised ${colors.ring}`}`} />;
+  return <span aria-hidden className={`block h-3 w-3 shrink-0 ${diamond ? "rotate-45 scale-75" : "rounded-full"} ${filled ? colors.fill : `border-2 bg-surface-raised ${colors.ring} ${shape === "diamondDashed" ? "border-dashed" : ""}`}`} />;
 }
 
 /** One event on a track, with what it was in a tooltip and for screen readers. */

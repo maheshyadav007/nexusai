@@ -4,6 +4,7 @@ import { AssistantDock, AssistantRoom } from "@/ui/features/assistant/AssistantD
 import { AssistantProvider } from "@/ui/features/assistant/AssistantProvider";
 import { SourcePreviewProvider } from "@/ui/features/sources/SourcePreviewProvider";
 import { SearchBox } from "@/ui/features/search/SearchBox";
+import { WaitingInbox } from "@/ui/features/today/WaitingInbox";
 import { AppGate } from "@/ui/shell/AppGate";
 import { AppShell } from "@/ui/shell/AppShell";
 
@@ -12,7 +13,7 @@ export default function AppLayout({ children, modal }: { children: ReactNode; mo
     <AppGate>
       <AssistantProvider>
         <SourcePreviewProvider>
-          <AppShell room={<AssistantRoom />} search={<SearchBox />}>{children}</AppShell>
+          <AppShell room={<AssistantRoom />} search={<SearchBox />} waiting={<WaitingInbox />}>{children}</AppShell>
           {modal}
           <AgentToasts />
           <AssistantDock />

@@ -29,6 +29,7 @@ import { ErrorState } from "@/ui/primitives/ErrorState";
 import { IconButton } from "@/ui/primitives/IconButton";
 import { Textarea } from "@/ui/primitives/Input";
 import { CountPop, Presence, Rise } from "@/ui/primitives/Motion";
+import { Popover } from "@/ui/primitives/Popover";
 import { Pressable } from "@/ui/primitives/Pressable";
 import { quickLook } from "@/ui/primitives/SourceRef";
 import { Skeleton } from "@/ui/primitives/Skeleton";
@@ -46,9 +47,11 @@ import { Tabs } from "@/ui/primitives/Tabs";
 const MAIL_AGENT = "mail-agent";
 
 /** A part of the day: what it is, how many, and what can be done about it, all at a glance. */
-function Panel({ id, icon, title, count, urgent = false, hint, action, children }: { id?: string; icon: IconName; title: string; count?: number; urgent?: boolean; hint?: string; action?: ReactNode; children: ReactNode }) {
+function Panel({ id, icon, title, count, urgent = false, hint, action, bare = false, children }: { id?: string; icon: IconName; title: string; count?: number; urgent?: boolean; hint?: string; action?: ReactNode; bare?: boolean; children: ReactNode }) {
+  // Bare inside something that already draws the edge, like a popover.
+  const frame = bare ? "" : `rounded-lg border bg-surface-raised p-4 shadow-raised ${urgent ? "border-accent-default" : "border-line-subtle"}`;
   return (
-    <section id={id} aria-label={title} className={`flex scroll-mt-4 flex-col gap-3 rounded-lg border bg-surface-raised p-4 shadow-raised ${urgent ? "border-accent-default" : "border-line-subtle"}`}>
+    <section id={id} aria-label={title} className={`flex scroll-mt-4 flex-col gap-3 ${frame}`}>
       <header className="flex items-start gap-3">
         <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${urgent ? "bg-accent-default text-accent-on" : "bg-surface-sunken text-ink-secondary"}`}>
           <Icon name={icon} />
@@ -68,6 +71,46 @@ function Panel({ id, icon, title, count, urgent = false, hint, action, children 
 }
 
 /** One figure in the line beside the greeting. It takes you to what it counts. */
+type Shown = Record<"decide" | "waiting" | "others" | "working" | "due", boolean>;
+// Due starts hidden; every count can be ticked back on from Customize.
+const SHOWN_AT_FIRST: Shown = { decide: true, waiting: true, others: true, working: true, due: false };
+
+/** Which counts and panels Today shows. On this computer only: it's how the page looks to the
+ *  person here, not a fact about their mail. Hidden ones are kept, never removed. */
+function useTodayShown(): [Shown, (next: Shown) => void] {
+  const [shown, setShown] = useState<Shown>(SHOWN_AT_FIRST);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(appConfig.storageKeys.todayShown) ?? "{}") as Partial<Shown>;
+      setShown({ ...SHOWN_AT_FIRST, ...saved });
+    } catch {
+      // Storage can be blocked or hold something else; the page then shows the usual counts.
+    }
+  }, []);
+  const change = (next: Shown) => {
+    setShown(next);
+    try {
+      localStorage.setItem(appConfig.storageKeys.todayShown, JSON.stringify(next));
+    } catch {
+      // Storage can be blocked; the choice then lasts until reload.
+    }
+  };
+  return [shown, change];
+}
+
+function CustomizeToday({ shown, onChange }: { shown: Shown; onChange: (next: Shown) => void }) {
+  const keys: (keyof Shown)[] = ["decide", "waiting", "others", "working", "due"];
+  return (
+    <Popover label={t("today.customize.title")} trigger={<Button variant="quiet" className="py-px text-sm">{t("today.customize")}</Button>}>
+      <div className="flex flex-col gap-3">
+        <p className="text-md font-medium text-ink-primary">{t("today.customize.title")}</p>
+        {keys.map((key) => <Checkbox key={key} label={t(`today.customize.${key}` as StringKey)} checked={shown[key]} onChange={(on) => onChange({ ...shown, [key]: on })} />)}
+        <p className="text-sm text-ink-muted">{t("today.customize.note")}</p>
+      </div>
+    </Popover>
+  );
+}
+
 function Stat({ href, label, value, urgent = false, alarming = false }: { href: string; label: string; value: number; urgent?: boolean; alarming?: boolean }) {
   const tone = !value ? "text-ink-faint" : alarming ? "text-status-danger" : urgent ? "text-accent-default" : "text-ink-primary";
   return (
@@ -166,15 +209,17 @@ function useRowAction(item: Pick<WaitingItem, "doIt" | "decline">) {
 
 function ProposalRow({ icon, title, meta, why, source, item, accept = t("tasks.accept"), selecting, selected, onToggle }: { icon: IconName; title: string; meta: string; why?: string | null | undefined; source?: PreviewSource | null | undefined; item: WaitingItem; accept?: string; selecting: boolean; selected: boolean; onToggle: () => void }) {
   const { acting, done, failed, run } = useRowAction(item);
+  const lead = useLeadName();
   const busy = acting !== null || done;
   return (
-    <Rise as="li" settle data-testid="proposal" data-state={done ? "done" : failed ? "failed" : acting ? "running" : "idle"} className="flex flex-col gap-2 rounded-lg border border-line-subtle bg-surface-raised p-4">
+    <Rise as="li" settle data-testid="proposal" data-state={done ? "done" : failed ? "failed" : acting ? "running" : "idle"} className="ai-edge flex flex-col gap-2 rounded-lg p-4">
       <div className="flex items-start gap-3">
         {selecting ? <div className="mt-1 shrink-0"><Checkbox label={t("today.select.item", { title })} hideLabel checked={selected} onChange={onToggle} /></div> : null}
         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-surface-sunken text-ink-secondary">
           <Icon name={icon} />
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <p className="text-sm text-ink-secondary">{t("tasks.proposed", { name: lead })}</p>
           <p className="break-words text-md font-medium text-ink-primary">{title}</p>
           <p className="text-sm tabular-nums text-ink-muted">{meta}</p>
           {why ? <p className="text-sm text-ink-secondary">{why}</p> : null}
@@ -244,8 +289,9 @@ function BulkBar({ items, picked, onPick, onClear, onCancel }: { items: readonly
   );
 }
 
-/** Everything agents are waiting on the person for, in one place, answered right here. */
-function WaitingOnYou() {
+/** Everything agents are waiting on the person for, in one place, answered right here. The
+ *  same panel opens from the shield in the top bar, so both always agree. */
+export function WaitingOnYou({ inPopover = false }: { inPopover?: boolean } = {}) {
   const lead = useLeadName();
   const channel = useChannel();
   const approvals = useApprovals();
@@ -318,7 +364,7 @@ function WaitingOnYou() {
   // Nothing waiting is said once, by the page, not by an empty panel.
   if (!channel.isSuccess || count === 0) return null;
   return (
-    <Panel id="today-needs" icon="approvals" title={t("today.needsYou")} count={count} urgent={count > 0} {...(count ? { hint: t("today.needsYou.hint") } : {})} action={allItems.length > 1 && !selecting ? <Button variant="quiet" className="py-px" data-testid="bulk-select" onClick={() => setSelecting(true)}>{t("today.select")}</Button> : undefined}>
+    <Panel {...(inPopover ? { bare: true } : { id: "today-needs" })} icon="approvals" title={t(inPopover ? "waiting.title" : "today.needsYou")} count={count} urgent={count > 0} {...(count && !inPopover ? { hint: t("today.needsYou.hint") } : {})} action={inPopover ? <TextLink className="text-sm" href="/today#today-needs">{t("waiting.openToday")}</TextLink> : allItems.length > 1 && !selecting ? <Button variant="quiet" className="py-px" data-testid="bulk-select" onClick={() => setSelecting(true)}>{t("today.select")}</Button> : undefined}>
       {selecting ? (
         <>
           <BulkBar items={allItems} picked={picked} onPick={(keys) => setPicked(new Set(keys))} onClear={() => setPicked(new Set())} onCancel={() => { setSelecting(false); setPicked(new Set()); }} />
@@ -568,6 +614,7 @@ export function TodayScreen() {
   useEffect(() => () => markSeen(), [markSeen]);
   const noMail = mail.data?.state === "off" && !today.data?.needs_you.length && !today.data?.waiting.length;
   const needed = useWaitingCount();
+  const [shown, setShown] = useTodayShown();
   const cockpit = useCockpit();
   const due = today.data?.due ?? [];
   const { view, go } = useTodayView();
@@ -589,7 +636,7 @@ export function TodayScreen() {
           {today.data && !noMail ? <MatterGroups /> : null}
         </div>
         <div className="flex min-w-0 flex-col gap-6">
-          <DueToday items={due} />
+          {shown.due ? <DueToday items={due} /> : null}
           {today.data && !noMail ? <SinceYouLooked /> : null}
           {today.data?.automated_count ? <TextLink className="self-start text-md" href="/mail/all">{tn("today.automated", today.data.automated_count)}</TextLink> : null}
           <StatusLine />
@@ -604,12 +651,17 @@ export function TodayScreen() {
           <h1 className="font-serif text-display text-ink-primary">{greeting}</h1>
           {today.data ? <p data-testid="today-brief" className="text-md tabular-nums text-ink-secondary">{today.data.brief}</p> : null}
         </div>
-        <nav aria-label={t("today.stat.label")} className="flex flex-wrap items-baseline divide-x divide-line-subtle">
-          <Stat href="#today-needs" label={t("today.stat.needsYou")} value={needed} urgent />
-          <Stat href="#today-due" label={t("today.stat.due")} value={due.length} alarming={due.some((item) => item.overdue)} urgent />
-          <Stat href="#today-important" label={t("today.stat.important")} value={today.data?.needs_you.length ?? 0} urgent />
-          <Stat href="/cockpit" label={t("today.stat.working")} value={cockpit.data?.jobs.length ?? 0} />
-        </nav>
+        <div className="flex flex-wrap items-center gap-3">
+          <nav aria-label={t("today.stat.label")} className="flex flex-wrap items-baseline divide-x divide-line-subtle">
+            {shown.decide ? <Stat href="#today-needs" label={t("today.stat.needsYou")} value={needed} urgent /> : null}
+            {/* Matters, so a conversation of seven emails counts once. */}
+            {shown.waiting ? <Stat href="#today-important" label={t("today.stat.important")} value={matters.data?.needs_you.length ?? 0} urgent /> : null}
+            {shown.others ? <Stat href="#today-waiting" label={t("today.stat.others")} value={matters.data?.waiting.length ?? 0} /> : null}
+            {shown.working ? <Stat href="/cockpit" label={t("today.stat.working")} value={cockpit.data?.jobs.length ?? 0} /> : null}
+            {shown.due ? <Stat href="#today-due" label={t("today.stat.due")} value={due.length} alarming={due.some((item) => item.overdue)} urgent /> : null}
+          </nav>
+          <CustomizeToday shown={shown} onChange={setShown} />
+        </div>
       </header>
       {/* Until it's sorted the AI reads nothing, so this comes before everything else. */}
       <SortMailCard />

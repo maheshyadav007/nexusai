@@ -69,7 +69,7 @@ def test_one_change_from_different_senders_is_one_matter(
     assert matter["state"] == "waiting_on_you" and matter["next"] == "Get CL 88213 merged"
     detail = query(client, "matters.get", id=matter["id"])
     kinds = [event["kind"] for event in detail["events"]]
-    assert kinds[0] == "started" and sorted(kinds[1:]) == ["joined", "task"]
+    assert kinds[0] == "started" and sorted(kinds[1:]) == ["joined", "suggested"]
     joined = next(event for event in detail["events"] if event["kind"] == "joined")
     assert joined["why"] == "Both mention 88213" and joined["source"]["kind"] == "mail"
 

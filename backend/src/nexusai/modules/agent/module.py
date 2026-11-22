@@ -562,6 +562,11 @@ def conversation_work(event: AppEvent, ctx: Context) -> None:
 
 
 def conversation_task(event: AppEvent, ctx: Context) -> None:
+    removed = event.payload.get("removed")
+    if removed and removed.get("proposed") and event.payload.get("by") == "person":
+        matters.note(
+            ctx, removed.get("thread"), "declined", f'To-do: "{removed["title"]}"', by="person"
+        )
     if not event.payload.get("id"):
         return
     now, before = event.payload.get("changes", {}), event.payload.get("old", {})
@@ -571,6 +576,18 @@ def conversation_task(event: AppEvent, ctx: Context) -> None:
         if now.get("status") == "done" and before.get("status") != "done":
             _tell_what_else_is_open(ctx, int(event.payload["id"]))
         return
+    if now.get("proposed") is False and before.get("proposed"):
+        accepted = ctx.bus.db.fetch_all(
+            "SELECT title FROM tasks WHERE id = ?", (event.payload["id"],)
+        )
+        if accepted:
+            matters.note(
+                ctx,
+                event.payload.get("thread"),
+                "accepted",
+                f'To-do: "{accepted[0]["title"]}"',
+                by="person",
+            )
     if now.get("status") == "done" and before.get("status") != "done":
         title = ctx.bus.db.fetch_all("SELECT title FROM tasks WHERE id = ?", (event.payload["id"],))
         if title:

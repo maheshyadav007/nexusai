@@ -278,13 +278,17 @@ def apply(ctx: Context, command: ApplyMailSort) -> int:
     # A sender a rule already files only changes sides, in its rule; the rest are sorted as
     # they always were. Nothing the person didn't move changes.
     flips: dict[str, bool] = {}
+    # Put in an exact folder, or the Inbox: each goes there on its own, mail and all.
+    placed = {c.sender: c for c in command.senders if c.folder is not None}
+    command = ApplyMailSort(senders=[c for c in command.senders if c.folder is None])
+    found = {**found, "senders": [r for r in found["senders"] if r["sender"] not in placed]}
     # Let through by an "AI reads" rule and moved back: that rule goes, and it's sorted afresh.
     unlet: set[str] = set()
     if job.current:
         chosen = {choice.sender: choice for choice in command.senders}
         for sender, (folder, kept) in job.current.items():
             choice = chosen.get(sender)
-            if choice is None or (choice.side == "ignores") == kept:
+            if choice is None or sender in placed or (choice.side == "ignores") == kept:
                 continue
             if folder:
                 flips[sender] = choice.side == "ignores"
@@ -414,12 +418,49 @@ def apply(ctx: Context, command: ApplyMailSort) -> int:
         )
     for sender, kept in flips.items():
         move_sender(ctx, sender, reads=not kept, folder=job.current[sender][0])
+    for sender, choice in placed.items():
+        move_sender(
+            ctx,
+            sender,
+            reads=choice.side == "reads",
+            folder=choice.folder or None,
+            keep_folder=False,
+            refile=True,
+        )
     _jobs.pop(str(ctx.config.home), None)
     return moved
 
 
+def _refile(ctx: Context, tx: Any, sender: str, rule: MailRule) -> None:
+    """The sender's mail goes where its new rule files it: its emails carry that rule, and their
+    conversations its folder, or the Inbox. What the person filed by hand stays put."""
+    account = accounts.current_account(ctx.config)
+    tx.execute(
+        "UPDATE messages SET rule = ? WHERE account = ? AND LOWER(from_addr) = ?",
+        (rule.name, account, sender),
+    )
+    threads = "SELECT DISTINCT thread_id FROM messages WHERE account = ? AND LOWER(from_addr) = ?"
+    folder = rule.actions.category
+    tx.execute(
+        "UPDATE threads SET category = ?, category_source = 'rule', why = ?"  # noqa: S608
+        f" WHERE id IN ({threads}) AND COALESCE(category_source, '') != 'user'",
+        (folder, f"Sorted into “{folder}”" if folder else "Sorted into the Inbox", account, sender),
+    )
+    tx.execute(
+        "UPDATE threads SET latest_rule = (SELECT rule FROM messages m WHERE m.thread_id ="  # noqa: S608
+        f" threads.id ORDER BY m.date DESC, m.id DESC LIMIT 1) WHERE id IN ({threads})",
+        (account, sender),
+    )
+
+
 def move_sender(
-    ctx: Context, sender: str, *, reads: bool, folder: str | None = None, keep_folder: bool = True
+    ctx: Context,
+    sender: str,
+    *,
+    reads: bool,
+    folder: str | None = None,
+    keep_folder: bool = True,
+    refile: bool = False,
 ) -> str:
     """One sender to the side the AI reads or the side it ignores, the one way every screen
     and agent does it. A sender has one rule, so whatever rules it had are replaced:
@@ -428,7 +469,8 @@ def move_sender(
     - to the AI, from a folder the AI skips as a whole, or from none: a rule lets it through;
     - away from the AI: its rule files it in `folder`, its old folder, or Automated.
 
-    Mail already filed stays where it is; the rule decides what's to come. Says what it did."""
+    Mail already filed stays where it is, unless `refile`, when it moves with the sender; the
+    rule decides what's to come. Says what it did."""
     sender = sender.strip().lower()
     if "@" not in sender:
         raise CommandError("mail.sender", "That isn't an email address.", 422)
@@ -447,6 +489,14 @@ def move_sender(
                 conditions=[RuleCondition(field="sender_exact", value=sender)],
                 actions=RuleActions(category=target),
             )
+            with ctx.bus.unit_of_work() as work:
+                # A new folder for it, one the AI reads.
+                work.tx.execute(
+                    "INSERT OR IGNORE INTO mail_categories (name, source, in_priority, proposed,"
+                    " why, created, mode, description, ai_reads)"
+                    " VALUES (?, 'user', 0, 0, ?, ?, 'exact', ?, 1)",
+                    (target, "Made on the Sort page", _now(), target),
+                )
             said = f"{sender}: filed in {target}, and the AI reads it"
         else:
             rule = MailRule(
@@ -482,6 +532,11 @@ def move_sender(
         work.tx.execute(
             "UPDATE mail_categories SET sender = NULL WHERE LOWER(sender) = ?", (sender,)
         )
+        if refile:
+            _refile(ctx, work.tx, sender, rule)
+            work.emit(
+                "mail.changed", {"reason": "categories"}, source="mail", trace_id=ctx.trace_id
+            )
         work.emit("rules.changed", {"count": 1}, source="mail", trace_id=ctx.trace_id)
         work.emit("categories.changed", {}, source="mail", trace_id=ctx.trace_id)
     _jobs.pop(str(ctx.config.home), None)

@@ -35,3 +35,9 @@ export function RoundCheck({ label, checked, onChange }: { label: string; checke
     </RadixCheckbox.Root>
   );
 }
+
+/** Where a tick would be, for something the AI suggested: dashed, and not a box to tick. It
+ *  becomes the person's own, and tickable, only once they accept it. */
+export function SuggestedCheck({ label, round = false }: { label: string; round?: boolean }) {
+  return <span role="img" aria-label={label} className={`flex h-4 w-4 shrink-0 border border-dashed border-ink-faint ${round ? "rounded-full" : "rounded-sm"}`} />;
+}

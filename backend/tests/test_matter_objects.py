@@ -262,3 +262,35 @@ def test_the_ai_sees_a_big_matter_cut_short_with_a_count_and_its_work_once(
     # Listed in the matter, so not again for the conversation.
     assert "Already open for this conversation" not in given
     assert "conversations:" in given and "lately:" in given
+
+
+def test_the_morning_brief_waits_until_the_mail_is_judged_then_runs(
+    client: TestClient, script: Script, fake: FakeMail, monkeypatch: Any
+) -> None:
+    from nexusai.modules.agent import module as agent
+    from nexusai.modules.agent.providers import ToolCall
+
+    connect(client, fake)
+    db = client.app.state.bus.db  # type: ignore[attr-defined]
+    triggers = agent._triggers
+    assert triggers is not None and triggers._mail_settled()
+    brief = db.fetch_all("SELECT id FROM schedules WHERE kind = 'mail-brief'")[0]["id"]
+    with db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO trigger_runs (trigger, event, time, status, schedule)"
+            " VALUES ('schedule', 'morning', '2026-01-01', 'pending', ?)",
+            (brief,),
+        )
+    script.replies = [[ToolCall("b", "update_brief", {"text": "Your morning: all judged."})]]
+    status = "SELECT status FROM trigger_runs WHERE event = 'morning'"
+    # Mail still being judged: the brief stays pending, however often the loop looks.
+    monkeypatch.setattr(triggers, "_mail_settled", lambda: False)
+    for _ in range(3):
+        with triggers.lock:
+            triggers._start_schedules()
+    assert db.fetch_all(status)[0]["status"] == "pending"
+    # Judged: the next look starts it.
+    monkeypatch.setattr(triggers, "_mail_settled", lambda: True)
+    with triggers.lock:
+        triggers._start_schedules()
+    wait(lambda: db.fetch_all(status)[0]["status"] != "pending", "the brief started")

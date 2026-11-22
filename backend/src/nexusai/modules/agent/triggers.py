@@ -862,8 +862,29 @@ class Triggers:
                 self._hourly(run["id"])
             elif found[0]["kind"] == REVIEW_KIND:
                 self._review(run["id"])
+            elif found[0]["kind"] == BRIEF_KIND and not self._mail_settled():
+                # The brief waits, pending, for the mail to be in and judged, and starts on the
+                # wake that follows the last of it. Written earlier it would only say it's partial.
+                continue
             else:
                 self._start_schedule(run["id"], found[0])
+
+    def _mail_settled(self) -> bool:
+        """Whether the mail is all in and judged: the download done, the first read of past mail
+        finished, and nothing new waiting for the Mail agent."""
+        db = self.ctx.bus.db
+        if db.fetch_all(
+            "SELECT 1 FROM mail_sync_settings WHERE account = ? AND history_finished IS NULL",
+            (accounts.current_account(self.ctx.config),),
+        ):
+            return False
+        if not mail_agent.enabled(self.ctx):
+            return True
+        if mail_agent.learning_state(self.ctx) in {"reading", "wrapping"}:
+            return False
+        return not db.fetch_all(
+            "SELECT 1 FROM trigger_runs WHERE trigger = 'mail-received' AND status IN ('pending', 'running') LIMIT 1"
+        )
 
     def _hourly(self, run: int) -> None:
         if mail_agent.mode(self.ctx) == "hourly":

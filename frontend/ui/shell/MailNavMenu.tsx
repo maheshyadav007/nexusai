@@ -14,6 +14,8 @@ import { Dialog } from "@/ui/primitives/Dialog";
 import type { MenuItem } from "@/ui/primitives/Menu";
 import { useToast } from "@/ui/primitives/Toast";
 import { t } from "@/ui/strings";
+import { EditFolder } from "./EditFolder";
+import { useHiddenFolders } from "./hiddenFolders";
 
 export const categorySettingsHref = (name: string) => `/settings?section=categories&category=${encodeURIComponent(name)}`;
 
@@ -28,6 +30,8 @@ export function MailNavMenu({ href, scope, category, moreFolder, children }: { h
   const [removing, setRemoving] = useState(false);
   const [sorting, setSorting] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const { hidden, setHidden } = useHiddenFolders();
   const [newName, setNewName] = useState("");
   const failed = (error: Error) => toast({ title: error.message, tone: "danger" });
   const read = useMutation({ mutationFn: () => command("mail.markFolderRead", scope), onSuccess: () => { void client.invalidateQueries({ queryKey: ["threads"] }); void client.invalidateQueries({ queryKey: ["mail-folders"] }); void client.invalidateQueries({ queryKey: ["categories"] }); void client.invalidateQueries({ queryKey: ["thread"] }); toast({ title: t("menu.folderReadDone") }); }, onError: failed });
@@ -39,7 +43,9 @@ export function MailNavMenu({ href, scope, category, moreFolder, children }: { h
   ];
   if (moreFolder) items.push({ id: "more", label: t("mail.folder.getRest"), icon: "background", disabled: busy, onSelect: () => more.mutate({ folder: moreFolder }, { onError: failed }) });
   if (category) items.push(
-    { id: "rename", label: t("menu.renameCategory"), icon: "edit", disabled: busy, onSelect: () => { setNewName(category.name); setRenaming(true); } },
+    { id: "editFolder", label: t("menu.editFolder"), icon: "edit", disabled: busy, onSelect: () => setEditing(true) },
+    { id: "rename", label: t("menu.renameCategory"), disabled: busy, onSelect: () => { setNewName(category.name); setRenaming(true); } },
+    { id: "hide", label: t(hidden.has(category.name) ? "menu.showFolder" : "menu.hideFolder"), icon: hidden.has(category.name) ? "eye" : "eyeOff", onSelect: () => setHidden(category.name, !hidden.has(category.name)) },
     { id: "priority", label: t(category.in_priority ? "menu.leavePriority" : "menu.joinPriority"), icon: "priority", disabled: busy, onSelect: () => update.mutate({ name: category.name, in_priority: !category.in_priority }, { onError: failed, onSuccess: () => toast({ title: t("menu.categoryUpdated") }) }) },
     { id: "mode", label: t(category.mode === "exact" ? "menu.useSmart" : "menu.useExact"), disabled: busy, onSelect: () => { if (category.mode !== "exact") { router.push(categorySettingsHref(category.name)); return; } update.mutate({ name: category.name, mode: "smart" }, { onError: failed, onSuccess: () => toast({ title: t("menu.categoryUpdated") }) }); } },
     { id: "edit", label: t("menu.categorySettings"), icon: "settings", onSelect: () => router.push(categorySettingsHref(category.name)) },
@@ -49,6 +55,7 @@ export function MailNavMenu({ href, scope, category, moreFolder, children }: { h
   return <>
     <ContextMenu items={items}>{children}</ContextMenu>
     {category ? <>
+      <EditFolder category={category} open={editing} onOpenChange={setEditing} onRenamed={(name) => { toast({ title: t("menu.categoryUpdated") }); if (window.location.pathname === href || window.location.pathname.startsWith(`${href}/`)) router.push(`/mail/category/${encodeURIComponent(name)}`); }} />
       <Dialog title={t("menu.renameCategory")} open={renaming} onOpenChange={setRenaming}>
         <form className="flex flex-col gap-4" onSubmit={(event) => {
           event.preventDefault();

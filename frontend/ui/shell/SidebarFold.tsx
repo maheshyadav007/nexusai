@@ -19,17 +19,22 @@ function readFolds(): Folds {
 /** A group in the sidebar: a quiet heading like Agent's or Planner's, with its rows under it at
  *  the same level as the rows above. It folds by its heading and remembers, and opens by itself
  *  while the page shown is inside it, so the open folder is never hidden. */
-export function SidebarFold({ id, label, actions, open: startOpen = false, holdsActive, children }: { id: string; label: string; actions?: ReactNode; open?: boolean; holdsActive: boolean; children: ReactNode }) {
+export function SidebarFold({ id, label, actions, open: startOpen = false, remember = true, holdsActive, children }: { id: string; label: string; actions?: ReactNode; open?: boolean; remember?: boolean; holdsActive: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(startOpen);
   const panel = useId();
   useEffect(() => {
-    const saved = readFolds()[id];
+    const saved = remember ? readFolds()[id] : undefined;
     if (saved !== undefined) setOpen(saved);
-  }, [id]);
+  }, [id, remember]);
+  // One that isn't remembered folds again when the page shown leaves it.
+  useEffect(() => {
+    if (!remember && !holdsActive) setOpen(false);
+  }, [remember, holdsActive]);
   const shown = open || holdsActive;
   const toggle = () => {
     const next = !shown;
     setOpen(next);
+    if (!remember) return;
     try {
       localStorage.setItem(appConfig.storageKeys.sidebarFolds, JSON.stringify({ ...readFolds(), [id]: next }));
     } catch {

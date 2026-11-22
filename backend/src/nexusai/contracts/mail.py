@@ -504,6 +504,8 @@ class UpdateCategory(BaseModel):
     clear_rule: bool = False
     mode: Literal["exact", "smart"] | None = None
     description: str | None = Field(default=None, max_length=500)
+    # Whether the AI reads it. Every sender filed there moves to that side with it.
+    ai_reads: bool | None = None
 
 
 class MergeCategories(BaseModel):
@@ -944,6 +946,9 @@ class SortSenderChoice(BaseModel):
     side: Literal["reads", "ignores"]
     own: bool = False
     name: str = Field(default="", max_length=60)
+    # Put in this exact folder, mail and all, as the one rule for this sender: one the page
+    # showed, or one made there. Empty is the Inbox. Unset, it's sorted by side, own and name.
+    folder: str | None = Field(default=None, max_length=64)
 
 
 class ApplyMailSort(BaseModel):

@@ -1722,6 +1722,9 @@ MatterEventKind = Literal[
     "merged",
     "linked",
     "kept",
+    "suggested",
+    "accepted",
+    "declined",
 ]
 MatterMarkKind = Literal["in", "sent", "due", "reminder", "closed"]
 
@@ -1859,6 +1862,8 @@ class MatterItem(BaseModel):
     when: str | None = None
     # Ticked to start with: the same email asked for it, so it's most likely finished too.
     suggested: bool = False
+    # An AI suggestion not yet accepted, shown as one wherever it appears.
+    proposed: bool = False
     why: str = ""
 
 

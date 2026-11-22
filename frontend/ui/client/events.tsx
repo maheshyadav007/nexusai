@@ -66,6 +66,11 @@ const INVALIDATES: Record<string, readonly string[]> = {
 };
 
 const EVENT_RECONNECT_MS = 3000;
+// Events come in bursts while mail downloads. What they make stale is read again once per
+// burst, a moment after it, and at least this often while it lasts, so a slow list isn't
+// cancelled by each new event before it can arrive.
+const EVENT_SETTLE_MS = 250;
+const EVENT_MAX_WAIT_MS = 1500;
 
 type Listener = (event: AppEvent) => void;
 
@@ -104,6 +109,24 @@ export function EventsProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     let reconnect: ReturnType<typeof setTimeout> | undefined;
     let seq: number | null = null;
+    const stale = new Set<string>();
+    let settle: ReturnType<typeof setTimeout> | undefined;
+    let since = 0;
+    const flush = () => {
+      clearTimeout(settle);
+      settle = undefined;
+      since = 0;
+      const keys = [...stale];
+      stale.clear();
+      for (const key of keys) void refresh(client, { queryKey: [key] });
+    };
+    const later = (keys: readonly string[]) => {
+      if (!keys.length) return;
+      for (const key of keys) stale.add(key);
+      since ||= Date.now();
+      clearTimeout(settle);
+      settle = setTimeout(flush, Date.now() - since >= EVENT_MAX_WAIT_MS ? 0 : EVENT_SETTLE_MS);
+    };
     const retry = () => {
       if (cancelled) return;
       clearTimeout(reconnect);
@@ -139,13 +162,13 @@ export function EventsProvider({ children }: { children: ReactNode }) {
           if (event.type === "semantic.changed") {
             void client.cancelQueries({ queryKey: ["semantic"] });
             client.setQueryData(["semantic"], event.payload);
-            void refresh(client, { queryKey: ["jobs"] });
+            later(["jobs"]);
           }
           if (event.type === "categories.changed" && event.payload.categories) {
             void client.cancelQueries({ queryKey: ["categories"] });
             client.setQueryData(["categories"], { categories: event.payload.categories });
           }
-          for (const key of INVALIDATES[event.type] ?? []) void refresh(client, { queryKey: [key] });
+          later(INVALIDATES[event.type] ?? []);
           for (const listener of listeners.current) listener(event);
         };
       } catch { setConnected(false); retry(); }
@@ -154,6 +177,7 @@ export function EventsProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
       clearTimeout(reconnect);
+      clearTimeout(settle);
       source?.close();
     };
   }, [client, ready, reachable]);

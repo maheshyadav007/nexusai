@@ -637,6 +637,7 @@ export type Sender8 = string;
 export type Side1 = "reads" | "ignores";
 export type Own1 = boolean;
 export type Name21 = string;
+export type Folder7 = string | null;
 /**
  * @maxItems 20000
  */
@@ -647,7 +648,7 @@ export type Sender9 = string | null;
 export type DateFrom1 = string | null;
 export type DateTo1 = string | null;
 export type Source3 = ("upload" | "email" | "home") | null;
-export type Folder7 = string | null;
+export type Folder8 = string | null;
 export type Tag1 = string | null;
 export type Query1 = string;
 export type Limit2 = number;
@@ -658,7 +659,7 @@ export type ContentType1 = string;
 export type Size5 = number;
 export type Date1 = string;
 export type Source4 = "upload" | "email" | "home";
-export type Folder8 = string | null;
+export type Folder9 = string | null;
 export type Tags = string[];
 export type ThreadId3 = number | null;
 export type Risky = boolean;
@@ -691,7 +692,7 @@ export type Key4 = string | null;
 export type Html1 = string | null;
 export type Text3 = string;
 export type Key5 = string;
-export type Folder9 = string | null;
+export type Folder10 = string | null;
 /**
  * @maxItems 32
  */
@@ -710,7 +711,7 @@ export type Status5 = string | null;
 export type UnreadOnly = boolean;
 export type FlaggedOnly = boolean;
 export type Query2 = string | null;
-export type Folder10 = string | null;
+export type Folder11 = string | null;
 export type Id19 = string;
 export type Title = string;
 export type Source5 = "threads" | "documents" | "tasks" | "reminders";
@@ -1811,7 +1812,10 @@ export type Kind22 =
   | "moved"
   | "merged"
   | "linked"
-  | "kept";
+  | "kept"
+  | "suggested"
+  | "accepted"
+  | "declined";
 export type Text17 = string;
 export type Why4 = string;
 export type Matter1 = number;
@@ -1859,6 +1863,7 @@ export type Kind25 = "task" | "reminder" | "deadline" | "thread";
 export type Title23 = string;
 export type When7 = string | null;
 export type Suggested = boolean;
+export type Proposed3 = boolean;
 export type Why7 = string;
 export type Ref4 = string;
 export type Matter3 = number | null;
@@ -1897,7 +1902,7 @@ export type Status22 = "todo" | "in_progress" | "done";
 export type Due4 = string | null;
 export type Thread11 = number | null;
 export type Source10 = "user" | "agent";
-export type Proposed3 = boolean;
+export type Proposed4 = boolean;
 export type Created6 = string;
 export type Updated8 = string | null;
 export type Completed = string | null;
@@ -1909,7 +1914,7 @@ export type Notes2 = string;
 export type Status23 = "todo" | "in_progress" | "done";
 export type Due5 = string | null;
 export type Thread12 = number | null;
-export type Proposed4 = boolean;
+export type Proposed5 = boolean;
 export type Id97 = number;
 export type Id98 = number;
 export type Title27 = string;
@@ -1918,7 +1923,7 @@ export type Repeat = "none" | "day" | "week" | "month" | "year";
 export type Thread13 = number | null;
 export type Task1 = number | null;
 export type Source11 = "user" | "agent";
-export type Proposed5 = boolean;
+export type Proposed6 = boolean;
 export type Fired = boolean;
 export type Created7 = string | null;
 export type Updated9 = string | null;
@@ -1929,7 +1934,7 @@ export type When9 = string;
 export type Repeat1 = "none" | "day" | "week" | "month" | "year";
 export type Thread14 = number | null;
 export type Task2 = number | null;
-export type Proposed6 = boolean;
+export type Proposed7 = boolean;
 export type Id100 = number;
 export type Minutes = number;
 export type Id101 = number;
@@ -1969,7 +1974,7 @@ export type Id103 = string | null;
 export type Id104 = string;
 export type Mirror1 = string | null;
 export type Id105 = string;
-export type Folder11 = string;
+export type Folder12 = string;
 export type Kind28 = "mail" | "document";
 export type Ref6 = string;
 export type Score1 = number;
@@ -3827,6 +3832,7 @@ export interface SortSenderChoice {
   side: Side1;
   own?: Own1;
   name?: Name21;
+  folder?: Folder7;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -3853,7 +3859,7 @@ export interface ListDocuments {
   date_from?: DateFrom1;
   date_to?: DateTo1;
   source?: Source3;
-  folder?: Folder7;
+  folder?: Folder8;
   tag?: Tag1;
   query?: Query1;
   limit?: Limit2;
@@ -3870,7 +3876,7 @@ export interface DocumentRow {
   size: Size5;
   date: Date1;
   source: Source4;
-  folder: Folder8;
+  folder: Folder9;
   tags: Tags;
   thread_id?: ThreadId3;
   risky?: Risky;
@@ -3966,7 +3972,7 @@ export interface DocumentPreview {
  */
 export interface UpdateDocument {
   key: Key5;
-  folder?: Folder9;
+  folder?: Folder10;
   tags?: Tags2;
 }
 /**
@@ -4012,7 +4018,7 @@ export interface PanelFilters {
   unread_only?: UnreadOnly;
   flagged_only?: FlaggedOnly;
   query?: Query2;
-  folder?: Folder10;
+  folder?: Folder11;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -6455,6 +6461,7 @@ export interface MatterItem {
   title: Title23;
   when?: When7;
   suggested?: Suggested;
+  proposed?: Proposed3;
   why?: Why7;
   [k: string]: unknown;
 }
@@ -6577,7 +6584,7 @@ export interface Task {
   due: Due4;
   thread: Thread11;
   source: Source10;
-  proposed: Proposed3;
+  proposed: Proposed4;
   created: Created6;
   updated?: Updated8;
   completed?: Completed;
@@ -6610,7 +6617,7 @@ export interface SaveTask {
   status?: Status23;
   due?: Due5;
   thread?: Thread12;
-  proposed?: Proposed4;
+  proposed?: Proposed5;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -6631,7 +6638,7 @@ export interface Reminder {
   thread: Thread13;
   task: Task1;
   source: Source11;
-  proposed: Proposed5;
+  proposed: Proposed6;
   fired: Fired;
   created?: Created7;
   source_ref?: SourceRef | null;
@@ -6664,7 +6671,7 @@ export interface SaveReminder {
   repeat?: Repeat1;
   thread?: Thread14;
   task?: Task2;
-  proposed?: Proposed6;
+  proposed?: Proposed7;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -6805,7 +6812,7 @@ export interface SaveSemanticSettings {
  */
 export interface ImportModel {
   id: Id105;
-  folder: Folder11;
+  folder: Folder12;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema

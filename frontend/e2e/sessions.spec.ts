@@ -106,11 +106,14 @@ test("approvals can be answered from the top bar, and a denied command never run
   await expect(page.getByTestId("approval")).toBeVisible();
 
   await page.goto("/today");
-  await page.getByRole("button", { name: "Approvals, 1 waiting" }).click();
+  // The shield holds everything waiting for the person: approvals, questions and suggestions.
+  await page.getByRole("button", { name: /^Waiting for you, \d+$/ }).click();
+  const waiting = page.getByRole("dialog", { name: "Waiting for you" });
+  await expect(waiting.getByRole("button", { name: "Deny" })).toBeVisible();
   await noViolations(page);
   // Today shows the same approval, so this answers the one in the top bar's list.
-  await page.getByRole("dialog", { name: "Approvals" }).getByRole("button", { name: "Deny" }).click();
-  await expect(page.getByRole("button", { name: "Approvals", exact: true })).toBeVisible();
+  await waiting.getByRole("button", { name: "Deny" }).click();
+  await expect(waiting.getByRole("button", { name: "Deny" })).toHaveCount(0);
 
   await page.goto("/agent/sessions");
   // Agent chats are listed first now, so pick this conversation by what was said.

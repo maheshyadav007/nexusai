@@ -433,3 +433,93 @@ def test_a_sender_always_has_one_rule_whichever_side_it_is_moved_to(
     sorting.move_sender(ctx, sender, reads=True)
     assert (mine()[0].actions.category, mine()[0].actions.skip_agent) == ("Tools", False)
     assert build_bot(reviewed(ctx)).side == "reads"
+
+
+def test_a_sender_put_in_a_folder_on_the_page_goes_there_mail_and_all(
+    ctx: Context,  # noqa: F811
+    mailbox: Any,
+) -> None:
+    ready(ctx)
+    sorting.apply(ctx, named("Builds"))
+    reviewed(ctx)
+    kim = "kim@else.example"
+
+    def folders(sender: str) -> set[str | None]:
+        return {
+            row["category"]
+            for row in ctx.bus.db.fetch_all(
+                "SELECT DISTINCT t.category FROM threads t JOIN messages m ON m.thread_id = t.id"
+                " WHERE LOWER(m.from_addr) = ?",
+                (sender,),
+            )
+        }
+
+    def rule_of(sender: str) -> MailRule:
+        (rule,) = [
+            r
+            for r in rules.load_rules(ctx.config.home)
+            if any(c.value == sender for c in r.conditions)
+        ]
+        return rule
+
+    # Kim, read by the AI from the Inbox, gets a new folder the AI reads.
+    sorting.apply(
+        ctx,
+        ApplyMailSort(senders=[SortSenderChoice(sender=kim, side="reads", folder="Friends")]),
+    )
+    friends = ctx.bus.db.fetch_all("SELECT ai_reads FROM mail_categories WHERE name = 'Friends'")
+    assert [row["ai_reads"] for row in friends] == [1]
+    assert folders(kim) == {"Friends"}
+    assert (rule_of(kim).actions.category, rule_of(kim).actions.skip_agent) == ("Friends", False)
+    # The build bot is dragged into it from Automated/Builds: its mail follows, the AI reads it.
+    bot = "ci@tools.example"
+    reviewed(ctx)
+    sorting.apply(
+        ctx,
+        ApplyMailSort(senders=[SortSenderChoice(sender=bot, side="reads", folder="Friends")]),
+    )
+    assert folders(bot) == {"Friends"}
+    assert not rule_of(bot).actions.skip_agent
+    # And back to the Inbox: no folder, still read, one rule.
+    reviewed(ctx)
+    sorting.apply(
+        ctx, ApplyMailSort(senders=[SortSenderChoice(sender=kim, side="reads", folder="")])
+    )
+    assert folders(kim) == {None}
+    assert rule_of(kim).actions.category is None
+    row = next(r for r in reviewed(ctx).senders if r.sender == bot)
+    assert (row.side, row.folder) == ("reads", "Friends")
+
+
+def test_a_whole_folder_moves_to_one_side_with_every_sender_in_it(
+    ctx: Context,  # noqa: F811
+    mailbox: Any,
+) -> None:
+    from nexusai.contracts.mail import UpdateCategory
+    from nexusai.kernel.module import CommandError
+    from nexusai.modules.mail.module import update_category
+
+    ready(ctx)
+    sorting.apply(ctx, named("Builds"))
+    # Both senders filed in Shopping by their rules, one read and one kept.
+    sorting.move_sender(ctx, "kim@else.example", reads=True, folder="Shopping")
+    sorting.move_sender(ctx, "ci@tools.example", reads=False, folder="Shopping")
+
+    def sides() -> dict[str, bool]:
+        return {
+            c.value: r.actions.skip_agent
+            for r in rules.load_rules(ctx.config.home)
+            for c in r.conditions
+            if r.actions.category == "Shopping"
+        }
+
+    assert sides() == {"kim@else.example": False, "ci@tools.example": True}
+    update_category(UpdateCategory(name="Shopping", ai_reads=False), ctx)
+    assert sides() == {"kim@else.example": True, "ci@tools.example": True}
+    update_category(UpdateCategory(name="Shopping", ai_reads=True), ctx)
+    assert sides() == {"kim@else.example": False, "ci@tools.example": False}
+    reads = ctx.bus.db.fetch_all("SELECT ai_reads FROM mail_categories WHERE name = 'Shopping'")
+    assert reads[0]["ai_reads"] == 1
+    # What's under Automated stays kept.
+    with pytest.raises(CommandError):
+        update_category(UpdateCategory(name="Automated/Builds", ai_reads=True), ctx)
