@@ -1,4 +1,5 @@
 import type { AgentMap, GetAgentMap, GetRunTree, ListRuns, RunList, RunSpan, SeeAlerts } from "./contracts.generated";
+import type { HiddenFromAi, HideFromAi, HideFromAiPreview, HidePreview, UndoHide } from "./contracts.generated";
 import type { AddSkill, DecideSkill, ListSkills, SkillList, SkillName } from "./contracts.generated";
 import type { CancelTeamTask, CardList, GetTeamTask, ListCards, ListTeamTasks, NoteOnTeamTask, RenameAgent, ResetAgentName, RetryTeamTask, SetMascot, TeamTaskList, TeamTaskView } from "./contracts.generated";
 import type { MarkFolderRead } from "./contracts.generated";
@@ -297,6 +298,8 @@ interface Commands {
   "thread.setFlag": [SetThreadFlag, MailDone];
   "thread.move": [MoveThread, MailDone];
   "thread.toInbox": [ThreadToInbox, ThreadInInbox];
+  "mail.hide": [HideFromAi, HiddenFromAi];
+  "mail.hide.undo": [UndoHide, MailDone];
   "thread.setStatus": [SetThreadStatus, MailDone];
   "thread.setImportance": [SetThreadImportance, MailDone];
   "thread.setCategory": [SetThreadCategory, MailDone];
@@ -445,6 +448,7 @@ interface Queries {
   "threads.list": [ListThreads, ThreadList];
   "thread.get": [GetThread, ThreadView];
   "rules.get": [GetRules, RuleSet];
+  "mail.hide.preview": [HidePreview, HideFromAiPreview];
   "drafts.list": [ListDrafts, DraftList];
   "mail.replyDraft": [ReplyContext, ReplyDraft];
   "mail.forwardDraft": [ForwardContext, ReplyDraft];

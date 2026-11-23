@@ -11,6 +11,7 @@ from nexusai.kernel.module import Context
 from nexusai.modules.agent import citations
 from nexusai.modules.agent.prompt_data import untrusted
 from nexusai.modules.mail import accounts
+from nexusai.modules.mail.store import hidden_from_ai
 
 MIGRATION = Migration(
     "agent_brief_artifacts_001",
@@ -55,7 +56,9 @@ def snapshot(ctx: Context) -> str:
         ),
         (
             "Unfinished mail, including archived conversations",
-            "SELECT id,subject,status,importance,next_action,follow_up_on,decision_version FROM threads WHERE account=? AND in_trash=0 AND status IN ('waiting_on_you','waiting_on_others') ORDER BY importance='high' DESC,last_date DESC",
+            # What a folder keeps from the AI stays out of the brief, whatever it was judged before.
+            "SELECT id,subject,status,importance,next_action,follow_up_on,decision_version FROM threads WHERE account=? AND in_trash=0"
+            f" AND NOT {hidden_from_ai()} AND status IN ('waiting_on_you','waiting_on_others') ORDER BY importance='high' DESC,last_date DESC",
         ),
     )
     for label, query in queries:

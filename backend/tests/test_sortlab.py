@@ -130,15 +130,21 @@ def test_details_keep_senders_and_score_signs_for_improving_the_engine(lab: Any)
     assert saved["moved_by_person"] == 0
 
 
-def test_each_email_shown_says_when_it_came_and_whether_it_still_reaches_the_ai(lab: Any) -> None:
+def test_each_email_shown_says_when_it_came_and_none_kept_reaches_the_ai(lab: Any) -> None:
     _, _, client = lab
     client.post("/api/start", json=SIGN_IN)
     _ready(client)
     report = client.get("/api/report").json()
     emails = [email for row in report["senders"] for email in row["emails"]]
     assert all(email["when"] and "snippet" in email for email in emails)
-    ignored = [row for row in report["senders"] if row["side"] == "ignores" and row["reach"]]
-    assert any(email["names_you"] for row in ignored for email in row["emails"])
+    # The folder is the gate: nothing on the kept side is said to still reach the AI.
+    assert not any(
+        "reach" in row or "names_you" in email
+        for row in report["senders"]
+        for email in row["emails"]
+    )
+    kept = sum(row["count"] for row in report["senders"] if row["side"] == "ignores")
+    assert report["reach_ai"] == report["total"] - kept - report["calendar"]
 
 
 def test_discarding_deletes_the_mail_and_saves_nothing(lab: Any) -> None:
@@ -198,13 +204,13 @@ def test_settings_come_from_the_file_and_a_plain_login_gets_the_company_domain(
     assert sortlab.address_for("sam@else.example", server.domain) == "sam@else.example"
 
 
-def test_a_sender_that_names_everyone_lets_none_of_it_through(lab: Any) -> None:
+def test_a_sender_that_names_everyone_is_kept_from_the_ai(lab: Any) -> None:
     _, _, client = lab
     client.post("/api/start", json=SIGN_IN)
     _ready(client)
     report = client.get("/api/report").json()
     team = next(row for row in report["senders"] if row["examples"][0].startswith("weekly effort"))
-    assert team["side"] == "ignores" and team["reach"] == 0
+    assert team["side"] == "ignores"
 
 
 def test_the_lab_needs_no_database_or_keychain_library() -> None:

@@ -5,7 +5,7 @@ import type { ComponentType } from "react";
 export const ICON_NAMES = [
   "eye", "eyeOff", "activity", "lockedChat", "pin", "unpin", "repeat", "more", "thinking", "copy",
   "skipped", "connectors", "cockpit", "compact", "like", "dislike", "retry", "previous", "edit",
-  "stop", "minimize", "openFull", "newChat", "chat", "followUp", "file", "priority", "important",
+  "stop", "minimize", "fewer", "openFull", "newChat", "chat", "followUp", "file", "priority", "important",
   // The Priority view: a folder with settings, since it's chosen by what each folder says.
   "priorityView",
   "starred", "reply", "replyAll", "forward", "trash", "add", "markUnread", "folder",
@@ -13,8 +13,8 @@ export const ICON_NAMES = [
   "folderRule", "folderSmart",
   // A label on the server, such as a Gmail label: mail the person tagged, not a folder the app files into.
   "label",
-  // What the AI skips: the section, mail tools send, and invitations.
-  "keptFromAi", "automated", "calendar", "moreFolders", "allMail",
+  // The two homes, what the AI reads and what it skips; mail tools send, and invitations.
+  "readByAi", "keptFromAi", "automated", "calendar", "moreFolders", "allMail",
   "agent", "all", "approvals", "archive", "attachment", "categories", "channel", "check",
   "chevronDown", "soundOn", "soundOff", "chevronLeft", "info", "chevronRight", "close", "collapse",
   "customize", "documents", "drafts", "error", "expand", "flag", "fromEmail", "grip", "inbox",

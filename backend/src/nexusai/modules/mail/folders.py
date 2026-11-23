@@ -26,8 +26,8 @@ CALENDAR = "Calendar"
 # Kept from the AI whatever happens: tools' mail, and invitations.
 KEPT_WHOLE = (AUTOMATED, CALENDAR)
 # What the two homes and the Priority view are called, which no folder can take.
-RESERVED = ("Inbox", "Kept from the AI", "Priority")
-INBOX, KEPT = "Inbox", "Kept from the AI"
+RESERVED = ("Inbox", "Kept from the AI", "Read by AI", "Hidden from AI", "Priority")
+INBOX, KEPT = "Read by AI", "Hidden from AI"
 LONGEST_NAME = 64
 
 # Every folder in the tree under one, itself included. UNION stops at a loop.

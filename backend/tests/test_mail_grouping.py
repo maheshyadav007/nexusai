@@ -273,8 +273,6 @@ def test_each_sender_gets_one_score_and_a_side() -> None:
     assert sides["ci@tools.example"] == "ignores"
     assert sides["news@paper.example"] == "ignores"
     assert sides["kim@else.example"] == "reads"
-    # How many would still reach the AI if it were ignored, so moving it changes the totals.
-    assert next(row for row in report.senders if row.sender == "kim@else.example").reach == 0
     assert (
         next(row for row in report.senders if row.sender == "new@shop.example").kept
         == "A new sender"
@@ -284,13 +282,13 @@ def test_each_sender_gets_one_score_and_a_side() -> None:
     )
 
 
-def test_an_ignored_email_reaches_the_ai_when_it_mentions_the_person_or_a_person_replies() -> None:
+def test_an_ignored_sender_keeps_all_its_mail_from_the_ai_even_what_names_the_person() -> None:
     builds = [
         _mail("ci@tools.example", f"Build {n} passed", "Done.\nLogs\nMore\nCI") for n in range(6)
     ]
     named = _mail("ci@tools.example", "Build 9 failed", f"Assigned to {OWNER}\nLogs\nMore\nCI")
     report = grouping.score_senders(enumerate_mail([*builds, named]))
     tool = next(row for row in report.senders if row.sender == "ci@tools.example")
-    assert tool.side == "ignores" and tool.reach == 1
-    # The one that names them goes to the AI; the six that don't stay away from it.
-    assert report.quiet == {str(n) for n in range(len(builds))}
+    assert tool.side == "ignores"
+    # The folder is the gate: the one that names them stays away from the AI too.
+    assert report.quiet == {str(n) for n in range(len(builds) + 1)}

@@ -150,7 +150,7 @@ def test_the_timeline_reads_oldest_first_and_loads_earlier_pages(
     with db.transaction() as tx:
         for day in range(1, 61):
             tx.execute(
-                "INSERT INTO matter_events (matter, time, kind, by, text) VALUES (?, ?, 'mail', 'engine', ?)",
+                "INSERT INTO matter_events (matter, time, kind, by, text) VALUES (?, ?, 'task', 'engine', ?)",
                 (
                     matter["id"],
                     f"2026-01-01T00:{day:02d}:00+00:00"
@@ -169,12 +169,13 @@ def test_the_timeline_reads_oldest_first_and_loads_earlier_pages(
         seen |= {e["id"] for e in page["events"]}
         page = query(client, "matters.events", id=matter["id"], before=page["events"][0]["id"])
     seen |= {e["id"] for e in page["events"]}
-    assert (
-        len(seen)
-        == db.fetch_all(
-            "SELECT COUNT(*) AS n FROM matter_events WHERE matter = ?", (matter["id"],)
-        )[0]["n"]
-    )
+    # Every action, and the one email, which the timeline reads from the mail itself.
+    actions = db.fetch_all(
+        "SELECT COUNT(*) AS n FROM matter_events WHERE matter = ? AND kind NOT IN"
+        " ('started', 'joined', 'mail', 'sent')",
+        (matter["id"],),
+    )[0]["n"]
+    assert len(seen) == actions + 1
 
 
 def test_the_ai_is_shown_related_matters_and_updates_the_task_instead_of_adding_one(

@@ -418,7 +418,7 @@ test("mail has folders, a reading pane, and categories people make", async ({ pa
   await expect(page.getByRole("heading", { name: subject })).toBeVisible();
   await noViolations(page);
 
-  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Inbox", exact: true }).click({ button: "right" });
+  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Read by AI", exact: true }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "New folder…" }).click();
   const dialog = page.getByRole("dialog", { name: "New folder" });
   await noViolations(page);

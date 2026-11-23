@@ -35,7 +35,7 @@ const emptyCondition = (): RuleCondition => ({ field: "subject", value: "" });
 const emptyRule = (): MailRule => ({ name: t("rules.newName"), enabled: true, conditions: [emptyCondition()] as MailRule["conditions"], actions: { category: null, mark_read: false, skip_agent: false, notify: false, tag: null } });
 
 /** One condition in words, the way a person would say it. */
-function phrase(condition: RuleCondition): string {
+export function phrase(condition: RuleCondition): string {
   const value = condition.value ?? "";
   switch (condition.field) {
     case "sender_exact": return t("rules.said.from", { sender: value });
@@ -98,11 +98,9 @@ const SORTED = "Sorted: ";
 const READS = "AI reads: ";
 const written = (rule: MailRule) => rule.name.startsWith(SORTED) || rule.name.startsWith(READS);
 
-/** One rule the app wrote, as a sentence: what it matches, and what still reaches the AI. */
+/** One rule the app wrote, as a sentence: what it matches. */
 function said(rule: MailRule): string {
-  const matches = rule.conditions.map(phrase);
-  const through = [rule.actions.read_replies ? t("rules.said.replies") : "", rule.actions.mentions?.length ? t("rules.said.namesYou") : ""].filter(Boolean);
-  return [matches.join(", "), ...through].join(" · ");
+  return rule.conditions.map(phrase).join(", ");
 }
 
 /** The rules sorting wrote for one folder: what goes there, and a way to take any one back. */

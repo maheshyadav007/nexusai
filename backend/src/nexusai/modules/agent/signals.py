@@ -10,6 +10,7 @@ from nexusai.contracts.agent import ContactRow
 from nexusai.kernel.module import Context
 from nexusai.modules.agent import feedback
 from nexusai.modules.mail import accounts
+from nexusai.modules.mail.store import hidden_from_ai
 
 CONTACT_WINDOW_DAYS = 180
 MOST_SENT_READ = 2000
@@ -24,6 +25,30 @@ REVIEW_MIN_EMAILS = 5
 STYLE_SAMPLES = 2
 STYLE_SAMPLE_CHARS = 400
 BROAD_CATEGORIES = ("Promotions", "Updates", "Social", "Forums", "Automated")
+
+
+# Said beside mail the person asked for that its folder keeps from the AI.
+HIDDEN_NOTE = "hidden from AI; shown only because the person asked"
+
+
+def asked_by_person(ctx: Context, session: str) -> bool:
+    """The person is asking now, in this conversation, rather than an agent running by itself."""
+    turns = ctx.bus.db.fetch_all(
+        "SELECT origin FROM agent_turns WHERE session = ? ORDER BY id DESC LIMIT 1", (session,)
+    )
+    return bool(turns) and turns[0]["origin"] == "person"
+
+
+def hidden_threads(ctx: Context, threads: list[int]) -> set[int]:
+    """Which of these conversations a folder keeps from the AI."""
+    if not threads:
+        return set()
+    marks = ",".join("?" * len(threads))
+    rows = ctx.bus.db.fetch_all(
+        f"SELECT id FROM threads WHERE id IN ({marks}) AND {hidden_from_ai()}",  # noqa: S608
+        threads,
+    )
+    return {int(row["id"]) for row in rows}
 
 
 def own_addresses(ctx: Context) -> set[str]:

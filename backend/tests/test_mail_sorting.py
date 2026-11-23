@@ -95,12 +95,13 @@ def test_sorting_files_what_the_ai_ignores_and_gives_it_a_rule(ctx: Context, mai
     status = ready(ctx)
     assert status.state == "ready" and status.emails == 12
     tool = build_bot(status)
-    assert tool.side == "ignores" and tool.own and tool.reach == 1 and tool.count == 9
+    assert tool.side == "ignores" and tool.own and tool.count == 9
     assert tool.score >= 0.5
     kim = next(row for row in status.senders if row.sender == "kim@else.example")
     assert kim.side == "reads"
     moved = sorting.apply(ctx, named("Builds"))
-    assert moved == 8
+    # All of it, the one that names them too: the folder is the gate.
+    assert moved == 9
     category = ctx.bus.db.fetch_all("SELECT * FROM mail_categories WHERE name = 'Builds'")[0]
     assert (category["mode"], category["ai_reads"]) == ("exact", 0)
     parent = ctx.bus.db.fetch_all("SELECT * FROM mail_categories WHERE name = 'Automated'")[0]
@@ -111,8 +112,8 @@ def test_sorting_files_what_the_ai_ignores_and_gives_it_a_rule(ctx: Context, mai
             "SELECT thread_id FROM messages WHERE rule LIKE 'Sorted: %'"
         )
     }
-    assert filed == {build.thread for build in mailbox["builds"]}
-    # Kept from the AI, so out of the Inbox too; the one that names them stays in it.
+    assert filed == {build.thread for build in [*mailbox["builds"], mailbox["asked"]]}
+    # Kept from the AI, so out of Priority too, the one that names them as well.
     from nexusai.modules.mail.store import FOLDER_FILTERS
 
     inbox = {
@@ -121,23 +122,25 @@ def test_sorting_files_what_the_ai_ignores_and_gives_it_a_rule(ctx: Context, mai
             f"SELECT id FROM threads WHERE {FOLDER_FILTERS['priority']}"  # noqa: S608
         )
     }
-    assert not inbox & filed and mailbox["asked"].thread in inbox
-    # The email that names them stays where the AI reads it.
+    assert not inbox & filed and mailbox["asked"].thread not in inbox
     asked = ctx.bus.db.fetch_all(
         "SELECT category FROM threads WHERE id = ?", (mailbox["asked"].thread,)
     )[0]
-    assert asked["category"] != "Builds"
+    assert asked["category"] == "Builds"
     assert sorting.decided(ctx) == "done"
     # Meaning search leaves the filed mail out; keyword search still has it.
     indexed = ctx.bus.db.fetch_all(f"SELECT COUNT(*) AS n FROM messages WHERE {KEPT_MAIL}")[0]["n"]  # noqa: S608
-    assert indexed == 12 - 8
+    assert indexed == 12 - 9
 
 
-def test_new_mail_follows_the_rule_unless_it_names_the_person(ctx: Context, mailbox: Any) -> None:  # noqa: F811
+def test_new_mail_follows_the_rule_even_when_it_names_the_person(
+    ctx: Context,  # noqa: F811
+    mailbox: Any,
+) -> None:
     ready(ctx)
     sorting.apply(ctx, named("Builds"))
     rule = next(r for r in rules.load_rules(ctx.config.home) if r.actions.category == "Builds")
-    assert rule.actions.skip_agent and OWNER in rule.actions.mentions
+    assert rule.actions.skip_agent and not rule.actions.mentions
     quiet = stored(ctx, "Build 120 passed", "ci@tools.example")
     asked = stored(
         ctx,
@@ -145,9 +148,9 @@ def test_new_mail_follows_the_rule_unless_it_names_the_person(ctx: Context, mail
         "ci@tools.example",
         f"Please look, {OWNER} is on call.\nLogs\nCI\nFooter",
     )
-    assert quiet.skip_agent and not quiet.worth_a_look
-    # Its rule keeps the sender away, but this one names the person, so the AI reads it.
-    assert not asked.skip_agent and asked.worth_a_look
+    assert quiet.skip_agent
+    # Naming the person changes nothing: what the folder keeps, the AI never sees.
+    assert asked.skip_agent
 
 
 def test_a_sender_moved_to_the_ai_is_filed_nowhere(ctx: Context, mailbox: Any) -> None:  # noqa: F811

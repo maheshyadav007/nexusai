@@ -13,7 +13,6 @@ import shutil
 import subprocess
 import sys
 import threading
-from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -251,17 +250,16 @@ AUTOMATED = "Automated"
 
 def rule_preview(lab: Lab, chosen: Sorted) -> dict[str, Any]:
     """The rules each folder would get, written as the app writes them, and what the rule
-    engine then does with the downloaded mail: how much each keeps from the AI, how much still
-    reaches it and why, and how much it takes from senders left with the AI."""
+    engine then does with the downloaded mail: how much each keeps from the AI, and how much it
+    takes from senders left with the AI. What a folder keeps, the AI never sees."""
     assert lab.report is not None
-    owner, mentions = lab.report.owner, [lab.report.owner, lab.report.owner_name]
+    owner = lab.report.owner
     seen = [sort_rules.Seen.of(parsed) for parsed in lab.mail]
     # Kept folders are plain names at the top of Kept from the AI, as the app makes them.
     entries = [(c.name.strip(), c.senders) for c in chosen.categories]
     entries.append((AUTOMATED, chosen.automated))
     made = {
-        name: sort_rules.rules_for(name, senders, seen, mentions, owner)
-        for name, senders in entries
+        name: sort_rules.rules_for(name, senders, seen, owner=owner) for name, senders in entries
     }
     decisions = rules.Engine([rule for found in made.values() for rule in found]).decide(lab.mail)
     found = []
@@ -285,9 +283,6 @@ def rule_preview(lab: Lab, chosen: Sorted) -> dict[str, Any]:
                     for rule in made[name]
                 ],
                 "kept": sum(not decision.reaches_ai for _, decision in mine),
-                "reach": dict(
-                    Counter(decision.exception for _, decision in mine if decision.reaches_ai)
-                ),
                 "others": sum(parsed.from_addr not in own for parsed, _ in mine),
             }
         )

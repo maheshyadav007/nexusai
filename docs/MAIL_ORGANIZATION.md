@@ -86,7 +86,7 @@ The description of every Smart folder goes into that one call, so Smart folders 
 
 ### Header rules
 
-The header rules in `modules/mail/rules.py` don't change. They include one exception to "Exact never reaches the model": generated and no-reply mail filed in Updates still goes to the model when its subject matches `WORTH_A_LOOK` (security, password, payment, deadline and the like). These are guesses from headers, not the person's rules, and a suspicious sign-in alert must not go unjudged. Promotions keeps today's behaviour and never reaches the model.
+The header rules in `modules/mail/rules.py` don't change. Since 2026-11-23 there are **no exceptions**: mail filed where the AI doesn't read never reaches the model, whatever it says (the folder is the gate; see `docs/FLOW_FIXES_PLAN.md`). The earlier exceptions (mail that names the person, replies, and generated or no-reply mail with a `WORTH_A_LOOK` subject such as a sign-in alert) were removed at the person's request. `WORTH_A_LOOK` now only raises importance by code, on mail the AI reads.
 
 ## The Priority rule
 

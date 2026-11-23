@@ -41,6 +41,8 @@ const config: Config = {
         lane: "var(--layout-sidebar) minmax(0, 1fr)",
         week: "repeat(7, minmax(0, 1fr))",
         matters: "var(--layout-mailList) minmax(0, 1fr)",
+        // One email in a folder's window: who, what, when.
+        "sort-email": "minmax(0, var(--layout-thumbWide)) minmax(0, 1fr) auto",
       },
       inset: layout,
       width: layout,

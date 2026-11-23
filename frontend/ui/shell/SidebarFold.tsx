@@ -16,6 +16,27 @@ function readFolds(): Folds {
   }
 }
 
+/** Whether something in the sidebar is unfolded, remembered across visits. It opens by itself
+ *  while the page shown is inside it. */
+export function useRememberedFold(id: string, startOpen: boolean, holdsActive: boolean) {
+  const [open, setOpen] = useState(startOpen);
+  useEffect(() => {
+    const saved = readFolds()[id];
+    if (saved !== undefined) setOpen(saved);
+  }, [id]);
+  const shown = open || holdsActive;
+  const toggle = () => {
+    const next = !shown;
+    setOpen(next);
+    try {
+      localStorage.setItem(appConfig.storageKeys.sidebarFolds, JSON.stringify({ ...readFolds(), [id]: next }));
+    } catch {
+      // Storage can be blocked; the choice then lasts until reload.
+    }
+  };
+  return { open: shown, toggle };
+}
+
 /** A group in the sidebar: a quiet heading like Agent's or Planner's, with its rows under it at
  *  the same level as the rows above. It folds by its heading and remembers, and opens by itself
  *  while the page shown is inside it, so the open folder is never hidden. */

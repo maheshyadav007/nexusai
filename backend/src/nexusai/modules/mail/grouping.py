@@ -686,12 +686,8 @@ class SenderScore:
     side: Literal["reads", "ignores"]
     # Why it stays with the AI whatever its score, if it does.
     kept: str
-    # How many would still reach the AI if it's ignored, whichever side it starts on: they
-    # name the person, or a person replied in that conversation.
-    reach: int
     examples: list[tuple[str, int]]
     members: list[str] = field(repr=False)
-    through: list[str] = field(default_factory=list, repr=False)
 
 
 @dataclass
@@ -702,8 +698,7 @@ class SenderReport:
     reach_ai: int
     senders: list[SenderScore]
     calendar: list[str] = field(repr=False)
-    # Every email kept from the AI: calendar mail, and the ignored side's mail that neither
-    # names the person nor has a person's reply in its conversation.
+    # Every email kept from the AI: calendar mail and all of the ignored side's mail.
     quiet: set[str] = field(default_factory=set, repr=False)
 
 
@@ -746,16 +741,9 @@ def score_senders(raws: Iterable[tuple[str, bytes]]) -> SenderReport:
         side: Literal["reads", "ignores"] = (
             "ignores" if score >= THRESHOLD and not kept else "reads"
         )
-        named = sum(item.named for item in items)
-        names_everyone = named / len(items) > NAMES_EVERYONE
-        passes = {
-            item.key
-            for item in items
-            if (item.named and not names_everyone) or (box.writers[item.thread] - {sender, owner})
-        }
-        through = len(passes)
+        # Kept means all of it: what the folder keeps from the AI, the AI never sees.
         if side == "ignores":
-            quiet |= {item.key for item in items} - passes
+            quiet |= {item.key for item in items}
         scored.append(
             SenderScore(
                 sender=sender,
@@ -768,10 +756,8 @@ def score_senders(raws: Iterable[tuple[str, bytes]]) -> SenderReport:
                 score=round(score, 2),
                 side=side,
                 kept=kept,
-                reach=through,
                 examples=Counter(item.pattern for item in items).most_common(3),
                 members=[item.key for item in items],
-                through=sorted(passes),
             )
         )
     scored.sort(key=lambda row: (-row.count, row.sender))

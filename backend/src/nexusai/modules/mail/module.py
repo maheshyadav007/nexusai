@@ -39,6 +39,10 @@ from nexusai.contracts.mail import (
     GetRules,
     GetSendChecks,
     GetThread,
+    HiddenFromAi,
+    HideFromAi,
+    HideFromAiPreview,
+    HidePreview,
     ListCategories,
     ListDrafts,
     ListMailFolders,
@@ -113,12 +117,14 @@ from nexusai.contracts.mail import (
     ThreadToInbox,
     ThreadUpdated,
     ThreadView,
+    UndoHide,
     UpdateCategory,
 )
 from nexusai.kernel.module import CommandError, Context, Module
 from nexusai.modules.mail import (
     accounts,
     folders,
+    hiding,
     outgoing,
     pst,
     pst_search,
@@ -139,7 +145,14 @@ from nexusai.modules.semantic import module as semantic
 log = structlog.get_logger()
 ATTACHED_WORDS = re.compile(r"\b(attached|attachment|enclosed|첨부)\b|첨부", re.I)
 mail_module = Module(
-    name="mail", migrations=[*store.MIGRATIONS, pst.MIGRATION, sorting.MIGRATION, folders.MIGRATION]
+    name="mail",
+    migrations=[
+        *store.MIGRATIONS,
+        pst.MIGRATION,
+        sorting.MIGRATION,
+        folders.MIGRATION,
+        hiding.MIGRATION,
+    ],
 )
 
 # Filing that only exists on this computer, and old mail read from an archive file.
@@ -913,6 +926,23 @@ def move_thread(command: MoveThread, ctx: Context) -> MailDone:
 
 
 READS_PREFIX = sort_rules.READS_PREFIX
+
+
+@mail_module.query("mail.hide.preview")
+def hide_preview(command: HidePreview, ctx: Context) -> HideFromAiPreview:
+    return hiding.preview(ctx, command.thread)
+
+
+@mail_module.command("mail.hide")
+def hide_from_ai(command: HideFromAi, ctx: Context) -> HiddenFromAi:
+    """Everything from the sender, or one conversation, to Kept from the AI, with one Undo."""
+    return hiding.hide(ctx, command)
+
+
+@mail_module.command("mail.hide.undo")
+def undo_hide(command: UndoHide, ctx: Context) -> MailDone:
+    hiding.undo(ctx, command.undo)
+    return MailDone()
 
 
 @mail_module.command("thread.toInbox")

@@ -176,7 +176,19 @@ export type Category3 = string | null;
 export type Ok2 = boolean;
 export type Id11 = number;
 export type Always = boolean;
+export type Thread = number;
+export type Scope = "sender" | "conversation";
+export type Thread1 = number;
 export type Sender = string;
+export type SenderName1 = string;
+export type SenderEmails = number;
+export type ConversationEmails = number;
+export type Folder5 = string;
+export type Undo = number;
+export type Folder6 = string;
+export type Emails = number;
+export type Undo1 = number;
+export type Sender1 = string;
 export type Field =
   "subject" | "subject_prefix" | "tag" | "body" | "sender" | "sender_exact" | "header" | "has_attachment";
 export type Value1 = string;
@@ -423,7 +435,7 @@ export type PrioritySuggested = boolean;
 export type PriorityWhy = string | null;
 export type NeededYou = number;
 export type Why2 = string | null;
-export type Sender1 = string | null;
+export type Sender2 = string | null;
 export type Subject2 = string | null;
 export type Count1 = number;
 export type Unread1 = number;
@@ -439,7 +451,7 @@ export type Name9 = string;
 export type InPriority1 = boolean;
 export type Mode1 = ("exact" | "smart") | null;
 export type Description1 = string;
-export type Sender2 = string | null;
+export type Sender3 = string | null;
 export type Subject3 = string | null;
 export type Source1 = "user" | "agent";
 export type Parent2 = string | null;
@@ -537,8 +549,8 @@ export type Conditions2 =
     ];
 export type Conversations = number;
 export type Name10 = string;
-export type Sender3 = string;
-export type Emails = number;
+export type Sender4 = string;
+export type Emails1 = number;
 export type ReadSenders = SenderCount[];
 export type KeptSenders = SenderCount[];
 export type ReadEmails = number;
@@ -552,13 +564,13 @@ export type KeptName = string;
  * @maxItems 100
  */
 export type Splits = [FolderSplit, ...FolderSplit[]];
-export type Undo = boolean;
+export type Undo2 = boolean;
 export type Categories2 = MailCategory[];
 export type Filed = number;
 export type Name12 = string;
 export type NewName = string | null;
 export type InPriority2 = boolean | null;
-export type Sender4 = string | null;
+export type Sender5 = string | null;
 export type Subject4 = string | null;
 export type ClearRule = boolean;
 export type Mode2 = ("exact" | "smart") | null;
@@ -621,12 +633,12 @@ export type Text1 = string;
 export type People = Recipient[];
 export type Dropped1 = string[];
 export type Query = string;
-export type Sender5 = string | null;
+export type Sender6 = string | null;
 export type DateFrom = string | null;
 export type DateTo = string | null;
 export type Category5 = string | null;
 export type HasAttachment = boolean | null;
-export type Folder5 =
+export type Folder7 =
   | ("inbox" | "sent" | "drafts" | "trash" | "archive" | "other" | "junk")
   | ("priority" | "important" | "starred" | "all" | "reads" | "kept")
   | null;
@@ -693,7 +705,7 @@ export type Message2 = string;
 export type Problems = SendProblem[];
 export type UndoSeconds1 = number;
 export type Id17 = string;
-export type Sender6 = string;
+export type Sender7 = string;
 export type Subject7 = string;
 export type Note = string;
 export type Importance2 = "low" | "normal" | "high";
@@ -701,7 +713,7 @@ export type Into1 = string;
 export type Names2 = string[];
 export type Name21 = string;
 export type Senders = number;
-export type Emails1 = number;
+export type Emails2 = number;
 export type Id18 = number;
 export type Subject8 = string;
 export type State3 = string;
@@ -719,12 +731,11 @@ export type EstimatedTokens = number;
 export type Queued = number;
 export type Again = boolean;
 export type Subject9 = string;
-export type Sender7 = string;
-export type SenderName1 = string;
+export type Sender8 = string;
+export type SenderName2 = string;
 export type When = string;
 export type Snippet1 = string;
-export type NamesYou = boolean;
-export type Sender8 = string;
+export type Sender9 = string;
 export type Label3 = string;
 export type Count2 = number;
 export type Score = number;
@@ -733,49 +744,48 @@ export type Bulk = number;
 export type OneWay = boolean;
 export type Side = "reads" | "ignores";
 export type Kept1 = string;
-export type Reach = number;
 export type Own = boolean;
 export type Examples = string[];
-export type Emails2 = SortEmail[];
-export type Folder6 = string;
+export type Emails3 = SortEmail[];
+export type Folder8 = string;
 export type State4 = "none" | "preparing" | "ready" | "failed" | "done" | "skipped";
 export type Done2 = number;
 export type Total6 = number;
 export type Error1 = string;
 export type OwnerName = string;
-export type Emails3 = number;
+export type Emails4 = number;
 export type ReachAi = number;
 export type Calendar = number;
 export type AlreadySorted = number;
 export type Senders1 = SortSender[];
 export type Review = "none" | "preparing" | "ready" | "failed";
-export type Sender9 = string;
+export type Sender10 = string;
 export type Side1 = "reads" | "ignores";
 export type Own1 = boolean;
 export type Name23 = string;
-export type Folder7 = string | null;
+export type Folder9 = string | null;
 /**
  * @maxItems 20000
  */
 export type Senders2 = SortSenderChoice[];
 export type Moved = number;
 export type FileType = ("pdf" | "word" | "sheet" | "slides" | "image" | "other") | null;
-export type Sender10 = string | null;
+export type Sender11 = string | null;
 export type DateFrom1 = string | null;
 export type DateTo1 = string | null;
 export type Source3 = ("upload" | "email" | "home") | null;
-export type Folder8 = string | null;
+export type Folder10 = string | null;
 export type Tag1 = string | null;
 export type Query1 = string;
 export type Limit2 = number;
-export type Sender11 = string | null;
+export type Sender12 = string | null;
 export type Key1 = string;
 export type Name24 = string;
 export type ContentType1 = string;
 export type Size5 = number;
 export type Date1 = string;
 export type Source4 = "upload" | "email" | "home";
-export type Folder9 = string | null;
+export type Folder11 = string | null;
 export type Tags = string[];
 export type ThreadId3 = number | null;
 export type Risky = boolean;
@@ -808,7 +818,7 @@ export type Key4 = string | null;
 export type Html1 = string | null;
 export type Text3 = string;
 export type Key5 = string;
-export type Folder10 = string | null;
+export type Folder12 = string | null;
 /**
  * @maxItems 32
  */
@@ -820,14 +830,14 @@ export type Key6 = string;
 export type Folders4 = string[];
 export type Key7 = string;
 export type Ok3 = boolean;
-export type Sender12 = string | null;
+export type Sender13 = string | null;
 export type Subject10 = string | null;
 export type Category6 = string | null;
 export type Status5 = string | null;
 export type UnreadOnly = boolean;
 export type FlaggedOnly = boolean;
 export type Query2 = string | null;
-export type Folder11 = string | null;
+export type Folder13 = string | null;
 export type Id19 = string;
 export type Title = string;
 export type Source5 = "threads" | "documents" | "tasks" | "reminders";
@@ -1179,7 +1189,7 @@ export type Id36 = number;
 export type Kind8 = "ask" | "suggest" | "tell";
 export type Agent7 = string;
 export type Session6 = string | null;
-export type Thread = number | null;
+export type Thread2 = number | null;
 export type Text7 = string;
 export type Options = string[];
 export type Multiple = boolean;
@@ -1195,7 +1205,7 @@ export type Id38 = number;
 export type Id39 = number;
 export type Kind9 = string;
 export type Title6 = string;
-export type Thread1 = number | null;
+export type Thread3 = number | null;
 export type Due = string | null;
 export type By1 = string;
 export type Updated3 = string;
@@ -1207,7 +1217,7 @@ export type State5 = string;
 export type Outcome = string | null;
 export type Evidence = string[];
 export type Id40 = number;
-export type Sender13 = string;
+export type Sender14 = string;
 export type Recipient2 = string | null;
 export type Topic = string | null;
 export type Text8 = string;
@@ -1219,7 +1229,7 @@ export type Topic1 = string;
 export type Muted1 = boolean;
 export type Id41 = number;
 export type Message4 = number;
-export type Thread2 = number;
+export type Thread4 = number;
 export type Time7 = string;
 export type Status10 = "done" | "failed";
 export type Summary3 = string | null;
@@ -1229,7 +1239,7 @@ export type SuggestedAction = string | null;
 export type Provisional = boolean;
 export type Error4 = string | null;
 export type CallId1 = number | null;
-export type Thread3 = number;
+export type Thread5 = number;
 export type Runs = TriageRun[];
 export type Confirm1 = boolean;
 export type Untriaged = number;
@@ -1241,7 +1251,7 @@ export type Body1 = string;
 export type DraftId = number | null;
 export type Partial = boolean;
 export type Changed = boolean;
-export type Thread4 = number;
+export type Thread6 = number;
 export type Text9 = string | null;
 export type Covered = number;
 export type NewMessages = number;
@@ -1642,7 +1652,7 @@ export type Updated6 = string;
 export type Id66 = number;
 export type TaskId2 = number | null;
 export type Kind16 = string;
-export type Sender14 = string;
+export type Sender15 = string;
 export type Recipient3 = string | null;
 export type Text10 = string;
 export type Time11 = string;
@@ -1679,7 +1689,7 @@ export type Category8 = string;
 export type Senders3 = string[];
 export type Reason5 = string;
 export type Quiet = boolean;
-export type Emails4 = number;
+export type Emails5 = number;
 export type Opened = number;
 export type Replied = number;
 export type ToArchive = number;
@@ -1689,7 +1699,7 @@ export type Accept3 = boolean;
 export type Address3 = string;
 export type Written = number;
 export type Last = string;
-export type Sender15 = string;
+export type Sender16 = string;
 export type Field2 = string;
 export type Value6 = string;
 export type Said = string;
@@ -1702,7 +1712,7 @@ export type Revision = number;
 export type Line = string;
 export type Text12 = string;
 export type Section = string;
-export type Thread5 = number | null;
+export type Thread7 = number | null;
 export type Confirmed = boolean;
 export type Name38 = string;
 export type Text13 = string;
@@ -1717,7 +1727,7 @@ export type LearningState1 = string;
 export type LearningDone1 = number;
 export type LearningTotal1 = number;
 export type ConversationsUnread = number;
-export type Thread6 = number;
+export type Thread8 = number;
 export type Agent8 = "daily-prep" | "session";
 export type Text14 = string;
 export type Layers3 = KnowledgeLayer[];
@@ -1729,7 +1739,7 @@ export type Count5 = number;
 export type Id73 = number;
 export type Purpose1 = "all" | "mail" | "draft" | "brief";
 export type Account2 = string | null;
-export type Sender16 = string | null;
+export type Sender17 = string | null;
 export type Topic2 = string | null;
 export type Instruction1 = string;
 export type Status14 = "proposed" | "active" | "declined" | "retired" | "expired";
@@ -1742,7 +1752,7 @@ export type Id74 = number | null;
 export type Revision2 = number | null;
 export type Purpose2 = "all" | "mail" | "draft" | "brief";
 export type Account3 = string | null;
-export type Sender17 = string | null;
+export type Sender18 = string | null;
 export type Topic3 = string | null;
 export type Instruction2 = string;
 export type Status15 = "active" | "declined" | "retired";
@@ -1765,7 +1775,7 @@ export type Id76 = number;
 export type Revision3 = number;
 export type RestoreRevision = number;
 export type Id77 = string;
-export type Thread7 = number;
+export type Thread9 = number;
 export type Action3 = "opened";
 export type Kind17 = "personal" | "agent";
 export type Name39 = string;
@@ -1780,7 +1790,7 @@ export type Id79 = number | null;
 export type Revision4 = number | null;
 export type Purpose3 = "all" | "mail" | "draft" | "brief";
 export type Account4 = string | null;
-export type Sender18 = string | null;
+export type Sender19 = string | null;
 export type Topic4 = string | null;
 export type Instruction3 = string;
 export type Status16 = "active" | "declined" | "retired";
@@ -1814,7 +1824,7 @@ export type Id82 = number | null;
 export type Revision6 = number | null;
 export type Purpose4 = "all" | "mail" | "draft" | "brief";
 export type Account5 = string | null;
-export type Sender19 = string | null;
+export type Sender20 = string | null;
 export type Topic5 = string | null;
 export type Instruction5 = string;
 export type Status18 = "active" | "declined" | "retired";
@@ -1823,7 +1833,7 @@ export type Status18 = "active" | "declined" | "retired";
  */
 export type Evidence6 = string[];
 export type ExpiresAt5 = string | null;
-export type Thread8 = number;
+export type Thread10 = number;
 export type Subject12 = string;
 export type Before2 = string;
 export type After = string;
@@ -1895,7 +1905,7 @@ export type Kind21 = "task" | "reminder" | "deadline";
 export type Id87 = number;
 export type Title17 = string;
 export type When5 = string | null;
-export type Thread9 = number | null;
+export type Thread11 = number | null;
 export type Proposed2 = boolean;
 export type Parent5 = number | null;
 export type Id88 = number;
@@ -1905,7 +1915,7 @@ export type Next = string | null;
 export type Due3 = string | null;
 export type Importance5 = string;
 export type People2 = string[];
-export type Emails5 = number;
+export type Emails6 = number;
 export type Threads3 = number;
 export type Work = MatterWork[];
 export type LastDate2 = string;
@@ -1954,7 +1964,7 @@ export type Lanes = MatterLane[];
 export type Id90 = number;
 export type Subject13 = string;
 export type Status21 = string;
-export type Emails6 = number;
+export type Emails7 = number;
 export type LastDate3 = string;
 export type How1 = string;
 export type Why5 = string;
@@ -2009,14 +2019,14 @@ export type IncludeDone = boolean;
 export type Matters = MatterRow[];
 export type Id93 = number;
 export type Id94 = number;
-export type Thread10 = number;
+export type Thread12 = number;
 export type Closed = number;
 export type Id95 = number;
 export type Title25 = string;
 export type Notes1 = string;
 export type Status22 = "todo" | "in_progress" | "done";
 export type Due4 = string | null;
-export type Thread11 = number | null;
+export type Thread13 = number | null;
 export type Source10 = "user" | "agent";
 export type Proposed4 = boolean;
 export type Created6 = string;
@@ -2029,14 +2039,14 @@ export type Title26 = string;
 export type Notes2 = string;
 export type Status23 = "todo" | "in_progress" | "done";
 export type Due5 = string | null;
-export type Thread12 = number | null;
+export type Thread14 = number | null;
 export type Proposed5 = boolean;
 export type Id97 = number;
 export type Id98 = number;
 export type Title27 = string;
 export type When8 = string;
 export type Repeat = "none" | "day" | "week" | "month" | "year";
-export type Thread13 = number | null;
+export type Thread15 = number | null;
 export type Task1 = number | null;
 export type Source11 = "user" | "agent";
 export type Proposed6 = boolean;
@@ -2048,7 +2058,7 @@ export type Id99 = number | null;
 export type Title28 = string;
 export type When9 = string;
 export type Repeat1 = "none" | "day" | "week" | "month" | "year";
-export type Thread14 = number | null;
+export type Thread16 = number | null;
 export type Task2 = number | null;
 export type Proposed7 = boolean;
 export type Id100 = number;
@@ -2090,7 +2100,7 @@ export type Id103 = string | null;
 export type Id104 = string;
 export type Mirror1 = string | null;
 export type Id105 = string;
-export type Folder12 = string;
+export type Folder14 = string;
 export type Kind28 = "mail" | "document";
 export type Ref6 = string;
 export type Score1 = number;
@@ -2338,6 +2348,11 @@ export interface Contracts {
   SetThreadCategory?: SetThreadCategory;
   MailDone?: MailDone;
   ThreadToInbox?: ThreadToInbox;
+  HideFromAi?: HideFromAi;
+  HidePreview?: HidePreview;
+  HideFromAiPreview?: HideFromAiPreview;
+  HiddenFromAi?: HiddenFromAi;
+  UndoHide?: UndoHide;
   ThreadInInbox?: ThreadInInbox;
   RuleCondition?: RuleCondition;
   RuleActions?: RuleActions;
@@ -3264,11 +3279,58 @@ export interface ThreadToInbox {
   always?: Always;
 }
 /**
+ * Takes mail away from the AI from wherever it's seen: everything from the conversation's
+ * sender, or just the conversation.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "HideFromAi".
+ */
+export interface HideFromAi {
+  thread: Thread;
+  scope?: Scope;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "HidePreview".
+ */
+export interface HidePreview {
+  thread: Thread1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "HideFromAiPreview".
+ */
+export interface HideFromAiPreview {
+  sender?: Sender;
+  sender_name?: SenderName1;
+  sender_emails?: SenderEmails;
+  conversation_emails?: ConversationEmails;
+  folder?: Folder5;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "HiddenFromAi".
+ */
+export interface HiddenFromAi {
+  undo: Undo;
+  folder: Folder6;
+  emails: Emails;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "UndoHide".
+ */
+export interface UndoHide {
+  undo: Undo1;
+}
+/**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "ThreadInInbox".
  */
 export interface ThreadInInbox {
-  sender?: Sender;
+  sender?: Sender1;
   [k: string]: unknown;
 }
 /**
@@ -3318,7 +3380,7 @@ export interface MailCategory {
   priority_why?: PriorityWhy;
   needed_you?: NeededYou;
   why?: Why2;
-  sender?: Sender1;
+  sender?: Sender2;
   subject?: Subject2;
   count?: Count1;
   unread?: Unread1;
@@ -3355,7 +3417,7 @@ export interface SaveCategory {
   in_priority?: InPriority1;
   mode?: Mode1;
   description?: Description1;
-  sender?: Sender2;
+  sender?: Sender3;
   subject?: Subject3;
   source?: Source1;
   parent?: Parent2;
@@ -3400,8 +3462,8 @@ export interface MixedFolder {
  * via the `definition` "SenderCount".
  */
 export interface SenderCount {
-  sender: Sender3;
-  emails: Emails;
+  sender: Sender4;
+  emails: Emails1;
   [k: string]: unknown;
 }
 /**
@@ -3433,7 +3495,7 @@ export interface FolderSplit {
  */
 export interface SplitFolders {
   splits: Splits;
-  undo?: Undo;
+  undo?: Undo2;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -3452,7 +3514,7 @@ export interface UpdateCategory {
   name: Name12;
   new_name?: NewName;
   in_priority?: InPriority2;
-  sender?: Sender4;
+  sender?: Sender5;
   subject?: Subject4;
   clear_rule?: ClearRule;
   mode?: Mode2;
@@ -3626,12 +3688,12 @@ export interface ReplyDraft {
  */
 export interface SearchMail {
   query?: Query;
-  sender?: Sender5;
+  sender?: Sender6;
   date_from?: DateFrom;
   date_to?: DateTo;
   category?: Category5;
   has_attachment?: HasAttachment;
-  folder?: Folder5;
+  folder?: Folder7;
   location?: Location2;
   recipient?: Recipient1;
   subject?: Subject6;
@@ -3868,7 +3930,7 @@ export interface SendCheckResult {
  */
 export interface LearningGroupView {
   id: Id17;
-  sender: Sender6;
+  sender: Sender7;
   subject: Subject7;
   note: Note;
   importance: Importance2;
@@ -3890,7 +3952,7 @@ export interface FolderMergeSuggestion {
 export interface LearningFolderSuggestion {
   name: Name21;
   senders: Senders;
-  emails: Emails1;
+  emails: Emails2;
   [k: string]: unknown;
 }
 /**
@@ -3977,11 +4039,10 @@ export interface SkipMailSort {
  */
 export interface SortEmail {
   subject: Subject9;
-  sender: Sender7;
-  sender_name: SenderName1;
+  sender: Sender8;
+  sender_name: SenderName2;
   when: When;
   snippet: Snippet1;
-  names_you: NamesYou;
   [k: string]: unknown;
 }
 /**
@@ -3991,7 +4052,7 @@ export interface SortEmail {
  * via the `definition` "SortSender".
  */
 export interface SortSender {
-  sender: Sender8;
+  sender: Sender9;
   label: Label3;
   count: Count2;
   score: Score;
@@ -4000,11 +4061,10 @@ export interface SortSender {
   one_way: OneWay;
   side: Side;
   kept: Kept1;
-  reach: Reach;
   own: Own;
   examples: Examples;
-  emails: Emails2;
-  folder?: Folder6;
+  emails: Emails3;
+  folder?: Folder8;
   [k: string]: unknown;
 }
 /**
@@ -4017,7 +4077,7 @@ export interface MailSort {
   total?: Total6;
   error?: Error1;
   owner_name?: OwnerName;
-  emails?: Emails3;
+  emails?: Emails4;
   reach_ai?: ReachAi;
   calendar?: Calendar;
   already_sorted?: AlreadySorted;
@@ -4033,11 +4093,11 @@ export interface MailSort {
  * via the `definition` "SortSenderChoice".
  */
 export interface SortSenderChoice {
-  sender: Sender9;
+  sender: Sender10;
   side: Side1;
   own?: Own1;
   name?: Name23;
-  folder?: Folder7;
+  folder?: Folder9;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -4060,11 +4120,11 @@ export interface MailSortApplied {
  */
 export interface ListDocuments {
   file_type?: FileType;
-  sender?: Sender10;
+  sender?: Sender11;
   date_from?: DateFrom1;
   date_to?: DateTo1;
   source?: Source3;
-  folder?: Folder8;
+  folder?: Folder10;
   tag?: Tag1;
   query?: Query1;
   limit?: Limit2;
@@ -4074,14 +4134,14 @@ export interface ListDocuments {
  * via the `definition` "DocumentRow".
  */
 export interface DocumentRow {
-  sender?: Sender11;
+  sender?: Sender12;
   key: Key1;
   name: Name24;
   content_type: ContentType1;
   size: Size5;
   date: Date1;
   source: Source4;
-  folder: Folder9;
+  folder: Folder11;
   tags: Tags;
   thread_id?: ThreadId3;
   risky?: Risky;
@@ -4177,7 +4237,7 @@ export interface DocumentPreview {
  */
 export interface UpdateDocument {
   key: Key5;
-  folder?: Folder10;
+  folder?: Folder12;
   tags?: Tags2;
 }
 /**
@@ -4216,14 +4276,14 @@ export interface DocumentDone {
  * via the `definition` "PanelFilters".
  */
 export interface PanelFilters {
-  sender?: Sender12;
+  sender?: Sender13;
   subject?: Subject10;
   category?: Category6;
   status?: Status5;
   unread_only?: UnreadOnly;
   flagged_only?: FlaggedOnly;
   query?: Query2;
-  folder?: Folder11;
+  folder?: Folder13;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -4875,7 +4935,7 @@ export interface ChannelMessage {
   kind: Kind8;
   agent: Agent7;
   session: Session6;
-  thread: Thread;
+  thread: Thread2;
   text: Text7;
   options: Options;
   multiple?: Multiple;
@@ -4925,7 +4985,7 @@ export interface BoardItem {
   id: Id39;
   kind: Kind9;
   title: Title6;
-  thread: Thread1;
+  thread: Thread3;
   due: Due;
   by: By1;
   updated: Updated3;
@@ -4958,7 +5018,7 @@ export interface AgentChannelMessage {
   outcome?: Outcome;
   evidence?: Evidence;
   id: Id40;
-  sender: Sender13;
+  sender: Sender14;
   recipient: Recipient2;
   topic: Topic;
   text: Text8;
@@ -4997,7 +5057,7 @@ export interface SetTopicMuted {
 export interface TriageRun {
   id: Id41;
   message: Message4;
-  thread: Thread2;
+  thread: Thread4;
   time: Time7;
   status: Status10;
   summary: Summary3;
@@ -5014,7 +5074,7 @@ export interface TriageRun {
  * via the `definition` "GetThreadRuns".
  */
 export interface GetThreadRuns {
-  thread: Thread3;
+  thread: Thread5;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -5073,7 +5133,7 @@ export interface DraftedReply {
 export interface ThreadSummary {
   partial?: Partial;
   changed?: Changed;
-  thread: Thread4;
+  thread: Thread6;
   text: Text9;
   covered: Covered;
   new_messages: NewMessages;
@@ -5782,7 +5842,7 @@ export interface TeamMessage {
   id: Id66;
   task_id: TaskId2;
   kind: Kind16;
-  sender: Sender14;
+  sender: Sender15;
   recipient: Recipient3;
   text: Text10;
   time: Time11;
@@ -5899,7 +5959,7 @@ export interface MailSuggestion {
   senders: Senders3;
   reason: Reason5;
   quiet: Quiet;
-  emails: Emails4;
+  emails: Emails5;
   opened: Opened;
   replied: Replied;
   to_archive: ToArchive;
@@ -5943,7 +6003,7 @@ export interface ContactRow {
  * via the `definition` "CorrectionRow".
  */
 export interface CorrectionRow {
-  sender: Sender15;
+  sender: Sender16;
   field: Field2;
   value: Value6;
   said: Said;
@@ -5963,7 +6023,7 @@ export interface LearnedNote {
   line: Line;
   text: Text12;
   section: Section;
-  thread: Thread5;
+  thread: Thread7;
   confirmed?: Confirmed;
   [k: string]: unknown;
 }
@@ -6006,7 +6066,7 @@ export interface GetAgentKnowledge {
  * via the `definition` "PreviewMail".
  */
 export interface PreviewMail {
-  thread: Thread6;
+  thread: Thread8;
 }
 /**
  * What the brief writer or Posty would be sent, for a message like this one.
@@ -6058,7 +6118,7 @@ export interface Preference {
   id: Id73;
   purpose: Purpose1;
   account?: Account2;
-  sender?: Sender16;
+  sender?: Sender17;
   topic?: Topic2;
   instruction: Instruction1;
   status: Status14;
@@ -6078,7 +6138,7 @@ export interface SavePreference {
   revision?: Revision2;
   purpose?: Purpose2;
   account?: Account3;
-  sender?: Sender17;
+  sender?: Sender18;
   topic?: Topic3;
   instruction: Instruction2;
   status?: Status15;
@@ -6146,7 +6206,7 @@ export interface RestorePreference {
  */
 export interface RecordInteraction {
   id: Id77;
-  thread: Thread7;
+  thread: Thread9;
   action: Action3;
 }
 /**
@@ -6195,7 +6255,7 @@ export interface PreviewPreference {
   revision?: Revision4;
   purpose?: Purpose3;
   account?: Account4;
-  sender?: Sender18;
+  sender?: Sender19;
   topic?: Topic4;
   instruction: Instruction3;
   status?: Status16;
@@ -6274,7 +6334,7 @@ export interface SimulatePreference {
   revision?: Revision6;
   purpose?: Purpose4;
   account?: Account5;
-  sender?: Sender19;
+  sender?: Sender20;
   topic?: Topic5;
   instruction: Instruction5;
   status?: Status18;
@@ -6286,7 +6346,7 @@ export interface SimulatePreference {
  * via the `definition` "PreferenceDecision".
  */
 export interface PreferenceDecision {
-  thread: Thread8;
+  thread: Thread10;
   subject: Subject12;
   before: Before2;
   after: After;
@@ -6492,7 +6552,7 @@ export interface MatterWork {
   id: Id87;
   title: Title17;
   when?: When5;
-  thread?: Thread9;
+  thread?: Thread11;
   proposed?: Proposed2;
   parent?: Parent5;
   [k: string]: unknown;
@@ -6509,7 +6569,7 @@ export interface MatterRow {
   due?: Due3;
   importance?: Importance5;
   people?: People2;
-  emails?: Emails5;
+  emails?: Emails6;
   threads?: Threads3;
   work?: Work;
   last_date: LastDate2;
@@ -6594,7 +6654,7 @@ export interface MatterThread {
   id: Id90;
   subject: Subject13;
   status: Status21;
-  emails: Emails6;
+  emails: Emails7;
   last_date: LastDate3;
   how: How1;
   why: Why5;
@@ -6767,7 +6827,7 @@ export interface MatterAction {
  * via the `definition` "UnlinkThread".
  */
 export interface UnlinkThread {
-  thread: Thread10;
+  thread: Thread12;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -6787,7 +6847,7 @@ export interface Task {
   notes: Notes1;
   status: Status22;
   due: Due4;
-  thread: Thread11;
+  thread: Thread13;
   source: Source10;
   proposed: Proposed4;
   created: Created6;
@@ -6821,7 +6881,7 @@ export interface SaveTask {
   notes?: Notes2;
   status?: Status23;
   due?: Due5;
-  thread?: Thread12;
+  thread?: Thread14;
   proposed?: Proposed5;
 }
 /**
@@ -6840,7 +6900,7 @@ export interface Reminder {
   title: Title27;
   when: When8;
   repeat: Repeat;
-  thread: Thread13;
+  thread: Thread15;
   task: Task1;
   source: Source11;
   proposed: Proposed6;
@@ -6874,7 +6934,7 @@ export interface SaveReminder {
   title: Title28;
   when: When9;
   repeat?: Repeat1;
-  thread?: Thread14;
+  thread?: Thread16;
   task?: Task2;
   proposed?: Proposed7;
 }
@@ -7017,7 +7077,7 @@ export interface SaveSemanticSettings {
  */
 export interface ImportModel {
   id: Id105;
-  folder: Folder12;
+  folder: Folder14;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
