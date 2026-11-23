@@ -43,6 +43,7 @@ from nexusai.modules.agent.providers import Message
 from nexusai.modules.mail import accounts, sorting
 from nexusai.modules.mail import module as mail
 from nexusai.modules.mail import rules as mail_rules
+from nexusai.modules.mail import store as mail_store
 from nexusai.modules.mail.rules import FILED_BY_RULE, NO_REPLY
 from nexusai.modules.planner import module as planner
 
@@ -142,7 +143,8 @@ FALLBACK_DESCRIPTIONS = {
 }
 NOT_FROM_RULES = (
     "m.account = ? AND m.folder_role = 'inbox' AND m.rule IS NULL AND NOT EXISTS"
-    " (SELECT 1 FROM triage_runs r WHERE r.message = m.id)"
+    " (SELECT 1 FROM triage_runs r WHERE r.message = m.id) AND NOT EXISTS (SELECT 1 FROM threads t"
+    f" WHERE t.id = m.thread_id AND {mail_store.hidden_from_ai('t.category')})"
 )
 
 
@@ -554,6 +556,14 @@ def next_turn(
             " ORDER BY id LIMIT ?",
             (MAIL_TRIGGER, thread, config.triage_batch),
         )
+        # The folder is the gate, checked again now: mail moved into Kept from the AI since it
+        # was queued, or a reply in a conversation that's there, is never shown to the AI.
+        if db.fetch_all(
+            f"SELECT 1 FROM threads WHERE id = ? AND {mail_store.hidden_from_ai()}",  # noqa: S608
+            (thread,),
+        ):
+            settle(ctx, [row["id"] for row in rows], "skipped")
+            continue
         answers = [row["answer"] for row in rows if row["answer"]]
         filing_only = all(str(row["event"]).startswith("refile-") for row in rows)
         learning = filing_only or all(str(row["event"]).startswith(LEARN_PREFIX) for row in rows)

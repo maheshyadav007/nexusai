@@ -117,7 +117,7 @@ def test_names_are_unique_anywhere_whatever_their_case(ctx: Context) -> None:  #
     )
     with pytest.raises(CommandError, match="already a folder called Alpha, under Projects"):
         mail.save_category(by_sender("alpha", "other@work.example"), ctx)
-    with pytest.raises(CommandError, match="already a folder called Invoices, in Inbox"):
+    with pytest.raises(CommandError, match="already a folder called Invoices, in Read by AI"):
         mail.update_category(UpdateCategory(name="Alpha", new_name="INVOICES"), ctx)
     with pytest.raises(CommandError, match="already a part of your mail"):
         mail.save_category(by_sender("Kept from the AI", "x@y.example"), ctx)

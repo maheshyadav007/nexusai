@@ -43,11 +43,12 @@ starter_categories = []
 # The rule engine every email passes before the AI. Off, the AI reads everything.
 rules_on = true
 connect_timeout_seconds = 30
-initial_batch = 200
-backfill_batch = 100
+initial_batch = 50
+backfill_batch = 50
 # Emails fetched in one request. Each request waits a round trip to the server, so ten at a time
-# made a large download mostly waiting; a dropped connection loses at most this many.
-fetch_batch = 100
+# made a large download mostly waiting; a dropped connection loses at most this many. Fifty keeps
+# each step small enough that mail shows and gets filed as it comes.
+fetch_batch = 50
 flag_window = 500
 # How many emails the connect form suggests downloading. New mail always comes down.
 suggested_pull = 5000

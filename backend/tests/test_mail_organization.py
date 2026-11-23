@@ -440,7 +440,7 @@ def test_proposed_folders_and_counts_are_not_created_or_filed_until_accepted(ctx
     ]
 
 
-def test_account_scoped_group_identity_and_security_header_exception(ctx: Context) -> None:
+def test_account_scoped_group_identity_and_no_exception_for_kept_mail(ctx: Context) -> None:
     assert bulk_learning.group_id(
         "one", "A@EXAMPLE.COM", "Re: Payslip October 2026"
     ) == bulk_learning.group_id("one", "a@example.com", "Payslip November 2026")
@@ -449,12 +449,12 @@ def test_account_scoped_group_identity_and_security_header_exception(ctx: Contex
     )
     raw = make_mail(subject="Suspicious sign-in", sender="no-reply@example.com")
     matched = rules.evaluate(parse_message(raw), [])
-    assert matched and matched.look_closer and matched.actions.category == "Automated"
+    assert matched and matched.actions.category == "Automated"
+    # Filed where the AI doesn't read, so the AI never sees it, whatever its subject says.
     result = add(ctx, "Suspicious sign-in", sender="no-reply@example.com", match=matched)
-    assert result.worth_a_look
+    assert result.skip_agent
     bulk_learning.finalize(ctx)
-    assert thread(ctx, result.thread)["importance"] == "high"
-    assert ctx.bus.db.fetch_all(
+    assert not ctx.bus.db.fetch_all(
         "SELECT 1 FROM trigger_runs WHERE message=? AND event LIKE 'bulk-recent-%'",
         (result.message,),
     )
@@ -719,3 +719,37 @@ def test_only_a_newer_reply_moves_waiting_on_others_back_to_the_person(ctx: Cont
     assert reply.thread == first.thread
     mail_agent.they_answered(ctx, reply.message, reply.thread)
     assert thread(ctx, first.thread)["status"] == "waiting_on_you"
+
+
+def test_the_folder_is_checked_again_just_before_the_ai_judges(ctx: Context) -> None:
+    waiting = add(ctx, "Can you review this?")
+    assert not waiting.skip_agent
+    mail_agent.enqueue(ctx, waiting.message, waiting.thread)
+    # Filed where the AI doesn't read after it was queued: it's never shown to the AI.
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "UPDATE threads SET category='Automated', category_source='user' WHERE id=?",
+            (waiting.thread,),
+        )
+    assert mail_agent.next_turn(ctx, "mail") is None
+    run = ctx.bus.db.fetch_all("SELECT status FROM trigger_runs WHERE thread=?", (waiting.thread,))[
+        0
+    ]
+    assert run["status"] == "skipped"
+
+
+def test_learning_and_counts_leave_out_what_a_folder_keeps_from_the_ai(ctx: Context) -> None:
+    read = add(ctx, "Quarterly plan", sender="lee@example.com")
+    kept = add(ctx, "Weekly digest", sender="digest@example.com")
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "UPDATE threads SET category='Automated', category_source='user' WHERE id=?",
+            (kept.thread,),
+        )
+    assert mail_agent.unjudged_count(ctx) == 1
+    bulk_learning.queue(ctx)
+    members = {
+        row["thread"] for row in ctx.bus.db.fetch_all("SELECT thread FROM mail_learning_members")
+    }
+    assert read.thread in members and kept.thread not in members
+    assert signals.hidden_threads(ctx, [read.thread, kept.thread]) == {kept.thread}

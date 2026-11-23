@@ -677,10 +677,14 @@ def specs(
                 {"folder": folder, "category": category, "limit": max(1, min(limit, 100))}
             )
             found = cast(ThreadList, mail.list_threads(query, ctx)).threads
+            # Kept from the AI by its folder: only when the person asks, and said so.
+            hidden = signals.hidden_threads(ctx, [t.id for t in found])
+            if not signals.asked_by_person(ctx, session):
+                found = [t for t in found if t.id not in hidden]
             return wrap_untrusted(
                 "\n".join(
                     f"{citations.mark(citations.MAIL, t.id)} {t.subject} | {t.category or 'no category'}"
-                    f" | {t.last_date}"
+                    f"{' | ' + signals.HIDDEN_NOTE if t.id in hidden else ''} | {t.last_date}"
                     for t in found
                 )
                 or "Nothing here."

@@ -79,7 +79,7 @@ test("a new folder stays in its home, empty or not, after navigation", async ({ 
   const nav = page.getByRole("navigation", { name: "Main navigation" });
   const names = [`Review empty A ${Date.now()}`, `Review empty B ${Date.now()}`];
   for (const name of names) {
-    await nav.getByRole("link", { name: "Inbox", exact: true }).click({ button: "right" });
+    await nav.getByRole("link", { name: "Read by AI", exact: true }).click({ button: "right" });
     await page.getByRole("menuitem", { name: "New folder…" }).click();
     const dialog = page.getByRole("dialog", { name: "New folder" });
     await dialog.getByRole("textbox", { name: "Name", exact: true }).fill(name);

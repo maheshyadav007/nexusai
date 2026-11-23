@@ -41,10 +41,12 @@ def test_a_batch_gets_one_decision_each_with_what_matched() -> None:
     ]
     quiet, reply, named, person = engine.decide(batch)
     assert not quiet.reaches_ai and quiet.rule == plm.name and quiet.category == "Automated/PLM"
-    assert reply.reaches_ai and reply.exception.startswith("A reply")
-    assert named.reaches_ai and named.exception == "It names you"
+    # The folder is the gate: a reply or mail that names the person, filed where the AI doesn't
+    # read, stays there too, even under an old rule that still says otherwise.
+    assert not reply.reaches_ai and reply.rule == plm.name
+    assert not named.reaches_ai and named.rule == plm.name
     assert person.reaches_ai and person.rule is None
-    assert quiet.as_dict()["why"] == f"Kept from the AI by “{plm.name}”"
+    assert quiet.as_dict()["why"] == f"Hidden from AI by “{plm.name}”"
     # One email is a batch of one.
     assert engine.decide([batch[0]]) == [quiet]
 
@@ -71,13 +73,12 @@ def test_a_tag_becomes_a_rule_only_where_it_belongs_to_the_category() -> None:
         Seen("kim@corp.example", "Re: [PLM-3] Task due", True),
     ]
     assert sort_rules.own_tag(tool, box) == "PLM"
-    made = sort_rules.rules_for("Automated/PLM", tool, box, mentions=[OWNER], owner=OWNER)
+    made = sort_rules.rules_for("Automated/PLM", tool, box, owner=OWNER)
     assert [rule.conditions[0].field for rule in made] == ["sender_exact", "sender_exact", "tag"]
     tag_rule = made[-1]
-    assert tag_rule.actions.read_replies and not made[0].actions.read_replies
+    assert not any(rule.actions.read_replies or rule.actions.mentions for rule in made)
     assert rules.describe_rule(tag_rule) == (
-        "If the subject carries the tag [PLM] → file in Automated/PLM, the AI skips it,"
-        " except replies and mail that names you"
+        "If the subject carries the tag [PLM] → file in Automated/PLM, the AI skips it"
     )
     # A sender with no tag of its own gets only its address rule.
     hr = sort_rules.rules_for("Automated/HR", ["hr@corp.example"], box)

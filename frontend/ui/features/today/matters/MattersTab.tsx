@@ -6,6 +6,7 @@ import type { MatterChange, MatterDetail, MatterRow, MatterWork } from "@/ui/cli
 import { useDateOnly, useShortDate, useTimeOnly } from "@/ui/client/format";
 import { useMatter, useMatterList, useMatterReopen, useMergeMatter, useRemoveTask, useSaveTask, useTasks, useUnlinkThread, useUnmergeMatter } from "@/ui/client/work";
 import { useLeadName } from "@/ui/client/home";
+import { useHideFromAi } from "@/ui/features/mail/HideFromAi";
 import { mailSource } from "@/ui/features/sources/kinds";
 import { SourceChip } from "@/ui/features/sources/SourceChip";
 import { Icon } from "@/ui/icons";
@@ -144,6 +145,26 @@ function Timeline({ detail }: { detail: MatterDetail }) {
       kept.current = null;
     }
   }, [earlier.length]);
+  // Everything up to where it started, then the top of it in view.
+  const toStart = async () => {
+    let oldest = events[0];
+    let older = more;
+    const found: MatterChange[] = [];
+    setLoading(true);
+    try {
+      while (older && oldest) {
+        const page = await query("matters.events", { id: detail.matter.id, before: oldest.id });
+        found.unshift(...page.events);
+        oldest = page.events[0];
+        older = page.earlier;
+      }
+      setEarlier((shown) => [...found, ...shown]);
+      setMore(false);
+    } finally {
+      setLoading(false);
+    }
+    requestAnimationFrame(() => box.current?.scrollTo({ top: 0, behavior: "smooth" }));
+  };
   const loadEarlier = async () => {
     const oldest = events[0];
     if (!more || loading || !oldest) return;
@@ -161,7 +182,10 @@ function Timeline({ detail }: { detail: MatterDetail }) {
     <section aria-label={t("matters.timeline")} className="flex flex-col gap-3 border-t border-line-subtle pt-4">
       <header className="flex items-baseline justify-between gap-2">
         <h3 className="text-md font-medium text-ink-primary">{t("matters.timeline")}</h3>
-        <span className="text-sm text-ink-muted">{t("matters.timeline.newest")}</span>
+        <span className="flex items-center gap-3">
+          <Button variant="quiet" className="py-px" data-testid="timeline-start" onClick={() => void toStart()}><Icon name="moveUp" className="h-4 w-4" />{t("matters.timeline.toStart")}</Button>
+          <span className="text-sm text-ink-muted">{t("matters.timeline.newest")}</span>
+        </span>
       </header>
       <ol
         ref={box}
@@ -217,6 +241,9 @@ function Detail({ detail }: { detail: MatterDetail }) {
   const { go } = useTodayView();
   const toast = useToast();
   const [together, setTogether] = useState(false);
+  const hide = useHideFromAi();
+  // Its newest conversation, the one Hide from AI starts from.
+  const latest = [...detail.threads].sort((a, b) => b.last_date.localeCompare(a.last_date))[0]?.id ?? null;
   const when = matter.due ? due(matter.due) : null;
   const done = matter.state === "done";
   const people = detail.people.slice(0, 3);
@@ -238,7 +265,10 @@ function Detail({ detail }: { detail: MatterDetail }) {
             <span>{countsOf(matter)}</span>
           </p>
         </div>
-        {done ? <Button onClick={() => reopen.mutate(matter.id)} loading={reopen.isPending}>{t("matters.undo")}</Button> : <Button variant="primary" data-testid="matter-done" onClick={() => finish(matter)}>{t("matters.done")}</Button>}
+        <div className="flex items-center gap-2">
+          {latest ? <Button variant="quiet" data-testid="matter-hide" onClick={() => hide(latest)}><Icon name="keptFromAi" className="h-4 w-4" />{t("menu.hideFromAi")}</Button> : null}
+          {done ? <Button onClick={() => reopen.mutate(matter.id)} loading={reopen.isPending}>{t("matters.undo")}</Button> : <Button variant="primary" data-testid="matter-done" onClick={() => finish(matter)}>{t("matters.done")}</Button>}
+        </div>
       </header>
       {matter.work?.length ? (
         <section aria-label={t("matters.work")} className="flex flex-col gap-3 border-t border-line-subtle pt-4">

@@ -3,12 +3,13 @@
 import Link from "next/link";
 import type { ThreadRow } from "@/ui/client/contracts.generated";
 import { useShortDate } from "@/ui/client/format";
-import { useMailAccounts } from "@/ui/client/mail";
+import { useCategories, useMailAccounts } from "@/ui/client/mail";
 import { useThreadActions } from "@/ui/features/mail/threadActions";
 import { Highlight } from "@/ui/features/search/SearchFilters";
 import { Icon } from "@/ui/icons";
-import { AUTOMATED } from "@/ui/shell/customMail";
+import { AUTOMATED, CALENDAR, keptFromAi } from "@/ui/shell/customMail";
 import { ContextMenu } from "@/ui/primitives/ContextMenu";
+import { Tooltip } from "@/ui/primitives/Tooltip";
 import { t, type StringKey } from "@/ui/strings";
 
 // A line with nothing to say still takes up its line, so every row is one height.
@@ -26,6 +27,20 @@ export function statusLabel(status: string): string | null {
   return key ? t(key) : null;
 }
 
+/** Whether the AI reads it, and why it's where it is, in a word or two: "Hidden: Trading",
+ *  "rule: Finance", "AI: Job search", "AI: waiting on you". */
+function useWhy(thread: ThreadRow): { hidden: boolean; chip: string | null } {
+  const categories = useCategories();
+  const folder = thread.category ? (categories.data?.categories ?? []).find((item) => item.name === thread.category) : undefined;
+  const hidden = Boolean(thread.category && (thread.category === AUTOMATED || thread.category === CALENDAR || (folder && keptFromAi(folder))));
+  if (hidden) return { hidden, chip: thread.category === AUTOMATED ? t("mail.why.hidden.alone") : t("mail.why.hidden", { folder: thread.category ?? "" }) };
+  if (thread.category && thread.category_source === "rule") return { hidden, chip: t("mail.why.rule", { folder: thread.category }) };
+  if (thread.category && thread.category_source === "agent") return { hidden, chip: t("mail.why.ai", { what: thread.category }) };
+  if (thread.category) return { hidden, chip: thread.category };
+  const status = statusLabel(thread.status);
+  return { hidden, chip: status && thread.status === "waiting_on_you" ? t("mail.why.ai", { what: status.toLocaleLowerCase() }) : null };
+}
+
 function useOtherPeople(thread: ThreadRow): string {
   const accounts = useMailAccounts();
   const me = accounts.data?.accounts.find((account) => account.name === accounts.data?.active)?.profile.auth.user.toLowerCase();
@@ -39,8 +54,8 @@ export function ThreadRowView({ thread, excerpt, href, active = false, highlight
   const people = thread.sender_name || others;
   const format = useShortDate();
   const unread = thread.unread_count > 0;
-  const status = statusLabel(thread.status);
-  const actions = useThreadActions(thread, href);
+  const why = useWhy(thread);
+  const actions = useThreadActions(thread, href, why.hidden);
   return (
     <ContextMenu items={actions}>
     <Link href={href ?? `/mail/all/${thread.id}`} aria-current={active ? "page" : undefined} className={`focus-ring flex items-start gap-2 border-b border-line-subtle px-3 py-3 transition-colors duration-fast ${active ? "bg-surface-sunken" : "hover:bg-surface-raised"}`}>
@@ -67,10 +82,16 @@ export function ThreadRowView({ thread, excerpt, href, active = false, highlight
                 <Icon name="attachment" className="h-3 w-3" />
               </span>
             ) : null}
-            {/* Its own folder, which in a parent's list says where it really is. */}
-            {/* Kept from the AI's catch-all is never listed as a folder, so its mail wears no chip. */}
-            {thread.category && thread.category !== AUTOMATED ? <span data-testid="thread-folder" className="truncate rounded-sm bg-surface-sunken px-1">{thread.category}</span> : null}
-            {reason ? <span data-testid="priority-why" className="shrink-0">{reason}</span> : status && thread.status === "waiting_on_you" ? <span className="shrink-0">{status}</span> : null}
+            {/* The eye says whether the AI reads it; the chip why it's here, its full reason on hover. */}
+            <span role="img" aria-label={t(why.hidden ? "mail.why.side.hidden" : "mail.why.side.reads")} className={why.hidden ? "text-ink-faint" : "text-accent-default"}>
+              <Icon name={why.hidden ? "keptFromAi" : "readByAi"} className="h-3 w-3" />
+            </span>
+            {why.chip ? (
+              <Tooltip content={reason || thread.why || why.chip}>
+                <span data-testid="thread-folder" className={`truncate rounded-sm px-1 ${why.hidden ? "bg-surface-sunken text-ink-muted" : "bg-accent-default/10 text-ink-secondary"}`}>{why.chip}</span>
+              </Tooltip>
+            ) : null}
+            {reason ? <span data-testid="priority-why" className="sr-only">{reason}</span> : null}
           </span>
       </span>
     </Link>

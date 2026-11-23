@@ -44,7 +44,7 @@ input[type=text], input[type=password] { font: 14px var(--sans); color: var(--in
 .bar { height: 6px; background: var(--sunken); border-radius: 99px; overflow: hidden; }
 .bar > div { height: 100%; background: var(--accent); width: 0; transition: width .3s; }
 
-/* The sorter: one header, then two columns, Inbox and Kept from the AI, that stack on a phone. */
+/* The sorter: one header, then two columns, Read by AI and Hidden from AI, that stack on a phone. */
 .sorter { max-width: 1180px; margin: 0 auto; padding: 28px 16px 48px; display: flex; flex-direction: column; gap: 18px; }
 .rule { background: var(--raised); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; font-size: 13px; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 6px 18px; }
 .rule b { color: var(--ink); }
@@ -60,6 +60,11 @@ input[type=text], input[type=password] { font: 14px var(--sans); color: var(--in
 .list { display: flex; flex-direction: column; gap: 6px; }
 .row { background: var(--raised); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 4px 10px; align-items: center; }
 .row.own { border-color: var(--line-strong); }
+.flow { margin: 0; font-size: 13px; color: var(--ink-2); }
+.k { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; }
+.stepper button { width: 32px; height: 32px; border: 0; background: none; font-size: 16px; }
+.stepper output { min-width: 24px; text-align: center; font-variant-numeric: tabular-nums; }
 .row input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
 .spacer { width: 18px; }
 .who { min-width: 0; display: flex; flex-direction: column; }
@@ -75,7 +80,6 @@ input[type=text], input[type=password] { font: 14px var(--sans); color: var(--in
 .emails { grid-column: 1 / -1; border-top: 1px solid var(--line); margin-top: 4px; padding-top: 4px; display: flex; flex-direction: column; font-size: 12px; }
 .emails div { display: flex; gap: 10px; padding: 3px 0; min-width: 0; }
 .emails .subject { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.emails .through { color: var(--reads); flex: none; }
 .emails .when { color: var(--muted); flex: none; }
 .cat { background: var(--raised); border: 1px solid var(--line-strong); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
 .cat-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: baseline; padding: 0 2px; }
@@ -118,20 +122,23 @@ input[type=text], input[type=password] { font: 14px var(--sans); color: var(--in
   <div style="display: flex; flex-direction: column; gap: 4px">
     <h1>Sort your mail</h1>
     <p class="muted" id="summary"></p>
+    <p class="flow" id="flow"></p>
   </div>
   <div class="rule">
     <span>Each sender is scored by how <b>automated</b> it looks: repeated subjects, bulk-mail headers, or many emails nobody answers.</span>
-    <span><b>50% or more</b> → kept from the AI. Below that, and every new sender → in the Inbox, where the AI reads it.</span>
-    <span>A kept email still reaches the AI when it <b>mentions you</b> or <b>a person replied</b> in that conversation.</span>
+    <span><b>50% or more</b> → Hidden from AI. Below that, and every new sender → Read by AI.</span>
+    <span>What's hidden from the AI, the AI <b>never sees</b>, whatever it says.</span>
   </div>
   <div class="columns">
     <section class="col reads" aria-labelledby="reads-h">
-      <div class="col-head"><h2 id="reads-h">Inbox · the AI reads it</h2><span class="muted" id="reads-n"></span></div>
+      <div class="col-head"><h2 id="reads-h">Read by AI</h2><span class="muted" id="reads-n"></span></div>
       <div class="list" id="reads"></div>
     </section>
     <section class="col ignores" aria-labelledby="ignores-h">
-      <div class="col-head"><h2 id="ignores-h">Kept from the AI</h2><span class="muted" id="ignores-n"></span></div>
-      <p class="sub">A folder of their own · the 5 biggest are ticked</p>
+      <div class="col-head"><h2 id="ignores-h">Hidden from AI</h2><span class="muted" id="ignores-n"></span></div>
+      <div class="sub k">A folder of their own for the biggest
+        <span class="stepper"><button type="button" id="k-less" aria-label="One fewer">−</button><output id="k-own" aria-live="polite"></output><button type="button" id="k-more" aria-label="One more">+</button></span>
+        · tick or untick any</div>
       <div class="list" id="own"></div>
       <p class="sub">No folder · the rest</p>
       <div class="rules" id="rest-rules" hidden></div>
@@ -276,6 +283,17 @@ function start() {
   render();
 }
 
+// Own folders for the biggest hidden senders, as many as asked; a sender named like one joins it.
+function biggest(n) {
+  const sizes = new Map();
+  for (const s of byCount) if (state[s.sender].side === "ignores") sizes.set(state[s.sender].name, (sizes.get(state[s.sender].name) || 0) + s.count);
+  const top = new Set([...sizes.entries()].sort((a, b) => b[1] - a[1]).slice(0, Math.max(0, n)).map(([name]) => name));
+  for (const s of byCount) if (state[s.sender].side === "ignores") state[s.sender].own = top.has(state[s.sender].name);
+  render();
+}
+document.getElementById("k-less").addEventListener("click", () => biggest(categories(byCount.filter((s) => state[s.sender].side === "ignores")).length - 1));
+document.getElementById("k-more").addEventListener("click", () => biggest(categories(byCount.filter((s) => state[s.sender].side === "ignores")).length + 1));
+
 function why(s) {
   const parts = [];
   if (s.repeats >= 0.5) parts.push(`repeats subjects ${Math.round(s.repeats * 100)}%`);
@@ -300,7 +318,6 @@ function row(s, inCard = false) {
   const emails = openEmails[s.sender]
     ? h("div", { class: "emails" }, s.emails.map((email) => h("div", {},
         h("span", { class: "subject" }, email.subject || "(no subject)"),
-        ignored && email.names_you ? h("span", { class: "through" }, "still reaches the AI") : null,
         h("span", { class: "when" }, email.when))))
     : null;
   return h("div", { class: `row${ignored && st.own ? " own" : ""}` },
@@ -312,7 +329,6 @@ function row(s, inCard = false) {
       h("span", { class: "meter", title: `${pct}% automated` }, h("i", { style: `width: ${pct}%` }), h("span", { class: "mark" })),
       h("span", {}, `${pct}% automated${why(s) ? " · " + why(s) : ""}`),
       s.kept ? h("span", { class: "why" }, `· kept: ${s.kept.toLowerCase()}`) : null,
-      ignored && s.reach ? h("span", { class: "why" }, `· ${s.reach} still reach the AI`) : null,
       h("button", { type: "button", class: "link", style: "font-size: 11px", onclick: () => { openEmails[s.sender] = !openEmails[s.sender]; render(); } }, openEmails[s.sender] ? "Hide emails" : "Show emails")),
     emails);
 }
@@ -327,7 +343,7 @@ function fold(id, items) {
 
 const keyOf = (name) => name.trim().toLocaleLowerCase();
 
-// Senders kept from the AI with the same folder name are one folder.
+// Senders hidden from the AI with the same folder name are one folder.
 function categories(ignores) {
   const found = new Map();
   for (const s of ignores.filter((s) => state[s.sender].own)) {
@@ -347,20 +363,19 @@ function ruleBox(entry) {
   const tags = entry.match.filter((m) => m.kind === "tag");
   const pill = (m) => h("span", { class: `pill ${m.kind}`, title: m.kind === "tag" ? `Subject has the tag [${m.value}]` : `From ${m.value}` },
     h("i", {}, m.kind === "tag" ? "tag" : "from"), h("span", {}, m.kind === "tag" ? `[${m.value}]` : m.value));
-  const reached = Object.values(entry.reach).reduce((n, v) => n + v, 0);
   return h("div", { class: "rules" },
     h("div", { class: "when" }, h("span", { class: "label" }, "Files mail"),
       [...tags, ...from.slice(0, PILLS)].map(pill),
       from.length > PILLS ? h("span", { class: "label", title: from.slice(PILLS).map((m) => m.value).join("\n") }, `+ ${fmt(from.length - PILLS)} more`) : null),
-    h("div", { class: "label" }, `The AI skips it, except mail that names you${tags.length ? ", and replies" : ""}.`),
-    h("div", { class: "count" }, [`${fmt(entry.kept)} hidden`, `${fmt(reached)} reach the AI`,
+    h("div", { class: "label" }, "The AI never sees it."),
+    h("div", { class: "count" }, [`${fmt(entry.kept)} hidden`,
       ...(entry.others ? [`${fmt(entry.others)} from senders the AI reads`] : [])].join(" · ")));
 }
 
 function card(cat, reads) {
   const count = cat.members.reduce((n, s) => n + s.count, 0);
   const senders = cat.members.length === 1 ? "1 sender" : `${fmt(cat.members.length)} senders`;
-  const where = (name) => `In Kept from the AI · ${senders}`;
+  const where = (name) => `In Hidden from AI · ${senders}`;
   const path = h("span", { class: "line" }, where(cat.name));
   // Typing renames it everywhere at once; leaving the box merges it with a folder of that name.
   const rename = (value) => { for (const s of cat.members) state[s.sender].name = value; path.textContent = where(value); };
@@ -414,14 +429,16 @@ function render(ask = true) {
   restBox.hidden = !restRules;
   restBox.replaceChildren(...(restRules ? restRules.childNodes : []));
   if (ask) askRules(ignores);
-  const quiet = ignores.reduce((n, s) => n + s.count - s.reach, 0) + report.calendar;
+  const quiet = ignores.reduce((n, s) => n + s.count, 0) + report.calendar;
   document.getElementById("reads-n").textContent = `${fmt(reads.length)} senders · ${fmt(reads.reduce((n, s) => n + s.count, 0))} emails`;
   document.getElementById("ignores-n").textContent = `${fmt(ignores.length)} senders · ${fmt(ignores.reduce((n, s) => n + s.count, 0))} emails`;
-  document.getElementById("cal").textContent = `Calendar · ${fmt(report.calendar)} invitations and replies, kept from the AI`;
-  document.getElementById("summary").textContent = `${report.owner_name} · ${fmt(report.total)} emails · ${fmt(quiet)} kept from the AI · ${fmt(report.total - quiet)} read by it`;
+  document.getElementById("cal").textContent = `Calendar · ${fmt(report.calendar)} invitations and replies, hidden from AI`;
+  document.getElementById("summary").textContent = `${report.owner_name} · ${fmt(report.total)} emails · ${fmt(quiet)} hidden from AI · ${fmt(report.total - quiet)} read by it`;
+  document.getElementById("flow").textContent = `Mail in ${fmt(report.total)} → your rules → Read by AI ${fmt(report.total - quiet)} · Hidden from AI ${fmt(quiet)}`;
   const own = categories(ignores).length;
+  document.getElementById("k-own").textContent = fmt(own);
   const straight = ignores.filter((s) => !state[s.sender].own).length;
-  document.getElementById("foot").textContent = `${fmt(own)} folders of their own in Kept from the AI, and ${fmt(straight)} more senders kept with no folder. Each gets a rule per sender, and one for its own [tag] when it has one.`;
+  document.getElementById("foot").textContent = `${fmt(own)} folders of their own in Hidden from AI, and ${fmt(straight)} more senders hidden with no folder. Each gets a rule per sender, and one for its own [tag] when it has one.`;
 }
 
 const LABELS = { finish: "Finish", discard: "Discard" };

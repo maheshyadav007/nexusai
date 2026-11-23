@@ -610,10 +610,6 @@ class MailSync:
         self._note_progress()
         return True
 
-    def _deserves_a_look(self, tx: Any, result: store.Stored) -> bool:
-        """Only generated Updates with a consequential subject bypass an Exact match."""
-        return result.worth_a_look
-
     def _note_copies(self, session: MailSession, folder: Folder, uids: list[int]) -> list[int]:
         """Files what's already held under this folder too, and returns what needs downloading."""
         ids = session.message_ids(uids)
@@ -766,7 +762,7 @@ class MailSync:
                         not bulk
                         and len(stored) <= self.ctx.config.agent.bulk_mail_threshold
                         and not result.skip_agent
-                    ) or self._deserves_a_look(work.tx, result):
+                    ):
                         work.emit(
                             "mail.needsTriage",
                             {"message_id": result.message, "thread_id": result.thread},

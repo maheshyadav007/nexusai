@@ -268,6 +268,7 @@ agent_module = Module(
         runtime.COMPACTIONS_MIGRATION,
         citations.MIGRATION,
         conversations.MIGRATION,
+        conversations.HIDDEN_MIGRATION,
         matters.MIGRATION,
         matters.KEPT_MIGRATION,
         links.MIGRATION,
@@ -537,10 +538,8 @@ def person_replied(event: AppEvent, ctx: Context) -> None:
 @agent_module.on("mail.received", "agent.they_answered")
 def they_answered(event: AppEvent, ctx: Context) -> None:
     mail_agent.they_answered(ctx, int(event.payload["message_id"]), int(event.payload["thread_id"]))
-    # Mail the agent never sees, like a review tool's "approved change 88213", still joins
-    # the matter it's about. The agent links the rest after judging it.
-    if event.payload.get("rule"):
-        matters.link(ctx, int(event.payload["thread_id"]), start=False)
+    # The agent links mail to matters after judging it. What a folder keeps from the AI never
+    # joins one: matters are what the AI works from.
 
 
 def conversation_work(event: AppEvent, ctx: Context) -> None:
@@ -689,6 +688,16 @@ def learn_from_corrections(event: AppEvent, ctx: Context) -> None:
 def learn_when_enough_mail(event: AppEvent, ctx: Context) -> None:
     if _triggers and event.payload.get("reason") != "group-learning":
         _triggers.consider_learning()
+
+
+@agent_module.on("mail.changed", "agent.follow_folders")
+@agent_module.on("rules.changed", "agent.follow_folders_rules")
+@agent_module.on("categories.changed", "agent.follow_folders_categories")
+@agent_module.on("thread.updated", "agent.follow_folders_thread")
+def follow_folders(event: AppEvent, ctx: Context) -> None:
+    """Mail filed into Kept from the AI, however it got there, leaves the AI's work."""
+    if event.payload.get("reason") != "status":
+        conversations.follow_folders(ctx)
 
 
 @agent_module.on("mail.historyFinished", "agent.learn_when_history_finished")

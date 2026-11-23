@@ -37,6 +37,7 @@ from nexusai.modules.agent.kinds import parse, ref
 from nexusai.modules.mail import accounts
 from nexusai.modules.mail.parse import normalize_subject
 from nexusai.modules.mail.source import thread_source
+from nexusai.modules.mail.store import hidden_from_ai
 from nexusai.modules.planner import module as planner
 
 MIGRATION = Migration(
@@ -278,24 +279,23 @@ def link(
     thread: int,
     *,
     time: str | None = None,
-    start: bool = True,
     choose: int | None = None,
     because: str = "",
 ) -> int | None:
     """The conversation's matter, joined or started, and its newest email on the timeline.
 
     Only mail that needs something starts a matter; a fyi conversation stays a conversation.
-    Mail the rules kept from the agent (start=False), like a review tool's notice, can still
-    join a matter code is sure of, but never starts one. `choose` is the matter the AI picked
-    from the ones it was shown, which the caller has checked.
+    What a folder keeps from the AI never joins one. `choose` is the matter the AI picked from
+    the ones it was shown, which the caller has checked.
     """
     db = ctx.bus.db
     rows = db.fetch_all(
-        f"SELECT id, account, subject, why, ({NEEDS}) AS needs FROM threads WHERE id = ?",  # noqa: S608
+        f"SELECT id, account, subject, why, ({NEEDS}) AS needs FROM threads"  # noqa: S608
+        f" WHERE id = ? AND NOT {hidden_from_ai()}",
         (thread,),
     )
     existing = matter_of(db, thread)
-    if not rows or (existing is None and start and not rows[0]["needs"]):
+    if not rows or (existing is None and not rows[0]["needs"]):
         return None
     own = signals.own_addresses(ctx)
     latest = db.fetch_all(
@@ -339,8 +339,6 @@ def link(
                     work.tx, matter, "joined", _title(row["subject"]),
                     why=best[2], thread=thread, message=message["id"], time=time or message["date"],
                 )  # fmt: skip
-            elif not start:
-                return None
             else:
                 cursor = work.tx.execute(
                     "INSERT INTO matters (account, title, created, updated) VALUES (?, ?, ?, ?)",
@@ -422,9 +420,11 @@ def backfill(ctx: Context) -> int:
 
 
 def _threads_of(db: Database, matter: int) -> list[Any]:
+    """Its conversations, less those a folder now keeps from the AI. Moved back, they return;
+    a matter with none left drops out of the list."""
     return db.fetch_all(
-        "SELECT t.*, mt.how, mt.why AS link_why FROM matter_threads mt JOIN threads t ON t.id = mt.thread"
-        " WHERE mt.matter = ? ORDER BY t.last_date",
+        "SELECT t.*, mt.how, mt.why AS link_why FROM matter_threads mt JOIN threads t ON t.id = mt.thread"  # noqa: S608
+        f" WHERE mt.matter = ? AND NOT {hidden_from_ai('t.category')} ORDER BY t.last_date",
         (matter,),
     )
 
@@ -516,9 +516,13 @@ def row(ctx: Context, matter: Any) -> MatterRow:
         work=work,
         last_date=last,
         quiet_days=_quiet(last),
+        # When its earliest email came, wherever that conversation joined from.
         started=db.fetch_all(
-            "SELECT MIN(time) AS t FROM matter_events WHERE matter = ?", (matter["id"],)
-        )[0]["t"],
+            f"SELECT MIN(date) AS t FROM messages WHERE thread_id IN ({','.join('?' * len(ids))})",  # noqa: S608
+            ids,
+        )[0]["t"]
+        if ids
+        else matter["created"],
         latest=thread_source(db, max(threads, key=lambda t: t["last_date"])["id"])
         if threads
         else None,
@@ -559,7 +563,8 @@ def brief(ctx: Context, seen: str | None) -> MattersBrief:
     # The day's changes stay listed; the page marks the ones that came after the person looked.
     since = (datetime.now(UTC) - timedelta(days=1)).isoformat()
     events = db.fetch_all(
-        "SELECT * FROM matter_events WHERE time > ? ORDER BY time DESC, id DESC LIMIT ?",
+        "SELECT * FROM matter_events WHERE time > ? AND (thread IS NULL OR thread NOT IN"  # noqa: S608
+        f" (SELECT id FROM threads WHERE {hidden_from_ai()})) ORDER BY time DESC, id DESC LIMIT ?",
         (since, MOST_CHANGES),
     )
     soon = (datetime.now().astimezone() + timedelta(hours=SOON_HOURS)).strftime("%Y-%m-%dT%H:%M")
@@ -643,31 +648,98 @@ def _family(db: Database, matter: int) -> list[int]:
     return found
 
 
-def _events(db: Database, matter: int, titles: dict[int, str], before: int | None) -> MatterEvents:
-    """A page of changes, oldest first, ending just before `before` (or now)."""
+# What emails say on the timeline, worked out from the mail itself rather than stored.
+EMAIL_KINDS = ("started", "joined", "mail", "sent")
+
+
+def _story(db: Database, matter: int, titles: dict[int, str], own: set[str]) -> list[MatterChange]:
+    """Everything that happened, in date order. Each email is at its own date: the earliest one
+    started the matter, the first one of each conversation that came with it later linked it,
+    with why. What was done is at the time it was done. Emails have negative ids, so a page can
+    end before either kind."""
     family = _family(db, matter)
     marks = ",".join("?" * len(family))
-    since: tuple[Any, ...] = ()
-    where = ""
-    if before is not None:
-        cursor = db.fetch_all("SELECT time FROM matter_events WHERE id = ?", (before,))
-        if cursor:
-            where = " AND (time < ? OR (time = ? AND id < ?))"
-            since = (cursor[0]["time"], cursor[0]["time"], before)
-    rows = db.fetch_all(
-        f"SELECT * FROM matter_events WHERE matter IN ({marks}){where}"  # noqa: S608
-        " ORDER BY time DESC, id DESC LIMIT ?",
-        (*family, *since, PAGE + 1),
+    threads = {
+        row["thread"]: row
+        for row in db.fetch_all(
+            "SELECT mt.thread, mt.how, mt.why FROM matter_threads mt JOIN threads t ON t.id = mt.thread"  # noqa: S608
+            f" WHERE mt.matter IN ({marks}) AND NOT {hidden_from_ai('t.category')}",
+            family,
+        )
+    }
+    title = titles.get(matter, "")
+    story: list[MatterChange] = []
+    if threads:
+        places = ",".join("?" * len(threads))
+        emails = db.fetch_all(
+            "SELECT MIN(id) AS id, thread_id, subject, from_addr, date FROM messages"  # noqa: S608
+            f" WHERE thread_id IN ({places}) GROUP BY message_id ORDER BY date, id",
+            list(threads),
+        )
+        begun: set[int] = set()
+        # Why they're together is said by the conversation that joined. When the one that
+        # started it isn't the earliest, the earliest joined it, and its reason is theirs.
+        earliest = int(emails[0]["thread_id"]) if emails else None
+        joined_why = (
+            threads[earliest]["why"] if earliest and threads[earliest]["how"] != "start" else ""
+        )
+        for email in emails:
+            thread = int(email["thread_id"])
+            first = thread not in begun
+            kind = (
+                ("started" if not begun else "joined")
+                if first
+                else "sent"
+                if email["from_addr"].lower() in own
+                else "mail"
+            )
+            begun.add(thread)
+            story.append(
+                MatterChange(
+                    id=-int(email["id"]),
+                    matter=matter,
+                    title=title,
+                    time=email["date"],
+                    kind=kind,
+                    text=_title(email["subject"]),
+                    why=(
+                        (
+                            joined_why
+                            if threads[thread]["how"] == "start"
+                            else threads[thread]["why"]
+                        )
+                        or ""
+                    )
+                    if kind == "joined"
+                    else "",
+                    source=thread_source(db, thread, int(email["id"])),
+                )
+            )
+    actions = db.fetch_all(
+        f"SELECT * FROM matter_events WHERE matter IN ({marks})"  # noqa: S608
+        f" AND kind NOT IN {EMAIL_KINDS} AND (thread IS NULL OR thread NOT IN"
+        f" (SELECT id FROM threads WHERE {hidden_from_ai()})) ORDER BY time, id",
+        family,
     )
-    return MatterEvents(
-        events=[_change(db, e, titles) for e in reversed(rows[:PAGE])], earlier=len(rows) > PAGE
-    )
+    story += [_change(db, event, titles) for event in actions]
+    # The earliest email leads, however its time compares with an action on the same moment.
+    return sorted(story, key=lambda change: (change.time, change.kind != "started"))
+
+
+def _events(
+    db: Database, matter: int, titles: dict[int, str], before: int | None, own: set[str]
+) -> MatterEvents:
+    """A page of the story, oldest first, ending just before `before` (or now)."""
+    story = _story(db, matter, titles, own)
+    end = next((at for at, change in enumerate(story) if change.id == before), len(story))
+    page = story[max(0, end - PAGE) : end]
+    return MatterEvents(events=page, earlier=end > PAGE)
 
 
 def events(ctx: Context, matter: int, before: int) -> MatterEvents:
     db = ctx.bus.db
     titles = {m["id"]: m["title"] for m in db.fetch_all("SELECT id, title FROM matters")}
-    return _events(db, matter, titles, before)
+    return _events(db, matter, titles, before, signals.own_addresses(ctx))
 
 
 def _related(ctx: Context, matter: int) -> list[MatterLinkRow]:
@@ -716,7 +788,7 @@ def detail(ctx: Context, matter: int) -> MatterDetail:
         raise CommandError("matter.not_found", "That matter no longer exists.", 404)
     threads = _threads_of(db, matter)
     titles = {m["id"]: m["title"] for m in db.fetch_all("SELECT id, title FROM matters")}
-    page = _events(db, matter, titles, None)
+    page = _events(db, matter, titles, None, signals.own_addresses(ctx))
     return MatterDetail(
         matter=row(ctx, found[0]),
         events=page.events,
@@ -1179,22 +1251,26 @@ def context_for(ctx: Context, thread: int) -> str:
             f" · {shown.emails} emails in {shown.threads} conversations"
         )
         lines.append(f"   why: {why}")
-        threads = _threads_of(db, matter)[::-1]
+        # What a folder keeps from the AI stays out of what the AI is told, here too.
+        threads = db.fetch_all(
+            "SELECT t.subject, t.status FROM matter_threads mt JOIN threads t ON t.id = mt.thread"  # noqa: S608
+            f" WHERE mt.matter = ? AND NOT {hidden_from_ai('t.category')} ORDER BY t.last_date DESC",
+            (matter,),
+        )
         talks = [f'"{_short(t["subject"], 70)}" ({t["status"]})' for t in threads[:CONTEXT_MATTERS]]
         more = len(threads) - len(talks)
         lines.append(
             "   conversations: " + "; ".join(talks) + (f"; and {more} more" if more > 0 else "")
         )
-        happened = db.fetch_all(
-            "SELECT time, kind, text FROM matter_events WHERE matter = ? ORDER BY time DESC, id DESC LIMIT ?",
-            (matter, CONTEXT_MATTERS),
-        )
+        # The same story the person reads, in the same order, oldest first.
+        titles = {matter: shown.title}
+        happened = _story(db, matter, titles, signals.own_addresses(ctx))[-CONTEXT_MATTERS:]
         if happened:
             lines.append(
                 "   lately: "
                 + "; ".join(
-                    f"{e['time'][:10]} {EVENT_WORDS.get(e['kind'], e['kind'])}: {_short(e['text'], 90)}"
-                    for e in reversed(happened)
+                    f"{e.time[:10]} {EVENT_WORDS.get(e.kind, e.kind)}: {_short(e.text, 90)}"
+                    for e in happened
                 )
             )
         tasks = [w for w in shown.work if not (w.kind == "reminder" and w.parent is not None)]

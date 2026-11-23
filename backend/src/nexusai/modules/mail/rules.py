@@ -11,7 +11,6 @@ from typing import Any
 
 from nexusai.contracts.mail import MailRule, RuleActions, RuleCondition, RuleSet
 from nexusai.kernel.files import replace_file
-from nexusai.modules.mail import grouping
 from nexusai.modules.mail.parse import SUBJECT_PREFIX, ParsedMessage, tags_of
 
 NO_REPLY = re.compile(
@@ -59,7 +58,8 @@ FILED_BY_RULE = (
     " AND (COALESCE(c.sender,'')!='' OR COALESCE(c.subject,'')!='')))"
 )
 
-# Automated mail goes unjudged, unless what it says could cost the person something.
+# Subjects that could cost the person something. Code raises their importance; it never shows
+# the AI mail its folder keeps away.
 WORTH_A_LOOK = re.compile(
     r"\b(action required|escalat\w*|payment|overdue|past due|due (on|by|date|soon)"
     r"|expir(es|ing|ed|y)|deadline"
@@ -80,8 +80,6 @@ REPLY_PREFIX = re.compile(r"^(?:\s*(?:re|fwd?|aw)\s*:\s*)+", re.I)
 class RuleMatch:
     name: str
     actions: RuleActions
-    # Only a guess from its headers, so what it says can still bring it to the agent.
-    look_closer: bool = False
     extra_categories: tuple[str, ...] = ()
 
     @property
@@ -117,7 +115,7 @@ def _builtin(parsed: ParsedMessage, own_domain: str | None = None) -> RuleMatch 
         return RuleMatch("Notification from a system", updates)
     auto_submitted = headers.get("auto-submitted", "no").lower()
     if not auto_submitted.startswith("no") or "x-auto-response-suppress" in headers:
-        return RuleMatch("Automatically generated mail", updates, True)
+        return RuleMatch("Automatically generated mail", updates)
     # A company's own server has no social mail to speak of, and nor is its own mail a promotion.
     if not own_domain and any(
         sender_domain == domain or sender_domain.endswith(f".{domain}") for domain in SOCIAL_DOMAINS
@@ -131,7 +129,7 @@ def _builtin(parsed: ParsedMessage, own_domain: str | None = None) -> RuleMatch 
     if "list-id" in headers or precedence == "list":
         return RuleMatch("Mailing list", forums)
     if NO_REPLY.search(parsed.from_addr):
-        return RuleMatch("Sent from a no-reply address", updates, True)
+        return RuleMatch("Sent from a no-reply address", updates)
     return None
 
 
@@ -195,8 +193,6 @@ class Decision:
     why: str
     # The rule that matched, if one did. It files the mail even when the AI still reads it.
     match: RuleMatch | None = None
-    # Why it reaches the AI although its rule keeps mail away: the rule's own exception.
-    exception: str = ""
 
     @property
     def rule(self) -> str | None:
@@ -212,21 +208,12 @@ class Decision:
             "why": self.why,
             "rule": self.rule,
             "category": self.category,
-            "exception": self.exception,
         }
 
 
 def is_reply(parsed: ParsedMessage) -> bool:
     """Part of a conversation: a Re: or Fwd: subject, or an answer to earlier mail."""
     return bool(SUBJECT_PREFIX.match(parsed.subject) or parsed.in_reply_to)
-
-
-def _names_them(actions: RuleActions, parsed: ParsedMessage) -> bool:
-    if not actions.mentions:
-        return False
-    owner, *name = actions.mentions
-    names = grouping._mention(owner, name[0] if name else "")
-    return grouping._addressed(names, parsed.subject, parsed.own)
 
 
 @dataclass(frozen=True)
@@ -259,19 +246,13 @@ class Engine:
 
 
 def decision_for(match: RuleMatch | None, parsed: ParsedMessage) -> Decision:
-    """What a matched rule means for the AI, with its exceptions: mail that names the person,
-    a reply where its rule lets replies through, and a guessed kind whose subject could matter."""
+    """What a matched rule means for the AI. Mail filed where the AI doesn't read is never
+    shown to it, whatever it says: the folder is the gate, with no exceptions."""
     if match is None:
         return Decision(True, "No rule matched")
     if not match.actions.skip_agent:
         return Decision(True, f"Filed by “{match.name}”, which lets the AI read it", match)
-    if _names_them(match.actions, parsed):
-        return Decision(True, match.why, match, "It names you")
-    if match.actions.read_replies and is_reply(parsed):
-        return Decision(True, match.why, match, "A reply: a person joined in")
-    if match.look_closer and WORTH_A_LOOK.search(parsed.subject):
-        return Decision(True, match.why, match, "Its subject could matter to you")
-    return Decision(False, f"Kept from the AI by “{match.name}”", match)
+    return Decision(False, f"Hidden from AI by “{match.name}”", match)
 
 
 FIELD_WORDS = {
@@ -286,7 +267,7 @@ FIELD_WORDS = {
 
 def describe_rule(rule: MailRule) -> str:
     """A rule in plain words: "If it's from a@x and the subject carries the tag [PLM] → file in
-    Automated/PLM, the AI skips it, except replies and mail that names you"."""
+    PLM, the AI skips it"."""
     said = []
     for condition in rule.conditions:
         if condition.field == "header":
@@ -303,12 +284,7 @@ def describe_rule(rule: MailRule) -> str:
         then.append("mark it read")
     if actions.notify:
         then.append("tell you")
-    excepted = [
-        *(["replies"] if actions.skip_agent and actions.read_replies else []),
-        *(["mail that names you"] if actions.skip_agent and actions.mentions else []),
-    ]
-    text = f"If {' and '.join(said)} → {', '.join(then) or 'do nothing'}"
-    return text + (f", except {' and '.join(excepted)}" if excepted else "")
+    return f"If {' and '.join(said)} → {', '.join(then) or 'do nothing'}"
 
 
 def rules_path(home: Path) -> Path:

@@ -58,8 +58,13 @@ def test_one_change_from_different_senders_is_one_matter(
     ]  # fmt: skip
     fake.state.deliver(make_mail(subject="CL 88213 is the last blocker for MR-Nov", sender=KARTHIK))
     triaged(client, "88213 is the last blocker")
-    # A no-reply notice the agent never sees still joins the matter it's about.
-    fake.state.deliver(make_mail(subject="Swarm: Divya Menon approved change 88213", sender=SWARM))
+    # A no-reply notice is kept from the AI, so it never joins a matter, which the AI works from.
+    fake.state.deliver(make_mail(subject="Swarm: approved change 88213", sender=SWARM))
+    # A person writing about the same change does.
+    fake.state.deliver(
+        make_mail(subject="Divya Menon approved change 88213", sender="Divya <divya@corp.example>")
+    )
+    triaged(client, "Divya Menon approved")
     found = wait(
         lambda: (lambda rows: rows if rows and rows[0]["threads"] == 2 else None)(matters(client)),
         "joined",
@@ -68,10 +73,48 @@ def test_one_change_from_different_senders_is_one_matter(
     matter = found[0]
     assert matter["state"] == "waiting_on_you" and matter["next"] == "Get CL 88213 merged"
     detail = query(client, "matters.get", id=matter["id"])
+    assert not any(t["subject"].startswith("Swarm") for t in detail["threads"])
     kinds = [event["kind"] for event in detail["events"]]
     assert kinds[0] == "started" and sorted(kinds[1:]) == ["joined", "suggested"]
     joined = next(event for event in detail["events"] if event["kind"] == "joined")
     assert joined["why"] == "Both mention 88213" and joined["source"]["kind"] == "mail"
+
+
+def test_the_timeline_tells_it_in_date_order_when_the_older_half_joins_later(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    connect(client, fake)
+    script.replies = [
+        triage_reply(reason="Karthik needs 88213 merged.", tasks=[{"title": "Merge CL 88213"}]),
+        triage_reply(reason="Divya asked for 88213 last week."),
+    ]  # fmt: skip
+    # The newer conversation is read first and starts the matter.
+    fake.state.deliver(
+        make_mail(subject="CL 88213 is the last blocker", sender=KARTHIK,
+                  date="Mon, 16 Nov 2026 10:00:00 +0000")
+    )  # fmt: skip
+    triaged(client, "88213 is the last blocker")
+    # The older one, about the same change, comes in after and joins it.
+    fake.state.deliver(
+        make_mail(subject="Please review change 88213", sender="Divya <divya@corp.example>",
+                  date="Mon, 9 Nov 2026 10:00:00 +0000")
+    )  # fmt: skip
+    triaged(client, "Please review change 88213")
+    matter = wait(
+        lambda: (lambda rows: rows[0] if rows and rows[0]["threads"] == 2 else None)(
+            matters(client)
+        ),
+        "joined",
+    )
+    detail = query(client, "matters.get", id=matter["id"])
+    mail = [e for e in detail["events"] if e["kind"] in {"started", "joined", "mail", "sent"}]
+    # Started is the earliest email; the later conversation is linked, with the real reason.
+    assert [e["kind"] for e in mail] == ["started", "joined"]
+    assert mail[0]["text"].startswith("Please review change 88213")
+    assert mail[1]["why"] == "Both mention 88213"
+    times = [e["time"] for e in detail["events"]]
+    assert times == sorted(times)
+    assert detail["matter"]["started"].startswith("2026-11-09")
 
 
 def test_mail_that_needs_nothing_makes_no_matter(

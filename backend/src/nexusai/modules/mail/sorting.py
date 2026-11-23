@@ -4,8 +4,8 @@ Every sender gets a score for how automated it looks and starts on the side the 
 side it ignores; the person moves any across. Ignored senders are filed in Kept from the AI:
 the biggest in folders of their own, the rest in Automated, its catch-all, with rules for what's
 to come. Invitations go to Calendar.
-Both folders are kept from the AI, left out of meaning search and never learned from. Mail that
-names the person, or that a person answered, still reaches the AI.
+Both folders are kept from the AI, left out of meaning search and never learned from: whatever
+an email says, the AI never sees what its folder keeps away.
 """
 
 import threading
@@ -257,7 +257,6 @@ def _email(email: dict[str, Any]) -> SortEmail:
         sender_name=email["from"],
         when=email["when"],
         snippet=email["snippet"],
-        names_you=email["names_you"],
     )
 
 
@@ -373,14 +372,6 @@ def apply(ctx: Context, command: ApplyMailSort) -> int:
         )
         for row in raws.values()
     ]
-    # Mail that names the person, or that a person answered, keeps its conversation with the AI.
-    ignored = {sender for senders in folders.values() for sender in senders}
-    spoken = {
-        raws[key]["thread_id"]
-        for sender in ignored
-        for key in by_sender[sender].through
-        if key in raws
-    }
     filing = [(name, by_sender[s].members) for name, senders in folders.items() for s in senders]
     filing += [(CALENDAR, report.calendar)] if report.calendar else []
     new_rules: list[MailRule] = []
@@ -408,12 +399,11 @@ def apply(ctx: Context, command: ApplyMailSort) -> int:
                 name,
                 senders,
                 mailbox,
-                mentions=[report.owner, report.owner_name],
                 owner=report.owner,
             )
         for name, keys in filing:
-            threads = {raws[key]["thread_id"] for key in keys if key in raws} - spoken
-            quiet = [key for key in keys if key in raws and raws[key]["thread_id"] in threads]
+            threads = {raws[key]["thread_id"] for key in keys if key in raws}
+            quiet = [key for key in keys if key in raws]
             ordered = sorted(threads)
             for start in range(0, len(ordered), 500):
                 chunk = ordered[start : start + 500]

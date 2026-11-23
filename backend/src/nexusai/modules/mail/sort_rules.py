@@ -64,21 +64,17 @@ def rules_for(
     category: str,
     senders: Iterable[str],
     mailbox: Sequence[Seen],
-    mentions: Sequence[str] = (),
     owner: str = "",
 ) -> list[MailRule]:
-    """Rules that file what's to come under `category` and keep it from the AI, unless it names
-    the person. A tool's own address never writes to anyone, so its rule needs no exception for
-    replies; a tag can also turn up in a person's reply, so the tag's rule lets replies through."""
+    """Rules that file what's to come under `category` and keep all of it from the AI."""
     chosen = sorted({sender for sender in senders if sender and sender != owner})
-    named = [who for who in mentions if who][:4]
     found = []
     for sender in chosen:
         found.append(
             MailRule(
                 name=f"{PREFIX}{category}: {sender}"[:120],
                 conditions=[RuleCondition(field="sender_exact", value=sender)],
-                actions=RuleActions(category=category, skip_agent=True, mentions=named),
+                actions=RuleActions(category=category, skip_agent=True),
             )
         )
     if tag := own_tag(chosen, mailbox):
@@ -86,9 +82,7 @@ def rules_for(
             MailRule(
                 name=f"{PREFIX}{category}: [{tag}]"[:120],
                 conditions=[RuleCondition(field="tag", value=tag)],
-                actions=RuleActions(
-                    category=category, skip_agent=True, read_replies=True, mentions=named
-                ),
+                actions=RuleActions(category=category, skip_agent=True),
             )
         )
     return found

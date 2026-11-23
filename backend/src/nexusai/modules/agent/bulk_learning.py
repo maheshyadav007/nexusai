@@ -17,10 +17,13 @@ from nexusai.modules.agent.context import TurnRequest
 from nexusai.modules.agent.prompt_data import untrusted
 from nexusai.modules.mail import accounts, sorting
 from nexusai.modules.mail.rules import FILED_BY_RULE, NO_REPLY, REPLY_PREFIX, WORTH_A_LOOK
+from nexusai.modules.mail.store import hidden_from_ai
 
 BATCH_SIZE = 30
 RECENT_LIMIT = 200
 PREFIX = "learn-group-"
+# Learning never reads what a folder keeps from the AI.
+HIDDEN = hidden_from_ai("t.category")
 MIGRATION = Migration(
     "mail_group_learning_001",
     """
@@ -152,7 +155,7 @@ def queue(ctx: Context, *, retry_failed: bool = False, limit_groups: int | None 
         rows = tx.execute(
             "SELECT m.id, m.thread_id, m.from_addr, m.subject FROM messages m JOIN threads t ON t.id=m.thread_id"
             # Replies and sent copies in a conversation a rule filed are the rule's too.
-            f" WHERE m.account=? AND m.rule IS NULL AND NOT {FILED_BY_RULE} AND t.in_trash=0 AND t.in_junk=0"
+            f" WHERE m.account=? AND m.rule IS NULL AND NOT {FILED_BY_RULE} AND NOT {HIDDEN} AND t.in_trash=0 AND t.in_junk=0"
             " AND NOT EXISTS (SELECT 1 FROM mail_learning_members g WHERE g.message=m.id) ORDER BY m.date DESC,m.id DESC",
             (account,),
         ).fetchall()
@@ -551,7 +554,7 @@ def finalize(ctx: Context, importance: Mapping[str, str] | None = None) -> None:
                 f" {FILED_BY_RULE} AS ruled"
                 " FROM threads t JOIN messages m ON m.id=(SELECT id FROM messages WHERE thread_id=t.id ORDER BY date DESC,id DESC LIMIT 1)"
                 " LEFT JOIN mail_learning_members member ON member.message=m.id LEFT JOIN mail_learning_groups g ON g.id=member.group_id"
-                " WHERE t.account=? AND t.id>? AND t.in_trash=0 AND t.in_junk=0 AND (g.learned=1 OR g.id IS NULL) ORDER BY t.id LIMIT 500",
+                f" WHERE t.account=? AND t.id>? AND NOT {HIDDEN} AND t.in_trash=0 AND t.in_junk=0 AND (g.learned=1 OR g.id IS NULL) ORDER BY t.id LIMIT 500",
                 (account, last),
             ).fetchall()
             if not rows:
@@ -601,14 +604,7 @@ def finalize(ctx: Context, importance: Mapping[str, str] | None = None) -> None:
                     )
                 if (
                     row["last_date"] >= since
-                    and (
-                        row["latest_rule"] is None
-                        or (
-                            row["latest_rule"]
-                            in {"Automatically generated mail", "Sent from a no-reply address"}
-                            and WORTH_A_LOOK.search(row["latest_subject"])
-                        )
-                    )
+                    and row["latest_rule"] is None
                     and not tx.execute(
                         "SELECT 1 FROM triage_runs WHERE message=? LIMIT 1", (row["message"],)
                     ).fetchone()
@@ -657,7 +653,7 @@ def overview(ctx: Context) -> dict[str, Any]:
     since = (datetime.now(UTC) - timedelta(days=30)).isoformat()
     recent = (datetime.now(UTC) - timedelta(days=7)).isoformat()
     candidates = ctx.bus.db.fetch_all(
-        "SELECT t.id,t.subject,m.from_addr,m.to_json FROM threads t JOIN messages m ON m.id=(SELECT id FROM messages WHERE thread_id=t.id ORDER BY date DESC,id DESC LIMIT 1) WHERE t.account=? AND m.rule IS NULL AND t.in_inbox=1 AND t.last_date>=? AND t.last_date<? AND t.status NOT IN ('resolved','fyi') ORDER BY t.last_date DESC LIMIT 1000",
+        f"SELECT t.id,t.subject,m.from_addr,m.to_json FROM threads t JOIN messages m ON m.id=(SELECT id FROM messages WHERE thread_id=t.id ORDER BY date DESC,id DESC LIMIT 1) WHERE t.account=? AND m.rule IS NULL AND NOT {HIDDEN} AND t.in_inbox=1 AND t.last_date>=? AND t.last_date<? AND t.status NOT IN ('resolved','fyi') ORDER BY t.last_date DESC LIMIT 1000",
         (account, since, recent),
     )
     missed = [
@@ -776,7 +772,7 @@ def unseen_count(ctx: Context) -> int:
         )
     }
     rows = ctx.bus.db.fetch_all(
-        "SELECT m.from_addr,m.subject FROM messages m JOIN threads t ON t.id=m.thread_id WHERE m.account=? AND m.rule IS NULL AND t.in_trash=0 AND t.in_junk=0 AND NOT EXISTS(SELECT 1 FROM mail_learning_members member WHERE member.message=m.id)",
+        f"SELECT m.from_addr,m.subject FROM messages m JOIN threads t ON t.id=m.thread_id WHERE m.account=? AND m.rule IS NULL AND NOT {HIDDEN} AND t.in_trash=0 AND t.in_junk=0 AND NOT EXISTS(SELECT 1 FROM mail_learning_members member WHERE member.message=m.id)",
         (account,),
     )
     return len({group_id(account, row["from_addr"], row["subject"]) for row in rows} - known)

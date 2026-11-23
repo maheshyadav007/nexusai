@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from nexusai.kernel.database import Migration
 from nexusai.kernel.module import Context
 from nexusai.modules.agent.kinds import KINDS, WORK
+from nexusai.modules.mail.store import hidden_from_ai
 
 MIGRATION = Migration(
     "agent_conversation_closed_001",
@@ -17,6 +18,11 @@ CREATE TABLE conversation_closed (
   thread INTEGER NOT NULL, kind TEXT NOT NULL, item INTEGER NOT NULL, PRIMARY KEY (kind, item));
 CREATE INDEX conversation_closed_thread ON conversation_closed (thread);
 """,
+)
+# Conversations whose open work closed because a folder now keeps them from the AI.
+HIDDEN_MIGRATION = Migration(
+    "agent_conversation_hidden_001",
+    "CREATE TABLE conversation_hidden (thread INTEGER PRIMARY KEY);",
 )
 # What each kind of work is, and how it's closed and opened again, as kinds.py declares it.
 _WORK = {
@@ -82,6 +88,39 @@ def reopen_work(ctx: Context, thread: int) -> int:
         for kind in kinds:
             work.emit(_EVENTS[kind], {}, source="agent", trace_id=ctx.trace_id)
     return len(rows)
+
+
+def follow_folders(ctx: Context) -> int:
+    """What a folder keeps from the AI leaves the AI's work: its open tasks, reminders and
+    deadlines close. Moved back to where the AI reads, they open again. Returns how many
+    conversations changed."""
+    db = ctx.bus.db
+    still_open = " UNION ".join(
+        f"SELECT thread FROM {table} WHERE thread IS NOT NULL AND {open_}"  # noqa: S608
+        for table, open_, _, _ in _WORK.values()
+    )
+    hidden = db.fetch_all(
+        f"SELECT DISTINCT w.thread FROM ({still_open}) w JOIN threads t ON t.id = w.thread"  # noqa: S608
+        f" WHERE {hidden_from_ai('t.category')}"
+        " AND w.thread NOT IN (SELECT thread FROM conversation_hidden)"
+    )
+    back = db.fetch_all(
+        "SELECT h.thread, t.status FROM conversation_hidden h JOIN threads t ON t.id = h.thread"  # noqa: S608
+        f" WHERE NOT {hidden_from_ai('t.category')}"
+    )
+    for row in hidden:
+        close_work(ctx, int(row["thread"]))
+        with db.transaction() as tx:
+            tx.execute(
+                "INSERT OR IGNORE INTO conversation_hidden (thread) VALUES (?)", (row["thread"],)
+            )
+    for row in back:
+        # Marked done meanwhile, it stays done.
+        if row["status"] != "resolved":
+            reopen_work(ctx, int(row["thread"]))
+        with db.transaction() as tx:
+            tx.execute("DELETE FROM conversation_hidden WHERE thread = ?", (row["thread"],))
+    return len(hidden) + len(back)
 
 
 def _set_status(ctx: Context, thread: int, status: str, was: str) -> bool:

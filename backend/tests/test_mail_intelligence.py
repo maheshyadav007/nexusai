@@ -178,7 +178,7 @@ def mail_context(client: TestClient) -> Any:
     return _triggers().ctx
 
 
-def test_automated_mail_is_only_read_when_it_could_matter(
+def test_automated_mail_is_never_read_whatever_its_subject_says(
     client: TestClient, fake: FakeMail, script: Script
 ) -> None:
     connect(client, fake)
@@ -189,8 +189,14 @@ def test_automated_mail_is_only_read_when_it_could_matter(
     fake.state.deliver(
         make_mail(subject="Payment due Friday", sender="no-reply@bank.com", message_id="<f2@x>")
     )
-    judged(client, "Payment due")
-    assert all("Your weekly tips" not in told(request) for request in script.requests)
+    # Filed where the AI doesn't read, so even a consequential subject isn't shown to it.
+    assert thread_named(client, "Payment due")["category"] == "Automated"
+    fake.state.deliver(make_mail(subject="Lunch on Friday?", message_id="<f3@x>"))
+    judged(client, "Lunch on Friday")
+    assert all(
+        "Your weekly tips" not in told(request) and "Payment due" not in told(request)
+        for request in script.requests
+    )
 
 
 def test_a_header_match_without_a_consequential_subject_uses_no_model(
@@ -650,7 +656,7 @@ def test_the_same_mail_isnt_offered_twice_under_another_name(
     assert len(post(client, "suggestions.list")["suggestions"]) == 1
 
 
-def test_the_ai_s_folder_replaces_a_header_guess_one_folder_per_email(
+def test_a_conversation_kept_from_the_ai_stays_kept_when_people_write_in_it(
     client: TestClient, fake: FakeMail, script: Script
 ) -> None:
     connect(client, fake)
@@ -676,7 +682,6 @@ def test_the_ai_s_folder_replaces_a_header_guess_one_folder_per_email(
         ),
         box="Sent",
     )
-    wait(lambda: row(client, first["id"])["status"] == "waiting_on_others", "their reply")
     fake.state.deliver(
         make_mail(
             subject="Re: Interview",
@@ -685,8 +690,13 @@ def test_the_ai_s_folder_replaces_a_header_guess_one_folder_per_email(
             in_reply_to="<ab2@x>",
         )
     )
-    wait(lambda: row(client, first["id"])["category"] == "Job search", "the AI's folder")
-    assert json.loads(row(client, first["id"])["extra_categories"]) == []
+    # The folder is the gate for the whole conversation: neither the reply nor the answer is
+    # shown to the AI, so it stays where it was filed.
+    fake.state.deliver(make_mail(subject="Lunch on Friday?", message_id="<ab4@x>"))
+    judged(client, "Lunch on Friday")
+    kept = row(client, first["id"])
+    assert kept["category"] == "Automated"
+    assert all("Re: Interview" not in told(request) for request in script.requests)
 
 
 def test_a_conversation_a_rule_filed_gets_no_ai_folders_and_is_not_learned(

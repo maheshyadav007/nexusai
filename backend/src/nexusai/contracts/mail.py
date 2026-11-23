@@ -402,6 +402,44 @@ class ThreadToInbox(BaseModel):
     always: bool = False
 
 
+class HideFromAi(BaseModel):
+    """Takes mail away from the AI from wherever it's seen: everything from the conversation's
+    sender, or just the conversation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    thread: int
+    scope: Literal["sender", "conversation"] = "sender"
+
+
+class HidePreview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    thread: int
+
+
+class HideFromAiPreview(BaseModel):
+    # Who "everything from" means; empty when only the person wrote in the conversation.
+    sender: str = ""
+    sender_name: str = ""
+    sender_emails: int = 0
+    conversation_emails: int = 0
+    # The folder its mail would go to.
+    folder: str = ""
+
+
+class HiddenFromAi(BaseModel):
+    undo: int
+    folder: str
+    emails: int
+
+
+class UndoHide(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    undo: int
+
+
 class ThreadInInbox(BaseModel):
     # Who "always" would apply to; empty when the conversation has no sender to go by.
     sender: str = ""
@@ -960,7 +998,6 @@ class SortEmail(BaseModel):
     sender_name: str
     when: str
     snippet: str
-    names_you: bool
 
 
 class SortSender(BaseModel):
@@ -977,9 +1014,6 @@ class SortSender(BaseModel):
     side: Literal["reads", "ignores"]
     # Why it stays with the AI whatever its score, if it does.
     kept: str
-    # How many would still reach the AI if it's ignored: they name the person, or a person
-    # replied in that conversation.
-    reach: int
     # Starts as a category of its own under Automated, rather than going straight into it.
     own: bool
     examples: list[str]

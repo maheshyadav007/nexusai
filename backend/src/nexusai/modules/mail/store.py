@@ -281,23 +281,38 @@ KEPT_FOLDERS = (
     "(SELECT name FROM mail_categories WHERE ai_reads = 0 UNION SELECT 'Automated'"
     " UNION SELECT 'Calendar')"
 )
+
+
+def hidden_from_ai(column: str = "category") -> str:
+    """A conversation the AI never sees: its folder is in Kept from the AI. The one test, for the
+    sidebar, the agent, learning and matters alike. Never NULL, so NOT works on mail with none."""
+    return f"COALESCE({column}, '') IN {KEPT_FOLDERS}"
+
+
 FOLDER_FILTERS = {
     **{name: f"{column} = 1" for name, column in THREAD_COLUMNS.items()},
     # What came in, wherever it's been filed since.
     "all": "(in_inbox = 1 OR in_archive = 1)",
     "starred": "(flagged = 1 AND (in_inbox = 1 OR in_archive = 1 OR in_sent = 1 OR in_drafts = 1 OR in_other = 1))",
-    "important": "(in_inbox = 1 AND (importance = 'high' OR status = 'waiting_on_you'))",
+    # What the AI judged important; a folder that keeps mail from the AI keeps its judgement too.
+    "important": (
+        f"(in_inbox = 1 AND NOT COALESCE(category, '') IN {KEPT_FOLDERS}"
+        " AND (importance = 'high' OR status = 'waiting_on_you'))"
+    ),
     # The two homes: what the AI reads, and what's kept from it, each without what's archived.
     "reads": f"(in_inbox = 1 AND (category IS NULL OR category NOT IN {KEPT_FOLDERS}))",
     "kept": f"(in_inbox = 1 AND category IN {KEPT_FOLDERS})",
+    # Mail kept from the AI comes to Priority only by its folder's Show in Priority, never by
+    # what the AI judged before it was kept.
     "priority": (
-        "(in_inbox = 1 AND (importance = 'high' OR status = 'waiting_on_you'"
-        " OR (category IS NULL AND extra_categories = '[]')"
-        " OR category IN (SELECT name FROM mail_categories WHERE in_priority = 1 AND proposed = 0)"
+        "(in_inbox = 1 AND (category IN (SELECT name FROM mail_categories WHERE in_priority = 1 AND proposed = 0)"
         " OR EXISTS (SELECT 1 FROM json_each(extra_categories) e WHERE e.value IN"
         " (SELECT name FROM mail_categories WHERE in_priority = 1 AND proposed = 0))"
+        f" OR (NOT COALESCE(category, '') IN {KEPT_FOLDERS}"
+        " AND (importance = 'high' OR status = 'waiting_on_you'"
+        " OR (category IS NULL AND extra_categories = '[]')"
         " OR (latest_rule IS NULL AND COALESCE(category,'') != 'Broadcast'"
-        " AND NOT EXISTS (SELECT 1 FROM json_each(extra_categories) WHERE value='Broadcast'))))"
+        " AND NOT EXISTS (SELECT 1 FROM json_each(extra_categories) WHERE value='Broadcast'))))))"
     ),
 }
 SUBJECT_WINDOW_DAYS = 30
@@ -421,7 +436,6 @@ class Stored:
     notify: bool
     is_new_thread: bool
     # Filed by its headers alone, and what it says could matter to the person.
-    worth_a_look: bool = False
 
 
 def _participants(parsed: ParsedMessage) -> set[str]:
@@ -678,8 +692,6 @@ def store_message(
         rule=match.name if match else None,
         skip_agent=not decision.reaches_ai,
         notify=bool(match and match.actions.notify),
-        # Its rule keeps mail away, yet this one is the exception, whatever else came with it.
-        worth_a_look=bool(decision.exception),
         is_new_thread=is_new,
     )
 

@@ -74,6 +74,12 @@ body {
   .nx-progress::-moz-progress-bar {
     @apply bg-accent-default;
   }
+  .nx-progress-quiet::-webkit-progress-value {
+    @apply bg-ink-faint;
+  }
+  .nx-progress-quiet::-moz-progress-bar {
+    @apply bg-ink-faint;
+  }
   /* Anything clickable gives a little under the pointer. */
   .press {
     transition-property: transform, color, background-color, border-color, opacity;

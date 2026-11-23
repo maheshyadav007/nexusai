@@ -1,8 +1,8 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-// Priority, then the two homes: Inbox with the folders the AI reads, Kept from the AI with the
-// rest. Each shows its biggest three; More holds the system folders and the server's labels.
+// Priority, then the two homes: Read by AI with the folders the AI reads, Hidden from AI with the
+// rest, folded at first. Each shows its biggest three; More holds the system folders and labels.
 const categories = ["Action needed", "Projects", "Finance", "People", "Travel", "Newsletters", "Team updates", "Reference", ...Array.from({ length: 12 }, (_, i) => `Project ${i + 1}`)].map((name, index) => ({ name, source: "user", in_priority: false, proposed: false, count: 40 - index, unread: 0 }));
 const folders = Array.from({ length: 2 }, (_, i) => ({ name: `Server ${i + 1}`, label: `Server ${i + 1}`, role: "other", here: 4, on_server: 4, unread: 0 }));
 const screenshots = "../output/sidebar-review-2026-11-23";
@@ -30,17 +30,19 @@ test("each home shows its three biggest folders, and Show all keeps the open one
   const priority = nav.getByRole("link", { name: "Priority", exact: true });
   await expect(rows).toHaveCount(3);
   await expect(rows.first()).toContainText("Action needed");
-  await expect(inbox.getByRole("link", { name: "Inbox", exact: true })).toBeVisible();
+  await expect(inbox.getByRole("link", { name: "Read by AI", exact: true })).toBeVisible();
+  // Hidden from AI starts folded: its home, and none of its folders.
+  await expect(nav.getByTestId("nav-home-kept").getByRole("button", { name: "Show what's in Hidden from AI" })).toHaveAttribute("aria-expanded", "false");
   // The server's labels wait under More.
   await expect(nav.locator('[data-testid="nav-folder"]')).toHaveCount(0);
   await expect(today).toHaveAttribute("aria-current", "page");
   const homeBox = await today.boundingBox();
   const mailBox = await priority.boundingBox();
   expect(mailBox!.y - homeBox!.y - homeBox!.height).toBeGreaterThanOrEqual(16);
-  // Priority, then the Inbox, then Starred.
+  // Priority, then Read by AI, then Starred.
   const order = await nav.getByRole("link").evaluateAll((links) => links.map((link) => link.textContent?.trim() ?? ""));
-  expect(order.findIndex((name) => name.startsWith("Priority"))).toBeLessThan(order.findIndex((name) => name.startsWith("Inbox")));
-  expect(order.findIndex((name) => name.startsWith("Inbox"))).toBeLessThan(order.findIndex((name) => name.startsWith("Starred")));
+  expect(order.findIndex((name) => name.startsWith("Priority"))).toBeLessThan(order.findIndex((name) => name.startsWith("Read by AI")));
+  expect(order.findIndex((name) => name.startsWith("Read by AI"))).toBeLessThan(order.findIndex((name) => name.startsWith("Starred")));
   await page.screenshot({ path: `${screenshots}/homes-light.png` });
   await inbox.getByRole("button", { name: "Show all (20)", exact: true }).click();
   await expect(rows).toHaveCount(20);
@@ -104,10 +106,14 @@ test("folders sit inside folders, each home holds its own side, and a parent cou
   const inbox = nav.getByTestId("nav-home-reads");
   const kept = nav.getByTestId("nav-home-kept");
   await expect(nav.getByRole("link", { name: "Priority", exact: true })).toContainText("22");
-  await expect(inbox.getByRole("link", { name: "Inbox", exact: true })).toContainText("7");
-  await expect(kept.getByRole("link", { name: "Kept from the AI", exact: true })).toContainText("41");
-  // Automated, the catch-all, is never listed; its mail is simply kept.
+  await expect(inbox.getByRole("link", { name: "Read by AI", exact: true })).toContainText("7");
+  await expect(kept.getByRole("link", { name: "Hidden from AI", exact: true })).toContainText("41");
+  // Folded at first; opened, it shows its folders with Calendar in its own place under them.
+  await expect(kept.locator('[data-testid="nav-category"]')).toHaveCount(0);
+  await kept.getByRole("button", { name: "Show what's in Hidden from AI" }).click();
+  // Automated, the catch-all, is never listed; its mail is simply hidden.
   await expect(kept.locator('[data-testid="nav-category"]')).toHaveText([/linkedin/, /beehiiv/]);
+  await expect(kept.getByTestId("nav-calendar")).toContainText("Calendar");
   await expect(nav.getByRole("link", { name: "Automated", exact: true })).toHaveCount(0);
   // Projects, the biggest with Alpha in it, counts Alpha's unread too, and folds it away.
   const projects = inbox.getByRole("link", { name: "Projects", exact: true });
@@ -116,14 +122,14 @@ test("folders sit inside folders, each home holds its own side, and a parent cou
   await inbox.getByRole("button", { name: "Show what's in Projects" }).click();
   await expect(inbox.getByRole("link", { name: "Alpha", exact: true })).toBeVisible();
   // A home's menu makes a folder for that side.
-  await kept.getByRole("link", { name: "Kept from the AI", exact: true }).click({ button: "right" });
+  await kept.getByRole("link", { name: "Hidden from AI", exact: true }).click({ button: "right" });
   await expect(page.getByRole("menuitem")).toHaveText(["Open", "Mark downloaded mail as read", "New folder…", "Sort senders…"]);
   await page.getByRole("menuitem", { name: "New folder…" }).click();
   const dialog = page.getByRole("dialog", { name: "New folder" });
-  await expect(dialog.getByRole("combobox", { name: "Inside" })).toHaveText(/Kept from the AI/);
+  await expect(dialog.getByRole("combobox", { name: "Inside" })).toHaveText(/Hidden from AI/);
   await expect(dialog.getByRole("radio", { name: "The AI decides" })).toBeDisabled();
   await dialog.getByRole("textbox", { name: "Name" }).fill("LinkedIn");
-  await expect(dialog.getByRole("alert")).toHaveText("There's already a folder called linkedin, in Kept from the AI.");
+  await expect(dialog.getByRole("alert")).toHaveText("There's already a folder called linkedin, in Hidden from AI.");
   await expect(dialog.getByRole("button", { name: "Create folder" })).toBeDisabled();
   await page.screenshot({ path: `${screenshots}/new-folder.png` });
   await page.keyboard.press("Escape");
@@ -237,7 +243,7 @@ test("a folder can be hidden from the sidebar, waits under Show all, and is edit
   await page.getByRole("menuitem", { name: "Edit folder…" }).click();
   const dialog = page.getByRole("dialog", { name: "Edit folder" });
   await expect(dialog.getByRole("textbox", { name: "What goes here" })).toBeVisible();
-  await expect(dialog.getByRole("combobox", { name: "Inside" })).toHaveText(/Inbox/);
+  await expect(dialog.getByRole("combobox", { name: "Inside" })).toHaveText(/Read by AI/);
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).toHaveCount(0);
   await request.post("/api/commands/sidebar.reset", { data: {} });

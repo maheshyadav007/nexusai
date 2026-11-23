@@ -14,7 +14,7 @@ from nexusai.modules.mail.parse import parse_message
 SAMPLES = 10
 
 
-def _summary(key: str, raw: bytes, named: set[str]) -> dict[str, Any]:
+def _summary(key: str, raw: bytes) -> dict[str, Any]:
     parsed = parse_message(raw)
     try:
         when = datetime.fromisoformat(parsed.date).strftime("%d %b").lstrip("0")
@@ -27,7 +27,6 @@ def _summary(key: str, raw: bytes, named: set[str]) -> dict[str, Any]:
         "from": parsed.from_name or parsed.from_addr,
         "when": when,
         "snippet": parsed.snippet[:140],
-        "names_you": key in named,
     }
 
 
@@ -39,10 +38,9 @@ TOP_CATEGORIES = 3
 
 def describe_senders(report: grouping.SenderReport, read: Callable[[str], bytes]) -> dict[str, Any]:
     """Every sender biggest first, with its score, its side, whether it starts as its own
-    category, and sample emails. An email marked through still reaches the AI."""
+    category, and sample emails."""
     ignored = [row.sender for row in report.senders if row.side == "ignores"]
     own = set(ignored[:TOP_CATEGORIES])
-    through = {key for row in report.senders for key in row.through}
     senders = []
     for row in report.senders:
         senders.append(
@@ -56,10 +54,9 @@ def describe_senders(report: grouping.SenderReport, read: Callable[[str], bytes]
                 "one_way": row.one_way,
                 "side": row.side,
                 "kept": row.kept,
-                "reach": row.reach,
                 "own": row.sender in own,
                 "examples": [pattern for pattern, _ in row.examples],
-                "emails": [_summary(key, read(key), through) for key in row.members[:SAMPLES]],
+                "emails": [_summary(key, read(key)) for key in row.members[:SAMPLES]],
                 "folder": "",
             }
         )

@@ -1570,21 +1570,27 @@ def build_tools(
                 folder=folder,
             )
             found = cast(SearchResults, run_search(wanted, ctx))
-            for hit in found.hits:
+            # What a folder keeps from the AI is never shown to an agent running by itself;
+            # when the person asks, it is, and says so.
+            hidden = signals.hidden_threads(ctx, [hit.thread.id for hit in found.hits])
+            asked = signals.asked_by_person(ctx, session)
+            hits = [hit for hit in found.hits if asked or hit.thread.id not in hidden]
+            for hit in hits:
                 citations.note(ctx.bus.db, session, citations.MAIL, str(hit.thread.id))
             lines = [
                 f"{citations.mark(citations.MAIL, h.thread.id)} {h.thread.last_date[:10]} | {h.thread.subject}"
                 f" | {', '.join(h.thread.participants[:3])}"
                 f"{' | ' + h.thread.category if h.thread.category else ''}"
+                f"{' | ' + signals.HIDDEN_NOTE if h.thread.id in hidden else ''}"
                 f"{' | related in meaning, not these words' if h.matched_by == 'meaning' else ''}"
                 f" | {h.excerpt}"
-                for h in found.hits
+                for h in hits
             ]
             if found.corrected:
                 lines.insert(
                     0, f"Nothing matched as typed, so this searched for: {found.corrected}"
                 )
-            if len(found.hits) == SEARCH_SHOWN:
+            if len(hits) == SEARCH_SHOWN:
                 lines.append("There may be more. Narrow it with sender, after or before.")
             return _untrusted(
                 "\n".join(lines)
@@ -1634,9 +1640,15 @@ def build_tools(
                 ctx.config.agent.max_thread_chars,
                 ctx.config.agent.max_tool_output_chars // len(ids) - 100,
             )
-            return _untrusted("\n\n---\n\n".join(_thread_text(thread, share) for thread in ids))
+            hidden = signals.hidden_threads(ctx, ids)
+            asked = signals.asked_by_person(ctx, session)
+            return _untrusted(
+                "\n\n---\n\n".join(_thread_text(thread, share, hidden, asked) for thread in ids)
+            )
 
-        def _thread_text(thread_id: int, budget: int) -> str:
+        def _thread_text(thread_id: int, budget: int, hidden: set[int], asked: bool) -> str:
+            if thread_id in hidden and not asked:
+                return f"Conversation {thread_id} is hidden from the AI by its folder."
             view = store.thread_view(ctx.bus.db, thread_id)
             if view is None:
                 return f"Conversation {thread_id} no longer exists."
@@ -1655,7 +1667,8 @@ def build_tools(
                 if attachments
                 else ""
             )
-            head = f"Conversation {citations.mark(citations.MAIL, thread_id)}\nSubject: {view.thread.subject}\n{manifest}"
+            shown = f" ({signals.HIDDEN_NOTE})" if thread_id in hidden else ""
+            head = f"Conversation {citations.mark(citations.MAIL, thread_id)}{shown}\nSubject: {view.thread.subject}\n{manifest}"
             # The newest messages matter most, so when space runs out the oldest go first.
             kept: list[str] = []
             room = budget - len(head)

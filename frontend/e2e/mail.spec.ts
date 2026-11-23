@@ -189,7 +189,7 @@ test("the sidebar runs from mail to planner, and every folder shows what's unrea
   const labels = await nav.getByRole("link").allInnerTexts();
   const first = (name: string) => labels.findIndex((label) => label.startsWith(name));
   expect(first("Today")).toBe(0);
-  expect(first("Inbox")).toBeLessThan(first("Starred"));
+  expect(first("Read by AI")).toBeLessThan(first("Starred"));
   expect(first("Starred")).toBeLessThan(first("Sent"));
   // All mail is open, so More is too, with the rarely needed folders in it.
   await expect(nav.getByRole("button", { name: "More" })).toHaveAttribute("aria-expanded", "true");

@@ -65,7 +65,7 @@ test("Priority, Inbox, Important and Starred are separate views", async ({ page,
   const target = rows[0];
   await post(request, "/api/commands/thread.setFlag", { id: target.id, flagged: true });
   await page.goto("/mail/starred");
-  await expect(page.getByRole("link", { name: "Inbox", exact: false }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Read by AI", exact: false }).first()).toBeVisible();
   await page.getByRole("button", { name: "More" }).click();
   await expect(page.getByRole("link", { name: "Important", exact: false }).first()).toBeVisible();
   await expect(page.getByText(target.subject, { exact: true })).toBeVisible();

@@ -1,6 +1,7 @@
 """One thing going on is one conversation, and its work goes with it (docs/MATTERS_PLAN.md, phase 1)."""
 # ruff: noqa: F811
 
+import json
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -151,3 +152,100 @@ def test_ticking_the_last_task_finishes_the_conversation(
     client.post("/api/commands/tasks.save", json={**save, "status": "todo", "proposed": False})
     wait(lambda: thread_named(client, "The deck")["status"] == "waiting_on_you", "open again")
     wait(lambda: reminders(client), "reminder back")
+
+
+def test_mail_filed_where_the_ai_doesnt_read_leaves_its_work_and_comes_back_with_it(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    connect(client, fake)
+    script.replies = [
+        triage_reply(
+            reason="Budget due.", tasks=[{"title": "Send the budget", "due": "2099-01-10"}]
+        )
+    ]
+    fake.state.deliver(make_mail(subject="Budget numbers"))
+    thread = triaged(client, "Budget numbers")
+    wait(lambda: tasks(client), "work")
+
+    def listed(folder: str) -> set[int]:
+        found = client.post("/api/queries/threads.list", json={"folder": folder}).json()
+        return {row["id"] for row in found["threads"]}
+
+    def matters() -> list[Any]:
+        return client.post("/api/queries/matters.list", json={}).json()["matters"]
+
+    assert thread["id"] in listed("priority") and matters()
+    moved = client.post(
+        "/api/commands/thread.setCategory", json={"id": thread["id"], "category": "Automated"}
+    )
+    assert moved.status_code == 200, moved.text
+    # Kept from the AI now: its task closes, and it leaves Priority and the matters.
+    wait(lambda: not tasks(client), "closed")
+    assert thread["id"] not in listed("priority") and thread["id"] in listed("kept")
+    assert not matters()
+    client.post("/api/commands/thread.setCategory", json={"id": thread["id"], "category": None})
+    wait(lambda: tasks(client), "back")
+    assert thread["id"] in listed("priority") and matters()
+
+
+def test_hide_from_ai_takes_the_sender_away_whole_and_undo_brings_it_all_back(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    connect(client, fake)
+    script.replies = [
+        triage_reply(reason="Bill due.", tasks=[{"title": "Pay the bill", "due": "2099-01-10"}])
+    ]
+    fake.state.deliver(make_mail(subject="Your bill is ready", sender=SENDER))
+    thread = triaged(client, "Your bill is ready")
+    wait(lambda: tasks(client), "work")
+
+    def ask(kind: str, name: str, body: dict[str, Any]) -> Any:
+        response = client.post(f"/api/{kind}/{name}", json=body)
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    def listed(folder: str) -> set[int]:
+        return {row["id"] for row in ask("queries", "threads.list", {"folder": folder})["threads"]}
+
+    seen = ask("queries", "mail.hide.preview", {"thread": thread["id"]})
+    assert seen["sender"] == "billing@cloud.example" and seen["sender_emails"] == 1
+    assert seen["folder"] == "Cloud Billing"
+    hidden = ask("commands", "mail.hide", {"thread": thread["id"], "scope": "sender"})
+    assert hidden["folder"] == "Cloud Billing" and hidden["emails"] == 1
+    wait(lambda: not tasks(client), "its work closed")
+    assert thread["id"] in listed("kept") and thread["id"] not in listed("priority")
+    folders = {c["name"]: c for c in ask("queries", "categories.list", {})["categories"]}
+    assert folders["Cloud Billing"]["ai_reads"] is False
+    # What comes next from the sender follows, and the AI isn't asked about it.
+    asked = len(script.requests)
+    fake.state.deliver(make_mail(subject="Your next bill", sender=SENDER))
+    later = wait(lambda: thread_named(client, "Your next bill"), "the next bill")
+    assert later["category"] == "Cloud Billing" and len(script.requests) == asked
+
+    ask("commands", "mail.hide.undo", {"undo": hidden["undo"]})
+    wait(lambda: tasks(client), "its work back")
+    assert thread["id"] in listed("priority")
+    folders = {c["name"] for c in ask("queries", "categories.list", {})["categories"]}
+    rules = ask("queries", "rules.get", {})["rules"]
+    assert not any(r["actions"].get("category") == "Cloud Billing" for r in rules)
+    # The bill that came while it was hidden comes back too, and the folder hiding made goes.
+    assert thread_named(client, "Your next bill")["category"] is None
+    assert "Cloud Billing" not in folders
+
+
+def test_hide_from_ai_one_conversation_leaves_the_sender_alone(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    connect(client, fake)
+    script.replies = [triage_reply(reason="A question.")]
+    fake.state.deliver(make_mail(subject="Quick question"))
+    thread = triaged(client, "Quick question")
+    hidden = client.post(
+        "/api/commands/mail.hide", json={"thread": thread["id"], "scope": "conversation"}
+    ).json()
+    assert hidden["folder"] == "Automated"
+    rules = client.post("/api/queries/rules.get", json={}).json()["rules"]
+    assert not any(r["actions"].get("skip_agent") for r in rules if "priya" in json.dumps(r))
+    client.post("/api/commands/mail.hide.undo", json={"undo": hidden["undo"]})
+    back = thread_named(client, "Quick question")
+    assert back["category"] == thread["category"]

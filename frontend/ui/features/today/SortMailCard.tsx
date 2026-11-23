@@ -16,7 +16,7 @@ export function SortMailCard() {
   const data = sort.data;
   if (!data || (data.state !== "ready" && data.state !== "preparing")) return null;
   // The same figure the sorting page starts with: what it would keep from the AI.
-  const automated = (data.senders ?? []).filter((sender) => sender.side === "ignores").reduce((n, sender) => n + sender.count - sender.reach, 0) + (data.calendar ?? 0);
+  const automated = (data.senders ?? []).filter((sender) => sender.side === "ignores").reduce((n, sender) => n + sender.count, 0) + (data.calendar ?? 0);
   return <Card title={t("mail.sort.card.title")}>
     <div className="flex flex-col gap-3">
       <p className="text-md text-ink-secondary">{data.state !== "ready" ? t("mail.sort.card.preparing", { name: lead }) : automated ? t("mail.sort.card.ready", { name: lead, count: automated.toLocaleString() }) : t("mail.sort.card.none", { name: lead })}</p>

@@ -104,7 +104,7 @@ A **matter** is one real-world thing the person may need to know about or act on
 Rules of thumb:
 - A matter ends. A folder or topic doesn't.
 - A matter has at most one owner of the next move: you, someone else, or nobody (done).
-- Mail kept from the AI by the rule engine never creates a matter. Mail that *names you* inside such a folder still does, because the rule engine lets it through.
+- Mail kept from the AI never creates or joins a matter, and a conversation filed there later leaves its matter (it comes back if moved out). Since 2026-11-23 nothing in such a folder reaches the AI, including mail that names you.
 
 ### 3.2 Terms
 
