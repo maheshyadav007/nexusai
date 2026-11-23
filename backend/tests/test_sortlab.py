@@ -241,3 +241,19 @@ def test_the_lab_shows_each_categorys_rules_from_the_same_engine(lab: Any) -> No
     written = json.loads(Path(saved["saved"]).read_text())
     assert any(c["name"] == "PLM" and c["rules"] for c in written["rules"])
     assert state.mail == []
+
+
+def test_mail_and_results_are_kept_beside_the_lab(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sortlab, "_beside_program", lambda: tmp_path)
+    found = sortlab.default_lab()
+    assert (found.folder, found.results) == (
+        tmp_path / "sort-lab-mail",
+        tmp_path / "sort-lab-results",
+    )
+    # A folder it can't write to, like Program Files: the app's data folder and Documents.
+    monkeypatch.setattr(sortlab, "_writable", lambda _: False)
+    fallback = sortlab.default_lab()
+    assert fallback.results == Path.home() / "Documents" / "NexusAI Sort Lab"
+    assert fallback.folder.parts[-2:] == ("sort-lab", "mail")
