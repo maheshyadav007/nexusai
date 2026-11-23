@@ -36,6 +36,9 @@ SETTINGS_FILE = "sortlab.env"
 LIMIT = 15000
 SKIPPED_ROLES = {"trash", "junk", "drafts"}
 PAGE = Path(__file__).with_name("page.html")
+# Beside the lab: the downloaded mail, deleted when an experiment ends, and the results kept.
+MAIL_FOLDER = "sort-lab-mail"
+RESULTS_FOLDER = "sort-lab-results"
 
 
 class Session(Protocol):
@@ -435,8 +438,24 @@ def show_folder(folder: Path) -> None:
             subprocess.run(["open", str(folder)], check=False)  # noqa: S603, S607
 
 
+def _writable(folder: Path) -> bool:
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        probe = folder / f".write-test-{secrets.token_hex(4)}"
+        probe.write_bytes(b"")
+        probe.unlink()
+    except OSError:
+        return False
+    return True
+
+
 def default_lab() -> Lab:
-    """Mail goes in the app's data folder, results in Documents where people find them."""
+    """Mail and results go beside the lab, in the folder it was run from, so everything it
+    keeps is in one place. Where that folder can't be written, as under Program Files, mail
+    goes in the app's data folder and results in Documents."""
+    here = _beside_program()
+    if _writable(here / RESULTS_FOLDER):
+        return Lab(folder=here / MAIL_FOLDER, results=here / RESULTS_FOLDER)
     return Lab(
         folder=app_data_dir() / "sort-lab" / "mail",
         results=Path.home() / "Documents" / "NexusAI Sort Lab",
