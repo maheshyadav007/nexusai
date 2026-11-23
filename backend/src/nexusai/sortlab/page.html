@@ -44,7 +44,7 @@ input[type=text], input[type=password] { font: 14px var(--sans); color: var(--in
 .bar { height: 6px; background: var(--sunken); border-radius: 99px; overflow: hidden; }
 .bar > div { height: 100%; background: var(--accent); width: 0; transition: width .3s; }
 
-/* The sorter: one header, then two columns, AI reads and AI ignores, that stack on a phone. */
+/* The sorter: one header, then two columns, Inbox and Kept from the AI, that stack on a phone. */
 .sorter { max-width: 1180px; margin: 0 auto; padding: 28px 16px 48px; display: flex; flex-direction: column; gap: 18px; }
 .rule { background: var(--raised); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; font-size: 13px; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 6px 18px; }
 .rule b { color: var(--ink); }
@@ -121,19 +121,19 @@ input[type=text], input[type=password] { font: 14px var(--sans); color: var(--in
   </div>
   <div class="rule">
     <span>Each sender is scored by how <b>automated</b> it looks: repeated subjects, bulk-mail headers, or many emails nobody answers.</span>
-    <span><b>50% or more</b> → the AI ignores it. Below that, and every new sender → the AI reads it.</span>
-    <span>An ignored email still reaches the AI when it <b>mentions you</b> or <b>a person replied</b> in that conversation.</span>
+    <span><b>50% or more</b> → kept from the AI. Below that, and every new sender → in the Inbox, where the AI reads it.</span>
+    <span>A kept email still reaches the AI when it <b>mentions you</b> or <b>a person replied</b> in that conversation.</span>
   </div>
   <div class="columns">
     <section class="col reads" aria-labelledby="reads-h">
-      <div class="col-head"><h2 id="reads-h">AI reads <span class="chip reads">Inbox</span></h2><span class="muted" id="reads-n"></span></div>
+      <div class="col-head"><h2 id="reads-h">Inbox · the AI reads it</h2><span class="muted" id="reads-n"></span></div>
       <div class="list" id="reads"></div>
     </section>
     <section class="col ignores" aria-labelledby="ignores-h">
-      <div class="col-head"><h2 id="ignores-h">AI ignores <span class="chip ignores">Automated</span></h2><span class="muted" id="ignores-n"></span></div>
-      <p class="sub">Their own category · the 5 biggest are ticked</p>
+      <div class="col-head"><h2 id="ignores-h">Kept from the AI</h2><span class="muted" id="ignores-n"></span></div>
+      <p class="sub">A folder of their own · the 5 biggest are ticked</p>
       <div class="list" id="own"></div>
-      <p class="sub">The rest go into Automated</p>
+      <p class="sub">No folder · the rest</p>
       <div class="rules" id="rest-rules" hidden></div>
       <div class="list" id="rest"></div>
       <p class="sub" id="cal"></p>
@@ -173,7 +173,7 @@ let byCount = [];
 const state = {};
 const opened = {};
 const openEmails = {};
-// What the rule engine says about each category's rules, by the category's id: its first
+// What the rule engine says about each folder's rules, by the folder's id: its first
 // sender, so a rename keeps them.
 let ruled = {};
 let asking = null;
@@ -269,7 +269,7 @@ async function watch() {
 function start() {
   byCount = [...report.senders].sort((a, b) => b.count - a.count);
   for (const s of byCount) state[s.sender] = { side: s.side, own: s.own, name: s.label };
-  // A sender named like a category that starts on its own joins it, so one tool is one category.
+  // A sender named like a folder that starts on its own joins it, so one tool is one folder.
   const named = new Set(byCount.filter((s) => s.own).map((s) => keyOf(s.label)));
   for (const s of byCount) if (s.side === "ignores" && named.has(keyOf(s.label))) state[s.sender].own = true;
   show("results");
@@ -289,13 +289,13 @@ function row(s, inCard = false) {
   const ignored = st.side === "ignores";
   const move = h("button", { type: "button", class: "icon", "aria-label": ignored ? `Let the AI read ${st.name}` : `Keep ${st.name} from the AI`,
     onclick: () => { st.side = ignored ? "reads" : "ignores"; render(); } }, arrow(ignored));
-  // Inside a category a sender goes by its address; the category's name is on the card.
+  // Inside a folder a sender goes by its address; the folder's name is on the card.
   const name = inCard
     ? h("span", {}, s.sender)
     : ignored && st.own
-    ? h("input", { type: "text", value: st.name, maxlength: 60, "aria-label": "Category name", oninput: (e) => { st.name = e.target.value; } })
+    ? h("input", { type: "text", value: st.name, maxlength: 60, "aria-label": "Folder name", oninput: (e) => { st.name = e.target.value; } })
     : h("span", {}, st.name);
-  const tick = h("input", { type: "checkbox", checked: st.own, "aria-label": `Own category for ${st.name}`, onchange: (e) => { st.own = e.target.checked; render(); } });
+  const tick = h("input", { type: "checkbox", checked: st.own, "aria-label": `Own folder for ${st.name}`, onchange: (e) => { st.own = e.target.checked; render(); } });
   const pct = Math.round(s.score * 100);
   const emails = openEmails[s.sender]
     ? h("div", { class: "emails" }, s.emails.map((email) => h("div", {},
@@ -327,7 +327,7 @@ function fold(id, items) {
 
 const keyOf = (name) => name.trim().toLocaleLowerCase();
 
-// Senders on the ignored side with the same category name are one category.
+// Senders kept from the AI with the same folder name are one folder.
 function categories(ignores) {
   const found = new Map();
   for (const s of ignores.filter((s) => state[s.sender].own)) {
@@ -338,7 +338,7 @@ function categories(ignores) {
   return [...found.values()];
 }
 
-// Addresses past this many fold into "+ N more", so a big category stays one line.
+// Addresses past this many fold into "+ N more", so a big folder stays one line.
 const PILLS = 3;
 
 function ruleBox(entry) {
@@ -360,16 +360,16 @@ function ruleBox(entry) {
 function card(cat, reads) {
   const count = cat.members.reduce((n, s) => n + s.count, 0);
   const senders = cat.members.length === 1 ? "1 sender" : `${fmt(cat.members.length)} senders`;
-  const where = (name) => `Automated/${name.trim() || "…"} · ${senders}`;
+  const where = (name) => `In Kept from the AI · ${senders}`;
   const path = h("span", { class: "line" }, where(cat.name));
-  // Typing renames it everywhere at once; leaving the box merges it with a category of that name.
+  // Typing renames it everywhere at once; leaving the box merges it with a folder of that name.
   const rename = (value) => { for (const s of cat.members) state[s.sender].name = value; path.textContent = where(value); };
   // Senders the AI reads that go by this name, or by the name a member started with.
   const names = new Set([cat.key, ...cat.members.map((s) => keyOf(s.label))]);
   const elsewhere = reads.filter((s) => names.has(keyOf(s.label)));
   return h("div", { class: "cat" },
     h("div", { class: "cat-head" },
-      h("input", { type: "text", value: cat.name, maxlength: 60, "aria-label": "Category name", title: "Rename it to another category's name to merge them",
+      h("input", { type: "text", value: cat.name, maxlength: 60, "aria-label": "Folder name", title: "Rename it to another folder's name to merge them",
         oninput: (e) => rename(e.target.value), onchange: () => render() }),
       h("span", { class: "n" }, fmt(count)),
       h("span", { class: "line", style: "display: flex; gap: 8px; align-items: center" }, h("span", { class: "kind" }, "Rule folder"), path)),
@@ -395,7 +395,7 @@ function askRules(ignores) {
     try {
       const asked = sortedNow(ignores);
       const found = await api("/api/rules", asked);
-      // Answers come in the order asked, the straight-to-Automated senders last.
+      // Answers come in the order asked, the senders with no folder last.
       const ids = [...asked.categories.map((cat) => cat.id), "Automated"];
       ruled = Object.fromEntries(found.categories.map((entry, index) => [ids[index], entry]));
       if (!document.activeElement || document.activeElement.tagName !== "INPUT" || document.activeElement.type !== "text") render(false);
@@ -421,7 +421,7 @@ function render(ask = true) {
   document.getElementById("summary").textContent = `${report.owner_name} · ${fmt(report.total)} emails · ${fmt(quiet)} kept from the AI · ${fmt(report.total - quiet)} read by it`;
   const own = categories(ignores).length;
   const straight = ignores.filter((s) => !state[s.sender].own).length;
-  document.getElementById("foot").textContent = `${fmt(own)} categories under Automated, ${fmt(straight)} more senders straight into Automated. Each gets a rule per sender, and one for its own [tag] when it has one.`;
+  document.getElementById("foot").textContent = `${fmt(own)} folders of their own in Kept from the AI, and ${fmt(straight)} more senders kept with no folder. Each gets a rule per sender, and one for its own [tag] when it has one.`;
 }
 
 const LABELS = { finish: "Finish", discard: "Discard" };

@@ -247,13 +247,14 @@ AUTOMATED = "Automated"
 
 
 def rule_preview(lab: Lab, chosen: Sorted) -> dict[str, Any]:
-    """The rules each category would get, written as the app writes them, and what the rule
+    """The rules each folder would get, written as the app writes them, and what the rule
     engine then does with the downloaded mail: how much each keeps from the AI, how much still
     reaches it and why, and how much it takes from senders left with the AI."""
     assert lab.report is not None
     owner, mentions = lab.report.owner, [lab.report.owner, lab.report.owner_name]
     seen = [sort_rules.Seen.of(parsed) for parsed in lab.mail]
-    entries = [(f"{AUTOMATED}/{c.name.strip()}", c.senders) for c in chosen.categories]
+    # Kept folders are plain names at the top of Kept from the AI, as the app makes them.
+    entries = [(c.name.strip(), c.senders) for c in chosen.categories]
     entries.append((AUTOMATED, chosen.automated))
     made = {
         name: sort_rules.rules_for(name, senders, seen, mentions, owner)
