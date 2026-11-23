@@ -520,6 +520,8 @@ def needs_triage(event: AppEvent, ctx: Context) -> None:
 def person_replied(event: AppEvent, ctx: Context) -> None:
     message, thread = int(event.payload["message_id"]), int(event.payload["thread_id"])
     mail_agent.person_replied(ctx, thread)
+    # Writing back makes it something going on, even when the agent is off or judged it fyi.
+    matters.link(ctx, thread)
     personalization.observe(
         ctx,
         "sent",
@@ -561,6 +563,7 @@ def conversation_work(event: AppEvent, ctx: Context) -> None:
 
 
 def conversation_task(event: AppEvent, ctx: Context) -> None:
+    matters.follow_kept_tasks(ctx)
     removed = event.payload.get("removed")
     if removed and removed.get("proposed") and event.payload.get("by") == "person":
         matters.note(
@@ -599,6 +602,15 @@ def conversation_task(event: AppEvent, ctx: Context) -> None:
             )
         conversations.task_finished(ctx, int(event.payload["id"]))
     elif before.get("status") == "done" and now.get("status") not in {None, "done"}:
+        title = ctx.bus.db.fetch_all("SELECT title FROM tasks WHERE id = ?", (event.payload["id"],))
+        if title:
+            matters.note(
+                ctx,
+                event.payload.get("thread"),
+                "reopened",
+                f'Task opened again: "{title[0]["title"]}"',
+                by="person",
+            )
         conversations.task_reopened(ctx, int(event.payload["id"]))
 
 

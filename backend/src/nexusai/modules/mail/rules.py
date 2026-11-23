@@ -135,10 +135,12 @@ def _builtin(parsed: ParsedMessage, own_domain: str | None = None) -> RuleMatch 
 
 def _condition_matches(condition: RuleCondition, parsed: ParsedMessage) -> bool:
     needle = condition.value.lower()
+    # Spaces as typed don't matter in a subject: "Your  OTP" has "your otp".
+    subject, words = " ".join(parsed.subject.lower().split()), " ".join(needle.split())
     if condition.field == "subject":
-        return needle in parsed.subject.lower()
+        return words in subject
     if condition.field == "subject_prefix":
-        return parsed.subject.lower().startswith(needle)
+        return subject.startswith(words)
     if condition.field == "tag":
         return needle.casefold() in {tag.casefold() for tag in tags_of(parsed.subject)}
     if condition.field == "body":

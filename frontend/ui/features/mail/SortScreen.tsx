@@ -24,7 +24,7 @@ import { Select } from "@/ui/primitives/Select";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { Tabs } from "@/ui/primitives/Tabs";
 import { TextLink } from "@/ui/primitives/TextLink";
-import { phrase } from "@/ui/features/settings/RulesSettings";
+import { phraseRule } from "@/ui/features/settings/RulesSettings";
 import { categoryHref } from "@/ui/shell/customMail";
 import { EditFolder } from "@/ui/shell/EditFolder";
 import { useHiddenFolders, useShownFolders } from "@/ui/shell/hiddenFolders";
@@ -529,10 +529,13 @@ function FolderEmails({ card, real }: { card: Card; real: boolean }) {
   if (!rows.length) return <p className="text-sm text-ink-muted">{t("mail.sort.modal.none")}</p>;
   return <div className="flex flex-col gap-3">
     <ul className="flex flex-col divide-y divide-line-subtle rounded-md border border-line-subtle">
-      {rows.map((row) => <li key={row.key} className="grid grid-cols-sort-email items-baseline gap-3 px-3 py-2 text-md">
-        <span className="truncate font-medium text-ink-primary">{row.from}</span>
-        <span className="truncate text-ink-primary">{row.subject || t("mail.sort.noSubject")}</span>
-        <span className="text-right text-sm tabular-nums text-ink-muted">{row.when}</span>
+      {/* The sender above and the whole subject below, so the subject has the full width. */}
+      {rows.map((row) => <li key={row.key} data-testid="sort-folder-email" className="flex flex-col gap-1 px-3 py-2">
+        <span className="flex items-baseline justify-between gap-3 text-sm text-ink-muted">
+          <span className="truncate">{row.from}</span>
+          <span className="shrink-0 tabular-nums">{row.when}</span>
+        </span>
+        <span title={row.subject} className="line-clamp-2 break-words text-md text-ink-primary">{row.subject || t("mail.sort.noSubject")}</span>
       </li>)}
     </ul>
     {real ? <TextLink href={categoryHref(card.place)}>{t("mail.sort.modal.open", { name: card.place })}</TextLink> : null}
@@ -544,7 +547,7 @@ function FolderRule({ card, existing, onEdit }: { card: Card; existing: MailCate
   const rules = useRules();
   const reads = card.side === "reads";
   const mine = (rules.data?.rules ?? []).filter((rule) => !noFolder(card.place) && keyOf(rule.actions.category ?? "") === keyOf(card.place));
-  const lines = mine.flatMap((rule) => rule.conditions.map(phrase));
+  const lines = mine.map(phraseRule);
   const lead = noFolder(card.place) ? t("mail.sort.rule.lead.none")
     : card.group ? t("mail.sort.rule.lead.group")
     : !existing ? t("mail.sort.rule.lead.will")
@@ -552,12 +555,18 @@ function FolderRule({ card, existing, onEdit }: { card: Card; existing: MailCate
     : existing.mode === "smart" ? t("mail.sort.rule.lead.ai", { description: existing.description || existing.name })
     : BY_HEADERS.has(existing.name) ? t("mail.sort.rule.lead.headers")
     : t("mail.sort.rule.lead.empty");
-  const shown = existing ? lines : card.members.map((s) => t("rules.said.from", { sender: s.sender }));
+  // The rules Save will write: one per way a sender's subjects start, or one for all its mail.
+  const planned = card.members.flatMap((s) => s.starts?.length && !reads
+    ? s.starts.map((value) => `${t("rules.said.from", { sender: s.sender })}${t("rules.said.and")}${t("rules.said.has", { value })}`)
+    : [t("rules.said.from", { sender: s.sender })]);
+  const shown = existing ? lines : planned;
+  const narrowed = !reads && (existing ? mine.some((rule) => rule.conditions.length > 1) : card.members.some((s) => Boolean(s.starts?.length)));
   const MOST = 8;
   return <div className="flex flex-col gap-3">
     <p className="text-sm text-ink-muted">{lead}</p>
     {!noFolder(card.place) && shown.length ? <ul className="flex flex-col gap-1">{shown.slice(0, MOST).map((line, index) => <li key={`${line}-${index}`} className="rounded-md bg-surface-sunken px-3 py-2 text-md text-ink-primary">{line}</li>)}</ul> : null}
     {shown.length > MOST ? <p className="text-sm text-ink-muted">{t("mail.sort.rule.more", { count: fmt(shown.length - MOST) })}</p> : null}
+    {narrowed && !noFolder(card.place) ? <p className="text-sm text-ink-muted">{t("mail.sort.rule.rest")}</p> : null}
     <p className="text-sm text-ink-muted">{t(reads ? "mail.sort.rule.reads" : "mail.sort.rule.hidden")}</p>
     {existing && !noFolder(card.place) ? <Button className="self-start" onClick={onEdit}>{t("mail.sort.rule.edit")}</Button> : null}
   </div>;
@@ -612,10 +621,11 @@ function SenderRow({ sender: s }: { sender: SortSender }) {
       <span className="max-w-reading"><Select compact label={t("mail.sort.moveTo", { name: s.label })} value={here} options={all.map((c) => ({ value: c.key, label: `${t(c.side === "reads" ? "mail.sort.reads" : "mail.sort.ignores")} · ${cardName(c.place)}` }))} onChange={(key) => { const card = all.find((c) => c.key === key); if (card && key !== here) move([s], { side: card.side, place: card.place }); }} /></span>
       <ul className="flex flex-col gap-1 border-l border-line-subtle pl-3">
         {s.emails.map((email, index) => <li key={`${email.subject}-${index}`} className="flex items-baseline justify-between gap-3 text-sm">
-          <span className="min-w-0 truncate text-ink-primary">{email.subject || t("mail.sort.noSubject")}</span>
+          <span title={email.subject} className="line-clamp-2 min-w-0 break-words text-ink-primary">{email.subject || t("mail.sort.noSubject")}</span>
           <span className="shrink-0 tabular-nums text-ink-muted">{email.when}</span>
         </li>)}
       </ul>
+      {s.starts?.length ? <p className="text-sm text-ink-muted">{t(s.starts.length === 1 ? "mail.sort.starts.one" : "mail.sort.starts", { count: s.starts.length, starts: s.starts.map((value) => `“${value}”`).join(", ") })}</p> : null}
     </div> : null}
   </li>;
 }

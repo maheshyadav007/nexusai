@@ -22,6 +22,7 @@ from nexusai.contracts.agent import (
     MatterLane,
     MatterLinkRow,
     MatterMark,
+    MatterMarkKind,
     MatterRelated,
     MatterRow,
     MattersBrief,
@@ -85,6 +86,10 @@ MOST_CHANGES = 12
 ID = re.compile(r"\b(?:[A-Z][A-Z0-9_]*[-_#]?\d{3,}|\d{4,})\b")
 YEAR = re.compile(r"^(19|20)\d{2}$")
 NEEDS = "status IN ('waiting_on_you', 'waiting_on_others') OR importance = 'high'"
+# A task the person kept makes its conversation something to do, whatever the AI judged.
+KEPT_TASKS = (
+    "SELECT thread FROM tasks WHERE status != 'done' AND proposed = 0 AND thread IS NOT NULL"
+)
 
 
 def _now() -> str:
@@ -284,14 +289,15 @@ def link(
 ) -> int | None:
     """The conversation's matter, joined or started, and its newest email on the timeline.
 
-    Only mail that needs something starts a matter; a fyi conversation stays a conversation.
+    Only mail that needs something, or holds a task the person kept, starts a matter; a fyi
+    conversation stays a conversation.
     What a folder keeps from the AI never joins one. `choose` is the matter the AI picked from
     the ones it was shown, which the caller has checked.
     """
     db = ctx.bus.db
     rows = db.fetch_all(
-        f"SELECT id, account, subject, why, ({NEEDS}) AS needs FROM threads"  # noqa: S608
-        f" WHERE id = ? AND NOT {hidden_from_ai()}",
+        f"SELECT id, account, subject, why, ({NEEDS} OR id IN ({KEPT_TASKS})) AS needs"  # noqa: S608
+        f" FROM threads WHERE id = ? AND NOT {hidden_from_ai()}",
         (thread,),
     )
     existing = matter_of(db, thread)
@@ -393,6 +399,15 @@ def note(
     with ctx.bus.unit_of_work() as work:
         _event(work.tx, matter, kind, text, why=why, thread=thread, by=by)
         work.emit("matters.changed", {"matter": matter}, source="agent", trace_id=ctx.trace_id)
+
+
+def follow_kept_tasks(ctx: Context) -> int:
+    """A conversation the person gave a task to becomes a matter now, not at its next email."""
+    rows = ctx.bus.db.fetch_all(
+        f"SELECT DISTINCT thread FROM ({KEPT_TASKS})"  # noqa: S608
+        " WHERE thread NOT IN (SELECT thread FROM matter_threads)"
+    )
+    return sum(link(ctx, int(row["thread"])) is not None for row in rows)
 
 
 def backfill(ctx: Context) -> int:
@@ -619,11 +634,25 @@ def week(ctx: Context, start: str | None, days: int = 7) -> MattersWeek:
                         label=w.title,
                     )
                 )
+        # Every step the person or the AI took, not only closes: the emails are drawn above.
         for e in db.fetch_all(
-            "SELECT time, text FROM matter_events WHERE matter = ? AND kind IN ('closed', 'done') AND time >= ? AND time < ?",
+            "SELECT time, kind, text FROM matter_events WHERE matter = ?"
+            " AND kind NOT IN ('started', 'joined', 'mail', 'sent') AND time >= ? AND time < ?"
+            " ORDER BY time, id",
             (matter.id, _utc(begin), _utc(end)),
         ):
-            marks.append(MatterMark(time=e["time"], kind="closed", label=e["text"]))
+            kind = e["kind"]
+            look: MatterMarkKind = (
+                "closed"
+                if kind in {"closed", "done"}
+                else "reopened"
+                if kind == "reopened"
+                else "step"
+            )
+            # The page names a close or a reopen; any other step says what it was itself.
+            said = EVENT_WORDS.get(kind, kind)
+            label = e["text"] if look != "step" else f"{said[:1].upper()}{said[1:]}: {e['text']}"
+            marks.append(MatterMark(time=e["time"], kind=look, label=label))
         if marks or matter.state != "done":
             lanes.append(MatterLane(matter=matter, marks=sorted(marks, key=lambda mark: mark.time)))
     lanes = [lane for lane in lanes if lane.marks or lane.matter.state != "done"]

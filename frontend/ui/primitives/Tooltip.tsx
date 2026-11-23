@@ -3,7 +3,7 @@
 import * as RadixTooltip from "@radix-ui/react-tooltip";
 import type { ReactNode } from "react";
 
-export function Tooltip({ content, side = "bottom", children }: { content: string; side?: "top" | "right" | "bottom" | "left"; children: ReactNode }) {
+export function Tooltip({ content, side = "bottom", children }: { content: ReactNode; side?: "top" | "right" | "bottom" | "left"; children: ReactNode }) {
   return (
     <RadixTooltip.Provider delayDuration={300}>
       <RadixTooltip.Root>

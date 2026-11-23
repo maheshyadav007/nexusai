@@ -19,6 +19,7 @@ from email.utils import getaddresses
 from pathlib import Path
 from typing import Literal
 
+from nexusai.modules.mail import sort_rules
 from nexusai.modules.mail.parse import (
     SUBJECT_PREFIX,
     ParsedMessage,
@@ -688,6 +689,8 @@ class SenderScore:
     kept: str
     examples: list[tuple[str, int]]
     members: list[str] = field(repr=False)
+    # How its subjects start, when a few ways cover most of it: what its rules will name.
+    starts: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -758,6 +761,11 @@ def score_senders(raws: Iterable[tuple[str, bytes]]) -> SenderReport:
                 kept=kept,
                 examples=Counter(item.pattern for item in items).most_common(3),
                 members=[item.key for item in items],
+                # Only for mail a program sends one person, like a bank's alerts: there a new
+                # kind of subject can matter. Bulk mail, like a newsletter, is all one thing.
+                starts=sort_rules.subject_starts([item.parsed.subject for item in starts])
+                if bulk < THRESHOLD
+                else [],
             )
         )
     scored.sort(key=lambda row: (-row.count, row.sender))

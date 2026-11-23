@@ -748,6 +748,7 @@ export type Own = boolean;
 export type Examples = string[];
 export type Emails3 = SortEmail[];
 export type Folder8 = string;
+export type Starts = string[];
 export type State4 = "none" | "preparing" | "ready" | "failed" | "done" | "skipped";
 export type Done2 = number;
 export type Total6 = number;
@@ -1956,7 +1957,7 @@ export type Waiting2 = MatterRow[];
 export type Fyi = MatterRow[];
 export type Next1 = MatterDue[];
 export type Time18 = string;
-export type Kind24 = "in" | "sent" | "due" | "reminder" | "closed";
+export type Kind24 = "in" | "sent" | "due" | "reminder" | "closed" | "reopened" | "step";
 export type Label10 = string;
 export type Marks = MatterMark[];
 export type Start1 = string;
@@ -4066,6 +4067,7 @@ export interface SortSender {
   examples: Examples;
   emails: Emails3;
   folder?: Folder8;
+  starts?: Starts;
   [k: string]: unknown;
 }
 /**

@@ -1021,6 +1021,9 @@ class SortSender(BaseModel):
     # The folder a rule already files this sender's mail into, when one does. Its side is
     # the rule's, so the page shows what's true now.
     folder: str = ""
+    # How its subjects start when a few ways cover most of its mail. Kept from the AI, it gets
+    # a rule for each, with the sender, rather than one for everything it sends.
+    starts: list[str] = Field(default_factory=list)
 
 
 class MailSort(BaseModel):

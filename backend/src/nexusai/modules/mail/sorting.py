@@ -400,6 +400,9 @@ def apply(ctx: Context, command: ApplyMailSort) -> int:
                 senders,
                 mailbox,
                 owner=report.owner,
+                starts={
+                    sender: by_sender[sender].starts for sender in senders if sender in by_sender
+                },
             )
         for name, keys in filing:
             threads = {raws[key]["thread_id"] for key in keys if key in raws}
