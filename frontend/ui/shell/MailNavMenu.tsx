@@ -14,13 +14,15 @@ import { Dialog } from "@/ui/primitives/Dialog";
 import type { MenuItem } from "@/ui/primitives/Menu";
 import { useToast } from "@/ui/primitives/Toast";
 import { t } from "@/ui/strings";
+import { keptFromAi } from "./customMail";
 import { EditFolder } from "./EditFolder";
+import { NewFolder } from "./NewFolder";
 import { useHiddenFolders } from "./hiddenFolders";
 
 export const categorySettingsHref = (name: string) => `/settings?section=categories&category=${encodeURIComponent(name)}`;
 
 /** Only offer supported operations; every write reports failure and can be retried. */
-export function MailNavMenu({ href, scope, category, moreFolder, children }: { href: string; scope: MarkFolderRead; category?: MailCategory; moreFolder?: string; children: ReactNode }) {
+export function MailNavMenu({ href, scope, category, home, moreFolder, children }: { href: string; scope: MarkFolderRead; category?: MailCategory; home?: "reads" | "kept"; moreFolder?: string; children: ReactNode }) {
   const router = useRouter();
   const client = useQueryClient();
   const toast = useToast();
@@ -31,6 +33,7 @@ export function MailNavMenu({ href, scope, category, moreFolder, children }: { h
   const [sorting, setSorting] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [making, setMaking] = useState(false);
   const { hidden, setHidden } = useHiddenFolders();
   const [newName, setNewName] = useState("");
   const failed = (error: Error) => toast({ title: error.message, tone: "danger" });
@@ -42,18 +45,27 @@ export function MailNavMenu({ href, scope, category, moreFolder, children }: { h
     { id: "read", label: t("menu.markFolderRead"), icon: "check", disabled: busy, onSelect: () => read.mutate() },
   ];
   if (moreFolder) items.push({ id: "more", label: t("mail.folder.getRest"), icon: "background", disabled: busy, onSelect: () => more.mutate({ folder: moreFolder }, { onError: failed }) });
+  // Both homes have the same four: what's here, and making or sorting what goes in them.
+  if (home) items.push(
+    { id: "newFolder", label: t("menu.newFolder"), icon: "add", onSelect: () => setMaking(true) },
+    { id: "sortSenders", label: t("menu.sortSenders"), icon: "customize", onSelect: () => router.push("/mail/sort") },
+  );
+  const kept = category ? keptFromAi(category) : false;
   if (category) items.push(
     { id: "editFolder", label: t("menu.editFolder"), icon: "edit", disabled: busy, onSelect: () => setEditing(true) },
     { id: "rename", label: t("menu.renameCategory"), disabled: busy, onSelect: () => { setNewName(category.name); setRenaming(true); } },
     { id: "hide", label: t(hidden.has(category.name) ? "menu.showFolder" : "menu.hideFolder"), icon: hidden.has(category.name) ? "eye" : "eyeOff", onSelect: () => setHidden(category.name, !hidden.has(category.name)) },
     { id: "priority", label: t(category.in_priority ? "menu.leavePriority" : "menu.joinPriority"), icon: "priority", disabled: busy, onSelect: () => update.mutate({ name: category.name, in_priority: !category.in_priority }, { onError: failed, onSuccess: () => toast({ title: t("menu.categoryUpdated") }) }) },
-    { id: "mode", label: t(category.mode === "exact" ? "menu.useSmart" : "menu.useExact"), disabled: busy, onSelect: () => { if (category.mode !== "exact") { router.push(categorySettingsHref(category.name)); return; } update.mutate({ name: category.name, mode: "smart" }, { onError: failed, onSuccess: () => toast({ title: t("menu.categoryUpdated") }) }); } },
+    // The AI doesn't read what's kept from it, so it can't sort it either.
+    { id: "mode", label: t(category.mode === "exact" ? "menu.useSmart" : "menu.useExact"), disabled: busy || (kept && category.mode === "exact"), onSelect: () => { if (category.mode !== "exact") { router.push(categorySettingsHref(category.name)); return; } update.mutate({ name: category.name, mode: "smart" }, { onError: failed, onSuccess: () => toast({ title: t("menu.categoryUpdated") }) }); } },
     { id: "edit", label: t("menu.categorySettings"), icon: "settings", onSelect: () => router.push(categorySettingsHref(category.name)) },
     { id: "sort", label: t("menu.sortOlder"), disabled: busy, onSelect: () => { sort.reset(); setSorting(true); sort.mutate(false); } },
+    { id: "newInside", label: t("menu.newFolderInside"), icon: "add", onSelect: () => setMaking(true) },
     { id: "remove", label: t("menu.removeCategory"), icon: "trash", danger: true, disabled: busy, onSelect: () => setRemoving(true) },
   );
   return <>
     <ContextMenu items={items}>{children}</ContextMenu>
+    {home || category ? <NewFolder open={making} onOpenChange={setMaking} inside={category ? `folder:${category.name}` : home === "kept" ? "home:kept" : "home:reads"} /> : null}
     {category ? <>
       <EditFolder category={category} open={editing} onOpenChange={setEditing} onRenamed={(name) => { toast({ title: t("menu.categoryUpdated") }); if (window.location.pathname === href || window.location.pathname.startsWith(`${href}/`)) router.push(`/mail/category/${encodeURIComponent(name)}`); }} />
       <Dialog title={t("menu.renameCategory")} open={renaming} onOpenChange={setRenaming}>
@@ -71,7 +83,7 @@ export function MailNavMenu({ href, scope, category, moreFolder, children }: { h
         </form>
       </Dialog>
       <Dialog title={t("categories.remove")} description={t("menu.removeCategoryDescription", { name: category.name })} open={removing} onOpenChange={setRemoving}>
-        <Button variant="danger" loading={remove.isPending} onClick={() => remove.mutate(category.name, { onError: failed, onSuccess: () => { setRemoving(false); toast({ title: t("menu.categoryRemoved") }); if (window.location.pathname === href || window.location.pathname.startsWith(`${href}/`)) router.push("/mail/all"); } })}>{t("categories.remove")}</Button>
+        <Button variant="danger" loading={remove.isPending} onClick={() => remove.mutate(category.name, { onError: failed, onSuccess: () => { setRemoving(false); toast({ title: t("menu.categoryRemoved") }); if (window.location.pathname === href || window.location.pathname.startsWith(`${href}/`)) router.push(category.parent ? `/mail/category/${encodeURIComponent(category.parent)}` : kept ? "/mail/kept" : "/mail/inbox"); } })}>{t("categories.remove")}</Button>
       </Dialog>
       <Dialog title={t("categories.sort")} open={sorting} onOpenChange={setSorting}>
         {sort.data ? <p className="mb-4">{t("categories.sort.cost", { count: sort.data.conversations, tokens: sort.data.estimated_tokens })}</p> : null}

@@ -142,7 +142,7 @@ def test_renaming_onto_a_name_in_use_is_refused(client: TestClient, script: Scri
     result = use_tool(
         client, script, ToolCall("c", "update_category", {"name": "One", "new_name": "Two"})
     )
-    assert "already a category" in result
+    assert "already a folder" in result
     assert category_named(client, "One")
 
 

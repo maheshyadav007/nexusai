@@ -174,15 +174,9 @@ def evaluate(
         and all(_condition_matches(condition, parsed) for condition in rule.conditions)
     ]
     if matched:
+        # One folder per email: the first rule that matches files it, and the rest wait.
         first = matched[0]
-        extras = tuple(
-            dict.fromkeys(
-                rule.actions.category
-                for rule in matched[1:]
-                if rule.actions.category and rule.actions.category != first.actions.category
-            )
-        )
-        return RuleMatch(first.name, first.actions, extra_categories=extras)
+        return RuleMatch(first.name, first.actions)
     match = _builtin(parsed, own_domain)
     if (
         match

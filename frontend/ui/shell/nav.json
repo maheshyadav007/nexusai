@@ -16,7 +16,7 @@
         {
           "id": "priority",
           "labelKey": "nav.priority",
-          "icon": "inbox",
+          "icon": "priorityView",
           "href": "/mail/priority"
         },
         {

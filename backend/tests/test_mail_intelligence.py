@@ -650,7 +650,7 @@ def test_the_same_mail_isnt_offered_twice_under_another_name(
     assert len(post(client, "suggestions.list")["suggestions"]) == 1
 
 
-def test_exact_header_folder_keeps_primary_and_smart_filing_is_extra(
+def test_the_ai_s_folder_replaces_a_header_guess_one_folder_per_email(
     client: TestClient, fake: FakeMail, script: Script
 ) -> None:
     connect(client, fake)
@@ -685,11 +685,8 @@ def test_exact_header_folder_keeps_primary_and_smart_filing_is_extra(
             in_reply_to="<ab2@x>",
         )
     )
-    wait(
-        lambda: "Job search" in json.loads(row(client, first["id"])["extra_categories"]),
-        "Smart filing as extra",
-    )
-    assert row(client, first["id"])["category"] == "Automated"
+    wait(lambda: row(client, first["id"])["category"] == "Job search", "the AI's folder")
+    assert json.loads(row(client, first["id"])["extra_categories"]) == []
 
 
 def test_a_conversation_a_rule_filed_gets_no_ai_folders_and_is_not_learned(

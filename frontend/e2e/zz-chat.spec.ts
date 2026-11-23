@@ -404,9 +404,10 @@ test("the Mail agent's timing and how much a chat remembers are set in Settings"
 });
 
 test("mail has folders, a reading pane, and categories people make", async ({ page }) => {
-  const subject = unique("Invoice");
+  // Not "invoice": a rule an earlier test wrote files those in Finance, and an email has one folder.
+  const subject = unique("Billing statement");
   await page.goto("/mail/all");
-  await page.request.post(CONTROL, { data: { subject, body: "Your invoice.", sender: "Billing <billing@vendor.example>" } });
+  await page.request.post(CONTROL, { data: { subject, body: "Your statement is ready.", sender: "Billing <billing@vendor.example>" } });
   const row = page.getByTestId("thread-row").filter({ hasText: subject });
   await expect(row).toBeVisible({ timeout: 15_000 });
   await noViolations(page);
@@ -417,15 +418,17 @@ test("mail has folders, a reading pane, and categories people make", async ({ pa
   await expect(page.getByRole("heading", { name: subject })).toBeVisible();
   await noViolations(page);
 
-  await page.getByRole("button", { name: "New category" }).click();
+  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Inbox", exact: true }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "New folder…" }).click();
+  const dialog = page.getByRole("dialog", { name: "New folder" });
   await noViolations(page);
-  await page.getByRole("textbox", { name: "Name" }).fill("Invoices");
-  // A rule needs an Exact folder; a new one starts as Smart.
-  await page.getByRole("combobox", { name: "Kind" }).click();
-  await page.getByRole("option", { name: /^By rule/ }).click();
-  await page.getByRole("textbox", { name: "File mail automatically from" }).fill("billing@vendor.example");
-  await page.getByRole("checkbox", { name: "Show in Inbox" }).click();
-  await page.getByRole("button", { name: "Create category" }).click();
+  await dialog.getByRole("textbox", { name: "Name" }).fill("Invoices");
+  // A rule of conditions that all must match: here, one, on who it's from.
+  await dialog.getByRole("button", { name: "Remove this condition" }).first().click();
+  await dialog.getByRole("textbox", { name: "From" }).fill("billing@vendor.example");
+  await expect(dialog.getByRole("status")).toContainText(/conversations? here match/, { timeout: 10_000 });
+  await dialog.getByRole("checkbox", { name: "Show in Priority" }).click();
+  await dialog.getByRole("button", { name: "Create folder" }).click();
   const link = page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Invoices" });
   await expect(link).toBeVisible();
   await link.click();
@@ -460,8 +463,11 @@ test("counts in the sidebar change the moment mail moves, without asking the ser
   await page.goto("/mail/all");
   const nav = page.getByRole("navigation", { name: "Main navigation" });
   await expect(page.getByTestId("thread-row").first()).toBeVisible();
-  // It has no mail yet, so it isn't listed until it does.
-  await expect(nav.getByRole("link", { name: "Moved here" })).toHaveCount(0);
+  // Made by the person, it's listed though empty: in the Inbox, under Show all past the biggest three.
+  const showAll = nav.getByTestId("nav-home-reads").getByRole("button", { name: /Show all/ });
+  if (await showAll.count()) await showAll.click();
+  await expect(nav.getByRole("link", { name: "Moved here" })).toHaveCount(1);
+  await expect(nav.getByRole("link", { name: "Moved here" })).not.toContainText("1");
   let asked = 0;
   await page.route("**/api/queries/categories.list", (route) => {
     asked += 1;

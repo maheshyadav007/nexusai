@@ -7,6 +7,7 @@ import { useMailAccounts } from "@/ui/client/mail";
 import { useThreadActions } from "@/ui/features/mail/threadActions";
 import { Highlight } from "@/ui/features/search/SearchFilters";
 import { Icon } from "@/ui/icons";
+import { AUTOMATED } from "@/ui/shell/customMail";
 import { ContextMenu } from "@/ui/primitives/ContextMenu";
 import { t, type StringKey } from "@/ui/strings";
 
@@ -33,7 +34,7 @@ function useOtherPeople(thread: ThreadRow): string {
   return shown.join(", ");
 }
 
-export function ThreadRowView({ thread, excerpt, href, active = false, highlight }: { thread: ThreadRow; excerpt?: string; href?: string; highlight?: string; active?: boolean }) {
+export function ThreadRowView({ thread, excerpt, href, active = false, highlight, reason }: { thread: ThreadRow; excerpt?: string; href?: string; highlight?: string; active?: boolean; reason?: string }) {
   const others = useOtherPeople(thread);
   const people = thread.sender_name || others;
   const format = useShortDate();
@@ -66,8 +67,10 @@ export function ThreadRowView({ thread, excerpt, href, active = false, highlight
                 <Icon name="attachment" className="h-3 w-3" />
               </span>
             ) : null}
-            {thread.category ? <span className="truncate">{thread.category}</span> : null}
-            {status && thread.status === "waiting_on_you" ? <span className="shrink-0">{status}</span> : null}
+            {/* Its own folder, which in a parent's list says where it really is. */}
+            {/* Kept from the AI's catch-all is never listed as a folder, so its mail wears no chip. */}
+            {thread.category && thread.category !== AUTOMATED ? <span data-testid="thread-folder" className="truncate rounded-sm bg-surface-sunken px-1">{thread.category}</span> : null}
+            {reason ? <span data-testid="priority-why" className="shrink-0">{reason}</span> : status && thread.status === "waiting_on_you" ? <span className="shrink-0">{status}</span> : null}
           </span>
       </span>
     </Link>

@@ -4,12 +4,10 @@ import { useSessions } from "@/ui/client/sessions";
 import { usePlannerCounts, useWaitingCount } from "@/ui/client/work";
 import { MailNavMenu } from "./MailNavMenu";
 import type { MailCategory, MarkFolderRead } from "@/ui/client/contracts.generated";
-import { CategoryNav, NewCategory } from "./CategoryNav";
-import { CustomMailNav } from "./CustomMailNav";
 import { FolderNav, SpamNav } from "./FolderNav";
+import { HomeNav } from "./HomeNav";
 import { SidebarFold } from "./SidebarFold";
-import { categoryHref, customCategories, folderHref, isCurrentMail, keptFromAi, spamFolders } from "./customMail";
-import { useHiddenFolders } from "./hiddenFolders";
+import { customFolders, folderHref, isCurrentMail, spamFolders } from "./customMail";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useId, useState } from "react";
@@ -31,6 +29,7 @@ import { arrange } from "./sidebarLayout";
 // One highlight that glides to the row you chose.
 const ACTIVE_ROW = "nav-active";
 const MAIL_SECTION = "mail";
+const PRIORITY = "priority";
 
 function NavRow({ item, active, collapsed, count, attention }: { item: NavItem; active: boolean; collapsed: boolean; count: number | undefined; attention: boolean }) {
   const label = t(item.label);
@@ -85,54 +84,32 @@ function useUnreadCounts(): Readonly<Record<string, number>> {
   return { priority: found.priority ?? 0, important: found.important ?? 0, starred: found.starred ?? 0, "all-mail": found.all ?? 0, sent: found.sent ?? 0, drafts: found.drafts ?? 0, archive: found.archive ?? 0, trash: found.trash ?? 0 };
 }
 
-/** The person's folders and their mail account's labels, under one heading that can add one. */
-function FoldersNav() {
-  const pathname = usePathname();
-  return (
-    <SidebarFold id="folders" label={t("nav.categories")} open actions={<NewCategory />} holdsActive={pathname.startsWith("/mail/category/") || pathname.startsWith("/mail/folder/")}>
-      <CustomMailNav collapsed={false} after={<FolderNav collapsed={false} />} />
-    </SidebarFold>
-  );
-}
-
-/** Opens the Sort page again, where each sender stands now, to move any across. */
-function SortAgain() {
-  const router = useRouter();
-  return <IconButton icon="customize" label={t("nav.sortAgain")} className="-my-1 p-1" onClick={() => router.push("/mail/sort")} />;
-}
-
-/** What the AI skips: Automated with the tools filed under it, and Calendar. */
-function KeptNav() {
-  const categories = useCategories();
-  const pathname = usePathname();
-  const { hidden } = useHiddenFolders();
-  const [all, setAll] = useState(false);
-  const kept = customCategories(categories.data?.categories ?? []).filter(keptFromAi);
-  if (!kept.length) return null;
-  const tucked = kept.filter((item) => hidden.has(item.name)).length;
-  const shown = (item: MailCategory) => keptFromAi(item) && (all || !hidden.has(item.name) || isCurrentMail(pathname, categoryHref(item.name)));
-  return (
-    <SidebarFold id="kept" label={t("nav.kept")} open actions={<SortAgain />} holdsActive={kept.some((item) => isCurrentMail(pathname, categoryHref(item.name)))}>
-      <CategoryNav collapsed={false} pick={shown} label={t("nav.kept")} />
-      {tucked ? <Button variant="quiet" aria-expanded={all} className="shrink-0 self-start px-2 py-1 text-sm" onClick={() => setAll(!all)}>{all ? t("nav.folders.showLess") : tn("nav.kept.hidden", tucked)}</Button> : null}
-    </SidebarFold>
-  );
-}
-
-/** The system folders, needed now and then: Important, All mail, Archive, Spam and Trash. The
- *  person's own folders and labels sit with their folders above, never in here. */
+/** The system folders, needed now and then: Important, All mail, Archive, Spam and Trash, and
+ *  the labels and folders of the mail account itself. Those come from the server, have no rules
+ *  and can hold mail from both sides, so they sit here rather than in a home. */
 function MoreNav({ items, row }: { items: NavItem[]; row: (item: NavItem) => React.ReactNode }) {
   const pathname = usePathname();
   const folders = useMailFolders();
+  const categories = useCategories();
   const spam = spamFolders(folders.data?.folders ?? [], pathname);
-  if (!items.length && !spam.length) return null;
-  const holdsActive = items.some((item) => isCurrentMail(pathname, item.href)) || spam.some((folder) => isCurrentMail(pathname, folderHref(folder.name)));
+  const labels = customFolders(folders.data?.folders ?? [], pathname, categories.data?.categories ?? []);
+  if (!items.length && !spam.length && !labels.length) return null;
+  const holdsActive = items.some((item) => isCurrentMail(pathname, item.href)) || [...spam, ...labels].some((folder) => isCurrentMail(pathname, folderHref(folder.name)));
   return (
     <SidebarFold id="more" label={t("nav.more")} remember={false} holdsActive={holdsActive}>
       <ul className="flex flex-col gap-px">{items.map(row)}</ul>
       <SpamNav />
+      {labels.length ? <div className="mt-2 flex flex-col gap-1"><h3 className="px-2 text-sm text-ink-muted">{t("nav.labels")}</h3><FolderNav collapsed={false} /></div> : null}
     </SidebarFold>
   );
+}
+
+/** Mail's rows with the two homes right after Priority: one tree of folders under each. */
+function withHomes(items: readonly NavItem[], row: (item: NavItem) => React.ReactNode, collapsed: boolean) {
+  const homes = (["reads", "kept"] as const).map((side) => <li key={`home-${side}`} className={collapsed ? "" : "mt-1"}><HomeNav side={side} collapsed={collapsed} /></li>);
+  const at = items.findIndex((item) => item.id === PRIORITY);
+  if (at < 0) return [...homes, ...items.map(row)];
+  return [...items.slice(0, at + 1).map(row), ...homes, <li key="homes-end" aria-hidden className="h-1" />, ...items.slice(at + 1).map(row)];
 }
 
 export function NavSidebar({ counts }: { counts?: Readonly<Record<string, number>> }) {
@@ -194,8 +171,8 @@ export function NavSidebar({ counts }: { counts?: Readonly<Record<string, number
             return (
               <section key={section.id} aria-label={t(section.label)} className={mail ? "flex shrink-0 flex-col gap-1" : "shrink-0 border-t border-line-subtle pt-2"}>
                 {collapsed || !section.heading ? null : <h2 className="mb-1 px-2 text-sm text-ink-muted">{t(section.label)}</h2>}
-                <ul className="flex flex-col gap-px">{daily.map(row)}</ul>
-                {mail && !collapsed ? <div className="mt-2 flex flex-col gap-3"><FoldersNav /><KeptNav /><MoreNav items={items.filter((item) => item.more)} row={row} /></div> : null}
+                <ul className="flex flex-col gap-px">{mail ? withHomes(daily, row, collapsed) : daily.map(row)}</ul>
+                {mail && !collapsed ? <div className="mt-2 flex flex-col gap-3"><MoreNav items={items.filter((item) => item.more)} row={row} /></div> : null}
               </section>
             );
           })}

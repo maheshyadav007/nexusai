@@ -47,6 +47,7 @@ export const HEROICONS = {
   followUp: ArrowTurnDownRightIcon,
   file: DocumentIcon,
   priority: BoltIcon,
+  priorityView: AdjustmentsHorizontalIcon,
   important: TagIcon,
   starred: StarIcon,
   reply: ArrowUturnLeftIcon,

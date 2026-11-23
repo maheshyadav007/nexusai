@@ -101,9 +101,7 @@ def test_sorting_files_what_the_ai_ignores_and_gives_it_a_rule(ctx: Context, mai
     assert kim.side == "reads"
     moved = sorting.apply(ctx, named("Builds"))
     assert moved == 8
-    category = ctx.bus.db.fetch_all(
-        "SELECT * FROM mail_categories WHERE name = 'Automated/Builds'"
-    )[0]
+    category = ctx.bus.db.fetch_all("SELECT * FROM mail_categories WHERE name = 'Builds'")[0]
     assert (category["mode"], category["ai_reads"]) == ("exact", 0)
     parent = ctx.bus.db.fetch_all("SELECT * FROM mail_categories WHERE name = 'Automated'")[0]
     assert parent["ai_reads"] == 0
@@ -128,7 +126,7 @@ def test_sorting_files_what_the_ai_ignores_and_gives_it_a_rule(ctx: Context, mai
     asked = ctx.bus.db.fetch_all(
         "SELECT category FROM threads WHERE id = ?", (mailbox["asked"].thread,)
     )[0]
-    assert asked["category"] != "Automated/Builds"
+    assert asked["category"] != "Builds"
     assert sorting.decided(ctx) == "done"
     # Meaning search leaves the filed mail out; keyword search still has it.
     indexed = ctx.bus.db.fetch_all(f"SELECT COUNT(*) AS n FROM messages WHERE {KEPT_MAIL}")[0]["n"]  # noqa: S608
@@ -138,9 +136,7 @@ def test_sorting_files_what_the_ai_ignores_and_gives_it_a_rule(ctx: Context, mai
 def test_new_mail_follows_the_rule_unless_it_names_the_person(ctx: Context, mailbox: Any) -> None:  # noqa: F811
     ready(ctx)
     sorting.apply(ctx, named("Builds"))
-    rule = next(
-        r for r in rules.load_rules(ctx.config.home) if r.actions.category == "Automated/Builds"
-    )
+    rule = next(r for r in rules.load_rules(ctx.config.home) if r.actions.category == "Builds")
     assert rule.actions.skip_agent and OWNER in rule.actions.mentions
     quiet = stored(ctx, "Build 120 passed", "ci@tools.example")
     asked = stored(
@@ -158,7 +154,7 @@ def test_a_sender_moved_to_the_ai_is_filed_nowhere(ctx: Context, mailbox: Any) -
     ready(ctx)
     moved = sorting.apply(ctx, named("Builds", side="reads"))
     assert moved == 0
-    assert not ctx.bus.db.fetch_all("SELECT 1 FROM mail_categories WHERE name LIKE 'Automated%'")
+    assert not ctx.bus.db.fetch_all("SELECT 1 FROM mail_categories WHERE name = 'Builds'")
     assert not [r for r in rules.load_rules(ctx.config.home) if r.name.startswith("Sorted: ")]
 
 
@@ -234,7 +230,8 @@ def test_senders_given_one_name_share_a_category(ctx: Context) -> None:  # noqa:
         ),
     )
     names = {row["name"] for row in ctx.bus.db.fetch_all("SELECT name FROM mail_categories")}
-    assert names == {"Automated", "Automated/Monitoring"}
+    # Plain names at the top of Kept from the AI; Automated is its catch-all.
+    assert names == {"Automated", "Monitoring"}
 
 
 def test_only_the_biggest_tools_get_a_folder_and_the_rest_go_into_automated(ctx: Context) -> None:  # noqa: F811
@@ -246,7 +243,13 @@ def test_only_the_biggest_tools_get_a_folder_and_the_rest_go_into_automated(ctx:
     assert len(automated) == 7 and sum(row.own for row in automated) == 3
     sorting.apply(ctx, ApplyMailSort())
     names = {row["name"] for row in ctx.bus.db.fetch_all("SELECT name FROM mail_categories")}
-    assert len([name for name in names if name.startswith("Automated/")]) == 3
+    kept = {
+        row["name"]
+        for row in ctx.bus.db.fetch_all(
+            "SELECT name FROM mail_categories WHERE ai_reads = 0 AND parent IS NULL"
+        )
+    }
+    assert len(kept - {"Automated"}) == 3 and "/" not in "".join(kept)
     smallest = ctx.bus.db.fetch_all(
         "SELECT DISTINCT t.category FROM threads t JOIN messages m ON m.thread_id = t.id"
         " WHERE m.from_addr = 'tool0@tools0.example'"
@@ -346,7 +349,7 @@ def test_the_page_opens_again_with_each_sender_where_its_rule_puts_it(
     assert again.state == "done" and again.review == "ready"
     tool = build_bot(again)
     kim = next(row for row in again.senders if row.sender == "kim@else.example")
-    assert (tool.side, tool.folder) == ("ignores", "Automated/Builds")
+    assert (tool.side, tool.folder) == ("ignores", "Builds")
     assert (kim.side, kim.folder) == ("reads", "")
     # Moved across from a folder the AI skips as a whole, its sorting rule goes and one lets it
     # in, as Move to Inbox does.
@@ -427,11 +430,17 @@ def test_a_sender_always_has_one_rule_whichever_side_it_is_moved_to(
         sorting.move_sender(ctx, sender, reads=reads, folder=folder)
         assert len(mine()) == 1
         assert mine()[0].actions.skip_agent is not reads
-    # Kept from the AI the last time, in the folder it had.
-    assert mine()[0].actions.category == "Tools"
-    # Moved to the AI out of a folder it reads, it stays filed there.
+    # A folder lives on one side: moved to the AI, it left Tools, and kept again it's in the
+    # catch-all.
+    assert mine()[0].actions.category == "Automated"
+    # Put in a folder the AI reads, then moved to the AI again, it stays filed there.
+    sorting.move_sender(ctx, sender, reads=True, folder="Friends")
     sorting.move_sender(ctx, sender, reads=True)
-    assert (mine()[0].actions.category, mine()[0].actions.skip_agent) == ("Tools", False)
+    assert (mine()[0].actions.category, mine()[0].actions.skip_agent) == ("Friends", False)
+    # Kept from the AI while in a folder the AI reads, it can't stay there.
+    sorting.move_sender(ctx, sender, reads=False)
+    assert (mine()[0].actions.category, mine()[0].actions.skip_agent) == ("Automated", True)
+    sorting.move_sender(ctx, sender, reads=True)
     assert build_bot(reviewed(ctx)).side == "reads"
 
 
@@ -501,9 +510,10 @@ def test_a_whole_folder_moves_to_one_side_with_every_sender_in_it(
 
     ready(ctx)
     sorting.apply(ctx, named("Builds"))
-    # Both senders filed in Shopping by their rules, one read and one kept.
+    # Both senders filed in Shopping by their rules, one read and one kept, as older sorting
+    # could leave it.
     sorting.move_sender(ctx, "kim@else.example", reads=True, folder="Shopping")
-    sorting.move_sender(ctx, "ci@tools.example", reads=False, folder="Shopping")
+    sorting.move_sender(ctx, "ci@tools.example", reads=False, folder="Shopping", strict=False)
 
     def sides() -> dict[str, bool]:
         return {
@@ -520,6 +530,8 @@ def test_a_whole_folder_moves_to_one_side_with_every_sender_in_it(
     assert sides() == {"kim@else.example": False, "ci@tools.example": False}
     reads = ctx.bus.db.fetch_all("SELECT ai_reads FROM mail_categories WHERE name = 'Shopping'")
     assert reads[0]["ai_reads"] == 1
-    # What's under Automated stays kept.
+    # Automated, the catch-all, stays kept; a folder of its own can move across.
     with pytest.raises(CommandError):
-        update_category(UpdateCategory(name="Automated/Builds", ai_reads=True), ctx)
+        update_category(UpdateCategory(name="Automated", ai_reads=True), ctx)
+    update_category(UpdateCategory(name="Builds", ai_reads=True), ctx)
+    assert ctx.bus.db.fetch_all("SELECT ai_reads FROM mail_categories WHERE name = 'Builds'")[0][0]

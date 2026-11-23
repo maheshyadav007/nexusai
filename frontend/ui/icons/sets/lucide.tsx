@@ -1,4 +1,4 @@
-import { Zap, Tag, Split, Sparkle, CalendarClock, Ellipsis, Eye, EyeOff, Activity, AlarmClock, Archive, ArrowDown, ArrowUp, Bell, Bot, Brain, BrainCircuit, CalendarDays, Check, ChevronDown, Volume2, VolumeX, Info, ChevronLeft, ChevronRight, CircleAlert, Clock, Copy, CornerDownRight, File, FileText, Flag, FoldVertical, Folder, FolderOpen, Forward, Gauge, GripVertical, Inbox, LayoutPanelTop, ListChecks, LockKeyhole, Loader, MailOpen, Mails, Maximize2, MessageSquare, MessagesSquare, Minus, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Paperclip, PenLine, Pencil, Plug, Plus, Repeat, Reply, ReplyAll, RotateCcw, ScrollText, Search, Send, Settings, ShieldCheck, SlidersHorizontal, Square, Star, Sun, Tags, Terminal, ThumbsDown, ThumbsUp, Trash2, Upload, WifiOff, X } from "lucide-react";
+import { Zap, Tag, Split, Sparkle, CalendarClock, Ellipsis, Eye, EyeOff, Activity, AlarmClock, Archive, ArrowDown, ArrowUp, Bell, Bot, Brain, BrainCircuit, CalendarDays, Check, ChevronDown, Volume2, VolumeX, Info, ChevronLeft, ChevronRight, CircleAlert, Clock, Copy, CornerDownRight, File, FileText, Flag, FoldVertical, Folder, FolderCog, FolderOpen, Forward, Gauge, GripVertical, Inbox, LayoutPanelTop, ListChecks, LockKeyhole, Loader, MailOpen, Mails, Maximize2, MessageSquare, MessagesSquare, Minus, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Paperclip, PenLine, Pencil, Plug, Plus, Repeat, Reply, ReplyAll, RotateCcw, ScrollText, Search, Send, Settings, ShieldCheck, SlidersHorizontal, Square, Star, Sun, Tags, Terminal, ThumbsDown, ThumbsUp, Trash2, Upload, WifiOff, X } from "lucide-react";
 import type { IconSet } from "../names";
 
 /** Lucide, the set the app started with. */
@@ -30,6 +30,7 @@ export const LUCIDE = {
   followUp: CornerDownRight,
   file: File,
   priority: Zap,
+  priorityView: FolderCog,
   important: Tag,
   starred: Star,
   reply: Reply,

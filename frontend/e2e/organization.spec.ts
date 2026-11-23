@@ -60,7 +60,7 @@ test("an empty Smart folder can be changed to Exact by supplying a prefix", asyn
   await expect(row.getByRole("combobox", { name: "Kind", exact: true })).toContainText("By rule");
 });
 
-test("Inbox, Important and Starred are separate views", async ({ page, request }) => {
+test("Priority, Inbox, Important and Starred are separate views", async ({ page, request }) => {
   const rows = (await post(request, "/api/queries/threads.list", { folder: "all" })).threads;
   const target = rows[0];
   await post(request, "/api/commands/thread.setFlag", { id: target.id, flagged: true });
@@ -78,7 +78,7 @@ test("Inbox, Important and Starred are separate views", async ({ page, request }
 test("folder and category context menus perform scoped operations", async ({ page, request }) => {
   await page.goto("/mail/all");
   // Drafts shows only when there are drafts; the rest wait under More, open here because All mail is.
-  for (const href of ["priority", "important", "starred", "all", "sent", "archive", "trash"]) {
+  for (const href of ["priority", "inbox", "kept", "important", "starred", "all", "sent", "archive", "trash"]) {
     await page.locator(`nav a[href='/mail/${href}']`).click({ button: "right" });
     await expect(page.getByRole("menuitem", { name: "Open", exact: true })).toBeVisible();
     await expect(page.getByRole("menuitem", { name: "Mark downloaded mail as read", exact: true })).toBeVisible();
@@ -99,17 +99,17 @@ test("folder and category context menus perform scoped operations", async ({ pag
   await page.getByRole("menuitem", { name: "Mark downloaded mail as read", exact: true }).click();
   await expect.poll(async () => (await post(request, "/api/queries/threads.list", { folder: "all", category: name })).threads[0].unread_count).toBe(0);
   await category.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Show in Inbox", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Show in Priority", exact: true }).click();
   await expect.poll(async () => (await post(request, "/api/queries/categories.list")).categories.find((c: { name: string }) => c.name === name).in_priority).toBe(true);
   await category.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Let the AI sort it", exact: true }).click();
   await expect.poll(async () => (await post(request, "/api/queries/categories.list")).categories.find((c: { name: string }) => c.name === name).mode).toBe("smart");
   await category.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Category settings…", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Folder settings…", exact: true }).click();
   await expect(page.getByTestId("category").filter({ hasText: name }).getByRole("textbox", { name: "Description", exact: true })).toBeVisible();
   await page.goto("/mail/all");
   await category.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Rename category…", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Rename folder…", exact: true }).click();
   await page.getByRole("dialog").getByRole("textbox", { name: "Name", exact: true }).fill("Renamed context category");
   await page.getByRole("dialog").getByRole("button", { name: "Save", exact: true }).click();
   name = "Renamed context category";
@@ -120,13 +120,13 @@ test("folder and category context menus perform scoped operations", async ({ pag
   await expect(page.getByRole("dialog").getByRole("button", { name: "Confirm sorting", exact: true })).toBeEnabled();
   await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
   await category.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Remove category…", exact: true }).click();
-  await expect(page.getByRole("dialog")).toContainText("Its mail will be kept");
+  await page.getByRole("menuitem", { name: "Remove folder…", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("move to where it was");
   await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
   await expect(category).toBeVisible();
   await category.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Remove category…", exact: true }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Remove category", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Remove folder…", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Remove folder", exact: true }).click();
   await expect(category).toHaveCount(0);
   await expect.poll(async () => (await post(request, "/api/queries/threads.list", { folder: "all" })).threads.some((row: {id:number}) => row.id === id)).toBe(true);
 });

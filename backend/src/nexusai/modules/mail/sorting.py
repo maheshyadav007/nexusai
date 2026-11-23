@@ -1,8 +1,9 @@
 """Sorting mail before the AI reads it, one sender at a time, the same way the Sort lab does.
 
 Every sender gets a score for how automated it looks and starts on the side the AI reads or the
-side it ignores; the person moves any across. Ignored senders are filed under Automated, the
-biggest in categories of their own, and get rules for what's to come. Invitations go to Calendar.
+side it ignores; the person moves any across. Ignored senders are filed in Kept from the AI:
+the biggest in folders of their own, the rest in Automated, its catch-all, with rules for what's
+to come. Invitations go to Calendar.
 Both folders are kept from the AI, left out of meaning search and never learned from. Mail that
 names the person, or that a person answered, still reaches the AI.
 """
@@ -28,6 +29,7 @@ from nexusai.contracts.mail import (
 from nexusai.kernel.database import Migration
 from nexusai.kernel.module import CommandError, Context
 from nexusai.modules.mail import accounts, grouping, rules, sort_rules, sort_view
+from nexusai.modules.mail import folders as folder_tree
 from nexusai.modules.mail.parse import SUBJECT_PREFIX, parse_message
 
 log = structlog.get_logger()
@@ -77,6 +79,34 @@ def decided(ctx: Context) -> str:
     """ "done" or "skipped" once the person has dealt with it, else ""."""
     rows = ctx.bus.db.fetch_all("SELECT state FROM mail_sorting WHERE id = 1")
     return str(rows[0]["state"]) if rows else ""
+
+
+def record_past_sorting(ctx: Context) -> bool:
+    """A mailbox already sorted sender by sender, before sorting saved that it was, counts as
+    sorted, so the page opens to change what's sorted rather than to sort or skip. Only once
+    learning has started, so this never starts it."""
+    if decided(ctx):
+        return False
+    learning = ctx.bus.db.fetch_all(
+        "SELECT value FROM agent_defaults WHERE key = 'mail_learning' AND value != ''"
+    )
+    by_sender = any(
+        rule.enabled
+        and rule.actions.category
+        and any(
+            condition.field in {"sender", "sender_exact"} and "@" in condition.value
+            for condition in rule.conditions
+        )
+        for rule in rules.load_rules(ctx.config.home)
+    )
+    if not (learning and by_sender):
+        return False
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "INSERT OR IGNORE INTO mail_sorting (id, state, updated) VALUES (1, 'done', ?)",
+            (_now(),),
+        )
+    return True
 
 
 def _decide(ctx: Context, state: str) -> None:
@@ -237,9 +267,13 @@ def skip(ctx: Context) -> None:
     _jobs.pop(str(ctx.config.home), None)
 
 
-def plan(found: dict[str, Any], command: ApplyMailSort) -> dict[str, list[str]]:
-    """Which ignored senders go into which folder: a category of their own under Automated, or
-    Automated itself. Senders given the same name share a category."""
+def plan(
+    found: dict[str, Any], command: ApplyMailSort, taken: dict[str, str] | None = None
+) -> dict[str, list[str]]:
+    """Which ignored senders go into which folder: one of their own at the top of Kept from the
+    AI, or Automated, its catch-all. Senders given the same name share a folder. `taken` maps a
+    name the AI's side already uses to the free one a kept folder gets instead."""
+    taken = taken or {}
     chosen = {choice.sender: choice for choice in command.senders}
     folders: dict[str, list[str]] = {}
     names: dict[str, str] = {}
@@ -248,15 +282,39 @@ def plan(found: dict[str, Any], command: ApplyMailSort) -> dict[str, list[str]]:
         if (choice.side if choice else row["side"]) != "ignores":
             continue
         own = choice.own if choice else row["own"]
-        label = ((choice.name.strip() if choice else "") or row["label"] or "Sorted").replace(
-            "/", " "
-        )
+        label = " ".join(
+            ((choice.name.strip() if choice else "") or row["label"] or "Sorted")
+            .replace("/", " ")
+            .split()
+        )[:64]
         if own:
-            # The first spelling of a name is the one the folder keeps.
-            label = names.setdefault(label.casefold(), label)
-        folder = f"{AUTOMATED}/{label}"[:64] if own else AUTOMATED
+            # The first spelling of a name is the one the folder keeps, and one the AI reads
+            # already has gets another: a folder lives on one side.
+            label = names.setdefault(label.casefold(), taken.get(label.casefold(), label))
+        folder = label if own else AUTOMATED
         folders.setdefault(folder, []).append(row["sender"])
     return folders
+
+
+def _taken_by_reads(ctx: Context, found: dict[str, Any], command: ApplyMailSort) -> dict[str, str]:
+    """Names the person's folders on the AI's side already have, each with a free one for a
+    folder of kept senders that would be called the same."""
+    reads = {
+        row["name"].casefold(): row["name"]
+        for row in ctx.bus.db.fetch_all(
+            "SELECT name FROM mail_categories WHERE ai_reads = 1 AND proposed = 0"
+        )
+    }
+    if not reads:
+        return {}
+    chosen = {choice.sender: choice for choice in command.senders}
+    taken: dict[str, str] = {}
+    for row in found["senders"]:
+        choice = chosen.get(row["sender"])
+        name = ((choice.name.strip() if choice else "") or row["label"] or "").casefold()
+        if name in reads and name not in taken:
+            taken[name] = folder_tree.suggest_kept_name(ctx.bus.db, reads[name], [row["sender"]])
+    return taken
 
 
 def _about(rule: MailRule, senders: set[str]) -> bool:
@@ -297,7 +355,7 @@ def apply(ctx: Context, command: ApplyMailSort) -> int:
         settled = {s for s in job.current if s not in unlet}
         command = ApplyMailSort(senders=[c for c in command.senders if c.sender not in settled])
         found = {**found, "senders": [r for r in found["senders"] if r["sender"] not in settled]}
-    folders = plan(found, command)
+    folders = plan(found, command, _taken_by_reads(ctx, found, command))
     raws = {
         str(row["id"]): row
         for row in ctx.bus.db.fetch_all(
@@ -329,22 +387,22 @@ def apply(ctx: Context, command: ApplyMailSort) -> int:
     moved = 0
     now = datetime.now(UTC).isoformat()
     with ctx.bus.unit_of_work() as work:
-        for name in dict.fromkeys(name for name, _ in filing):
-            for folder in dict.fromkeys((name.partition("/")[0], name)):
-                senders = folders.get(name, [])
-                work.tx.execute(
-                    "INSERT INTO mail_categories (name, source, in_priority, proposed, why, sender,"
-                    " created, mode, description, ai_reads) VALUES (?, 'user', 0, 0, ?, ?, ?,"
-                    " 'exact', ?, 0) ON CONFLICT (name) DO UPDATE SET mode = 'exact', ai_reads = 0,"
-                    " sender = COALESCE(mail_categories.sender, excluded.sender)",
-                    (
-                        folder,
-                        "Sorted before the AI read it",
-                        senders[0] if folder == name and senders and folder != AUTOMATED else None,
-                        now,
-                        folder,
-                    ),
-                )
+        # Kept from the AI's catch-all is always there, even with nothing in it yet.
+        for name in dict.fromkeys([AUTOMATED, *(name for name, _ in filing)]):
+            senders = folders.get(name, [])
+            work.tx.execute(
+                "INSERT INTO mail_categories (name, source, in_priority, proposed, why, sender,"
+                " created, mode, description, ai_reads) VALUES (?, 'user', 0, 0, ?, ?, ?,"
+                " 'exact', ?, 0) ON CONFLICT (name) DO UPDATE SET mode = 'exact', ai_reads = 0,"
+                " sender = COALESCE(mail_categories.sender, excluded.sender)",
+                (
+                    name,
+                    "Sorted before the AI read it",
+                    senders[0] if senders and name != AUTOMATED else None,
+                    now,
+                    name,
+                ),
+            )
         for name, senders in folders.items():
             new_rules += sort_rules.rules_for(
                 name,
@@ -461,6 +519,7 @@ def move_sender(
     folder: str | None = None,
     keep_folder: bool = True,
     refile: bool = False,
+    strict: bool = True,
 ) -> str:
     """One sender to the side the AI reads or the side it ignores, the one way every screen
     and agent does it. A sender has one rule, so whatever rules it had are replaced:
@@ -468,6 +527,9 @@ def move_sender(
     - to the AI, into a folder the AI reads: its rule files it there and lets the AI read it;
     - to the AI, from a folder the AI skips as a whole, or from none: a rule lets it through;
     - away from the AI: its rule files it in `folder`, its old folder, or Automated.
+
+    A folder lives on one side, so a folder of the other side isn't kept: the sender goes to the
+    Inbox, or to Automated. `strict=False` allows it, only to put a split back.
 
     Mail already filed stays where it is, unless `refile`, when it moves with the sender; the
     rule decides what's to come. Says what it did."""
@@ -482,8 +544,15 @@ def move_sender(
         for row in ctx.bus.db.fetch_all("SELECT name FROM mail_categories WHERE ai_reads = 0")
     }
     target = (folder or (was if keep_folder else "") or "").strip()[:64]
+    known = folder_tree.find(ctx.bus.db, target) if target else None
+    if known is not None:
+        target = known["name"]
+    # A folder lives on one side, so a sender moved across leaves a folder of the other side:
+    # to the Inbox itself, or to Automated. Only putting a split back undoes that.
+    if strict and known is not None and bool(known["ai_reads"]) != reads:
+        target = ""
     if reads:
-        if target and target not in skipped:
+        if target and (target not in skipped or not strict):
             rule = MailRule(
                 name=f"{target}: {sender}"[:120],
                 conditions=[RuleCondition(field="sender_exact", value=sender)],
@@ -491,6 +560,14 @@ def move_sender(
             )
             with ctx.bus.unit_of_work() as work:
                 # A new folder for it, one the AI reads.
+                if known is None:
+                    target = folder_tree.check_name(work.tx, target)
+                    rule = rule.model_copy(
+                        update={
+                            "name": f"{target}: {sender}"[:120],
+                            "actions": RuleActions(category=target),
+                        }
+                    )
                 work.tx.execute(
                     "INSERT OR IGNORE INTO mail_categories (name, source, in_priority, proposed,"
                     " why, created, mode, description, ai_reads)"
@@ -513,13 +590,14 @@ def move_sender(
             actions=RuleActions(category=target, skip_agent=True),
         )
         with ctx.bus.unit_of_work() as work:
-            # A new folder for it; one under Automated is skipped whole, like Automated.
-            reads_whole = 0 if target.split("/")[0] == AUTOMATED else 1
+            # A new folder for it, at the top of Kept from the AI.
+            if known is None and target != AUTOMATED:
+                target = folder_tree.check_name(work.tx, target)
             work.tx.execute(
                 "INSERT OR IGNORE INTO mail_categories (name, source, in_priority, proposed, why,"
                 " created, mode, description, ai_reads)"
-                " VALUES (?, 'user', 0, 0, ?, ?, 'exact', ?, ?)",
-                (target, "Sorted before the AI read it", _now(), target, reads_whole),
+                " VALUES (?, 'user', 0, 0, ?, ?, 'exact', ?, 0)",
+                (target, "Sorted before the AI read it", _now(), target),
             )
         said = f"{sender}: filed in {target}, kept from the AI"
     rules.change_rules(

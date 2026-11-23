@@ -589,26 +589,16 @@ def finalize(ctx: Context, importance: Mapping[str, str] | None = None) -> None:
                     ("high" if raised else row["usual"], row["id"]),
                 )
                 folder = tx.execute(
-                    "SELECT name FROM mail_categories WHERE name=? AND proposed=0", (row["folder"],)
+                    "SELECT name FROM mail_categories WHERE name=? AND proposed=0 AND ai_reads=1",
+                    (row["folder"],),
                 ).fetchone()
-                # What the person chose stays, and so does what their rule filed.
-                if folder and row["category_source"] != "user" and not row["ruled"]:
-                    if row["category_source"] == "rule":
-                        extras = list(
-                            dict.fromkeys([*json.loads(row["extra_categories"]), folder["name"]])
-                        )
-                        tx.execute(
-                            "UPDATE threads SET extra_categories=? WHERE id=?",
-                            (
-                                json.dumps([name for name in extras if name != row["category"]]),
-                                row["id"],
-                            ),
-                        )
-                    else:
-                        tx.execute(
-                            "UPDATE threads SET category=?,category_source='agent' WHERE id=?",
-                            (folder["name"], row["id"]),
-                        )
+                # What the person chose stays, and so does what their rule filed: one folder
+                # per email, so a rule's folder isn't joined by another.
+                if folder and row["category_source"] not in {"user", "rule"} and not row["ruled"]:
+                    tx.execute(
+                        "UPDATE threads SET category=?,category_source='agent' WHERE id=?",
+                        (folder["name"], row["id"]),
+                    )
                 if (
                     row["last_date"] >= since
                     and (

@@ -112,10 +112,11 @@ def coverage(ctx: Context) -> str:
         f"{pending} emails are still being judged" if pending else "",
         "mail is still coming in" if syncing else "",
     ]
+    # The app says this in a quiet line under the brief; in it, it would read as news.
     return (
         "Coverage: partial, because "
         + " and ".join(r for r in reasons if r)
-        + ". Say so in the brief."
+        + ". The app notes this under the brief, so don't write it as a bullet."
     )
 
 

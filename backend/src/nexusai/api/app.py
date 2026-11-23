@@ -55,7 +55,7 @@ from nexusai.modules.documents import module as documents
 from nexusai.modules.documents.module import documents_module
 from nexusai.modules.mail import outgoing, pst_upload
 from nexusai.modules.mail import store as mail_store
-from nexusai.modules.mail.module import KINDS_SORTED, mail_module
+from nexusai.modules.mail.module import FOLDER_TREE_UPGRADE, KINDS_SORTED, mail_module
 from nexusai.modules.models.module import models_module, reset_login
 from nexusai.modules.notifications.module import notifications_module
 from nexusai.modules.onboarding.module import onboarding_module
@@ -121,7 +121,12 @@ def _open_database(config: Config, home: Path, key: str) -> tuple[Database, bool
         # Mail's background data conversion also records a completion marker here.
         db.require_compatible(
             migrations,
-            [KINDS_SORTED, "mail_organization_defaults_001", "mail_organization_provenance_001"],
+            [
+                KINDS_SORTED,
+                "mail_organization_defaults_001",
+                "mail_organization_provenance_001",
+                FOLDER_TREE_UPGRADE,
+            ],
         )
         upgrading = db.pending(migrations)
     except Exception:

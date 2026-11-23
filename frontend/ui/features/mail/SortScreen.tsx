@@ -4,8 +4,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { command, query } from "@/ui/client/api";
-import type { SortSender } from "@/ui/client/contracts.generated";
+import type { MailCategory, SortSender } from "@/ui/client/contracts.generated";
 import { useHomeReady, useLeadName } from "@/ui/client/home";
+import { useCategories } from "@/ui/client/mail";
+import { Checkbox } from "@/ui/primitives/Checkbox";
+import { SplitReview } from "./SplitReview";
 import { Badge } from "@/ui/primitives/Badge";
 import { Button } from "@/ui/primitives/Button";
 import { EmptyState } from "@/ui/primitives/EmptyState";
@@ -22,7 +25,8 @@ import { Skeleton } from "@/ui/primitives/Skeleton";
 import { t, tn } from "@/ui/strings";
 
 /** Where each sender stands: its side, and the folder card it sits in. `place` is the folder's
- * exact name: "" is the Inbox, "Automated" the catch-all, "Automated/…" a folder of its own. */
+ * exact name: "" is the Inbox itself, "Automated" Kept from the AI's catch-all, and any other
+ * name a folder of its own, on that side only. */
 interface Choice {
   side: SortSender["side"];
   place: string;
@@ -36,22 +40,22 @@ const CARDS_SHOWN = 8;
 // Lists show this many senders until opened, so the biggest are what shows.
 const SHOWN = 8;
 const AUTOMATED = "Automated";
-const UNDER = `${AUTOMATED}/`;
 const BIGGEST = [0, 3, 5, 10, 20];
 const fmt = (n: number) => n.toLocaleString();
 const keyOf = (name: string) => name.trim().toLocaleLowerCase();
 const cardKey = (side: Choice["side"], place: string) => `${side}|${keyOf(place)}`;
 const sizeOf = (members: readonly SortSender[]) => members.reduce((n, s) => n + s.count, 0);
-// Folders under Automated are skipped whole, so on the side the AI reads their senders are in the Inbox.
-const across = (side: Choice["side"], place: string): Choice => (side === "reads" ? { side: "ignores", place: place || AUTOMATED } : { side: "reads", place: place === AUTOMATED || place.startsWith(UNDER) ? "" : place });
-const cardName = (place: string) => (place === "" ? t("mail.sort.inbox") : place === AUTOMATED ? t("mail.sort.automated") : place);
+// A folder lives on one side, so a sender moved across lands in the other side's "No folder".
+const across = (side: Choice["side"]): Choice => (side === "reads" ? { side: "ignores", place: AUTOMATED } : { side: "reads", place: "" });
+const noFolder = (place: string) => place === "" || place === AUTOMATED;
+const cardName = (place: string) => (noFolder(place) ? t("mail.sort.noFolder") : place);
 // How long a sender that just moved stays marked in its new place.
 const FLASH_MS = 2400;
 // Senders that just moved, marked where they landed.
 const Flash = createContext<ReadonlySet<string>>(new Set());
 const flashClass = (on: boolean) => (on ? "ring-2 ring-accent-default bg-accent-default/5" : "");
 // Every card, for moving a sender with its details instead of dragging it.
-const Cards = createContext<{ all: readonly Card[]; move: (members: readonly SortSender[], to: Choice) => void }>({ all: [], move: () => undefined });
+const Cards = createContext<{ all: readonly Card[]; move: (members: readonly SortSender[], to: Choice) => void; flip: (card: Card) => void }>({ all: [], move: () => undefined, flip: () => undefined });
 const DRAG = "application/x-nexusai-sender";
 
 /** The sorting page, the same as the Sort lab's: every sender scored, on the side the AI reads
@@ -105,13 +109,22 @@ function Sorter({ senders, owner, total, calendar, alreadySorted, lead, onDone, 
   const byCount = [...senders].sort((a, b) => b.count - a.count);
   const [initial] = useState<Choices>(() => {
     // A sender a rule already files starts in its folder, on the side its rule puts it.
-    const start: Choices = Object.fromEntries(byCount.map((s) => [s.sender, s.folder ? { side: s.side, place: s.folder } : { side: s.side, place: s.side === "reads" ? "" : s.own ? `${UNDER}${s.label}` : AUTOMATED }]));
+    const start: Choices = Object.fromEntries(byCount.map((s) => [s.sender, s.folder ? { side: s.side, place: s.folder } : { side: s.side, place: s.side === "reads" ? "" : s.own ? s.label : AUTOMATED }]));
     // A sender named like a folder that starts on its own joins it, so one tool is one folder.
     const named = new Set(byCount.filter((s) => s.own && !s.folder).map((s) => keyOf(s.label)));
-    for (const s of byCount) if (!s.folder && s.side === "ignores" && named.has(keyOf(s.label))) start[s.sender] = { side: "ignores", place: `${UNDER}${s.label}` };
+    for (const s of byCount) if (!s.folder && s.side === "ignores" && named.has(keyOf(s.label))) start[s.sender] = { side: "ignores", place: s.label };
     return start;
   });
   const [choices, setChoices] = useState<Choices>(initial);
+  // Folders that exist, so a name on the page is known to be one or not.
+  const categories = useCategories();
+  const existing = new Map((categories.data?.categories ?? []).filter((item) => !item.proposed).map((item) => [keyOf(item.name), item]));
+  const real = (side: Choice["side"], place: string) => !noFolder(place) && (existing.get(keyOf(place))?.ai_reads !== false) === (side === "reads") && existing.has(keyOf(place));
+  // Whole folders switched to the other home. Saved after the senders, as one move each.
+  const [flipped, setFlipped] = useState<Readonly<Record<string, Choice["side"]>>>({});
+  // The AI's suggested topic folders, ticked to be made when the page is saved.
+  const suggested = (categories.data?.categories ?? []).filter((item) => item.proposed && item.mode === "smart" && item.ai_reads !== false);
+  const [declined, setDeclined] = useState<ReadonlySet<string>>(new Set());
   // Folders made on the page, empty until a sender is put in one.
   const [made, setMade] = useState<readonly Choice[]>([]);
   // The last move: where it came from, said in the column it left until the next one.
@@ -133,16 +146,29 @@ function Sorter({ senders, owner, total, calendar, alreadySorted, lead, onDone, 
   const payload = (s: SortSender) => {
     const now = choice(s);
     const start = initial[s.sender] as Choice;
+    // In a folder that moves home whole, the folder takes its senders along afterwards.
+    if (flipped[keyOf(now.place)] && keyOf(now.place) === keyOf(start.place)) return { sender: s.sender, side: start.side, own: false, name: "" };
     const same = now.side === start.side && keyOf(now.place) === keyOf(start.place);
-    const automated = now.place === AUTOMATED || now.place.startsWith(UNDER);
-    if (same || (!s.folder && now.side === "ignores" && automated)) {
-      const own = now.place.startsWith(UNDER);
-      const name = own ? now.place.slice(UNDER.length).slice(0, 60) : "";
+    // Kept from the AI in a folder that doesn't exist yet: sorted with the rest, as a folder of its own.
+    if (same || (!s.folder && now.side === "ignores" && !real("ignores", now.place))) {
+      const own = now.place !== AUTOMATED && now.side === "ignores";
+      const name = own ? now.place.slice(0, 60) : "";
       return { sender: s.sender, side: now.side, own, name: name === s.label ? "" : name };
     }
     return { sender: s.sender, side: now.side, own: false, name: "", folder: now.place.slice(0, 64) };
   };
-  const apply = useMutation({ mutationFn: () => command("mail.sort.apply", { senders: byCount.map(payload) }), onSuccess: onDone });
+  const apply = useMutation({
+    mutationFn: async () => {
+      const done = await command("mail.sort.apply", { senders: byCount.map(payload) });
+      for (const [key, side] of Object.entries(flipped)) {
+        const folder = existing.get(key);
+        if (folder) await command("categories.update", { name: folder.name, parent: "", ai_reads: side === "reads" });
+      }
+      for (const item of suggested) if (!declined.has(item.name)) await command("categories.decide", { name: item.name, accept: true });
+      return done;
+    },
+    onSuccess: onDone,
+  });
   const skip = useMutation({ mutationFn: () => command("mail.sort.skip", {}), onSuccess: onDone });
 
   // The cards, built from where everyone is now. The Inbox and Automated are always there.
@@ -176,15 +202,33 @@ function Sorter({ senders, owner, total, calendar, alreadySorted, lead, onDone, 
     setMoved({ name: members.length === 1 ? (members[0] as SortSender).label : cardName(choice(members[0] as SortSender).place), from, to: cardName(to.place), before });
     setFlash(new Set(members.map((s) => s.sender)));
   };
-  const rename = (card: Card, name: string) => setChoices((current) => ({ ...current, ...Object.fromEntries(card.members.map((s) => [s.sender, { side: card.side, place: `${UNDER}${name.replace("/", " ")}` }])) }));
+  const rename = (card: Card, name: string) => setChoices((current) => ({ ...current, ...Object.fromEntries(card.members.map((s) => [s.sender, { side: card.side, place: name.replaceAll("/", " ") }])) }));
   // Own folders for the biggest kept senders that have none yet; the rest go into Automated.
-  const fresh = (s: SortSender) => !s.folder && choice(s).side === "ignores" && (choice(s).place === AUTOMATED || choice(s).place.startsWith(UNDER)) && !made.some((c) => cardKey(c.side, c.place) === cardKey("ignores", choice(s).place));
-  const ownNow = new Set(byCount.filter((s) => fresh(s) && choice(s).place !== AUTOMATED).map((s) => keyOf(choice(s).place))).size;
+  const fresh = (s: SortSender) => !s.folder && choice(s).side === "ignores" && !real("ignores", choice(s).place) && !flipped[keyOf(choice(s).place)] && !made.some((c) => cardKey(c.side, c.place) === cardKey("ignores", choice(s).place));
+  // Every folder kept from the AI counts, the ones already there and the ones about to be.
+  const keptFolders = new Set(byCount.filter((s) => choice(s).side === "ignores" && choice(s).place !== AUTOMATED).map((s) => keyOf(choice(s).place)));
+  const settledFolders = new Set(byCount.filter((s) => choice(s).side === "ignores" && choice(s).place !== AUTOMATED && !fresh(s)).map((s) => keyOf(choice(s).place)));
+  const ownNow = keptFolders.size;
   const biggest = (n: number) => {
     const labels = new Map<string, number>();
     for (const s of byCount) if (fresh(s)) labels.set(s.label, (labels.get(s.label) ?? 0) + s.count);
-    const top = new Set([...labels.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([label]) => label));
-    setChoices((current) => ({ ...current, ...Object.fromEntries(byCount.filter(fresh).map((s) => [s.sender, { side: "ignores", place: top.has(s.label) ? `${UNDER}${s.label}` : AUTOMATED }])) }));
+    const top = new Set([...labels.entries()].sort((a, b) => b[1] - a[1]).slice(0, Math.max(0, n - settledFolders.size)).map(([label]) => label));
+    setChoices((current) => ({ ...current, ...Object.fromEntries(byCount.filter(fresh).map((s) => [s.sender, { side: "ignores", place: top.has(s.label) ? s.label : AUTOMATED }])) }));
+  };
+  // A whole folder to the other home: one that exists moves as itself; one only on this page
+  // goes with its name. The "No folder" cards swap.
+  const flip = (card: Card) => {
+    const side = card.side === "reads" ? "ignores" : "reads";
+    if (noFolder(card.place)) { move(card.members, across(card.side)); return; }
+    const key = keyOf(card.place);
+    if (real(card.side, card.place) || flipped[key]) setFlipped((current) => {
+      const next = { ...current };
+      const was = existing.get(key);
+      if (was && (was.ai_reads !== false) === (side === "reads")) delete next[key];
+      else next[key] = side;
+      return next;
+    });
+    move(card.members, { side, place: card.place });
   };
   // What's different from how the page opened, by where it went, each with its own undo.
   const changed = [...Map.groupBy(byCount.filter((s) => cardKey(choice(s).side, choice(s).place) !== cardKey((initial[s.sender] as Choice).side, (initial[s.sender] as Choice).place)), (s) => cardKey(choice(s).side, choice(s).place)).values()];
@@ -196,12 +240,15 @@ function Sorter({ senders, owner, total, calendar, alreadySorted, lead, onDone, 
         <Button variant="quiet" className="py-px" onClick={() => { setChoices((current) => ({ ...current, ...moved.before })); setMoved(null); }}>{t("mail.sort.undo")}</Button>
       </div>
     ) : null;
-  const other = (card: Card) => (card.place && card.place !== AUTOMATED ? found.get(cardKey(card.side === "reads" ? "ignores" : "reads", card.place))?.members.length ?? 0 : 0);
-  const show = (card: Card) => <FolderCard key={card.place.startsWith(UNDER) && !card.real ? card.members[0]?.sender ?? card.key : card.key} card={card} also={other(card)} onRename={card.side === "ignores" && card.place.startsWith(UNDER) && !card.real && card.members.length ? (name) => rename(card, name) : undefined} />;
+  const other = (card: Card) => (!noFolder(card.place) ? found.get(cardKey(card.side === "reads" ? "ignores" : "reads", card.place))?.members.length ?? 0 : 0);
+  // A kept folder only this page has made is named here, before it exists.
+  const naming = (card: Card) => card.side === "ignores" && !noFolder(card.place) && !card.real && !real("ignores", card.place) && !flipped[keyOf(card.place)] && card.members.length > 0;
+  const show = (card: Card) => <FolderCard key={naming(card) ? card.members[0]?.sender ?? card.key : card.key} card={card} also={other(card)} onRename={naming(card) ? (name) => rename(card, name) : undefined} />;
   const choiceOf = (s: SortSender) => choice(s);
 
   return <div className="flex min-h-full flex-1 flex-col">
     <div className="flex flex-1 flex-col gap-5 px-5 py-6 md:px-6">
+      {again ? <SplitReview /> : null}
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex flex-col gap-2">
           <h1 className="font-serif text-title text-ink-primary">{t("mail.sort.title")}</h1>
@@ -224,11 +271,12 @@ function Sorter({ senders, owner, total, calendar, alreadySorted, lead, onDone, 
         </span>
       </header>
       <Flash.Provider value={flash}>
-      <Cards.Provider value={{ all: cards, move }}>
+      <Cards.Provider value={{ all: cards, move, flip }}>
       <Choosing.Provider value={choiceOf}>
       <div className="grid items-start gap-5 lg:grid-cols-2">
         <Column title={t("mail.sort.reads")} reads count={counted(reads)}>
           {movedNote("reads")}
+          {suggested.length ? <Suggested items={suggested} declined={declined} onChange={(name, on) => setDeclined((current) => { const next = new Set(current); if (on) next.delete(name); else next.add(name); return next; })} /> : null}
           <FoldedCards cards={folders("reads")} render={show} />
           {show(inbox)}
           <NewFolder side="reads" onMake={(place) => setMade((list) => [...list, { side: "reads", place }])} />
@@ -304,13 +352,13 @@ function FoldedCards({ cards, render }: { cards: readonly Card[]; render: (card:
 /** One folder: its name and size, a switch that moves it all across, and its senders when
  *  opened. Senders can be dropped on it from any other card. */
 function FolderCard({ card, also, onRename }: { card: Card; also: number; onRename?: ((name: string) => void) | undefined }) {
-  const { all, move } = useContext(Cards);
+  const { all, move, flip } = useContext(Cards);
   const flashing = useContext(Flash);
   const [open, setOpen] = useState(false);
   const [over, setOver] = useState(false);
   const landed = card.members.some((s) => flashing.has(s.sender));
   const shown = open || landed;
-  const catchAll = card.place === "" || card.place === AUTOMATED;
+  const catchAll = noFolder(card.place);
   const name = cardName(card.place);
   const to: Choice = { side: card.side, place: card.place };
   const summary = `${tn("mail.sort.senderCount", card.members.length)} · ${fmt(sizeOf(card.members))}`;
@@ -329,12 +377,12 @@ function FolderCard({ card, also, onRename }: { card: Card; also: number; onRena
         <Icon name={card.place === "" ? "inbox" : card.side === "reads" ? "folder" : "keptFromAi"} className={`h-4 w-4 shrink-0 ${card.side === "reads" ? "text-accent-default" : "text-ink-muted"}`} />
         {onRename ? null : <span className="min-w-0 truncate text-md font-medium text-ink-primary">{name}</span>}
       </Pressable>
-      {onRename ? <Input aria-label={t("mail.sort.categoryName")} value={card.place.slice(UNDER.length)} maxLength={60} onChange={(event) => onRename(event.target.value)} className="min-w-0 flex-1" /> : null}
+      {onRename ? <Input aria-label={t("mail.sort.categoryName")} value={card.place} maxLength={60} onChange={(event) => onRename(event.target.value)} className="min-w-0 flex-1" /> : null}
       <span className="shrink-0 text-sm tabular-nums text-ink-muted">{summary}</span>
-      {card.members.length ? <SideSwitch side={card.side} name={name} onChange={(side) => side !== card.side && move(card.members, across(card.side, card.place))} /> : null}
+      {card.members.length ? <SideSwitch side={card.side} name={name} onChange={(side) => side !== card.side && flip(card)} /> : null}
     </div>
-    {card.place === AUTOMATED ? <p className="text-sm text-ink-muted">{t("mail.sort.automated.sub")}</p> : null}
-    {onRename ? <p className="text-sm text-ink-muted">{t("mail.sort.path", { name: card.place.slice(UNDER.length).trim() || "…", senders: tn("mail.sort.senderCount", card.members.length) })}</p> : null}
+    {card.place === AUTOMATED ? <p className="text-sm text-ink-muted">{t("mail.sort.automated.sub")}</p> : card.place === "" ? <p className="text-sm text-ink-muted">{t("mail.sort.noFolder.reads")}</p> : null}
+    {onRename ? <p className="text-sm text-ink-muted">{t("mail.sort.path", { senders: tn("mail.sort.senderCount", card.members.length) })}</p> : null}
     {/* The count only when it isn't every sender, which the header already says. */}
     {card.real && card.members.some((s) => s.folder) ? <p className="text-sm text-ink-muted">{card.members.every((s) => s.folder) ? t("mail.sort.filed.all") : t("mail.sort.filed", { senders: tn("mail.sort.senderCount", card.members.filter((s) => s.folder).length) })}</p> : null}
     {also ? <p className="text-sm text-ink-muted">{t("mail.sort.also", { senders: tn("mail.sort.senderCount", also), side: t(card.side === "reads" ? "mail.sort.ignores" : "mail.sort.reads") })}</p> : null}
@@ -385,7 +433,7 @@ function SenderRow({ sender: s }: { sender: SortSender }) {
       </Pressable>
       <span className="shrink-0 text-md tabular-nums text-ink-secondary">{fmt(s.count)}</span>
       <span className="hidden w-thumb shrink-0 md:block"><Progress label={t("mail.sort.score", { pct })} value={pct} /></span>
-      <SideSwitch side={now.side} name={s.label} onChange={(side) => side !== now.side && move([s], across(now.side, now.place))} />
+      <SideSwitch side={now.side} name={s.label} onChange={(side) => side !== now.side && move([s], across(now.side))} />
     </div>
     {open ? <div className="flex flex-col gap-2 pl-7">
       <p className="text-sm tabular-nums text-ink-secondary">{[t("mail.sort.score", { pct }), ...reasons].join(" · ")}</p>
@@ -403,13 +451,13 @@ function SenderRow({ sender: s }: { sender: SortSender }) {
   </li>;
 }
 
-/** A folder made here, on one side. One kept from the AI goes under Automated, like the rest. */
+/** A folder made here, on one side, at the top of that home. */
 function NewFolder({ side, onMake }: { side: Choice["side"]; onMake: (place: string) => void }) {
   const [naming, setNaming] = useState(false);
   const [name, setName] = useState("");
   const make = () => {
-    const clean = name.trim().replace("/", " ").slice(0, 50);
-    if (clean) onMake(side === "ignores" ? `${UNDER}${clean}` : clean);
+    const clean = name.trim().replaceAll("/", " ").slice(0, 50);
+    if (clean) onMake(clean);
     setName("");
     setNaming(false);
   };
@@ -419,4 +467,15 @@ function NewFolder({ side, onMake }: { side: Choice["side"]; onMake: (place: str
     <Button type="submit" variant="primary" disabled={!name.trim()}>{t("mail.sort.new.add")}</Button>
     <Button variant="quiet" onClick={() => setNaming(false)}>{t("mail.sort.new.cancel")}</Button>
   </form>;
+}
+
+/** The AI's suggested topic folders for the side it reads, ticked to be made on Save. */
+function Suggested({ items, declined, onChange }: { items: readonly MailCategory[]; declined: ReadonlySet<string>; onChange: (name: string, on: boolean) => void }) {
+  return <div data-testid="sort-suggested" className="flex flex-col gap-2 rounded-lg border border-dashed border-line-strong p-3">
+    <p className="text-md font-medium text-ink-primary">{t("mail.sort.suggested")}</p>
+    <ul className="flex flex-col gap-1">
+      {items.map((item) => <li key={item.name}><Checkbox label={item.description && item.description !== item.name ? `${item.name} · ${item.description}` : item.name} checked={!declined.has(item.name)} onChange={(on) => onChange(item.name, on)} /></li>)}
+    </ul>
+    <p className="text-sm text-ink-muted">{t("mail.sort.suggested.note")}</p>
+  </div>;
 }
