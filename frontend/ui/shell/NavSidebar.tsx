@@ -1,7 +1,7 @@
 "use client";
 
 import { useSessions } from "@/ui/client/sessions";
-import { usePlannerCounts, useWaitingCount } from "@/ui/client/work";
+import { useCockpit, usePlannerCounts, useWaitingCount } from "@/ui/client/work";
 import { MailNavMenu } from "./MailNavMenu";
 import type { MailCategory, MarkFolderRead } from "@/ui/client/contracts.generated";
 import { FolderNav, SpamNav } from "./FolderNav";
@@ -10,7 +10,7 @@ import { SidebarFold } from "./SidebarFold";
 import { customFolders, folderHref, isCurrentMail, spamFolders } from "./customMail";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useId, useState } from "react";
+import { createContext, useContext, useEffect, useId, useState, type ReactNode } from "react";
 import { useCategories, useDrafts, useMailFolders } from "@/ui/client/mail";
 import appConfig from "@/app.config.json";
 import { Icon } from "@/ui/icons";
@@ -112,7 +112,11 @@ function withHomes(items: readonly NavItem[], row: (item: NavItem) => React.Reac
   return [...items.slice(0, at + 1).map(row), ...homes, <li key="homes-end" aria-hidden className="h-1" />, ...items.slice(at + 1).map(row)];
 }
 
-export function NavSidebar({ counts }: { counts?: Readonly<Record<string, number>> }) {
+// Whether the sidebar is the narrow rail, for what's put into it from outside the shell.
+const Collapsed = createContext(false);
+export const useSidebarCollapsed = () => useContext(Collapsed);
+
+export function NavSidebar({ counts, setup }: { counts?: Readonly<Record<string, number>>; setup?: ReactNode }) {
   const pathname = usePathname();
   const waiting = useWaitingCounts();
   const unread = useUnreadCounts();
@@ -122,6 +126,8 @@ export function NavSidebar({ counts }: { counts?: Readonly<Record<string, number
   const sections = arrange(NAV_SECTIONS, layout.data).filter((section) => !section.hidden);
   const [collapsed, setCollapsed] = useState(false);
   const tools = NAV_BOTTOM.filter((item) => item.id !== "settings");
+  // Something of the app's own needs fixing: Tools says so, as Today does.
+  const problem = (useCockpit().data?.health ?? []).some((item) => item.state === "problem");
 
   useEffect(() => {
     try {
@@ -159,7 +165,7 @@ export function NavSidebar({ counts }: { counts?: Readonly<Record<string, number
           <IconButton icon={collapsed ? "expand" : "collapse"} label={t(collapsed ? "nav.expand" : "nav.collapse")} aria-expanded={!collapsed} onClick={toggle} />
         </div>
       </div>
-      <ul className="flex shrink-0 flex-col gap-px px-2 pb-4 pt-2">{NAV_TOP.map(row)}</ul>
+      <ul className="flex shrink-0 flex-col gap-px px-2 pb-4 pt-2">{NAV_TOP.map(row)}<Collapsed.Provider value={collapsed}>{setup}</Collapsed.Provider></ul>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain category-scroll">
         <div className="flex min-h-full flex-col gap-2 px-2 pb-2">
           {sections.map((section) => {
@@ -179,7 +185,7 @@ export function NavSidebar({ counts }: { counts?: Readonly<Record<string, number
           {/* Little used, so they have a section of their own that stays folded; the narrow rail
               still shows each icon. */}
           <section aria-label={t("nav.tools")} className="shrink-0 border-t border-line-subtle pt-2">
-            {collapsed ? <ul className="flex flex-col gap-px">{tools.map(row)}</ul> : <SidebarFold id="tools" label={t("nav.tools")} holdsActive={tools.some((item) => isCurrentMail(pathname, item.href))}><ul className="flex flex-col gap-px">{tools.map(row)}</ul></SidebarFold>}
+            {collapsed ? <ul className="flex flex-col gap-px">{tools.map(row)}</ul> : <SidebarFold id="tools" label={t("nav.tools")} actions={problem ? <span role="img" aria-label={t("nav.tools.problem")} data-testid="tools-problem" className="mr-2 h-2 w-2 rounded-full bg-status-danger" /> : null} holdsActive={tools.some((item) => isCurrentMail(pathname, item.href))}><ul className="flex flex-col gap-px">{tools.map(row)}</ul></SidebarFold>}
           </section>
         </div>
       </div>

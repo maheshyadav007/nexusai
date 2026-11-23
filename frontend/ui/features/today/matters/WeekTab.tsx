@@ -13,7 +13,8 @@ import { Skeleton } from "@/ui/primitives/Skeleton";
 import { MarkGlyph, Track, TrackMark, TrackNow, TrackSpan, type MarkShape, type MarkTone } from "@/ui/primitives/Track";
 import light from "@/ui/theme/themes/nexus-light.json";
 import { t, type StringKey } from "@/ui/strings";
-import { useHideFromAi } from "@/ui/features/mail/HideFromAi";
+import { ContextMenu } from "@/ui/primitives/ContextMenu";
+import { useMatterActions } from "./matterActions";
 import { StateText, placeIn, useTodayView, type MatterMarkKind } from "./parts";
 
 const WEEK = 7;
@@ -60,11 +61,11 @@ function useDayCount<T extends HTMLElement>(days: number) {
 
 function Lane({ lane, start, days, now }: { lane: MatterLane; start: Date; days: number; now: number }) {
   const { go } = useTodayView();
-  const hide = useHideFromAi();
   const moment = useDateTime();
   const day = useDateOnly();
   const strip = useDayCount<HTMLDivElement>(days);
   const matter = lane.matter;
+  const actions = useMatterActions(matter);
   const nowAt = (now - start.getTime()) / (days * 86_400_000);
   const points = lane.marks.map((mark) => placeIn(mark.time, start, days));
   const open = matter.state !== "done";
@@ -73,18 +74,17 @@ function Lane({ lane, start, days, now }: { lane: MatterLane; start: Date; days:
   const label = (mark: MatterMark) => `${mark.time.length > 10 ? moment(mark.time) : day(mark.time)} · ${t(`matters.week.mark.${mark.kind}` as StringKey)}: ${mark.label}`;
   const overdue = (mark: MatterMark) => open && mark.kind === "due" && new Date(mark.time.length > 10 ? mark.time : `${mark.time}T23:59`).getTime() < now;
   const today = Math.floor(nowAt * days);
-  // Its newest conversation, to take it off the AI from here.
-  const thread = matter.latest?.kind === "mail" ? Number(matter.latest.ref) : null;
   return (
     <li data-testid="week-lane" className="flex items-stretch border-t border-line-subtle">
       {/* Stays put while the days scroll under it, so each line keeps its name. */}
-      <div className="group sticky left-0 z-raised flex w-sidebar shrink-0 items-center border-r border-line-subtle bg-surface-raised pr-2">
+      <ContextMenu items={actions}>
+      <div className="sticky left-0 z-raised flex w-sidebar shrink-0 items-center border-r border-line-subtle bg-surface-raised pr-2">
         <Pressable onClick={() => go("matters", matter.id)} className="flex min-w-0 flex-1 flex-col items-start gap-1 py-3 pl-4 pr-2 text-left">
           <span className="w-full truncate text-md font-medium text-ink-primary transition-colors duration-fast hover:text-accent-default">{matter.title}</span>
           <StateText state={matter.state} />
         </Pressable>
-        {thread ? <span className="opacity-0 transition-opacity duration-fast group-hover:opacity-100 group-focus-within:opacity-100"><IconButton icon="keptFromAi" label={t("menu.hideFromAi")} onClick={() => hide(thread)} /></span> : null}
       </div>
+      </ContextMenu>
       <div ref={strip} className="nx-days relative">
         {Array.from({ length: days }, (_, index) => <span key={index} aria-hidden className={`border-l border-line-subtle ${today === index ? "bg-accent-default/5" : ""}`} />)}
         <span className="absolute inset-x-0 top-1/2 -translate-y-1/2"><Track>

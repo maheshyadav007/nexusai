@@ -5,7 +5,7 @@ import Link from "next/link";
 import appConfig from "@/app.config.json";
 import { useEffect, useState, type ReactNode } from "react";
 import type { ChannelMessage, DueItem, MailCategory, TodayThread, ToolApproval } from "@/ui/client/contracts.generated";
-import { useDateOnly, useDateTime, useShortDate } from "@/ui/client/format";
+import { useDateOnly, useDateTime, useShortDate, useTimeOnly } from "@/ui/client/format";
 import { useCategories, useDecideCategory, useDecidePriority, useMailStatus, useSetImportance, useSetStatus } from "@/ui/client/mail";
 import { groupApprovals, useApprovals, useDecideApprovals, useSessions } from "@/ui/client/sessions";
 import { useLeadName } from "@/ui/client/home";
@@ -33,7 +33,6 @@ import { Popover } from "@/ui/primitives/Popover";
 import { Pressable } from "@/ui/primitives/Pressable";
 import { quickLook } from "@/ui/primitives/SourceRef";
 import { Skeleton } from "@/ui/primitives/Skeleton";
-import { StatusDot } from "@/ui/primitives/StatusDot";
 import { TextLink } from "@/ui/primitives/TextLink";
 import { useToast } from "@/ui/primitives/Toast";
 import { t, tn, type StringKey } from "@/ui/strings";
@@ -461,6 +460,7 @@ function MorningBrief() {
   const react = useReactToBrief();
   const toast = useToast();
   const format = useDateTime();
+  const time = useTimeOnly();
   const data = today.data;
   const [comment, setComment] = useState("");
   const [telling, setTelling] = useState(false);
@@ -509,6 +509,8 @@ function MorningBrief() {
         <IconButton icon="dislike" label={t("today.brief.dislike")} aria-pressed={rating === "down"} data-testid="brief-dislike" className={rating === "down" ? "text-accent-default" : ""} disabled={react.isPending} onClick={() => rate("down")} />
         <Button variant="quiet" aria-expanded={telling} data-testid="brief-tell" onClick={() => setTelling(!telling)}>{t("today.brief.tell")}</Button>
         <span className="flex-1" />
+        {/* How fresh it is, quietly: what it was written from. */}
+        {data.prep_at ? <span data-testid="brief-covers" className="text-sm tabular-nums text-ink-muted">{t("today.brief.covers", { when: time(data.prep_at) })}</span> : null}
         <Pressable onClick={() => assistant.openSession(session)} className="focus-ring rounded-sm text-sm text-ink-secondary underline underline-offset-2 hover:text-ink-primary">{t("channel.openSession")}</Pressable>
       </div>
       {telling ? (
@@ -579,20 +581,22 @@ function SinceYouLooked() {
   );
 }
 
-/** One line on how the app is doing. The Cockpit has the rest. */
-function StatusLine() {
+/** Today stays about the person's day: the app speaks here only when something of its own
+ *  stopped working and needs them, with the way to fix it. Everything else is in the Cockpit. */
+function ProblemLine() {
   const cockpit = useCockpit();
-  const data = cockpit.data;
-  if (!data) return null;
-  const health = (id: string) => data.health.find((item) => item.id === id);
-  const parts = [health("mail"), health("index-mail")].filter((item) => item !== undefined).map((item) => `${item.label}: ${item.detail}`);
-  if (data.jobs.length) parts.push(tn("today.status.running", data.jobs.length));
+  const problems = (cockpit.data?.health ?? []).filter((item) => item.state === "problem");
+  if (!problems.length) return null;
   return (
-    <Link href="/cockpit" data-testid="today-status" className="focus-ring flex items-center gap-2 self-start rounded-sm text-sm text-ink-muted transition-colors duration-fast hover:text-ink-primary">
-      <StatusDot tone={data.health.some((item) => item.state === "problem") ? "failed" : data.jobs.length ? "running" : "done"} />
-      {parts.join(" · ")}
-      <Icon name="chevronRight" className="h-3 w-3" />
-    </Link>
+    <div className="flex flex-col gap-2">
+      {problems.map((item) => (
+        <p key={item.id} role="alert" data-testid="today-problem" className="flex flex-wrap items-center gap-3 rounded-lg border border-status-danger/30 bg-status-danger/10 px-4 py-3 text-md text-status-danger">
+          <Icon name="error" className="h-4 w-4 shrink-0" />
+          <span className="min-w-0 flex-1">{t("today.problem", { what: item.label, detail: item.detail })}</span>
+          <Link href={item.link ?? "/cockpit"} className="focus-ring rounded-sm font-medium text-status-danger underline underline-offset-2">{t("today.problem.fix")}</Link>
+        </p>
+      ))}
+    </div>
   );
 }
 
@@ -638,8 +642,6 @@ export function TodayScreen() {
         <div className="flex min-w-0 flex-col gap-6">
           {shown.due ? <DueToday items={due} /> : null}
           {today.data && !noMail ? <SinceYouLooked /> : null}
-          {today.data?.automated_count ? <TextLink className="self-start text-md" href="/mail/all">{tn("today.automated", today.data.automated_count)}</TextLink> : null}
-          <StatusLine />
         </div>
       </div>
     </div>
@@ -663,6 +665,7 @@ export function TodayScreen() {
           <CustomizeToday shown={shown} onChange={setShown} />
         </div>
       </header>
+      <ProblemLine />
       {/* Until it's sorted the AI reads nothing, so this comes before everything else. */}
       <SortMailCard />
       <Tabs

@@ -27,4 +27,8 @@ class OnboardingChanged(BaseModel):
 
 
 class DismissChecklist(BaseModel):
+    """Later: setup leaves Today and waits in the sidebar. Back brings it to Today again."""
+
     model_config = ConfigDict(extra="forbid")
+
+    back: bool = False

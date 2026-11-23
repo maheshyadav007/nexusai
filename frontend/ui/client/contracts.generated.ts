@@ -2238,6 +2238,7 @@ export type Completed1 = boolean;
 export type Completed2 = boolean;
 export type CurrentStep = string | null;
 export type ChecklistDismissed = boolean;
+export type Back = boolean;
 export type Step2 = string;
 export type Name51 = string;
 export type Role4 = string;
@@ -7597,10 +7598,14 @@ export interface OnboardingState {
   [k: string]: unknown;
 }
 /**
+ * Later: setup leaves Today and waits in the sidebar. Back brings it to Today again.
+ *
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "DismissChecklist".
  */
-export interface DismissChecklist {}
+export interface DismissChecklist {
+  back?: Back;
+}
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "SetOnboardingStep".

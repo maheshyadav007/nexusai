@@ -119,6 +119,11 @@ test("Today shows one matter per thing, as a brief, a week and a timeline", asyn
   await expect(row).toBeVisible({ timeout: 30_000 });
   await expect(row).toContainText("2 emails", { timeout: 30_000 });
   await expect(page.getByTestId("matter-change").filter({ hasText: first }).first()).toBeVisible();
+  // A Brief row has no Done button: it's in the row's menu.
+  await expect(row.getByRole("button", { name: "Done" })).toHaveCount(0);
+  await row.click({ button: "right" });
+  await expect(page.getByRole("menuitem", { name: "Done" })).toBeVisible();
+  await page.keyboard.press("Escape");
   await noViolations(page);
   if (shots) await page.screenshot({ path: `${shots}/brief.png`, fullPage: true });
 
@@ -170,6 +175,21 @@ test("Today shows one matter per thing, as a brief, a week and a timeline", asyn
     await page.getByRole("tab", { name: "Matters" }).click();
     await page.emulateMedia({ colorScheme: "light" });
   }
+
+  // Done is the one button; everything else done to a matter is in its menu.
+  await expect(header.getByRole("button", { name: "Hide from AI" })).toHaveCount(0);
+  await header.click({ button: "right" });
+  for (const item of ["Done", "Merge with…", "Go to the start", "Hide from AI"]) await expect(page.getByRole("menuitem", { name: item })).toBeVisible();
+  await page.keyboard.press("Escape");
+  // So is what's done to one email on its timeline.
+  await expect(page.getByRole("button", { name: "Jump to start" })).toHaveCount(0);
+  await page.getByTestId("timeline-entry").last().click({ button: "right" });
+  for (const item of ["Open the email", "Go to the start", "Hide from AI"]) await expect(page.getByRole("menuitem", { name: item })).toBeVisible();
+  await page.keyboard.press("Escape");
+  // The same matter menu on the list beside it.
+  await page.getByTestId("matter-list-item").filter({ hasText: first }).click({ button: "right" });
+  await expect(page.getByRole("menuitem", { name: "Open" })).toBeVisible();
+  await page.keyboard.press("Escape");
 
   await header.getByTestId("matter-done").click();
   // Two toasts can offer Undo now; the matter's own button is the one meant here.

@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { query } from "@/ui/client/api";
 import type { MatterChange, MatterDetail, MatterRow, MatterWork } from "@/ui/client/contracts.generated";
 import { useDateOnly, useShortDate, useTimeOnly } from "@/ui/client/format";
 import { useMatter, useMatterList, useMatterReopen, useMergeMatter, useRemoveTask, useSaveTask, useTasks, useUnlinkThread, useUnmergeMatter } from "@/ui/client/work";
 import { useLeadName } from "@/ui/client/home";
 import { useHideFromAi } from "@/ui/features/mail/HideFromAi";
+import { useOpenSource } from "@/ui/features/sources/context";
+import { ContextMenu } from "@/ui/primitives/ContextMenu";
 import { mailSource } from "@/ui/features/sources/kinds";
 import { SourceChip } from "@/ui/features/sources/SourceChip";
 import { Icon } from "@/ui/icons";
@@ -21,13 +23,16 @@ import { Skeleton } from "@/ui/primitives/Skeleton";
 import { useToast } from "@/ui/primitives/Toast";
 import { MarkGlyph } from "@/ui/primitives/Track";
 import { t, tn, type StringKey } from "@/ui/strings";
+import { useMatterActions, useTimelineActions } from "./matterActions";
 import { KIND_MARK, StateText, countsOf, kindLabel, useDue, useMatterDoneWithUndo, useTodayView } from "./parts";
 
 function ListItem({ matter, selected, onPick }: { matter: MatterRow; selected: boolean; onPick: () => void }) {
   const due = useDue();
+  const actions = useMatterActions(matter);
   const when = matter.due ? due(matter.due) : null;
   return (
-    <li>
+    <ContextMenu items={actions}>
+    <li data-testid="matter-list-item">
       <RowButton aria-current={selected ? "true" : undefined} onClick={onPick} className={`flex-col items-stretch gap-1 py-3 ${selected ? "bg-surface-sunken" : ""}`}>
         <span className="flex items-baseline justify-between gap-2">
           <span className={`truncate text-md ${selected ? "font-medium text-ink-primary" : "text-ink-primary"}`}>{matter.title}</span>
@@ -40,6 +45,7 @@ function ListItem({ matter, selected, onPick }: { matter: MatterRow; selected: b
         </span>
       </RowButton>
     </li>
+    </ContextMenu>
   );
 }
 
@@ -115,7 +121,13 @@ function WorkList({ work }: { work: readonly MatterWork[] }) {
 
 /** Everything that happened, top to bottom as it happened, in its own scrolling box. It opens at
  *  the newest; scrolling up loads earlier changes until the start. */
-function Timeline({ detail }: { detail: MatterDetail }) {
+/** One change on the timeline, with its own menu: open its email, go to the start, take its
+ *  conversation out of the matter, or off the AI. */
+function Entry({ event, toStart, children }: { event: MatterChange; toStart: () => void; children: ReactNode }) {
+  return <ContextMenu items={useTimelineActions(event, { toStart })}>{children}</ContextMenu>;
+}
+
+function Timeline({ detail, startRef }: { detail: MatterDetail; startRef: { current: (() => void) | null } }) {
   const dateOnly = useDateOnly();
   const time = useTimeOnly();
   // Each day once, above its changes: "Today", or the date.
@@ -165,6 +177,7 @@ function Timeline({ detail }: { detail: MatterDetail }) {
     }
     requestAnimationFrame(() => box.current?.scrollTo({ top: 0, behavior: "smooth" }));
   };
+  startRef.current = () => void toStart();
   const loadEarlier = async () => {
     const oldest = events[0];
     if (!more || loading || !oldest) return;
@@ -182,16 +195,15 @@ function Timeline({ detail }: { detail: MatterDetail }) {
     <section aria-label={t("matters.timeline")} className="flex flex-col gap-3 border-t border-line-subtle pt-4">
       <header className="flex items-baseline justify-between gap-2">
         <h3 className="text-md font-medium text-ink-primary">{t("matters.timeline")}</h3>
-        <span className="flex items-center gap-3">
-          <Button variant="quiet" className="py-px" data-testid="timeline-start" onClick={() => void toStart()}><Icon name="moveUp" className="h-4 w-4" />{t("matters.timeline.toStart")}</Button>
-          <span className="text-sm text-ink-muted">{t("matters.timeline.newest")}</span>
-        </span>
+        <span className="text-sm text-ink-muted">{t("matters.timeline.newest")}</span>
       </header>
       <ol
         ref={box}
         data-testid="matter-timeline"
         tabIndex={0}
         aria-busy={loading}
+        // Home goes to where it started, as the menus' "Go to the start" does.
+        onKeyDown={(event) => { if (event.key === "Home") { event.preventDefault(); void toStart(); } }}
         onScroll={(event) => {
           if (event.currentTarget.scrollTop < 48) void loadEarlier();
         }}
@@ -204,7 +216,8 @@ function Timeline({ detail }: { detail: MatterDetail }) {
           const day = new Date(event.time).toDateString();
           const newDay = index === 0 || new Date(events[index - 1]!.time).toDateString() !== day;
           return (
-            <li key={event.id} className="flex flex-col">
+            <Entry key={event.id} event={event} toStart={() => void toStart()}>
+            <li data-testid="timeline-entry" className="flex flex-col">
               {newDay ? <p className="pb-2 pt-1 text-sm font-medium tabular-nums text-ink-secondary">{dayOf(event.time)}</p> : null}
               <div className="grid grid-cols-timeline gap-3">
                 <span className="pt-px text-sm tabular-nums text-ink-muted">{time(event.time)}</span>
@@ -220,6 +233,7 @@ function Timeline({ detail }: { detail: MatterDetail }) {
                 </div>
               </div>
             </li>
+            </Entry>
           );
         })}
       </ol>
@@ -242,13 +256,16 @@ function Detail({ detail }: { detail: MatterDetail }) {
   const toast = useToast();
   const [together, setTogether] = useState(false);
   const hide = useHideFromAi();
-  // Its newest conversation, the one Hide from AI starts from.
-  const latest = [...detail.threads].sort((a, b) => b.last_date.localeCompare(a.last_date))[0]?.id ?? null;
+  const openSource = useOpenSource();
+  // The timeline knows how to go to its start; the header's menu asks it to.
+  const startRef = useRef<(() => void) | null>(null);
+  const actions = useMatterActions(matter, { open: false, toStart: () => startRef.current?.() });
   const when = matter.due ? due(matter.due) : null;
   const done = matter.state === "done";
   const people = detail.people.slice(0, 3);
   return (
     <article className="flex min-w-0 max-w-reading flex-col gap-5 rounded-lg border border-line-subtle bg-surface-raised p-5 shadow-raised">
+      <ContextMenu items={actions}>
       <header data-testid="matter-header" className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           <StateText state={matter.state} />
@@ -265,45 +282,36 @@ function Detail({ detail }: { detail: MatterDetail }) {
             <span>{countsOf(matter)}</span>
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {latest ? <Button variant="quiet" data-testid="matter-hide" onClick={() => hide(latest)}><Icon name="keptFromAi" className="h-4 w-4" />{t("menu.hideFromAi")}</Button> : null}
-          {done ? <Button onClick={() => reopen.mutate(matter.id)} loading={reopen.isPending}>{t("matters.undo")}</Button> : <Button variant="primary" data-testid="matter-done" onClick={() => finish(matter)}>{t("matters.done")}</Button>}
-        </div>
+        {done ? <Button onClick={() => reopen.mutate(matter.id)} loading={reopen.isPending}>{t("matters.undo")}</Button> : <Button variant="primary" data-testid="matter-done" onClick={() => finish(matter)}>{t("matters.done")}</Button>}
       </header>
+      </ContextMenu>
       {matter.work?.length ? (
         <section aria-label={t("matters.work")} className="flex flex-col gap-3 border-t border-line-subtle pt-4">
           <h3 className="text-md font-medium text-ink-primary">{t("matters.work")}</h3>
           <WorkList work={matter.work} />
         </section>
       ) : null}
-      <Timeline detail={detail} />
+      <Timeline detail={detail} startRef={startRef} />
       {(detail.related ?? []).length ? (
         <section aria-label={t("matters.related")} className="flex flex-col gap-3 border-t border-line-subtle pt-4">
           <h3 className="text-md font-medium text-ink-primary">{t("matters.related")}</h3>
           <p className="text-sm text-ink-muted">{t("matters.related.hint")}</p>
           <ul className="flex flex-col gap-3">
             {(detail.related ?? []).map((other) => (
-              <li key={other.matter} className="flex flex-wrap items-center justify-between gap-2">
+              <ContextMenu key={other.matter} items={[
+                { id: "open", label: t("menu.open"), onSelect: () => go("matters", other.matter) },
+                { id: "merge", label: t("matters.related.merge"), onSelect: () => merge.mutate({ id: other.matter, into: matter.id }, {
+                  onSuccess: () => toast({ title: t("matters.related.merged"), action: { label: t("matters.unmerge"), run: () => unmerge.mutate(other.matter) } }),
+                  onError: (error) => toast({ title: error.message, tone: "danger" }),
+                }) },
+              ]}>
+              <li data-testid="related-matter" className="flex flex-wrap items-center justify-between gap-2">
                 <span className="flex min-w-0 flex-col gap-1">
                   <Pressable onClick={() => go("matters", other.matter)} className="truncate rounded-sm text-left text-md text-ink-primary transition-colors duration-fast hover:text-accent-default">{other.title}</Pressable>
                   <span className="text-sm text-ink-muted">{[t(`matters.state.${other.state}` as StringKey), other.why].filter(Boolean).join(" · ")}</span>
                 </span>
-                <Button
-                  variant="quiet"
-                  loading={merge.isPending}
-                  onClick={() =>
-                    merge.mutate(
-                      { id: other.matter, into: matter.id },
-                      {
-                        onSuccess: () => toast({ title: t("matters.related.merged"), action: { label: t("matters.unmerge"), run: () => unmerge.mutate(other.matter) } }),
-                        onError: (error) => toast({ title: error.message, tone: "danger" }),
-                      },
-                    )
-                  }
-                >
-                  {t("matters.related.merge")}
-                </Button>
               </li>
+              </ContextMenu>
             ))}
           </ul>
         </section>
@@ -327,13 +335,16 @@ function Detail({ detail }: { detail: MatterDetail }) {
         {together ? (
           <ul className="flex flex-col gap-3">
             {detail.threads.map((thread) => (
-              <li key={thread.id} className="flex flex-col gap-1">
+              <ContextMenu key={thread.id} items={[
+                { id: "open", label: t("matters.menu.openEmail"), onSelect: () => openSource.open({ ...mailSource(thread.id), title: thread.subject }) },
+                ...(detail.threads.length > 1 && thread.how !== "start" ? [{ id: "unlink", label: t("matters.menu.notPart"), divider: true, onSelect: () => unlink.mutate(thread.id, { onSuccess: () => toast({ title: t("matters.notPart.done") }) }) }] : []),
+                { id: "hide", label: t("menu.hideFromAi"), icon: "keptFromAi" as const, onSelect: () => hide(thread.id) },
+              ]}>
+              <li data-testid="matter-conversation" className="flex flex-col gap-1">
                 <SourceChip source={{ ...mailSource(thread.id), title: thread.subject, date: thread.last_date }} />
                 <p className="text-sm text-ink-secondary">{thread.how === "start" ? t("matters.together.start") : thread.why}</p>
-                {detail.threads.length > 1 && thread.how !== "start" ? (
-                  <Button variant="quiet" className="-ml-3 self-start py-px" onClick={() => unlink.mutate(thread.id, { onSuccess: () => toast({ title: t("matters.notPart.done") }) })}>{t("matters.notPart")}</Button>
-                ) : null}
               </li>
+              </ContextMenu>
             ))}
           </ul>
         ) : null}

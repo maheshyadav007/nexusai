@@ -72,9 +72,9 @@ def dismiss_checklist(command: DismissChecklist, ctx: Context) -> OnboardingStat
     current = _load(ctx)
     with ctx.bus.unit_of_work() as work:
         work.tx.execute(
-            "INSERT INTO onboarding (id, completed, checklist_dismissed) VALUES (1, ?, 1)"
-            " ON CONFLICT (id) DO UPDATE SET checklist_dismissed = 1",
-            (int(current.completed),),
+            "INSERT INTO onboarding (id, completed, checklist_dismissed) VALUES (1, ?, ?)"
+            " ON CONFLICT (id) DO UPDATE SET checklist_dismissed = excluded.checklist_dismissed",
+            (int(current.completed), int(not command.back)),
         )
         work.emit(
             "onboarding.changed",

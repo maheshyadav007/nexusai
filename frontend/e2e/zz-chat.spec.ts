@@ -354,13 +354,24 @@ test("new mail appears live in the Mail agent's chat, as a message and a judgeme
   await expect(page.getByRole("textbox", { name: "Message the agent" })).toBeDisabled();
 });
 
-test("Today leads with the day, and has one line on how the app is doing", async ({ page }) => {
+test("Today leads with the day; the app speaks there only when something of its own needs fixing", async ({ page }) => {
   await page.goto("/today");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Good (morning|afternoon|evening)/);
   await expect(page.getByTestId("today-brief")).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Ask the agent to do something" })).toHaveCount(0);
-  await page.getByTestId("today-status").click();
-  await expect(page).toHaveURL(/\/cockpit$/);
+  // No status line and no count of filed mail: those live in the Cockpit and the sidebar.
+  await expect(page.getByTestId("today-status")).toHaveCount(0);
+  await expect(page.getByText(/automated messages? filed/)).toHaveCount(0);
+  // A problem says so, with the way to fix it.
+  await page.route("**/api/queries/cockpit.view", async (route) => {
+    const real = await (await route.fetch()).json();
+    await route.fulfill({ json: { ...real, health: [...real.health, { id: "mail", label: "Mail", state: "problem", detail: "Stopped coming in at 9:12 AM", link: "/connectors?connector=email" }] } });
+  });
+  await page.reload();
+  const problem = page.getByTestId("today-problem").filter({ hasText: "Stopped coming in at 9:12 AM" });
+  await expect(problem).toContainText("Mail: Stopped coming in at 9:12 AM");
+  await problem.getByRole("link", { name: "Fix it" }).click();
+  await expect(page).toHaveURL(/\/connectors\?connector=email$/);
 });
 
 test("the Cockpit shows health, what's running and what happened", async ({ page }) => {

@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { command, query } from "@/ui/client/api";
 import { useHomeReady, useLeadName } from "@/ui/client/home";
 import { useMailStatus } from "@/ui/client/mail";
@@ -13,11 +14,13 @@ import { useAgentName, useToday } from "@/ui/client/work";
 import { useAssistant } from "@/ui/features/assistant/AssistantProvider";
 import { SearchProgress } from "@/ui/features/settings/LocalModelSettings";
 import { Button } from "@/ui/primitives/Button";
+import { Pressable } from "@/ui/primitives/Pressable";
+import { Tooltip } from "@/ui/primitives/Tooltip";
+import { useSidebarCollapsed } from "@/ui/shell/NavSidebar";
 import { Dialog } from "@/ui/primitives/Dialog";
 import { Presence, Rise } from "@/ui/primitives/Motion";
-import { Progress } from "@/ui/primitives/Progress";
 import { StatusDot } from "@/ui/primitives/StatusDot";
-import { t, type StringKey } from "@/ui/strings";
+import { t, tn, type StringKey } from "@/ui/strings";
 
 type Tone = "done" | "running" | "waiting" | "failed" | "idle";
 
@@ -121,16 +124,31 @@ function StepList({ steps }: { steps: Step[] }) {
   );
 }
 
-export function FinishSetup() {
+// Without these nothing else can happen, so they keep setup on Today: no Later.
+const NEEDED = new Set(["mail", "model"]);
+
+/** Where setup stands, for Today's strip and the sidebar's row: how far along, what's left, and
+ *  whether it's on Today or waiting in the sidebar after Later. */
+export function useSetup() {
   const onboarding = useOnboarding();
+  const { steps, loaded, failed } = useSteps();
+  const done = steps.filter((step) => step.tone === "done").length;
+  const needed = steps.some((step) => NEEDED.has(step.id) && step.tone !== "done");
+  const unfinished = Boolean(loaded && onboarding.data?.completed && done < steps.length);
+  // Later moves it to the sidebar, except when reading failed or something needed is missing.
+  const onToday = unfinished && (failed || needed || !onboarding.data?.checklist_dismissed);
+  return { steps, done, total: steps.length, failed, needed, onToday, inSidebar: unfinished && !onToday };
+}
+
+export function FinishSetup() {
   const dismiss = useDismissChecklist();
   const lead = useLeadName();
-  const { steps, loaded, failed } = useSteps();
+  const { steps, done, total, failed, needed, onToday: showing } = useSetup();
   const [open, setOpen] = useState(false);
   const [welcome, setWelcome] = useState(false);
-  const done = steps.filter((step) => step.tone === "done").length;
-  // Hidden on request, except when reading failed: that has to stay where it can be retried.
-  const showing = Boolean(loaded && onboarding.data?.completed && (failed || (!onboarding.data.checklist_dismissed && done < steps.length)));
+  // Only what's left, one action each; with something needed missing, just that first.
+  const left = steps.filter((step) => step.tone !== "done");
+  const first = needed ? left.filter((step) => NEEDED.has(step.id) || step.tone === "failed") : left;
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (!params.has(WELCOME_PARAM)) return;
@@ -155,19 +173,46 @@ export function FinishSetup() {
       </Dialog>
       <Presence>
         {showing ? (
-          <Rise as="section" key="finish-setup" aria-label={t("start.title")} data-testid="finish-setup" className="flex flex-col gap-3 rounded-lg border border-line-subtle bg-surface-raised p-4">
+          <Rise as="section" key="finish-setup" aria-label={t("finish.strip", { done, total })} data-testid="finish-setup" className={`flex flex-col gap-3 rounded-lg border bg-surface-raised p-4 ${needed || failed ? "border-accent-default/40" : "border-line-subtle"}`}>
             <header className="flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-md font-medium text-ink-primary">{t("start.title")}</h2>
-                <p className="text-sm tabular-nums text-ink-muted">{t("finish.count", { done, total: steps.length })}</p>
-              </div>
-              <Button variant="quiet" onClick={() => dismiss.mutate(undefined)}>{t("finish.dismiss")}</Button>
+              <h2 className="text-md font-medium tabular-nums text-ink-primary">{t("finish.strip", { done, total })}</h2>
+              {needed || failed ? null : <Button onClick={() => dismiss.mutate(false)}>{t("finish.later")}</Button>}
             </header>
-            <Progress label={t("start.title")} value={done} max={steps.length} />
-            <StepList steps={steps} />
+            <ol aria-hidden className="grid grid-flow-col gap-1">
+              {steps.map((step, index) => <li key={step.id} className={`h-1 rounded-full ${index < done ? "bg-status-success" : "bg-line-subtle"}`} />)}
+            </ol>
+            <StepList steps={first} />
+            {first.length < left.length ? <p className="text-sm text-ink-muted">{tn("finish.more", left.length - first.length)}</p> : null}
           </Rise>
         ) : null}
       </Presence>
     </>
+  );
+}
+
+/** Setup waiting after Later: how far along, and a press brings it back to Today. */
+export function SetupRow() {
+  const collapsed = useSidebarCollapsed();
+  const setup = useSetup();
+  const back = useDismissChecklist();
+  const router = useRouter();
+  if (!setup.inSidebar) return null;
+  const count = t("nav.setup.count", { done: setup.done, total: setup.total });
+  const ring = (
+    <svg aria-hidden viewBox="0 0 36 36" className="h-4 w-4 shrink-0 -rotate-90">
+      <circle cx="18" cy="18" r="14" fill="none" strokeWidth="5" className="stroke-line-subtle" />
+      <circle cx="18" cy="18" r="14" fill="none" strokeWidth="5" className="stroke-status-success" strokeDasharray={`${(88 * setup.done) / Math.max(1, setup.total)} 88`} />
+    </svg>
+  );
+  const open = () => back.mutate(true, { onSuccess: () => router.push("/today") });
+  return (
+    <li data-testid="nav-setup" className="mt-1">
+      <Tooltip content={t("nav.setup.about")} side="right">
+        <Pressable onClick={open} aria-label={`${t("nav.setup")} ${count}`} className={`focus-ring press flex w-full items-center gap-2 rounded-md px-2 py-1 text-md text-ink-secondary hover:bg-surface-raised hover:text-ink-primary ${collapsed ? "justify-center" : ""}`}>
+          {ring}
+          {collapsed ? null : <><span className="flex-1 text-left">{t("nav.setup")}</span><span className="text-sm tabular-nums text-ink-muted">{count}</span></>}
+        </Pressable>
+      </Tooltip>
+    </li>
   );
 }
