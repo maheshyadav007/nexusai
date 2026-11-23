@@ -6,6 +6,8 @@ export const ICON_NAMES = [
   "eye", "eyeOff", "activity", "lockedChat", "pin", "unpin", "repeat", "more", "thinking", "copy",
   "skipped", "connectors", "cockpit", "compact", "like", "dislike", "retry", "previous", "edit",
   "stop", "minimize", "openFull", "newChat", "chat", "followUp", "file", "priority", "important",
+  // The Priority view: a folder with settings, since it's chosen by what each folder says.
+  "priorityView",
   "starred", "reply", "replyAll", "forward", "trash", "add", "markUnread", "folder",
   // The two kinds of folder a person or the AI makes: filed by rules, or sorted by the AI.
   "folderRule", "folderSmart",

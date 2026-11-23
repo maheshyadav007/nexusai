@@ -1,11 +1,11 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-// Your folders hold the person's own categories and their labels on the server; More holds only
-// the system folders.
-const categories = ["Action needed", "Projects", "Finance", "People", "Travel", "Newsletters", "Team updates", "Reference", ...Array.from({ length: 12 }, (_, i) => `Project ${i + 1}`)].map((name) => ({ name, source: "user", in_priority: false, proposed: false, count: 3, unread: 0 }));
+// Priority, then the two homes: Inbox with the folders the AI reads, Kept from the AI with the
+// rest. Each shows its biggest three; More holds the system folders and the server's labels.
+const categories = ["Action needed", "Projects", "Finance", "People", "Travel", "Newsletters", "Team updates", "Reference", ...Array.from({ length: 12 }, (_, i) => `Project ${i + 1}`)].map((name, index) => ({ name, source: "user", in_priority: false, proposed: false, count: 40 - index, unread: 0 }));
 const folders = Array.from({ length: 2 }, (_, i) => ({ name: `Server ${i + 1}`, label: `Server ${i + 1}`, role: "other", here: 4, on_server: 4, unread: 0 }));
-const screenshots = "../output/sidebar-review-2026-11-05";
+const screenshots = "../output/sidebar-review-2026-11-23";
 
 test.beforeAll(async ({ request }) => {
   await request.post("/api/home/choose", { data: { path: `${process.env.E2E_HOME}/NexusAI` } });
@@ -18,69 +18,58 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/api/queries/mail.folders", (route) => route.fulfill({ json: { folders, counts: {} } }));
 });
 
-test("five custom rows expand within a scroll area and collapse with the selected folder visible", async ({ page }) => {
+test("each home shows its three biggest folders, and Show all keeps the open one in view", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.route("**/api/queries/profile.get", (route) => route.fulfill({ json: { name: "Mahesh Yadav", role: "", tone: "friendly" } }));
   await page.goto("/today");
   const nav = page.getByRole("navigation", { name: "Main navigation" });
-  // The categories, the first five of them until shown all; the server's labels sit below them.
-  const rows = nav.locator('[data-testid="nav-category"]');
-  const list = nav.getByRole("region", { name: "Categories and custom folders" });
+  const inbox = nav.getByTestId("nav-home-reads");
+  const rows = inbox.locator('[data-testid="nav-category"]');
   const today = nav.getByRole("link", { name: "Today", exact: true });
-  const priority = nav.getByRole("link", { name: "Inbox", exact: true });
-  await expect(rows).toHaveCount(5);
-  await expect(nav.locator('[data-testid="nav-folder"]')).toHaveCount(2);
+  const priority = nav.getByRole("link", { name: "Priority", exact: true });
+  await expect(rows).toHaveCount(3);
+  await expect(rows.first()).toContainText("Action needed");
+  await expect(inbox.getByRole("link", { name: "Inbox", exact: true })).toBeVisible();
+  // The server's labels wait under More.
+  await expect(nav.locator('[data-testid="nav-folder"]')).toHaveCount(0);
   await expect(today).toHaveAttribute("aria-current", "page");
   const homeBox = await today.boundingBox();
   const mailBox = await priority.boundingBox();
   expect(mailBox!.y - homeBox!.y - homeBox!.height).toBeGreaterThanOrEqual(16);
-  await page.screenshot({ path: `${screenshots}/collapsed-light.png` });
-  await nav.getByRole("button", { name: "Show all (20)", exact: true }).click();
+  // Priority, then the Inbox, then Starred.
+  const order = await nav.getByRole("link").evaluateAll((links) => links.map((link) => link.textContent?.trim() ?? ""));
+  expect(order.findIndex((name) => name.startsWith("Priority"))).toBeLessThan(order.findIndex((name) => name.startsWith("Inbox")));
+  expect(order.findIndex((name) => name.startsWith("Inbox"))).toBeLessThan(order.findIndex((name) => name.startsWith("Starred")));
+  await page.screenshot({ path: `${screenshots}/homes-light.png` });
+  await inbox.getByRole("button", { name: "Show all (20)", exact: true }).click();
   await expect(rows).toHaveCount(20);
-  await expect(nav.getByRole("button", { name: "Show less", exact: true })).toHaveAttribute("aria-expanded", "true");
-  const size = await list.evaluate((node) => ({ visible: node.clientHeight, content: node.scrollHeight }));
-  expect(size.content).toBeGreaterThan(size.visible);
-  await page.screenshot({ path: `${screenshots}/show-all-top.png` });
-  await list.hover();
-  await page.mouse.wheel(0, 1000);
-  await expect(nav.getByRole("link", { name: "Project 12", exact: true })).toBeInViewport();
-  await expect(nav.getByRole("button", { name: "Show less", exact: true })).toBeInViewport();
-  await expect(nav.getByRole("link", { name: "Tasks", exact: true })).toBeInViewport();
-  await page.screenshot({ path: `${screenshots}/expanded-light.png` });
+  await expect(inbox.getByRole("button", { name: "Show less", exact: true })).toHaveAttribute("aria-expanded", "true");
+  await nav.getByRole("link", { name: "Project 12", exact: true }).scrollIntoViewIfNeeded();
   await nav.getByRole("link", { name: "Project 12", exact: true }).click();
-  await nav.getByRole("button", { name: "Show less", exact: true }).click();
-  await expect(rows).toHaveCount(5);
+  await inbox.getByRole("button", { name: "Show less", exact: true }).click();
+  // The three biggest, and the open one.
+  await expect(rows).toHaveCount(4);
   const active = nav.getByRole("link", { name: "Project 12", exact: true });
   await expect(active).toHaveAttribute("aria-current", "page");
   await expect(active).toBeInViewport();
-  expect(await list.evaluate((node) => node.scrollTop)).toBe(0);
-  await expect(nav.getByRole("link", { name: "Travel", exact: true })).toHaveCount(0);
   await today.click();
-  await expect(nav.getByRole("link", { name: "Travel", exact: true })).toBeVisible();
+  await expect(rows).toHaveCount(3);
   await page.evaluate(() => document.documentElement.setAttribute("data-theme", "nexus-dark"));
-  await page.screenshot({ path: `${screenshots}/collapsed-dark.png` });
-  await nav.getByRole("button", { name: "Show all (20)", exact: true }).click();
-  await page.screenshot({ path: `${screenshots}/expanded-dark.png` });
+  await page.screenshot({ path: `${screenshots}/homes-dark.png` });
   for (const height of [768, 640]) {
     await page.setViewportSize({ width: 1366, height });
-    await list.scrollIntoViewIfNeeded();
-    await expect(list).toBeInViewport();
-    expect(await list.evaluate((node) => node.clientHeight)).toBeGreaterThan(0);
-    await expect(nav.getByRole("button", { name: "Show less", exact: true })).toBeInViewport();
     await nav.getByRole("link", { name: "Sessions", exact: true }).scrollIntoViewIfNeeded();
     await expect(nav.getByRole("link", { name: "Sessions", exact: true })).toBeInViewport();
-    await nav.getByRole("link", { name: "Tasks", exact: true }).scrollIntoViewIfNeeded();
-    await expect(nav.getByRole("link", { name: "Tasks", exact: true })).toBeInViewport();
     await expect(today).toBeInViewport();
   }
   await nav.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
   await expect(today).toBeVisible();
-  await expect(nav.getByRole("button", { name: "Show less", exact: true })).toHaveCount(0);
+  await expect(nav.getByRole("button", { name: /Show all|Show less/ })).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
-test("five or fewer custom folders need no expansion button", async ({ page }) => {
+test("three or fewer folders need no Show all, and the server's labels are under More", async ({ page }) => {
   await page.route("**/api/queries/categories.list", (route) => route.fulfill({ json: { categories: categories.slice(0, 3) } }));
   // Gmail's own Starred and Important are the app's views of those names, so they don't show twice.
   const gmail = ["Starred", "Important"].map((label) => ({ name: `[Gmail]/${label}`, label, role: "other", here: 4, on_server: 4, unread: 0, shown_elsewhere: true }));
@@ -89,14 +78,59 @@ test("five or fewer custom folders need no expansion button", async ({ page }) =
   const nav = page.getByRole("navigation", { name: "Main navigation" });
   await expect(nav.locator('[data-testid="nav-category"]')).toHaveCount(3);
   await expect(nav.getByRole("button", { name: /Show all|Show less/ })).toHaveCount(0);
-  // The server's own labels show with the person's folders, not folded under More.
-  await expect(nav.locator('[data-testid="nav-folder"]')).toHaveCount(2);
+  await expect(nav.locator('[data-testid="nav-folder"]')).toHaveCount(0);
   await nav.getByRole("button", { name: "More" }).click();
   await expect(nav.locator('[data-testid="nav-folder"]')).toHaveCount(2);
+  await expect(nav.getByRole("heading", { name: "Labels from your mail account" })).toBeVisible();
   await expect(nav.getByRole("link", { name: "All mail", exact: true })).toBeVisible();
   // More isn't remembered open: after a reload it starts folded again.
   await page.reload();
   await expect(nav.getByRole("button", { name: "More" })).toHaveAttribute("aria-expanded", "false");
+});
+
+test("folders sit inside folders, each home holds its own side, and a parent counts what's in it", async ({ page }) => {
+  const tree = [
+    { name: "Automated", source: "rule", in_priority: false, proposed: false, count: 90, unread: 9, ai_reads: false },
+    { name: "Projects", source: "user", in_priority: false, proposed: false, count: 2, unread: 1, ai_reads: true },
+    { name: "Alpha", source: "user", in_priority: false, proposed: false, count: 5, unread: 2, ai_reads: true, parent: "Projects" },
+    { name: "Finance", source: "user", in_priority: true, proposed: false, count: 3, unread: 0, ai_reads: true },
+    { name: "linkedin", source: "user", in_priority: false, proposed: false, count: 30, unread: 28, ai_reads: false, mode: "exact" },
+    { name: "beehiiv", source: "user", in_priority: false, proposed: false, count: 5, unread: 4, ai_reads: false, mode: "exact" },
+  ];
+  await page.route("**/api/queries/categories.list", (route) => route.fulfill({ json: { categories: tree } }));
+  await page.route("**/api/queries/mail.folders", (route) => route.fulfill({ json: { folders: [], counts: { priority: 22, reads: 7, kept: 41 } } }));
+  await page.goto("/today");
+  const nav = page.getByRole("navigation", { name: "Main navigation" });
+  const inbox = nav.getByTestId("nav-home-reads");
+  const kept = nav.getByTestId("nav-home-kept");
+  await expect(nav.getByRole("link", { name: "Priority", exact: true })).toContainText("22");
+  await expect(inbox.getByRole("link", { name: "Inbox", exact: true })).toContainText("7");
+  await expect(kept.getByRole("link", { name: "Kept from the AI", exact: true })).toContainText("41");
+  // Automated, the catch-all, is never listed; its mail is simply kept.
+  await expect(kept.locator('[data-testid="nav-category"]')).toHaveText([/linkedin/, /beehiiv/]);
+  await expect(nav.getByRole("link", { name: "Automated", exact: true })).toHaveCount(0);
+  // Projects, the biggest with Alpha in it, counts Alpha's unread too, and folds it away.
+  const projects = inbox.getByRole("link", { name: "Projects", exact: true });
+  await expect(projects).toContainText("3");
+  await expect(inbox.getByRole("link", { name: "Alpha", exact: true })).toHaveCount(0);
+  await inbox.getByRole("button", { name: "Show what's in Projects" }).click();
+  await expect(inbox.getByRole("link", { name: "Alpha", exact: true })).toBeVisible();
+  // A home's menu makes a folder for that side.
+  await kept.getByRole("link", { name: "Kept from the AI", exact: true }).click({ button: "right" });
+  await expect(page.getByRole("menuitem")).toHaveText(["Open", "Mark downloaded mail as read", "New folder…", "Sort senders…"]);
+  await page.getByRole("menuitem", { name: "New folder…" }).click();
+  const dialog = page.getByRole("dialog", { name: "New folder" });
+  await expect(dialog.getByRole("combobox", { name: "Inside" })).toHaveText(/Kept from the AI/);
+  await expect(dialog.getByRole("radio", { name: "The AI decides" })).toBeDisabled();
+  await dialog.getByRole("textbox", { name: "Name" }).fill("LinkedIn");
+  await expect(dialog.getByRole("alert")).toHaveText("There's already a folder called linkedin, in Kept from the AI.");
+  await expect(dialog.getByRole("button", { name: "Create folder" })).toBeDisabled();
+  await page.screenshot({ path: `${screenshots}/new-folder.png` });
+  await page.keyboard.press("Escape");
+  // Every folder has Show in Priority, and wording says folder.
+  await projects.click({ button: "right" });
+  for (const item of ["Show in Priority", "Rename folder…", "Folder settings…", "New folder inside…", "Remove folder…"]) await expect(page.getByRole("menuitem", { name: item })).toBeVisible();
+  await page.keyboard.press("Escape");
 });
 
 test("Today counts decisions, matters waiting on you and on others, and Due stays hidden until ticked", async ({ page }) => {
@@ -198,12 +232,12 @@ test("a folder can be hidden from the sidebar, waits under Show all, and is edit
   // Nothing hidden and only three: no button needed.
   await expect(nav.getByRole("button", { name: /Show all|Show less/ })).toHaveCount(0);
   await expect(nav.locator('[data-testid="nav-category"]')).toHaveCount(3);
-  // Name, what goes in it, and whether the AI reads it, together.
+  // Name, what goes in it, and where it is, which decides whether the AI reads it, together.
   await nav.getByRole("link", { name: /^Finance/ }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Edit folder…" }).click();
   const dialog = page.getByRole("dialog", { name: "Edit folder" });
   await expect(dialog.getByRole("textbox", { name: "What goes here" })).toBeVisible();
-  await expect(dialog.getByRole("radio", { name: "AI reads" })).toBeChecked();
+  await expect(dialog.getByRole("combobox", { name: "Inside" })).toHaveText(/Inbox/);
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).toHaveCount(0);
   await request.post("/api/commands/sidebar.reset", { data: {} });

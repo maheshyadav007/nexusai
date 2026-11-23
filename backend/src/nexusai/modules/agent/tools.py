@@ -877,7 +877,7 @@ class _RecordTriage(BaseModel):
     smart_folders: list[str] = Field(
         default_factory=list,
         max_length=100,
-        description="Zero or more existing Smart folder names. Never invent a folder.",
+        description="At most one existing Smart folder name: the best fit. Never invent a folder.",
     )
     groups: list[dict[str, Any]] = Field(
         default_factory=list,

@@ -2,7 +2,7 @@
 
 import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiRequestError, command, query } from "./api";
-import type { ApiError, Importance, Draft, DraftAttachment, ListThreads, MailProfile, MoveThread, RuleSet, SaveCategory, SearchMail, SetThreadStatus, UpdateCategory } from "./contracts.generated";
+import type { ApiError, Importance, Draft, DraftAttachment, ListThreads, MailProfile, MoveThread, PreviewCategoryRule, RuleCondition, RuleSet, SaveCategory, SearchMail, SetThreadStatus, SplitFolders, UpdateCategory } from "./contracts.generated";
 import { useHomeReady } from "./home";
 import { askAboutRest } from "./rest";
 
@@ -210,6 +210,8 @@ function useCategoryCommand<I, R>(run: (input: I) => Promise<R>) {
     onSuccess: (result) => {
       client.setQueryData(["categories"], { categories: (result as { categories: unknown }).categories });
       void client.invalidateQueries({ queryKey: ["threads"] });
+      void client.invalidateQueries({ queryKey: ["mixed-folders"] });
+      void client.invalidateQueries({ queryKey: ["rules"] });
     },
   });
 }
@@ -220,6 +222,20 @@ export const useReorderCategories = () => useCategoryCommand((names: string[]) =
 export const useRemoveCategory = () => useCategoryCommand((name: string) => command("categories.remove", { name }));
 export const useDecidePriority = () => useCategoryCommand((input: { name: string; accept: boolean }) => command("categories.decidePriority", input));
 export const useDecideCategory = () => useCategoryCommand((input: { name: string; accept: boolean }) => command("categories.decide", input));
+export const useSplitFolders = () => useCategoryCommand((input: SplitFolders) => command("categories.split", input));
+
+/** Folders with senders on both sides, each waiting to be split once. */
+export function useMixedFolders() {
+  const ready = useHomeReady();
+  return useQuery({ queryKey: ["mixed-folders"], queryFn: () => query("categories.mixed", {}), enabled: ready });
+}
+
+/** How many conversations already here a rule would file, saving nothing. */
+export function useRulePreview(conditions: readonly RuleCondition[]) {
+  const ready = useHomeReady();
+  const usable = conditions.filter((condition) => condition.field === "has_attachment" || (condition.value ?? "").trim());
+  return useQuery({ queryKey: ["rule-preview", usable], queryFn: () => query("categories.preview", { conditions: usable as PreviewCategoryRule["conditions"] }), enabled: ready && usable.length > 0 });
+}
 
 export function useMailPresets() {
   const ready = useHomeReady();

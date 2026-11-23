@@ -3,7 +3,8 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useParams, usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { useGetMoreFromFolder, useMailAccounts, useMailFolders, useSearch, useThreadPages, PAGE_SIZE, type FolderRole } from "@/ui/client/mail";
+import type { ThreadRow } from "@/ui/client/contracts.generated";
+import { useCategories, useGetMoreFromFolder, useMailAccounts, useMailFolders, useSearch, useThreadPages, PAGE_SIZE, type FolderRole } from "@/ui/client/mail";
 import type { IconName } from "@/ui/icons";
 import { Button } from "@/ui/primitives/Button";
 import { Dialog } from "@/ui/primitives/Dialog";
@@ -20,7 +21,10 @@ const ROW_ESTIMATE = 107;
 const FIRST_PAGE = [0];
 
 const FOLDERS: Readonly<Record<string, { title: StringKey; icon: IconName; empty: StringKey; role: FolderRole }>> = {
-  priority: { title: "nav.priority", icon: "priority", empty: "mail.empty.priority", role: "priority" },
+  priority: { title: "nav.priority", icon: "priorityView", empty: "mail.empty.priority", role: "priority" },
+  // The two homes: everything the AI reads, and everything kept from it.
+  inbox: { title: "nav.home.inbox", icon: "inbox", empty: "mail.empty.reads", role: "reads" },
+  kept: { title: "nav.home.kept", icon: "keptFromAi", empty: "mail.empty.kept", role: "kept" },
   important: { title: "nav.important", icon: "important", empty: "mail.empty.important", role: "important" },
   starred: { title: "nav.starred", icon: "starred", empty: "mail.empty.starred", role: "starred" },
   all: { title: "nav.allMail", icon: "inbox", empty: "mail.empty.inbox", role: "all" },
@@ -66,8 +70,18 @@ function FilteredList({ text, role, category, location, base, title }: { text: s
   );
 }
 
+/** Why a conversation is in Priority, in a few words, so the view never seems random. */
+function priorityReason(thread: ThreadRow, inPriority: ReadonlySet<string>): string {
+  if (thread.status === "waiting_on_you") return t("mail.priority.why.waiting");
+  if (thread.importance === "high") return t("mail.priority.why.important");
+  const folder = [thread.category, ...(thread.extra_categories ?? [])].find((name) => name && inPriority.has(name));
+  return folder ? t("mail.priority.why.folder", { name: folder }) : t("mail.priority.why.unfiled");
+}
+
 function ThreadList({ title, role, category, location, base, icon, empty }: { title: string; role: FolderRole; category: string | null; location: string | null; base: string; icon: IconName; empty: StringKey }) {
   const scroller = useRef<HTMLDivElement>(null);
+  const categories = useCategories();
+  const inPriority = new Set((categories.data?.categories ?? []).filter((item) => item.in_priority).map((item) => item.name));
   const pathname = usePathname();
   const [rowHeight, setRowHeight] = useState(ROW_ESTIMATE);
   const [first] = useThreadPages(role, category, location, FIRST_PAGE);
@@ -113,7 +127,7 @@ function ThreadList({ title, role, category, location, base, icon, empty }: { ti
             const href = `${base}/${thread.id}`;
             return (
               <li key={thread.id} data-index={item.index} ref={item.index === items[0]?.index ? measureOne : null} {...{ style: place }} data-testid="thread-row" className="absolute left-0 top-0 w-full">
-                <ThreadRowView thread={thread} href={href} active={pathname === href} />
+                <ThreadRowView thread={thread} href={href} active={pathname === href} {...(role === "priority" ? { reason: priorityReason(thread, inPriority) } : {})} />
               </li>
             );
           })}

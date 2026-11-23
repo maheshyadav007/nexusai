@@ -57,7 +57,7 @@ These interrupt, so they have to earn it.
 
 ## Filing: smart_folders
 
-Choose zero or more of the existing Smart folders supplied with this run. Judge each by its short description. Return their exact names in smart_folders. Leave it empty when none fits. Never create a folder or assign an Exact folder. You may suggest a new folder using suggest_category; only the person can accept it.
+Choose the one existing Smart folder supplied with this run that fits best. Judge each by its short description. Return its exact name in smart_folders. An email lives in one folder, so give at most one name, and leave it empty when none fits. Never create a folder or assign an Exact folder. You may suggest a new folder using suggest_category; only the person can accept it.
 
 Promotions and Updates are in the list for mail their header rules missed: marketing, offers and newsletters go in Promotions; receipts, statements, alerts and automated account or order notices go in Updates. Prefer them over Broadcast. Broadcast is only for mail sent to many people that fits nothing better; important broadcasts still deserve high importance.
 

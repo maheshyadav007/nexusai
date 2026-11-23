@@ -7,6 +7,8 @@ import { ActiveMark } from "./Motion";
 export interface SegmentedOption<T extends string> {
   value: T;
   label: string;
+  /** Shown, but can't be chosen; say why next to it. */
+  disabled?: boolean;
 }
 
 export function Segmented<T extends string>({ label, hideLabel = false, value, options, onChange }: { label: string; hideLabel?: boolean; value: T | undefined; options: readonly SegmentedOption<T>[]; onChange: (value: T) => void }) {
@@ -24,7 +26,8 @@ export function Segmented<T extends string>({ label, hideLabel = false, value, o
           <RadioGroup.Item
             key={option.value}
             value={option.value}
-            className="focus-ring relative rounded-sm px-3 py-1 text-sm text-ink-secondary transition-colors duration-fast hover:text-ink-primary data-[state=checked]:text-ink-primary"
+            {...(option.disabled ? { disabled: true } : {})}
+            className="focus-ring relative rounded-sm px-3 py-1 text-sm text-ink-secondary transition-colors duration-fast hover:text-ink-primary data-[state=checked]:text-ink-primary data-[disabled]:cursor-not-allowed data-[disabled]:text-ink-faint data-[disabled]:hover:text-ink-faint"
           >
             {value === option.value ? <ActiveMark group={thumb} className="absolute inset-0 rounded-sm bg-surface-raised shadow-raised" /> : null}
             <span className="relative">{option.label}</span>

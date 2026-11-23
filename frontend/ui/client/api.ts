@@ -2,6 +2,7 @@ import type { AgentMap, GetAgentMap, GetRunTree, ListRuns, RunList, RunSpan, See
 import type { AddSkill, DecideSkill, ListSkills, SkillList, SkillName } from "./contracts.generated";
 import type { CancelTeamTask, CardList, GetTeamTask, ListCards, ListTeamTasks, NoteOnTeamTask, RenameAgent, ResetAgentName, RetryTeamTask, SetMascot, TeamTaskList, TeamTaskView } from "./contracts.generated";
 import type { MarkFolderRead } from "./contracts.generated";
+import type { CategoryRulePreview, ListMixedFolders, MixedFolders, PreviewCategoryRule, SplitFolders } from "./contracts.generated";
 import type { AttachToMatter, CloseMatterItems, GetMatter, GetMatterEvents, GetMatterRelated, GetMattersBrief, GetMattersWeek, ListMatters, MatterAction, MatterDetail, MatterDone, MatterEvents, MatterList, MatterRelated, MattersBrief, MattersWeek, MergeMatters, ReopenMatterItems, UnlinkThread } from "./contracts.generated";
 import type { MailOrganization, FinishMailLearning, MergeCategories, SortCategory, CategorySortEstimate } from "./contracts.generated";
 import type { ApplyMailSort, GetMailSort, MailSort, MailSortApplied, PrepareMailSort, SkipMailSort } from "./contracts.generated";
@@ -339,6 +340,7 @@ interface Commands {
   "categories.reorder": [ReorderCategories, CategoryList];
   "categories.decide": [DecideCategory, CategoryList];
   "categories.decidePriority": [DecidePriority, CategoryList];
+  "categories.split": [SplitFolders, CategoryList];
   "thread.draftReply": [DraftThreadReply, DraftedReply];
   "channel.respond": [RespondChannel, AgentDone];
   "channel.dismiss": [DismissChannel, AgentDone];
@@ -477,6 +479,8 @@ interface Queries {
   "permissions.get": [GetPermissions, Permissions];
   "tools.catalog": [GetToolCatalog, ToolCatalog];
   "categories.list": [ListCategories, CategoryList];
+  "categories.preview": [PreviewCategoryRule, CategoryRulePreview];
+  "categories.mixed": [ListMixedFolders, MixedFolders];
   "today.view": [GetToday, TodayView];
   "matters.brief": [GetMattersBrief, MattersBrief];
   "matters.week": [GetMattersWeek, MattersWeek];

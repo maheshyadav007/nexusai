@@ -247,7 +247,9 @@ class MailPresets(BaseModel):
 class ListThreads(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    folder: FolderRole | Literal["priority", "important", "starred", "all"] = "inbox"
+    folder: FolderRole | Literal["priority", "important", "starred", "all", "reads", "kept"] = (
+        "inbox"
+    )
     # One folder on the server, by its full name. This takes the place of folder.
     location: str | None = Field(default=None, max_length=500)
     category: str | None = Field(default=None, max_length=64)
@@ -260,7 +262,7 @@ class ListThreads(BaseModel):
 class MarkFolderRead(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    folder: FolderRole | Literal["priority", "important", "starred", "all"] = "all"
+    folder: FolderRole | Literal["priority", "important", "starred", "all", "reads", "kept"] = "all"
     location: str | None = Field(default=None, max_length=500)
     category: str | None = Field(default=None, max_length=64)
 
@@ -467,6 +469,11 @@ class MailCategory(BaseModel):
     # Of its conversations, how many a sorting rule keeps from the AI. Sorting decides by
     # sender, so a folder can hold both: Shopping's store mail kept, a delivery question read.
     kept: int = 0
+    # The folder it's inside, or none at the top of its home. Its side comes from its home.
+    parent: str | None = None
+    # How many senders a rule files here on each side; both above zero means it needs splitting.
+    senders_read: int = 0
+    senders_kept: int = 0
 
 
 class ListCategories(BaseModel):
@@ -487,6 +494,65 @@ class SaveCategory(BaseModel):
     sender: str | None = Field(default=None, max_length=320)
     subject: str | None = Field(default=None, max_length=500)
     source: Literal["user", "agent"] = "user"
+    # Inside this folder, or empty for the top of a home; then ai_reads says which home.
+    parent: str | None = Field(default=None, max_length=64)
+    ai_reads: bool = True
+    # A rule of any shape, every condition matching; takes the place of sender and subject.
+    conditions: list["RuleCondition"] = Field(default_factory=list, max_length=10)
+    # Whether mail already here that matches is filed too, or only what comes from now on.
+    file_existing: bool = True
+
+
+class PreviewCategoryRule(BaseModel):
+    """How many conversations already here a folder's rule would file, saving nothing."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    conditions: list["RuleCondition"] = Field(min_length=1, max_length=10)
+
+
+class CategoryRulePreview(BaseModel):
+    conversations: int
+
+
+class MixedFolder(BaseModel):
+    """A folder with senders on both sides, and what its two halves would be."""
+
+    name: str
+    read_senders: list["SenderCount"]
+    kept_senders: list["SenderCount"]
+    read_emails: int
+    kept_emails: int
+    suggested: str
+
+
+class SenderCount(BaseModel):
+    sender: str
+    emails: int
+
+
+class ListMixedFolders(BaseModel):
+    pass
+
+
+class MixedFolders(BaseModel):
+    folders: list[MixedFolder]
+
+
+class FolderSplit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=64)
+    # What the half kept from the AI is called; the half the AI reads keeps the name.
+    kept_name: str = Field(min_length=1, max_length=64)
+
+
+class SplitFolders(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    splits: list[FolderSplit] = Field(min_length=1, max_length=100)
+    # Puts each kept half back into the folder it came from.
+    undo: bool = False
 
 
 class CategorySaved(CategoryList):
@@ -504,8 +570,11 @@ class UpdateCategory(BaseModel):
     clear_rule: bool = False
     mode: Literal["exact", "smart"] | None = None
     description: str | None = Field(default=None, max_length=500)
-    # Whether the AI reads it. Every sender filed there moves to that side with it.
+    # Whether the AI reads it. Every sender filed there moves to that side with it. A folder
+    # inside another takes its parent's side, so this moves it to the top of the other home.
     ai_reads: bool | None = None
+    # Moves it inside this folder; empty moves it to the top of its home (or of ai_reads').
+    parent: str | None = Field(default=None, max_length=64)
 
 
 class MergeCategories(BaseModel):
@@ -648,7 +717,9 @@ class SearchMail(BaseModel):
     date_to: str | None = Field(default=None, max_length=32)
     category: str | None = Field(default=None, max_length=64)
     has_attachment: bool | None = None
-    folder: FolderRole | Literal["priority", "important", "starred", "all"] | None = None
+    folder: (
+        FolderRole | Literal["priority", "important", "starred", "all", "reads", "kept"] | None
+    ) = None
     # One folder on the server, by its full name.
     location: str | None = Field(default=None, max_length=500)
     recipient: str | None = Field(default=None, max_length=320)

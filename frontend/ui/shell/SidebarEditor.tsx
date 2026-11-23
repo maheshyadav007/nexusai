@@ -92,8 +92,8 @@ function FolderChoices() {
   return (
     <section aria-label={t("sidebar.editor.folders")} data-testid="sidebar-folders" className="mt-4 flex flex-col gap-1 border-t border-line-subtle pt-4">
       <p className="text-sm text-ink-muted">{t("sidebar.editor.folders.note")}</p>
-      {group(t("sidebar.editor.folders"), all.filter((item) => !keptFromAi(item)))}
-      {group(t("sidebar.editor.kept"), all.filter(keptFromAi))}
+      {group(t("nav.home.inbox"), all.filter((item) => !keptFromAi(item)))}
+      {group(t("nav.home.kept"), all.filter(keptFromAi))}
     </section>
   );
 }

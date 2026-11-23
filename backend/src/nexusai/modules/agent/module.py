@@ -2,7 +2,7 @@ import json
 import re
 import threading
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 import httpx
@@ -1814,11 +1814,12 @@ def today_view(query: GetToday, ctx: Context) -> TodayView:
     rating, comment = (artifact["rating"], artifact["comment"] or "") if artifact else (None, "")
     freshness = "none"
     if artifact:
-        local_created = (
-            datetime.fromisoformat(artifact["created"]).astimezone().strftime("%Y-%m-%d")
-        )
         freshness = (
-            "stale" if local_created != local_day else "partial" if artifact["partial"] else "fresh"
+            "stale"
+            if _brief_overdue(ctx, datetime.fromisoformat(artifact["created"]))
+            else "partial"
+            if artifact["partial"]
+            else "fresh"
         )
         failed = db.fetch_all(
             "SELECT 1 FROM trigger_runs r JOIN schedules s ON s.id=r.schedule WHERE s.kind='mail-brief' AND r.status='failed' AND r.time > ? LIMIT 1",
@@ -1876,6 +1877,29 @@ def _brief(waiting: int, due: list[DueItem], important: int) -> str:
     late = next((item for item in due if item.overdue), None)
     item = late or due[0]
     return f"{first} {item.title} is {'overdue' if late else 'due today'}."
+
+
+# How long a morning run has to write its brief before the last one counts as out of date.
+BRIEF_GRACE = timedelta(minutes=30)
+
+
+def _brief_overdue(ctx: Context, created: datetime) -> bool:
+    """Out of date only once a scheduled morning brief should have replaced it. Read after
+    midnight, last evening's brief is still the newest there is, and isn't stale for that."""
+    rows = ctx.bus.db.fetch_all(
+        "SELECT time FROM schedules WHERE kind='mail-brief' AND enabled=1 ORDER BY time LIMIT 1"
+    )
+    if not rows:
+        return False
+    try:
+        hour, minute = (int(part) for part in str(rows[0]["time"]).split(":")[:2])
+    except ValueError:
+        return False
+    now = datetime.now().astimezone()
+    due = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if due > now:
+        due -= timedelta(days=1)
+    return now >= due + BRIEF_GRACE and created.astimezone() < due
 
 
 def _due_items(ctx: Context) -> list[DueItem]:

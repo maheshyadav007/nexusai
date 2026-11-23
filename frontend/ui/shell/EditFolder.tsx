@@ -4,51 +4,65 @@ import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { MailCategory } from "@/ui/client/contracts.generated";
-import { useRules, useUpdateCategory } from "@/ui/client/mail";
+import { useCategories, useRules, useUpdateCategory } from "@/ui/client/mail";
 import { Button } from "@/ui/primitives/Button";
 import { Dialog } from "@/ui/primitives/Dialog";
 import { Field } from "@/ui/primitives/Field";
 import { Input, Textarea } from "@/ui/primitives/Input";
-import { Segmented } from "@/ui/primitives/Segmented";
+import { Select } from "@/ui/primitives/Select";
 import { t, tn } from "@/ui/strings";
-import { AUTOMATED, CALENDAR, keptFromAi } from "./customMail";
+import { ancestors, AUTOMATED, CALENDAR, folderTree, keptFromAi, partlyKept } from "./customMail";
 
 // Chips shown before the rest are left to the Sort page.
 const SENDERS_SHOWN = 6;
-type Side = "reads" | "ignores";
 
-/** One folder's name, what goes in it, and whether the AI reads it, with the senders filed
- *  there. Choosing a side moves every one of them, each keeping its one rule. */
+/** One folder's name, what goes in it, and where it is, with the senders filed there. Moving
+ *  it to the other home moves every sender in it, each keeping its one rule. */
 export function EditFolder({ category, open, onOpenChange, onRenamed }: { category: MailCategory; open: boolean; onOpenChange: (open: boolean) => void; onRenamed: (name: string) => void }) {
   const client = useQueryClient();
   const update = useUpdateCategory();
   const rules = useRules();
+  const categories = useCategories();
+  const all = categories.data?.categories ?? [];
+  const here = category.parent ? `folder:${category.parent}` : keptFromAi(category) ? "home:kept" : "home:reads";
   const [name, setName] = useState(category.name);
   const [description, setDescription] = useState(category.description ?? "");
-  const [side, setSide] = useState<Side | undefined>(undefined);
+  const [place, setPlace] = useState(here);
   useEffect(() => {
     if (!open) return;
     setName(category.name);
     setDescription(category.description ?? "");
-    setSide(undefined);
+    setPlace(here);
     update.reset();
-  }, [open, category.name]);
+  }, [open, category.name, here]);
   // Each sender a rule files here, and whether that rule keeps it from the AI.
   const senders = new Map<string, boolean>();
   for (const rule of rules.data?.rules ?? []) {
     if (rule.actions.category !== category.name) continue;
-    for (const condition of rule.conditions) if ((condition.field === "sender" || condition.field === "sender_exact") && condition.value?.includes("@")) senders.set(condition.value.toLowerCase(), Boolean(rule.actions.skip_agent));
+    for (const condition of rule.conditions) if ((condition.field === "sender" || condition.field === "sender_exact") && condition.value?.includes("@")) senders.set(condition.value.toLowerCase(), keptFromAi(category) || Boolean(rule.actions.skip_agent));
   }
   const list = [...senders.entries()];
-  const read = list.filter(([, kept]) => !kept).length;
-  const mixed = list.length > 0 && read > 0 && read < list.length;
-  const now: Side | undefined = mixed ? undefined : keptFromAi(category) ? "ignores" : "reads";
-  const whole = [AUTOMATED, CALENDAR].find((top) => category.name === top || category.name.startsWith(`${top}/`));
-  const chosen = side ?? now;
+  const whole = [AUTOMATED, CALENDAR].includes(category.name);
+  // Not inside itself, nor inside anything under it.
+  const inside = new Set([category.name, ...all.filter((item) => ancestors(all, item.name).includes(category.name)).map((item) => item.name)]);
+  const options = [
+    { value: "home:reads", label: t("nav.home.inbox") },
+    ...folderTree(all, false).filter((row) => !inside.has(row.item.name)).map((row) => ({ value: `folder:${row.item.name}`, label: `${"\u2003".repeat(row.depth + 1)}${row.item.name}` })),
+    { value: "home:kept", label: t("nav.home.kept") },
+    ...folderTree(all, true).filter((row) => !inside.has(row.item.name)).map((row) => ({ value: `folder:${row.item.name}`, label: `${"\u2003".repeat(row.depth + 1)}${row.item.name}` })),
+  ];
+  const target = place.startsWith("folder:") ? all.find((item) => item.name === place.slice("folder:".length)) : undefined;
+  const willKeep = place === "home:kept" || Boolean(target && keptFromAi(target));
   const save = () => {
     const clean = name.trim();
+    const moved = place !== here;
     update.mutate(
-      { name: category.name, ...(clean && clean !== category.name ? { new_name: clean } : {}), ...(description !== (category.description ?? "") ? { description } : {}), ...(side && side !== now ? { ai_reads: side === "reads" } : {}) },
+      {
+        name: category.name,
+        ...(clean && clean !== category.name ? { new_name: clean } : {}),
+        ...(description !== (category.description ?? "") ? { description } : {}),
+        ...(moved ? { parent: target ? target.name : "", ai_reads: !willKeep } : {}),
+      },
       { onSuccess: () => { void client.invalidateQueries({ queryKey: ["rules"] }); onOpenChange(false); if (clean && clean !== category.name) onRenamed(clean); } },
     );
   };
@@ -57,15 +71,15 @@ export function EditFolder({ category, open, onOpenChange, onRenamed }: { catego
       <form className="flex flex-col gap-4" onSubmit={(event) => { event.preventDefault(); if (name.trim() && !update.isPending) save(); }}>
         <Field label={t("categories.name")}>{({ invalid, ...control }) => <Input invalid={invalid} value={name} maxLength={64} onChange={(event) => setName(event.target.value)} {...control} />}</Field>
         <Field label={t("folder.edit.description")}>{({ invalid, ...control }) => <Textarea invalid={invalid} rows={2} value={description} maxLength={500} onChange={(event) => setDescription(event.target.value)} {...control} />}</Field>
-        <div className="flex flex-col gap-2">
-          {whole ? <p className="text-sm text-ink-muted">{t("folder.edit.whole", { name: whole })}</p> : (
-            <>
-              <Segmented label={t("folder.edit.reads")} value={chosen} options={[{ value: "reads", label: t("mail.sort.side.reads") }, { value: "ignores", label: t("mail.sort.side.ignores") }]} onChange={setSide} />
-              {mixed && !side ? <p className="text-sm text-ink-muted">{t("folder.edit.mixed", { read: read.toLocaleString(), count: list.length.toLocaleString() })}</p> : null}
-              {side && side !== now && list.length ? <p className="text-sm text-ink-secondary">{tn(side === "reads" ? "folder.edit.willRead" : "folder.edit.willKeep", list.length)}</p> : null}
-            </>
-          )}
-        </div>
+        {whole ? <p className="text-sm text-ink-muted">{t("folder.edit.whole", { name: category.name })}</p> : (
+          <div className="flex flex-col gap-2">
+            <Field label={t("folder.edit.inside")} hint={t("folder.edit.inside.hint")}>
+              {({ id, ...control }) => <Select id={id} {...(control["aria-describedby"] ? { describedBy: control["aria-describedby"] } : {})} value={place} options={options} onChange={setPlace} />}
+            </Field>
+            {partlyKept(category) && place === here ? <p className="text-sm text-ink-muted">{t("nav.folder.mixed")}</p> : null}
+            {place !== here && willKeep !== keptFromAi(category) && list.length ? <p className="text-sm text-ink-secondary">{tn(willKeep ? "folder.edit.willKeep" : "folder.edit.willRead", list.length)}</p> : null}
+          </div>
+        )}
         {list.length ? (
           <div className="flex flex-col gap-2">
             <p className="text-sm text-ink-secondary">{tn("folder.edit.senders", list.length)}</p>

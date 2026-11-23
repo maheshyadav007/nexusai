@@ -1,10 +1,23 @@
 # Folders: one tree, Priority on top, two homes
 
-Status, 2026-11-23: designed and mocked up with the person; **nothing built yet**. The last code change is commit `e6d4419` on `main` (merged from `conversations`). Section 3 lists seven decisions the person still has to answer. Section 0 says how to pick this up.
+Status, 2026-11-23 (evening): **built**, on branch `conversations`. Phases 0–5 and 7 are done, Phase 1 mostly (see "What was built" below). Phase 6 (Today cleanup) is not built: it needs a mockup first. The seven decisions in section 3 were taken as recommended (D1–D7).
 
 > **The idea.** Today the sidebar mixes three different things and calls them all folders: a filtered view called "Inbox", folders the AI reads, and folders kept from the AI, with "Automated" drawn as if it contained its siblings. People can't tell what clicking anything will show. This plan makes mail work like a file system: **one tree of folders, each with settings** (its rules, an optional plain-language description the AI files by, Show in Priority, and more later). Two homes at the top, **Inbox** (everything the AI reads) and **Kept from the AI** (everything it doesn't), and a **Priority** view above them. A parent always shows its own items plus everything under it. New features become new folder settings, not new screens.
 
 ---
+
+## What was built (2026-11-23)
+
+- **Storage:** `mail_categories.parent` (migration `mail_folder_tree_001`); names unique across the tree, case-insensitive, checked in `modules/mail/folders.py` (`check_name`) on create, rename, split, sorting and agent saves. Homes are not rows: a folder with no parent is at the top of the home its `ai_reads` names; folders inside take their home's side (`folders.move`).
+- **Upgrade, once per Home** (`_folder_tree_upgrade`, marker `mail_folder_tree_upgrade_001`): `Automated/x` becomes `x` at the top of Kept from the AI (the next free name on a clash, e.g. `linkedin 2`); `A/B` becomes `B` inside `A`; an exact folder whose every rule keeps its mail from the AI moves to Kept from the AI. Rename carries threads, rules, rule names and the rule stamped on each email (`_rename_folder`).
+- **Parents include children:** `store.IN_CATEGORY` is a recursive "this folder or anything under it" (`folders.in_tree`), used by lists, search and mark-read. Sidebar counts add children's unread (`folderTree` in `ui/shell/customMail.ts`).
+- **Homes:** list filters `reads` and `kept` (`store.FOLDER_FILTERS`, in the inbox, not archived), routes `/mail/inbox` and `/mail/kept`, unread counts from `mail.folders`. `/mail/priority` is the Priority view (icon `priorityView` = Iconoir FolderSettings) with a "why it's here" line on each email.
+- **One folder per email (D3):** rules no longer add `extra_categories`; the mail agent and bulk learning pick one; "Add to folder" moves the conversation. Old extras stay readable.
+- **Rules follow the side:** a folder's own rule keeps mail from the AI only in Kept from the AI; in the Inbox it files and the AI still reads it. A rule can have any conditions, all must match (`SaveCategory.conditions`, `categories.preview` counts matches without saving).
+- **Split (board 12):** `categories.mixed` lists folders with senders on both sides and a suggested name; `categories.split` splits (or `undo`); shown at the top of the Sort page.
+- **UI:** sidebar homes (`ui/shell/HomeNav.tsx`), Gmail/server labels under More, menus as board 8, the New folder dialog (`ui/shell/NewFolder.tsx`, board 11), Edit folder with "Inside", Sort page wording and "No folder" cards (board 9), the "biggest" count fixed, AI-suggested folders tickable on the Sort page (D6).
+- **Phase 1:** 1.1 the "stale" brief was not a failure: freshness compared calendar days, so last evening's brief read after midnight said stale; now it's stale only once a scheduled morning brief should have replaced it. 1.2 the brief prompt no longer writes coverage as a bullet; the quiet line under it says so. 1.3 the one-email folders are gone from the test instance; sorting makes only the biggest 3. 1.4 and 1.5 are checked on the real mailbox after shipping.
+- **Not built:** Phase 6 (needs a mockup), Phase 8. The Sort page's "+ New folder" stays a quick name field (a folder there is filled by dragging senders), not the full dialog.
 
 ## 0. Picking this up in a new session
 

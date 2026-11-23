@@ -1,7 +1,7 @@
 import {
   Activity, Alarm, Archive, ArrowDown, ArrowDownRight, ArrowUp, Attachment, Bell, Bookmark, Brain, Calendar, CalendarRotate,
   ChatBubble, ChatLines, Check, CheckCircle, Clock, ClockRotateRight, Collapse, Copy, Cpu, DashboardSpeed, EditPencil, Expand, FilterList,
-  Eye, EyeClosed, FastArrowLeft, FastArrowRight, Flash, Folder, ForwardMessage, InfoCircle, Label, LightBulb, List, Lock, Mail,
+  Eye, EyeClosed, FastArrowLeft, FastArrowRight, Flash, Folder, FolderSettings, ForwardMessage, InfoCircle, Label, LightBulb, List, Lock, Mail,
   MailIn, MailOpen, Minus, MoreHoriz, MoreVert, MultiplePages, NavArrowDown, NavArrowLeft, NavArrowRight, Page, Plus, Puzzle,
   Refresh, RefreshDouble, Repeat, Reply, ReplyToMessage, Search, Send, Settings, ShieldCheck, SidebarCollapse, SidebarExpand,
   SoundHigh, SoundOff, Square, Star, SunLight, Terminal, ThumbsDown, ThumbsUp, Trash, TriangleFlag, Upload, ViewColumns3,
@@ -38,6 +38,7 @@ export const ICONOIR = {
   followUp: ArrowDownRight,
   file: Page,
   priority: Flash,
+  priorityView: FolderSettings,
   important: Bookmark,
   starred: Star,
   reply: Reply,

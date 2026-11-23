@@ -1220,21 +1220,21 @@ def test_moving_to_archive_with_nothing_else_downloaded_keeps_it_here(
     assert [row["subject"] for row in threads(client, folder="archive")] == ["Archive me"]
 
 
-def test_a_conversation_can_be_in_several_categories(client: TestClient, fake: FakeMail) -> None:
+def test_a_conversation_is_in_one_folder_and_moves_between_them(
+    client: TestClient, fake: FakeMail
+) -> None:
     fake.state.deliver(make_mail(subject="Both"))
     connect(client, fake)
     thread = thread_with(client, "Both")
     for name in ("Finance", "Travel"):
         client.post("/api/commands/thread.addCategory", json={"id": thread["id"], "name": name})
-    assert [row["subject"] for row in threads(client, folder="all", category="Finance")] == ["Both"]
+    assert threads(client, folder="all", category="Finance") == []
     assert [row["subject"] for row in threads(client, folder="all", category="Travel")] == ["Both"]
     listed = threads(client, folder="all")[0]
-    assert (listed["category"], listed["extra_categories"]) == ("Finance", ["Travel"])
-    counted = client.post("/api/queries/categories.list").json()["categories"]
-    assert {row["name"]: row["count"] for row in counted}["Travel"] == 1
-    client.post("/api/commands/thread.removeCategory", json={"id": thread["id"], "name": "Finance"})
-    listed = threads(client, folder="all")[0]
     assert (listed["category"], listed["extra_categories"]) == ("Travel", [])
+    client.post("/api/commands/thread.removeCategory", json={"id": thread["id"], "name": "Travel"})
+    listed = threads(client, folder="all")[0]
+    assert (listed["category"], listed["extra_categories"]) == (None, [])
 
 
 def test_mail_already_here_is_filed_under_its_other_folders_without_any_budget(

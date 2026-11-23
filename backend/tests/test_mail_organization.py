@@ -105,8 +105,12 @@ def test_literal_prefix_and_exact_address_and_multiple_folder_order(ctx: Context
         tx.execute("UPDATE mail_categories SET position=2 WHERE name='PLM'")
     parsed = parse_message(make_mail(subject="[PLM] Build 12"))
     match = rules.evaluate(parsed, mail.ordered_rules(ctx))
-    assert match and match.actions.category == "Builds" and match.extra_categories == ("PLM",)
-    assert match.actions.skip_agent
+    # One folder per email, the first in order; in the Inbox a rule files it and the AI reads it.
+    assert match and match.actions.category == "Builds" and match.extra_categories == ()
+    assert not match.actions.skip_agent
+    mail.update_category(UpdateCategory(name="Builds", ai_reads=False), ctx)
+    kept = rules.evaluate(parsed, mail.ordered_rules(ctx))
+    assert kept and kept.actions.category == "Builds" and kept.actions.skip_agent
     assert (
         rules.evaluate(
             parse_message(make_mail(subject="Re: [PLM] Build 12")), mail.ordered_rules(ctx)

@@ -429,7 +429,7 @@ def task_for(
     known = [
         dict(row)
         for row in db.fetch_all(
-            "SELECT name, description, in_priority FROM mail_categories WHERE proposed = 0 AND mode = 'smart' ORDER BY position, name"
+            "SELECT name, description, in_priority FROM mail_categories WHERE proposed = 0 AND mode = 'smart' AND ai_reads = 1 ORDER BY position, name"
         )
     ]
     # Header rules only catch marketing and automated mail that says so in its headers. What they
@@ -443,9 +443,7 @@ def task_for(
     ]
     if known:
         descriptions = json.dumps(known, ensure_ascii=False)
-        task += "\n\nSmart folders (use only these names, zero or more):\n" + untrusted(
-            descriptions
-        )
+        task += "\n\nSmart folders (use only these names, at most one):\n" + untrusted(descriptions)
     exact = db.fetch_all(
         "SELECT name, description, subject FROM mail_categories WHERE proposed = 0 AND mode = 'exact' AND name NOT IN ('Promotions','Updates') ORDER BY position, name"
     )
@@ -1031,7 +1029,7 @@ class Triage:
         allowed = {
             row["name"].casefold(): row["name"]
             for row in ctx.bus.db.fetch_all(
-                "SELECT name FROM mail_categories WHERE proposed = 0 AND (mode = 'smart' OR name IN ('Promotions','Updates'))"
+                "SELECT name FROM mail_categories WHERE proposed = 0 AND ai_reads = 1 AND (mode = 'smart' OR name IN ('Promotions','Updates'))"
             )
         }
         requested = parsed.get("smart_folders")
@@ -1134,8 +1132,11 @@ class Triage:
                 ).fetchone()
                 # A rule the person can see files it alone, with no folders added beside it.
                 if current and current["category_source"] != "user" and not current["ruled"]:
+                    # A folder headers guessed gives way to the one the AI chose: one per email.
                     primary = (
-                        current["category"] if current["category_source"] == "rule" else category
+                        current["category"]
+                        if current["category_source"] == "rule" and not smart
+                        else category
                     )
                     exact_names = {
                         row["name"]
@@ -1148,12 +1149,14 @@ class Triage:
                         for name in json.loads(current["extra_categories"])
                         if name in exact_names
                     ]
-                    extras = list(dict.fromkeys([*kept_extras, *smart]))
+                    extras = kept_extras
                     work.tx.execute(
                         "UPDATE threads SET category = ?, category_source = ?, extra_categories = ?, why = ? WHERE id = ?",
                         (
                             primary,
-                            "rule" if current["category_source"] == "rule" else "agent",
+                            "rule"
+                            if current["category_source"] == "rule" and primary != category
+                            else "agent",
                             json.dumps([name for name in extras if name != primary]),
                             why,
                             thread,

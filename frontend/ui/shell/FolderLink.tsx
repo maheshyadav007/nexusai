@@ -15,7 +15,7 @@ const TONE_ICON: Record<FolderTone, string> = { ai: "text-accent-default", partl
 const TONE_TEXT = { ai: "nav.folder.tone.ai", partly: "nav.folder.tone.partly", kept: "nav.folder.tone.kept", label: "nav.folder.tone.label" } as const;
 
 // Each level sets its icon under the label above it. Deeper ones stay at the last step.
-const INDENT = ["", "pl-5", "pl-7"] as const;
+const INDENT = ["", "pl-5", "pl-7", "pl-9"] as const;
 
 /** One folder in the sidebar: every kind looks the same, and only its icon's color says whether
  *  the AI reads it. A folder holding others folds them with the arrow at its end. */

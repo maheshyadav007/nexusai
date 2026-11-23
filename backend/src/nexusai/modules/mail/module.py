@@ -1,6 +1,7 @@
 import hashlib
 import json
 import re
+import sqlite3
 import threading
 from datetime import UTC, datetime
 from email.utils import parseaddr
@@ -15,6 +16,7 @@ from nexusai.contracts.mail import (
     ApplyMailSort,
     CategoryList,
     CategoryName,
+    CategoryRulePreview,
     CategorySaved,
     CategorySortEstimate,
     ChangeThreadCategory,
@@ -40,6 +42,7 @@ from nexusai.contracts.mail import (
     ListCategories,
     ListDrafts,
     ListMailFolders,
+    ListMixedFolders,
     ListThreads,
     MailAccounts,
     MailAccountView,
@@ -60,8 +63,11 @@ from nexusai.contracts.mail import (
     MailTestResult,
     MarkFolderRead,
     MergeCategories,
+    MixedFolder,
+    MixedFolders,
     MoveThread,
     PrepareMailSort,
+    PreviewCategoryRule,
     ProbeServer,
     PstImport,
     PstImportAction,
@@ -85,6 +91,7 @@ from nexusai.contracts.mail import (
     SendCheckResult,
     SendCheckSettings,
     SendDraft,
+    SenderCount,
     SendProblem,
     ServerProbe,
     SetNeverDelete,
@@ -96,6 +103,7 @@ from nexusai.contracts.mail import (
     SetThreadStatus,
     SkipMailSort,
     SortCategory,
+    SplitFolders,
     StartPstUpload,
     StopHistory,
     SuggestRecipients,
@@ -110,6 +118,7 @@ from nexusai.contracts.mail import (
 from nexusai.kernel.module import CommandError, Context, Module
 from nexusai.modules.mail import (
     accounts,
+    folders,
     outgoing,
     pst,
     pst_search,
@@ -129,7 +138,9 @@ from nexusai.modules.semantic import module as semantic
 
 log = structlog.get_logger()
 ATTACHED_WORDS = re.compile(r"\b(attached|attachment|enclosed|첨부)\b|첨부", re.I)
-mail_module = Module(name="mail", migrations=[*store.MIGRATIONS, pst.MIGRATION, sorting.MIGRATION])
+mail_module = Module(
+    name="mail", migrations=[*store.MIGRATIONS, pst.MIGRATION, sorting.MIGRATION, folders.MIGRATION]
+)
 
 # Filing that only exists on this computer, and old mail read from an archive file.
 LOCAL_PREFIXES = ("local:", "pst:")
@@ -232,6 +243,8 @@ def _startup(ctx: Context) -> None:
     _add_starter_categories(ctx)
     _organization_defaults(ctx)
     _automated_folder(ctx)
+    _folder_tree_upgrade(ctx)
+    sorting.record_past_sorting(ctx)
     global _maintenance
 
     def maintain() -> None:
@@ -991,25 +1004,20 @@ def remove_from_folder(command: ChangeThreadFolder, ctx: Context) -> MailDone:
 
 @mail_module.command("thread.addCategory")
 def add_category(command: ChangeThreadCategory, ctx: Context) -> MailDone:
-    """Another category for this conversation. The first one set is still what Priority goes by."""
+    """This conversation into a folder. An email lives in one folder, so it leaves the one it
+    was in; what the person chose stays, whatever a rule or the AI would say."""
     rows = ctx.bus.db.fetch_all(
         "SELECT category, extra_categories FROM threads WHERE id = ?", (command.id,)
     )
     if not rows:
         raise CommandError("thread.not_found", "That conversation no longer exists.", 404)
     with ctx.bus.unit_of_work() as work:
-        if rows[0]["category"] is None:
-            work.tx.execute(
-                "UPDATE threads SET category = ?, category_source = 'user', why = ? WHERE id = ?",
-                (command.name, "You chose this category", command.id),
-            )
-        elif command.name != rows[0]["category"]:
-            extras = {*json.loads(rows[0]["extra_categories"]), command.name}
-            work.tx.execute(
-                "UPDATE threads SET extra_categories = ?, category_source = 'user' WHERE id = ?",
-                (json.dumps(sorted(extras)), command.id),
-            )
-        _changed(work, ctx, command.id, "category", command.name)
+        work.tx.execute(
+            "UPDATE threads SET category = ?, extra_categories = '[]', category_source = 'user',"
+            " why = ? WHERE id = ?",
+            (command.name, "You chose this folder", command.id),
+        )
+        _changed(work, ctx, command.id, "category", command.name, rows[0]["category"])
     return MailDone()
 
 
@@ -1141,8 +1149,6 @@ _last_categories: dict[str, list[dict[str, Any]]] = {}
 SUGGESTED, DECLINED = 1, 2
 PRIORITY_SUGGESTED, PRIORITY_DECLINED = 1, 2
 UNORDERED = 1_000_000
-# Folders the AI skips whole, whatever is filed in them.
-KEPT_WHOLE = (sorting.AUTOMATED, sorting.CALENDAR)
 
 
 def _rename_extras(tx: Any, names: set[str], into: str | None) -> None:
@@ -1160,6 +1166,28 @@ def _rename_extras(tx: Any, names: set[str], into: str | None) -> None:
         )
 
 
+def sender_sides(ctx: Context) -> dict[str, dict[str, bool]]:
+    """For each folder, the senders a rule files there, and whether that keeps each from the AI.
+    In a folder kept from the AI every sender is kept; elsewhere each sender's rule says."""
+    reads = {
+        row["name"]: bool(row["ai_reads"])
+        for row in ctx.bus.db.fetch_all("SELECT name, ai_reads FROM mail_categories")
+    }
+    found: dict[str, dict[str, bool]] = {}
+    for rule in rules.load_rules(ctx.config.home):
+        name = rule.actions.category
+        if not rule.enabled or not name:
+            continue
+        # A folder's own rule follows its side.
+        kept = not reads.get(name, True) or (
+            rule.actions.skip_agent and rule.name != CATEGORY_RULE_PREFIX + name
+        )
+        for condition in rule.conditions:
+            if condition.field in {"sender", "sender_exact"} and "@" in condition.value:
+                found.setdefault(name, {})[condition.value.strip().lower()] = kept
+    return found
+
+
 def category_rows(ctx: Context) -> list[MailCategory]:
     db = ctx.bus.db
     account = accounts.current_account(ctx.config)
@@ -1175,6 +1203,7 @@ def category_rows(ctx: Context) -> list[MailCategory]:
             (account, account),
         )
     }
+    sides = sender_sides(ctx)
     # What sorting keeps from the AI is decided by each sender's rule, so it's counted per folder.
     skipping = [
         rule.name
@@ -1221,6 +1250,7 @@ def category_rows(ctx: Context) -> list[MailCategory]:
         ):
             continue
         count, unread = counts.get(row["name"], (0, 0))
+        filed = sides.get(row["name"], {})
         found.append(
             MailCategory(
                 name=row["name"],
@@ -1242,6 +1272,9 @@ def category_rows(ctx: Context) -> list[MailCategory]:
                 updated=row["updated"] or row["created"],
                 ai_reads=bool(row["ai_reads"]),
                 kept=min(kept.get(row["name"], 0), count),
+                parent=row["parent"],
+                senders_read=sum(not kept_from_ai for kept_from_ai in filed.values()),
+                senders_kept=sum(filed.values()),
             )
         )
         positions[row["name"]] = row["position"]
@@ -1269,16 +1302,79 @@ def category_rows(ctx: Context) -> list[MailCategory]:
     )
 
 
-def _apply_category_rule(
-    ctx: Context, name: str, sender: str | None, subject: str | None, *, refile: bool = True
-) -> int:
-    """Mail from now on follows the rule, and what's already here is filed too."""
-    conditions = []
+def _rule_conditions(
+    sender: str | None, subject: str | None, conditions: list[RuleCondition] | None = None
+) -> list[RuleCondition]:
+    if conditions:
+        return [
+            condition
+            for condition in conditions
+            if condition.value.strip() or condition.field == "has_attachment"
+        ]
+    found = []
     if sender:
-        conditions.append(RuleCondition(field="sender_exact", value=sender))
+        found.append(RuleCondition(field="sender_exact", value=sender))
     if subject:
-        conditions.append(RuleCondition(field="subject_prefix", value=subject))
+        found.append(RuleCondition(field="subject_prefix", value=subject))
+    return found
+
+
+def _likely(conditions: list[RuleCondition]) -> tuple[str, list[object]]:
+    """A cheap first pass in SQL, so only emails that could match are opened and checked."""
+    where: list[str] = []
+    params: list[object] = []
+    for condition in conditions:
+        value = condition.value.strip().lower()
+        if condition.field in {"sender", "sender_exact"}:
+            where.append("LOWER(m.from_addr || ' ' || m.from_name) LIKE ?")
+            params.append(f"%{value}%")
+        elif condition.field in {"subject", "subject_prefix", "tag"}:
+            where.append("LOWER(m.subject) LIKE ?")
+            params.append(f"%{value}%")
+        elif condition.field == "has_attachment":
+            where.append("m.has_attachments = 1")
+    return "".join(f" AND {part}" for part in where), params
+
+
+def _latest_matching(ctx: Context, conditions: list[RuleCondition]) -> list[sqlite3.Row]:
+    """Each conversation's newest email, where it could match these conditions."""
+    likely, params = _likely(conditions)
+    return ctx.bus.db.fetch_all(
+        "SELECT m.id,m.thread_id FROM messages m WHERE m.account=? AND m.id=(SELECT id FROM"  # noqa: S608
+        f" messages WHERE thread_id=m.thread_id ORDER BY date DESC,id DESC LIMIT 1){likely}",
+        (accounts.current_account(ctx.config), *params),
+    )
+
+
+def preview_rule(ctx: Context, conditions: list[RuleCondition]) -> int:
+    """How many conversations already here these conditions would file. Nothing is saved."""
+    conditions = _rule_conditions(None, None, conditions)
+    if not conditions:
+        return 0
+    probe = MailRule(name="preview", conditions=conditions, actions=RuleActions(category="preview"))
+    found = 0
+    for row in _latest_matching(ctx, conditions):
+        raw = store.raw_of(ctx.bus.db, row["id"])
+        if raw is not None and rules.evaluate(parse_message(raw), [probe]) is not None:
+            found += 1
+    return found
+
+
+def _apply_category_rule(
+    ctx: Context,
+    name: str,
+    sender: str | None,
+    subject: str | None,
+    *,
+    refile: bool = True,
+    conditions: list[RuleCondition] | None = None,
+) -> int:
+    """Mail from now on follows the rule, and what's already here is filed too. In a folder kept
+    from the AI the rule keeps its mail away; in one the AI reads it only files it."""
+    conditions = _rule_conditions(sender, subject, conditions)
     rule_name = CATEGORY_RULE_PREFIX + name
+    side = ctx.bus.db.fetch_all("SELECT ai_reads FROM mail_categories WHERE name=?", (name,))
+    reads = bool(side[0]["ai_reads"]) if side else False
 
     def changed(existing: list[MailRule]) -> list[MailRule]:
         kept = [
@@ -1292,7 +1388,7 @@ def _apply_category_rule(
                 MailRule(
                     name=rule_name,
                     conditions=conditions,
-                    actions=RuleActions(category=name, skip_agent=True),
+                    actions=RuleActions(category=name, skip_agent=not reads),
                 )
             )
         return kept
@@ -1306,20 +1402,15 @@ def _apply_category_rule(
     domain = own_domain_of(profile.address or profile.auth.user) if profile else None
     engine = rule_engine(ctx, domain)
     changed_threads: set[int] = set()
-    # Latest-message provenance and primary/extra filing are determined together.
+    rows = _latest_matching(ctx, conditions)
+    # Latest-message provenance and filing are decided together. One folder per conversation.
     with ctx.bus.db.transaction() as tx:
-        rows = tx.execute(
-            "SELECT m.id,m.thread_id FROM messages m WHERE m.account=? AND m.id=(SELECT id FROM messages WHERE thread_id=m.thread_id ORDER BY date DESC,id DESC LIMIT 1)",
-            (active,),
-        ).fetchall()
         for row in rows:
             raw = store.raw_of(ctx.bus.db, row["id"])
             if raw is None:
                 continue
             match = engine.match(parse_message(raw))
-            if not match or not match.actions.category:
-                continue
-            if name not in {match.actions.category, *match.extra_categories}:
+            if not match or match.actions.category != name:
                 continue
             tx.execute(
                 "UPDATE messages SET rule=?,why=? WHERE id=?", (match.name, match.why, row["id"])
@@ -1327,25 +1418,12 @@ def _apply_category_rule(
             tx.execute(
                 "UPDATE threads SET latest_rule=? WHERE id=?", (match.name, row["thread_id"])
             )
-            current = tx.execute(
-                "SELECT category_source,extra_categories FROM threads WHERE id=?",
-                (row["thread_id"],),
-            ).fetchone()
-            if current and current["category_source"] != "user":
-                extras = list(
-                    dict.fromkeys(
-                        [*json.loads(current["extra_categories"]), *match.extra_categories]
-                    )
-                )
-                tx.execute(
-                    "UPDATE threads SET category=?,category_source='rule',why=?,extra_categories=? WHERE id=?",
-                    (
-                        match.actions.category,
-                        match.why,
-                        json.dumps([extra for extra in extras if extra != match.actions.category]),
-                        row["thread_id"],
-                    ),
-                )
+            filed = tx.execute(
+                "UPDATE threads SET category=?,category_source='rule',why=? WHERE id=?"
+                " AND COALESCE(category_source,'')!='user'",
+                (name, match.why, row["thread_id"]),
+            ).rowcount
+            if filed:
                 changed_threads.add(row["thread_id"])
     return len(changed_threads)
 
@@ -1414,6 +1492,12 @@ def _automated_folder(ctx: Context) -> None:
             "INSERT OR IGNORE INTO mail_categories (name, source, mode, description, in_priority,"
             " ai_reads, created) VALUES (?, 'rule', 'exact', ?, 0, 0, ?)",
             (rules.AUTOMATED, rules.AUTOMATED, datetime.now(UTC).isoformat()),
+        )
+        # It's always kept from the AI, at the top of Kept from the AI.
+        tx.execute(
+            "UPDATE mail_categories SET ai_reads = 0, parent = NULL WHERE name = ?"
+            " AND (ai_reads != 0 OR parent IS NOT NULL)",
+            (rules.AUTOMATED,),
         )
 
 
@@ -1597,12 +1681,12 @@ def ordered_rules(ctx: Context) -> list[MailRule]:
                     actions=canonical.actions.model_copy(
                         update={
                             "category": folder["name"],
-                            "skip_agent": True,
+                            "skip_agent": not folder["ai_reads"],
                             "read_replies": False,
                         }
                     )
                     if canonical
-                    else RuleActions(category=folder["name"], skip_agent=True),
+                    else RuleActions(category=folder["name"], skip_agent=not folder["ai_reads"]),
                 )
             )
     return rules.for_folders(
@@ -1667,43 +1751,118 @@ def list_categories(query: ListCategories, ctx: Context) -> CategoryList:
 
 @mail_module.command("categories.save")
 def save_category(command: SaveCategory, ctx: Context) -> CategorySaved:
-    if command.mode == "exact" and not (command.sender or command.subject):
+    """A new folder, or the same one saved again. Inside a folder, it takes that folder's side;
+    at the top, ai_reads says which home. A rule of any shape, or the AI by its description."""
+    conditions = _rule_conditions(command.sender, command.subject, command.conditions)
+    mode = command.mode or ("exact" if conditions else "smart")
+    if mode == "exact" and not conditions:
         raise CommandError(
-            "category.rule_required", "An Exact folder needs a sender or subject prefix.", 422
+            "category.rule_required", "A folder filled by a rule needs at least one condition.", 422
         )
-    with ctx.bus.db.transaction() as tx:
+    db = ctx.bus.db
+    existing = folders.find(db, command.name)
+    # Saved again by its own name, it's updated; any other folder by that name is a clash.
+    name = (
+        existing["name"]
+        if existing is not None and existing["name"] == command.name.strip()
+        else folders.check_name(db, command.name)
+    )
+    parent = folders.find(db, command.parent) if command.parent else None
+    if command.parent and parent is None:
+        raise CommandError("category.not_found", f"There's no folder called {command.parent}.", 404)
+    reads = bool(parent["ai_reads"]) if parent is not None else command.ai_reads
+    if mode == "smart" and not reads:
+        raise CommandError(
+            "category.kept_smart",
+            "The AI doesn't read mail kept from it, so a folder there is filled by a rule.",
+            422,
+        )
+    sender = command.sender if not command.conditions else None
+    subject = command.subject if not command.conditions else None
+    with db.transaction() as tx:
+        # A suggestion the person turned down never stands in the way of their own folder.
+        tx.execute(
+            "DELETE FROM mail_categories WHERE name = ? COLLATE NOCASE AND name != ? AND proposed != 0",
+            (name, name),
+        )
         tx.execute(
             "INSERT INTO mail_categories (name, source, in_priority, proposed, sender, subject, created)"
             " VALUES (?, ?, ?, 0, ?, ?, ?) ON CONFLICT (name) DO UPDATE SET"
             " in_priority = excluded.in_priority, proposed = 0, sender = excluded.sender,"
             " subject = excluded.subject",
             (
-                command.name,
+                name,
                 command.source,
                 int(command.in_priority),
-                command.sender,
-                command.subject,
+                sender,
+                subject,
                 datetime.now(UTC).isoformat(),
             ),
         )
-    mode = command.mode or ("exact" if command.sender or command.subject else "smart")
-    if mode == "exact" and not (command.sender or command.subject):
-        raise CommandError(
-            "category.rule_required", "An Exact folder needs a sender or subject prefix.", 422
-        )
-    with ctx.bus.db.transaction() as tx:
         tx.execute(
             "UPDATE mail_categories SET mode = ?, description = ? WHERE name = ?",
-            (mode, command.description.strip() or command.name, command.name),
+            (mode, command.description.strip() or name, name),
         )
+        if existing is None or command.parent is not None or "ai_reads" in command.model_fields_set:
+            folders.move(tx, name, parent["name"] if parent is not None else None, reads)
     filed = _apply_category_rule(
         ctx,
-        command.name,
-        command.sender if mode == "exact" else None,
-        command.subject if mode == "exact" else None,
+        name,
+        sender if mode == "exact" else None,
+        subject if mode == "exact" else None,
+        conditions=command.conditions if mode == "exact" else None,
+        refile=command.file_existing,
     )
     _categories_changed(ctx)
     return CategorySaved(categories=category_rows(ctx), filed=filed)
+
+
+@mail_module.query("categories.preview")
+def preview_category_rule(query: PreviewCategoryRule, ctx: Context) -> CategoryRulePreview:
+    return CategoryRulePreview(conversations=preview_rule(ctx, query.conditions))
+
+
+def _rename_folder(ctx: Context, old: str, new: str) -> None:
+    """One folder's new name, everywhere it's used: the folders inside it, its mail, its rules,
+    and the emails those rules marked. Nothing else about it changes."""
+    if old == new:
+        return
+    old_rule, new_rule = CATEGORY_RULE_PREFIX + old, CATEGORY_RULE_PREFIX + new
+
+    def renamed_rule(name: str) -> str:
+        if name == old_rule:
+            return new_rule
+        if name.startswith(old_rule + ": "):
+            return new_rule + name[len(old_rule) :]
+        return name
+
+    names: dict[str, str] = {}
+    with ctx.bus.db.transaction() as tx:
+        tx.execute("UPDATE mail_categories SET name = ? WHERE name = ?", (new, old))
+        tx.execute("UPDATE mail_categories SET parent = ? WHERE parent = ?", (new, old))
+        tx.execute("UPDATE threads SET category = ? WHERE category = ?", (new, old))
+        tx.execute("UPDATE OR IGNORE mail_category_votes SET name = ? WHERE name = ?", (new, old))
+        _rename_extras(tx, {old}, new)
+        for rule in rules.load_rules(ctx.config.home):
+            if renamed_rule(rule.name) != rule.name:
+                names[rule.name] = renamed_rule(rule.name)
+        for before, after in names.items():
+            tx.execute("UPDATE messages SET rule = ? WHERE rule = ?", (after, before))
+            tx.execute("UPDATE threads SET latest_rule = ? WHERE latest_rule = ?", (after, before))
+    rules.change_rules(
+        ctx.config.home,
+        lambda existing: [
+            rule.model_copy(
+                update={
+                    "name": renamed_rule(rule.name),
+                    "actions": rule.actions.model_copy(update={"category": new})
+                    if rule.actions.category == old
+                    else rule.actions,
+                }
+            )
+            for rule in existing
+        ],
+    )
 
 
 @mail_module.command("categories.update")
@@ -1714,13 +1873,11 @@ def update_category(command: UpdateCategory, ctx: Context) -> CategoryList:
     in_use = db.fetch_all("SELECT 1 FROM threads WHERE category = ? LIMIT 1", (command.name,))
     if row is None and not in_use:
         raise CommandError("category.not_found", "That category no longer exists.", 404)
-    new_name = command.new_name or command.name
-    if new_name != command.name:
-        taken = db.fetch_all("SELECT 1 FROM mail_categories WHERE name = ?", (new_name,))
-        if taken:
-            raise CommandError(
-                "category.exists", f"There's already a category called {new_name}.", 409
-            )
+    new_name = (
+        folders.check_name(db, command.new_name, keep=command.name)
+        if command.new_name
+        else command.name
+    )
     sender = (
         None
         if command.clear_rule
@@ -1754,8 +1911,18 @@ def update_category(command: UpdateCategory, ctx: Context) -> CategoryList:
     )
     # Filed by its senders' own rules, as sorting does: those are its rules, and a guessed
     # sender would give one of them a second.
+    # Its own rule with more than a sender and a subject, as the New folder dialog makes, is
+    # its rule too.
     by_senders = any(
-        rule.actions.category == command.name and rule.name != CATEGORY_RULE_PREFIX + command.name
+        rule.actions.category == command.name
+        and (
+            rule.name != CATEGORY_RULE_PREFIX + command.name
+            or any(
+                condition.field not in {"sender", "sender_exact", "subject", "subject_prefix"}
+                for condition in rule.conditions
+            )
+            or (not (row and (row["sender"] or row["subject"])) and bool(rule.conditions))
+        )
         for rule in rules.load_rules(ctx.config.home)
     )
     if (
@@ -1790,61 +1957,110 @@ def update_category(command: UpdateCategory, ctx: Context) -> CategoryList:
                 (command.name, now),
             )
         tx.execute(
-            "UPDATE mail_categories SET name = ?, in_priority = ?, sender = ?, subject = ?,"
+            "UPDATE mail_categories SET in_priority = ?, sender = ?, subject = ?,"
             " proposed = 0, updated = ?, mode = ?, description = ? WHERE name = ?",
-            (new_name, int(in_priority), sender, subject, now, mode, description, command.name),
+            (int(in_priority), sender, subject, now, mode, description, command.name),
         )
-        tx.execute("UPDATE threads SET category = ? WHERE category = ?", (new_name, command.name))
-        _rename_extras(tx, {command.name}, new_name)
-    if new_name != command.name:
-        # Rules the person wrote themselves may file into it too.
-        def renamed(existing: list[MailRule]) -> list[MailRule]:
-            return [
-                rule.model_copy(
-                    update={
-                        "actions": rule.actions.model_copy(update={"category": new_name}),
-                    }
-                )
-                if rule.actions.category == command.name
-                else rule
-                for rule in existing
-                if rule.name != CATEGORY_RULE_PREFIX + command.name
-            ]
-
-        rules.change_rules(ctx.config.home, renamed)
-    _apply_category_rule(
-        ctx,
-        new_name,
-        sender if mode == "exact" else None,
-        subject if mode == "exact" else None,
-        refile=False,
+    _rename_folder(ctx, command.name, new_name)
+    # A rule with more than a sender and a subject stays as it was written; the rest follow
+    # the folder's settings.
+    own = next(
+        (
+            rule
+            for rule in rules.load_rules(ctx.config.home)
+            if rule.name == CATEGORY_RULE_PREFIX + new_name
+        ),
+        None,
     )
-    if command.ai_reads is not None:
+    shaped = own is not None and any(
+        condition.field not in {"sender", "sender_exact", "subject", "subject_prefix"}
+        for condition in own.conditions
+    )
+    # Made in the New folder dialog, a rule of conditions is the folder's own, and stays as
+    # written unless a sender or subject is set in its place.
+    written = (
+        own is not None
+        and not (row and (row["sender"] or row["subject"]))
+        and not command.clear_rule
+        and not {"sender", "subject"} & command.model_fields_set
+    )
+    if not ((shaped or written) and mode == "exact"):
+        _apply_category_rule(
+            ctx,
+            new_name,
+            sender if mode == "exact" else None,
+            subject if mode == "exact" else None,
+            refile=False,
+        )
+    if command.parent is not None:
+        _move_folder(ctx, new_name, command.parent or None, command.ai_reads)
+    elif command.ai_reads is not None:
         _set_reads(ctx, new_name, command.ai_reads)
     _categories_changed(ctx)
     return CategoryList(categories=category_rows(ctx))
 
 
+def _move_folder(ctx: Context, name: str, parent: str | None, reads: bool | None) -> None:
+    """Into another folder, or to the top of a home. Every folder that changes sides takes its
+    senders with it, each keeping its one rule."""
+    if name in folders.KEPT_WHOLE and (parent or reads):
+        raise CommandError("category.kept_whole", f"{name} is always kept from the AI.", 409)
+    with ctx.bus.db.transaction() as tx:
+        changed = folders.move(tx, name, parent, reads)
+    for folder in changed:
+        _follow_side(ctx, folder)
+
+
 def _set_reads(ctx: Context, name: str, reads: bool) -> None:
-    """A whole folder to one side: the folder, and each sender a rule files there, each still
-    with one rule. What's under Automated and Calendar is always kept from the AI."""
-    if reads and any(name == top or name.startswith(f"{top}/") for top in KEPT_WHOLE):
+    """A whole folder to the other side. A folder takes its side from its home, so it goes to
+    the top of the other one, with everything in it. Automated and Calendar are always kept."""
+    row = folders.find(ctx.bus.db, name)
+    if row is not None and bool(row["ai_reads"]) == reads and not row["parent"]:
+        # Already there; the senders still follow, in case a rule says otherwise.
+        _follow_side(ctx, row["name"])
+        return
+    if reads and name in folders.KEPT_WHOLE:
         raise CommandError(
             "category.kept_whole",
-            f"{name.split('/')[0]} is always kept from the AI. Move its senders to another folder.",
+            f"{name} is always kept from the AI. Move its senders to another folder.",
             409,
         )
-    with ctx.bus.db.transaction() as tx:
-        tx.execute("UPDATE mail_categories SET ai_reads = ? WHERE name = ?", (int(reads), name))
+    if row is None:
+        with ctx.bus.db.transaction() as tx:
+            tx.execute(
+                "INSERT OR IGNORE INTO mail_categories (name, source, mode, description, created)"
+                " VALUES (?, 'rule', 'exact', ?, ?)",
+                (name, name, datetime.now(UTC).isoformat()),
+            )
+    _move_folder(ctx, name, None, reads)
+
+
+def _follow_side(ctx: Context, name: str) -> None:
+    """Each sender a rule files into this folder, and the folder's own rule, on its side."""
+    row = folders.find(ctx.bus.db, name)
+    if row is None:
+        return
+    reads = bool(row["ai_reads"])
     senders = {
         (condition.value or "").strip().lower()
         for rule in rules.load_rules(ctx.config.home)
-        if rule.actions.category == name
+        if rule.actions.category == name and rule.name != CATEGORY_RULE_PREFIX + name
         for condition in rule.conditions
         if condition.field in {"sender", "sender_exact"} and "@" in (condition.value or "")
     }
     for sender in sorted(senders):
         sorting.move_sender(ctx, sender, reads=reads, folder=name)
+    rules.change_rules(
+        ctx.config.home,
+        lambda existing: [
+            rule.model_copy(
+                update={"actions": rule.actions.model_copy(update={"skip_agent": not reads})}
+            )
+            if rule.name == CATEGORY_RULE_PREFIX + name
+            else rule
+            for rule in existing
+        ],
+    )
 
 
 @mail_module.command("categories.merge")
@@ -1852,7 +2068,13 @@ def merge_categories(command: MergeCategories, ctx: Context) -> CategoryList:
     db = ctx.bus.db
     now = datetime.now(UTC).isoformat()
     others = [name for name in command.names if name != command.into]
+    if folders.find(db, command.into) is None:
+        folders.check_name(db, command.into)
     with db.transaction() as tx:
+        for name in others:
+            tx.execute(
+                "UPDATE mail_categories SET parent = ? WHERE parent = ?", (command.into, name)
+            )
         tx.execute(
             "INSERT OR IGNORE INTO mail_categories (name, source, description, in_priority, created) VALUES (?, 'user', ?, 1, ?)",
             (command.into, command.into, now),
@@ -1888,17 +2110,200 @@ def reorder_categories(command: ReorderCategories, ctx: Context) -> CategoryList
 
 @mail_module.command("categories.remove")
 def remove_category(command: CategoryName, ctx: Context) -> CategoryList:
-    """Its mail stays where it is, only without this label."""
+    """Its mail and the folders in it go to where it was: its parent, or the top of its home.
+    Mail kept from the AI stays kept."""
+    row = folders.find(ctx.bus.db, command.name)
+    if command.name.casefold() == folders.AUTOMATED.casefold():
+        raise CommandError("category.kept_whole", f"{folders.AUTOMATED} can't be removed.", 409)
+    into = (row["parent"] if row is not None else None) or (
+        None if row is None or row["ai_reads"] else folders.AUTOMATED
+    )
     with ctx.bus.db.transaction() as tx:
         tx.execute("DELETE FROM mail_categories WHERE name = ?", (command.name,))
         tx.execute(
-            "UPDATE threads SET category = NULL, category_source = NULL WHERE category = ?",
-            (command.name,),
+            "UPDATE mail_categories SET parent = ? WHERE parent = ?",
+            (row["parent"] if row is not None else None, command.name),
+        )
+        tx.execute(
+            "UPDATE threads SET category = ?, category_source = CASE WHEN ? IS NULL THEN NULL"
+            " ELSE category_source END WHERE category = ?",
+            (into, into, command.name),
         )
         _rename_extras(tx, {command.name}, None)
-    _apply_category_rule(ctx, command.name, None, None)
+    own = CATEGORY_RULE_PREFIX + command.name
+
+    def moved(existing: list[MailRule]) -> list[MailRule]:
+        """Its rules file into where its mail went. Its own rule, when that's the Inbox, goes."""
+        kept = []
+        for rule in existing:
+            if rule.actions.category != command.name and not rule.name.startswith(own + ": "):
+                kept.append(rule)
+                continue
+            if into is None and (rule.name == own or rule.name.startswith(own + ": ")):
+                continue
+            name = (
+                f"{CATEGORY_RULE_PREFIX}{into}: from {rule.name[len(CATEGORY_RULE_PREFIX) :]}"[:120]
+                if rule.name == own or rule.name.startswith(own + ": ")
+                else rule.name
+            )
+            kept.append(
+                rule.model_copy(
+                    update={
+                        "name": name,
+                        "actions": rule.actions.model_copy(update={"category": into}),
+                    }
+                )
+            )
+        return kept
+
+    rules.change_rules(ctx.config.home, moved)
     _categories_changed(ctx)
     return CategoryList(categories=category_rows(ctx))
+
+
+def _sender_emails(ctx: Context, senders: list[str]) -> dict[str, int]:
+    if not senders:
+        return {}
+    marks = ",".join("?" * len(senders))
+    return {
+        row["sender"]: row["n"]
+        for row in ctx.bus.db.fetch_all(
+            "SELECT LOWER(from_addr) AS sender, COUNT(*) AS n FROM messages"  # noqa: S608
+            f" WHERE account = ? AND LOWER(from_addr) IN ({marks}) GROUP BY LOWER(from_addr)",
+            (accounts.current_account(ctx.config), *senders),
+        )
+    }
+
+
+def _by_size(senders: list[str], emails: dict[str, int]) -> list[SenderCount]:
+    return sorted(
+        (SenderCount(sender=sender, emails=emails.get(sender, 0)) for sender in senders),
+        key=lambda item: (-item.emails, item.sender),
+    )
+
+
+@mail_module.query("categories.mixed")
+def mixed_folders(query: ListMixedFolders, ctx: Context) -> MixedFolders:
+    """Folders on both sides: some senders the AI reads, some it doesn't. Each is split once, so
+    every folder lives in one place."""
+    found = []
+    for name, senders in sorted(sender_sides(ctx).items()):
+        row = folders.find(ctx.bus.db, name)
+        if row is None or not row["ai_reads"] or name in folders.KEPT_WHOLE:
+            continue
+        read = sorted(sender for sender, kept in senders.items() if not kept)
+        kept = sorted(sender for sender, kept in senders.items() if kept)
+        if not read or not kept:
+            continue
+        emails = _sender_emails(ctx, read + kept)
+        found.append(
+            MixedFolder(
+                name=name,
+                read_senders=_by_size(read, emails),
+                kept_senders=_by_size(kept, emails),
+                read_emails=sum(emails.get(sender, 0) for sender in read),
+                kept_emails=sum(emails.get(sender, 0) for sender in kept),
+                suggested=folders.suggest_kept_name(ctx.bus.db, name, kept),
+            )
+        )
+    return MixedFolders(folders=found)
+
+
+@mail_module.command("categories.split")
+def split_folders(command: SplitFolders, ctx: Context) -> CategoryList:
+    """The half the AI reads keeps the name; the half kept from it becomes a folder of its own
+    at the top of Kept from the AI, its senders' mail and rules with it. Undo puts it back."""
+    for split in command.splits:
+        if command.undo:
+            _unsplit(ctx, split.name, split.kept_name)
+            continue
+        sides = sender_sides(ctx).get(split.name, {})
+        kept = sorted(sender for sender, is_kept in sides.items() if is_kept)
+        if not kept:
+            continue
+        _make_kept_folder(ctx, split.kept_name)
+        for sender in kept:
+            sorting.move_sender(
+                ctx, sender, reads=False, folder=split.kept_name, keep_folder=False, refile=True
+            )
+    _categories_changed(ctx)
+    return CategoryList(categories=category_rows(ctx))
+
+
+def _make_kept_folder(ctx: Context, name: str) -> None:
+    """A new folder at the top of Kept from the AI. One already there by that name is joined."""
+    existing = folders.find(ctx.bus.db, name)
+    if existing is not None and not existing["ai_reads"]:
+        return
+    name = folders.check_name(ctx.bus.db, name)
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO mail_categories (name, source, in_priority, proposed, why, created, mode,"
+            " description, ai_reads) VALUES (?, 'user', 0, 0, ?, ?, 'exact', ?, 0)",
+            (name, "Split from a folder on both sides", datetime.now(UTC).isoformat(), name),
+        )
+
+
+def _unsplit(ctx: Context, name: str, kept_name: str) -> None:
+    senders = sorted(sender_sides(ctx).get(kept_name, {}))
+    for sender in senders:
+        sorting.move_sender(
+            ctx, sender, reads=False, folder=name, keep_folder=False, refile=True, strict=False
+        )
+    with ctx.bus.db.transaction() as tx:
+        tx.execute("UPDATE mail_categories SET parent = NULL WHERE parent = ?", (kept_name,))
+        tx.execute("DELETE FROM mail_categories WHERE name = ?", (kept_name,))
+
+
+FOLDER_TREE_UPGRADE = "mail_folder_tree_upgrade_001"
+
+
+def _folder_tree_upgrade(ctx: Context) -> None:
+    """Once for each Home: folders named like paths become folders inside folders, those under
+    Automated move to the top of Kept from the AI, and a folder whose every rule keeps its mail
+    from the AI is put there too. A folder with senders on both sides waits for its split."""
+    db = ctx.bus.db
+    if db.fetch_all("SELECT 1 FROM migrations WHERE id = ?", (FOLDER_TREE_UPGRADE,)):
+        return
+    paths = sorted(
+        (
+            row["name"]
+            for row in db.fetch_all("SELECT name FROM mail_categories WHERE name LIKE '%/%'")
+        ),
+        key=lambda name: name.count("/"),
+    )
+    became: dict[str, str] = {}
+    for path in paths:
+        above, _, leaf = path.rpartition("/")
+        new = folders.free_name(db, leaf.strip() or path.replace("/", " "), keep=path)
+        if new.casefold() == path.casefold():
+            new = path.replace("/", " ")
+        _rename_folder(ctx, path, new)
+        parent = None if above == folders.AUTOMATED else became.get(above, above)
+        with db.transaction() as tx:
+            if parent and folders.find(tx, parent) is not None:
+                folders.move(tx, new, parent, None)
+            else:
+                folders.move(tx, new, None, False if above == folders.AUTOMATED else None)
+        became[path] = new
+    stored = rules.load_rules(ctx.config.home)
+    moved = bool(paths)
+    with db.transaction() as tx:
+        for row in tx.execute(
+            "SELECT name FROM mail_categories WHERE ai_reads = 1 AND parent IS NULL AND proposed = 0"
+            " AND mode = 'exact'"
+        ).fetchall():
+            skips = [
+                rule.actions.skip_agent
+                for rule in stored
+                if rule.enabled and rule.actions.category == row["name"]
+            ]
+            if skips and all(skips):
+                folders.move(tx, row["name"], None, False)
+                moved = True
+        tx.execute("INSERT INTO migrations (id) VALUES (?)", (FOLDER_TREE_UPGRADE,))
+    if moved:
+        _categories_changed(ctx)
 
 
 @mail_module.command("categories.decide")

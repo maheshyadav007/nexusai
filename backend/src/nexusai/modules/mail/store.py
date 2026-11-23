@@ -26,6 +26,7 @@ from nexusai.contracts.mail import (
 from nexusai.kernel import textmatch
 from nexusai.kernel.config import MailConfig
 from nexusai.kernel.database import Database, Migration
+from nexusai.modules.mail import folders
 from nexusai.modules.mail.attachments import classify
 from nexusai.modules.mail.parse import (
     ParsedMessage,
@@ -275,12 +276,20 @@ ROLE_RANK = {
 }
 # Mail only in these stays in its own folder: no agent, search or Documents sees it.
 SET_APART = ("junk", "trash")
+# A folder's side comes from its home; every folder in Kept from the AI has ai_reads = 0.
+KEPT_FOLDERS = (
+    "(SELECT name FROM mail_categories WHERE ai_reads = 0 UNION SELECT 'Automated'"
+    " UNION SELECT 'Calendar')"
+)
 FOLDER_FILTERS = {
     **{name: f"{column} = 1" for name, column in THREAD_COLUMNS.items()},
     # What came in, wherever it's been filed since.
     "all": "(in_inbox = 1 OR in_archive = 1)",
     "starred": "(flagged = 1 AND (in_inbox = 1 OR in_archive = 1 OR in_sent = 1 OR in_drafts = 1 OR in_other = 1))",
     "important": "(in_inbox = 1 AND (importance = 'high' OR status = 'waiting_on_you'))",
+    # The two homes: what the AI reads, and what's kept from it, each without what's archived.
+    "reads": f"(in_inbox = 1 AND (category IS NULL OR category NOT IN {KEPT_FOLDERS}))",
+    "kept": f"(in_inbox = 1 AND category IN {KEPT_FOLDERS})",
     "priority": (
         "(in_inbox = 1 AND (importance = 'high' OR status = 'waiting_on_you'"
         " OR (category IS NULL AND extra_categories = '[]')"
@@ -806,8 +815,9 @@ def row_of(row: sqlite3.Row) -> ThreadRow:
     )
 
 
-# One conversation can be in several categories, and the first is the one Priority goes by.
-IN_CATEGORY = "(category = ? OR EXISTS (SELECT 1 FROM json_each(extra_categories) WHERE value = ?))"
+# A folder holds its own mail and everything in the folders under it. Older conversations can
+# still be in more than one folder; new ones are filed in exactly one.
+IN_CATEGORY = folders.in_tree()
 IN_LOCATION = (
     "id IN (SELECT m.thread_id FROM message_locations l JOIN messages m ON m.id = l.message"
     " WHERE l.account = ? AND l.folder = ?)"
@@ -1178,15 +1188,13 @@ def _filters(account: str, query: SearchMail) -> tuple[list[str], list[object]]:
         conditions.append("m.date <= ?")
         params.append(query.date_to)
     if query.category:
-        conditions.append(
-            "(t.category = ? OR EXISTS (SELECT 1 FROM json_each(t.extra_categories) WHERE value = ?))"
-        )
+        conditions.append(folders.in_tree("t."))
         params += [query.category, query.category]
     if query.has_attachment is not None:
         conditions.append("m.has_attachments = ?")
         params.append(int(query.has_attachment))
     if query.folder:
-        if query.folder in {"priority", "important", "starred", "all"}:
+        if query.folder in {"priority", "important", "starred", "all", "reads", "kept"}:
             conditions.append(FOLDER_FILTERS[query.folder])
         else:
             conditions.append(f"t.{THREAD_COLUMNS[query.folder]} = 1")

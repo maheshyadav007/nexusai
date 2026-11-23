@@ -33,7 +33,7 @@ test("desktop header integrates actions and exposes staged update controls", asy
   await expect(page.locator(".desktop-caption")).toBeVisible();
   await expect(page.locator("#nexus-window-tools")).not.toBeEmpty();
   await expect(page.locator("header.h-topbar")).toHaveCount(0);
-  await expect(page.getByRole("region", { name: "Categories and custom folders" })).toBeVisible();
+  await expect(page.getByTestId("nav-home-reads")).toBeVisible();
   const nav = page.getByRole("navigation", { name: "Main navigation" });
   await nav.getByRole("link", { name: "Tasks", exact: true }).scrollIntoViewIfNeeded();
   await expect(nav.getByRole("link", { name: "Tasks", exact: true })).toBeInViewport();
@@ -74,21 +74,23 @@ test("chat launcher stays fixed at the right and the document does not scroll", 
   await page.screenshot({ path: "test-results/review-today.png" });
 });
 
-test("empty categories stay hidden from the sidebar after navigation", async ({ page }) => {
+test("a new folder stays in its home, empty or not, after navigation", async ({ page }) => {
   await page.goto("/today");
+  const nav = page.getByRole("navigation", { name: "Main navigation" });
   const names = [`Review empty A ${Date.now()}`, `Review empty B ${Date.now()}`];
   for (const name of names) {
-    await page.getByRole("button", { name: "New category", exact: true }).click();
-    const dialog = page.getByRole("dialog");
+    await nav.getByRole("link", { name: "Inbox", exact: true }).click({ button: "right" });
+    await page.getByRole("menuitem", { name: "New folder…" }).click();
+    const dialog = page.getByRole("dialog", { name: "New folder" });
     await dialog.getByRole("textbox", { name: "Name", exact: true }).fill(name);
-    await dialog.getByRole("button", { name: "Create category", exact: true }).click();
+    await dialog.getByRole("radio", { name: "The AI decides" }).click();
+    await dialog.getByRole("textbox", { name: "Description", exact: true }).fill("Reviews of empty folders");
+    await dialog.getByRole("button", { name: "Create folder", exact: true }).click();
     await expect(page).toHaveURL(new RegExp(encodeURIComponent(name) + "$"));
   }
   await page.getByRole("link", { name: "Today", exact: true }).click();
-  const nav = page.getByRole("navigation", { name: "Main navigation" });
-  for (const name of names) await expect(nav.getByRole("link", { name, exact: true })).toHaveCount(0);
-  await page.reload();
-  for (const name of names) await expect(nav.getByRole("link", { name, exact: true })).toHaveCount(0);
+  await nav.getByTestId("nav-home-reads").getByRole("button", { name: /Show all/ }).click().catch(() => undefined);
+  for (const name of names) await expect(nav.getByRole("link", { name, exact: true })).toHaveCount(1);
 });
 
 test("web settings offer browser actions instead of desktop process controls", async ({ page }) => {
