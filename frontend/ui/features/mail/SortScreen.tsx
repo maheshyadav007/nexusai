@@ -27,7 +27,7 @@ import { TextLink } from "@/ui/primitives/TextLink";
 import { phrase } from "@/ui/features/settings/RulesSettings";
 import { categoryHref } from "@/ui/shell/customMail";
 import { EditFolder } from "@/ui/shell/EditFolder";
-import { useShownFolders } from "@/ui/shell/hiddenFolders";
+import { useHiddenFolders, useShownFolders } from "@/ui/shell/hiddenFolders";
 import { t, tn } from "@/ui/strings";
 
 /** Where each sender stands: its side, and the folder card it sits in. `place` is the folder's
@@ -39,7 +39,9 @@ interface Choice {
 }
 type Choices = Record<string, Choice>;
 /** One folder card: a side, a folder, the senders in it. */
-type Card = { key: string; side: Choice["side"]; place: string; members: SortSender[]; real: boolean };
+/** One folder card: a side, a folder, the senders in it. A group is senders in no folder that
+ *  share a label, listed greyed like a folder so every one can be seen and ticked into one. */
+type Card = { key: string; side: Choice["side"]; place: string; members: SortSender[]; real: boolean; group?: boolean };
 
 // Lists show this many senders until opened, so the biggest are what shows.
 const SHOWN = 8;
@@ -182,8 +184,9 @@ function Sorter({ senders, owner, total, calendar, alreadySorted, lead, onDone, 
       }
       for (const item of suggested) if (!declined.has(item.name)) await command("categories.decide", { name: item.name, accept: true });
       // What shows in the sidebar, as ticked here.
-      const names = (side: Choice["side"]) => folders(side).filter(ticked).map((card) => card.place.trim()).filter(Boolean);
-      await shownFolders.setShown({ reads: names("reads"), kept: names("ignores") });
+      const all = [...folders("reads"), ...folders("ignores")];
+      const names = (cards: readonly Card[]) => cards.map((card) => card.place.trim()).filter(Boolean);
+      await shownFolders.setShown(names(all.filter(ticked)), names(all.filter((card) => !ticked(card))));
       return done;
     },
     onSuccess: onDone,
@@ -207,16 +210,38 @@ function Sorter({ senders, owner, total, calendar, alreadySorted, lead, onDone, 
   const automated = cardFor("ignores", AUTOMATED);
   const cards = [...found.values()];
   const folders = (side: Choice["side"]) => cards.filter((c) => c.side === side && c !== inbox && c !== automated).sort((a, b) => sizeOf(b.members) - sizeOf(a.members));
-  // In the sidebar: ticked by hand, or as saved before, or among the K biggest.
-  const saved = (side: Choice["side"]) => shownFolders.shown(side === "reads" ? "reads" : "kept");
+  // Every sender in no folder, by label, so each side lists all of its mail, to scroll and tick.
+  const groupsOf = (side: Choice["side"]) => [...Map.groupBy((side === "reads" ? inbox : automated).members.filter((s) => !s.folder), (s) => s.label).entries()].map(([label, members]): Card => {
+    const group: Card = { key: `${side}|~${keyOf(label)}`, side, place: label, members, real: false, group: true };
+    found.set(group.key, group);
+    return group;
+  });
+  const listed = { reads: [...folders("reads"), ...groupsOf("reads")], ignores: [...folders("ignores"), ...groupsOf("ignores")] };
+  for (const side of ["reads", "ignores"] as const) listed[side].sort((a, b) => sizeOf(b.members) - sizeOf(a.members));
+  // In the sidebar: ticked by hand, or as chosen before, or among the K biggest.
+  const { hidden: offSidebar } = useHiddenFolders();
   const ticked = (card: Card) => {
+    if (card.group) return false;
     const hand = ticks[card.key];
     if (hand !== undefined) return hand;
-    const before = saved(card.side);
-    if (before && !Object.keys(ticks).length && shownK[card.side] === firstK[card.side]) return before.some((name) => keyOf(name) === keyOf(card.place));
+    if (shownFolders.chosen && !Object.keys(ticks).length && shownK[card.side] === firstK[card.side]) return ![...offSidebar].some((name) => keyOf(name) === keyOf(card.place));
     return folders(card.side).indexOf(card) < shownK[card.side];
   };
-  const tick = (card: Card, on: boolean) => setTicks((current) => ({ ...current, [card.key]: on }));
+  const tick = (card: Card, on: boolean) => {
+    // A group ticked becomes a folder of its own, shown in the sidebar.
+    if (card.group && on) {
+      move(card.members, { side: card.side, place: card.place });
+      setTicks((current) => ({ ...current, [cardKey(card.side, card.place)]: true }));
+      return;
+    }
+    // A folder only this page made, unticked, goes back to being a group in no folder. One that
+    // exists stays a folder and only leaves the sidebar.
+    if (!on && !card.real && !existing.has(keyOf(card.place))) {
+      move(card.members, card.side === "reads" ? { side: "reads", place: "" } : { side: "ignores", place: AUTOMATED });
+      return;
+    }
+    setTicks((current) => ({ ...current, [card.key]: on }));
+  };
   const [modal, setModal] = useState<{ key: string; tab: FolderTab } | null>(null);
   const openCard = (card: Card, tab: FolderTab) => setModal({ key: card.key, tab });
   const priority = useMailFolders().data?.counts?.priority ?? 0;
@@ -263,7 +288,7 @@ function Sorter({ senders, owner, total, calendar, alreadySorted, lead, onDone, 
   // goes with its name. The "No folder" cards swap.
   const flip = (card: Card) => {
     const side = card.side === "reads" ? "ignores" : "reads";
-    if (noFolder(card.place)) { move(card.members, across(card.side)); return; }
+    if (noFolder(card.place) || card.group) { move(card.members, across(card.side)); return; }
     const key = keyOf(card.place);
     if (real(card.side, card.place) || flipped[key]) setFlipped((current) => {
       const next = { ...current };
@@ -284,10 +309,10 @@ function Sorter({ senders, owner, total, calendar, alreadySorted, lead, onDone, 
         <Button variant="quiet" className="py-px" onClick={() => { setChoices((current) => ({ ...current, ...moved.before })); setMoved(null); }}>{t("mail.sort.undo")}</Button>
       </div>
     ) : null;
-  const other = (card: Card) => (!noFolder(card.place) ? found.get(cardKey(card.side === "reads" ? "ignores" : "reads", card.place))?.members.length ?? 0 : 0);
+  const other = (card: Card) => (!noFolder(card.place) && !card.group ? found.get(cardKey(card.side === "reads" ? "ignores" : "reads", card.place))?.members.length ?? 0 : 0);
   // A kept folder only this page has made is named here, before it exists.
-  const naming = (card: Card) => card.side === "ignores" && !noFolder(card.place) && !card.real && !real("ignores", card.place) && !flipped[keyOf(card.place)] && card.members.length > 0;
-  const biggestOf = (side: Choice["side"]) => Math.max(1, ...folders(side).map((c) => sizeOf(c.members)));
+  const naming = (card: Card) => !card.group && card.side === "ignores" && !noFolder(card.place) && !card.real && !real("ignores", card.place) && !flipped[keyOf(card.place)] && card.members.length > 0;
+  const biggestOf = (side: Choice["side"]) => Math.max(1, ...listed[side].map((c) => sizeOf(c.members)));
   const show = (card: Card) => <FolderCard key={naming(card) ? card.members[0]?.sender ?? card.key : card.key} card={card} also={other(card)} size={noFolder(card.place) ? undefined : sizeOf(card.members) / biggestOf(card.side)} {...(noFolder(card.place) ? {} : { tick: { on: ticked(card), set: (on: boolean) => tick(card, on) } })} onRename={naming(card) ? (name) => rename(card, name) : undefined} />;
   const choiceOf = (s: SortSender) => choice(s);
 
@@ -318,13 +343,13 @@ function Sorter({ senders, owner, total, calendar, alreadySorted, lead, onDone, 
         <Column title={t("mail.sort.reads")} reads count={counted(reads)} k={<BiggestK side="reads" value={shownK.reads} onChange={(n) => biggest("reads", n)} />}>
           {movedNote("reads")}
           {suggested.length ? <Suggested items={suggested} declined={declined} onChange={(name, on) => setDeclined((current) => { const next = new Set(current); if (on) next.delete(name); else next.add(name); return next; })} /> : null}
-          <TickedCards cards={folders("reads")} ticked={ticked} render={show} />
+          <TickedCards cards={listed.reads} ticked={ticked} render={show} />
           {show(inbox)}
           <NewFolder side="reads" onMake={(place) => setMade((list) => [...list, { side: "reads", place }])} />
         </Column>
         <Column title={t("mail.sort.ignores")} count={counted(ignores)} k={<BiggestK side="ignores" value={shownK.ignores} onChange={(n) => biggest("ignores", n)} />}>
           {movedNote("ignores")}
-          <TickedCards cards={folders("ignores")} ticked={ticked} render={show} />
+          <TickedCards cards={listed.ignores} ticked={ticked} render={show} />
           {show(automated)}
           <NewFolder side="ignores" onMake={(place) => setMade((list) => [...list, { side: "ignores", place }])} />
           {calendar ? <p className="text-sm text-ink-muted">{t("mail.sort.calendar", { count: fmt(calendar) })}</p> : null}
@@ -450,6 +475,7 @@ function FolderCard({ card, also, size, tick, onRename }: { card: Card; also: nu
     onDragLeave={() => setOver(false)}
     onDrop={(event) => { setOver(false); const sender = all.flatMap((c) => c.members).find((s) => s.sender === event.dataTransfer.getData(DRAG)); if (sender) move([sender], to); }}
     data-ticked={tick ? String(tick.on) : undefined}
+    data-group={card.group ? "true" : undefined}
     className={`flex flex-col gap-2 rounded-lg border p-3 transition-shadow duration-normal ${greyed ? "bg-transparent" : "bg-surface-raised"} ${catchAll ? "border-dashed border-line-strong" : "border-line-subtle"} ${over ? "ring-2 ring-accent-default" : ""} ${flashClass(landed)}`}>
     <div data-testid="sort-folder-head" className="flex items-center gap-3">
       {tick ? <Checkbox hideLabel label={t("mail.sort.tick", { name })} checked={tick.on} onChange={tick.set} /> : null}
@@ -520,6 +546,7 @@ function FolderRule({ card, existing, onEdit }: { card: Card; existing: MailCate
   const mine = (rules.data?.rules ?? []).filter((rule) => !noFolder(card.place) && keyOf(rule.actions.category ?? "") === keyOf(card.place));
   const lines = mine.flatMap((rule) => rule.conditions.map(phrase));
   const lead = noFolder(card.place) ? t("mail.sort.rule.lead.none")
+    : card.group ? t("mail.sort.rule.lead.group")
     : !existing ? t("mail.sort.rule.lead.will")
     : lines.length ? t("mail.sort.rule.lead.rule")
     : existing.mode === "smart" ? t("mail.sort.rule.lead.ai", { description: existing.description || existing.name })

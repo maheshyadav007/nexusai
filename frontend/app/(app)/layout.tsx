@@ -5,6 +5,7 @@ import { AssistantProvider } from "@/ui/features/assistant/AssistantProvider";
 import { HideFromAiProvider } from "@/ui/features/mail/HideFromAi";
 import { SourcePreviewProvider } from "@/ui/features/sources/SourcePreviewProvider";
 import { SearchBox } from "@/ui/features/search/SearchBox";
+import { SetupRow } from "@/ui/features/today/FinishSetup";
 import { WaitingInbox } from "@/ui/features/today/WaitingInbox";
 import { AppGate } from "@/ui/shell/AppGate";
 import { AppShell } from "@/ui/shell/AppShell";
@@ -15,7 +16,7 @@ export default function AppLayout({ children, modal }: { children: ReactNode; mo
       <AssistantProvider>
         <SourcePreviewProvider>
           <HideFromAiProvider>
-            <AppShell room={<AssistantRoom />} search={<SearchBox />} waiting={<WaitingInbox />}>{children}</AppShell>
+            <AppShell room={<AssistantRoom />} search={<SearchBox />} waiting={<WaitingInbox />} setup={<SetupRow />}>{children}</AppShell>
             {modal}
             <AgentToasts />
             <AssistantDock />

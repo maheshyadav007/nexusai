@@ -49,7 +49,18 @@ test("sorting files tool mail in a folder of its own in Hidden from AI, renamed,
   expect(start).toBeLessThanOrEqual(3);
   for (let n = start; n > 0; n -= 1) await k.getByRole("button", { name: "One fewer" }).click();
   await expect(k.getByRole("status")).toHaveText("0");
-  await expect(page.locator('[data-testid="sort-folder"][data-side="reads"]:not([data-folder=""])')).toHaveCount(0);
+  // Every group is still listed, greyed with an empty tick, to scroll and check; ticking one
+  // gives it a folder, and unticking takes it back.
+  const groups = page.locator('[data-testid="sort-folder"][data-side="reads"][data-group="true"]');
+  expect(await groups.count()).toBeGreaterThan(0);
+  const group = groups.first();
+  const label = (await group.getAttribute("data-folder")) as string;
+  await expect(group.getByRole("checkbox")).not.toBeChecked();
+  await group.getByRole("checkbox").click();
+  const made = page.locator(`[data-testid="sort-folder"][data-side="reads"][data-folder="${label}"]:not([data-group])`);
+  await expect(made.getByRole("checkbox")).toBeChecked();
+  await made.getByRole("checkbox").click();
+  await expect(page.locator(`[data-testid="sort-folder"][data-side="reads"][data-folder="${label}"][data-group="true"]`)).toBeVisible();
   // The page draws where the mail goes, with its counts.
   await expect(page.getByTestId("sort-flow")).toBeVisible();
   // Which side is said in words, as the sidebar says it: a press moves the whole folder across,

@@ -17,7 +17,7 @@ function useOnboardingCommand<T>(run: (input: T) => Promise<OnboardingState>) {
 
 export const useSetStep = () => useOnboardingCommand((step: string) => command("onboarding.setStep", { step }));
 export const useFinishOnboarding = () => useOnboardingCommand(() => command("onboarding.finish", {}));
-export const useDismissChecklist = () => useOnboardingCommand(() => command("onboarding.dismissChecklist", {}));
+export const useDismissChecklist = () => useOnboardingCommand((back: boolean = false) => command("onboarding.dismissChecklist", { back }));
 
 export function useProfile() {
   const ready = useHomeReady();

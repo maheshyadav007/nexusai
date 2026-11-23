@@ -44,6 +44,9 @@ def test_the_checklist_stays_hidden_once_dismissed(client: TestClient) -> None:
     state = client.post("/api/commands/onboarding.dismissChecklist", json={}).json()
     assert state["checklist_dismissed"] is True and state["completed"] is True
     assert client.post("/api/queries/onboarding.state").json()["checklist_dismissed"] is True
+    # From the sidebar's Setup row it comes back to Today.
+    back = client.post("/api/commands/onboarding.dismissChecklist", json={"back": True}).json()
+    assert back["checklist_dismissed"] is False and back["completed"] is True
 
 
 def test_a_starter_set_can_be_told_from_the_persons_own_words(client: TestClient) -> None:

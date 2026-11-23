@@ -89,8 +89,12 @@ test("a new person goes from landing through setup into the app, and setup resum
   await expect(page).toHaveTitle(/\S/);
   await noViolations(page);
   await welcome.getByRole("button", { name: "Got it" }).click();
+  // Mail isn't connected, so setup stays on Today with just that first, and no Later.
   const checklist = page.getByTestId("finish-setup");
-  await expect(checklist.getByText("Answer a few questions")).toBeVisible();
+  await expect(checklist).toContainText("Finish setting up NexusAI");
+  await expect(checklist.getByText("Connect your mail")).toBeVisible();
+  await expect(checklist).toContainText("more after this");
+  await expect(checklist.getByRole("button", { name: "Later" })).toHaveCount(0);
   await expect(checklist.getByText("Bring in old mail")).toHaveCount(0);
   await noViolations(page);
   await page.reload();

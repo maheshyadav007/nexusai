@@ -177,11 +177,47 @@ Each task: what, why, where, done when.
 - **4.4 The reverse, "Let the AI read",** from a hidden email or folder, with the same follow-through.
 - **Done when:** on Gmail, hiding a newsletter from its matter closes the matter, removes its suggestions, files its old and new mail in Hidden, and Undo brings everything back.
 
-### Phase 5: Today cleanup (FOLDERS_PLAN Phase 6; mockup first)
+### Phase 5: Today cleanup (boards 18–19) — built 2026-11-23
 
 Unchanged from `docs/FOLDERS_PLAN.md` Phase 6: system status off Today, the setup strip, brief coverage as a quiet line.
 
 ---
+
+### Phase 6: One menu instead of buttons (board 20) — built 2026-11-23
+
+**Purpose:** fewer buttons on screen. What you do to a thing lives in its right-click menu, the same list wherever that thing appears, like an email's menu (`useThreadActions`) already is. Only the one decision a screen is for stays a button.
+
+| Where | Today | After |
+|---|---|---|
+| Matter header | Hide from AI button, Done button | **Done stays.** Hide from AI moves to the matter menu |
+| Matter list row, Brief row, Week lane | Brief rows have a Done button; Week lanes show a hide icon on hover | Right-click any of them: the matter menu |
+| Matter timeline | "Jump to start" button | In the matter menu and each entry's menu as "Go to the start"; the Home key does it too |
+| Related matters | A Merge button on each | Right-click the related matter: Open, Merge into this |
+| "Conversations in this matter" list | A "Not part of this" button on each | Right-click a timeline entry or a conversation: Open the email, Not part of this matter, Hide from AI… |
+| Suggested to-dos | Accept, Decline | **Stay.** They're the decision |
+| Email view toolbar | Archive, Delete, Unread, Star | **Stay.** Standard for mail; the rest is in the email's menu already |
+| Sort page | Rule per folder | **Stays** (asked for) |
+
+- **The matter menu** (one list, `useMatterActions(matter)` beside `useThreadActions`): Open (where it isn't open), Done / Open again, Merge with… (its related matters), Go to the start, Ask Posty about it, Hide from AI… (opens the same dialog). Used by the matter header, the matter list, Brief rows and Week lanes through the existing `ContextMenu` primitive.
+- **A timeline entry's menu:** Open the email, Go to the start, Not part of this matter, Hide from AI…
+- **Reachable without a mouse:** the context-menu key or Shift+F10 on the focused row, and a long press on touch (Radix does both). The visible buttons it replaces go away.
+- **Tests:** e2e for each menu, and the existing "Done", "Merge" and "Not part of this" flows through their menus.
+
+### Phase 7: Every group listed on both sides of the Sort page (board 14) — built 2026-11-23
+
+**Purpose:** the person scrolls one list per side and sees everything, instead of senders hiding inside "No folder".
+
+- **Today:** a side lists only its folders (the K biggest, ticked, plus any made before, greyed when unticked). Every other sender sits inside the "No folder" card, seen only by opening it.
+- **After:** each side lists **every sender group** (senders grouped by their label, as the kept side already groups them) as a row, biggest first, all visible by scrolling. The K biggest are ticked: each becomes a folder of its own and shows in the sidebar. The rest are listed **greyed**, with an empty tick. Ticking one makes it a folder and moves it up; unticking moves it down and, on Save, its mail goes to the side's "No folder". The "No folder" card is just the last row, and counts only what's left in it.
+- **Same on both sides,** and the same window (Emails, Senders, Rule) from any row, folder or not.
+- **Sort lab:** the same list on its hidden side.
+- **Tests:** a first sort lists every group on both sides; ticking a greyed one makes the folder on Save; unticking sends its mail to "No folder".
+
+**Phases 5–7, as built**
+- **Today** (`TodayScreen.tsx`): no status line and no "automated messages filed"; a red line per Cockpit problem with "Fix it" to its link, and a red dot on Tools; the brief ends with "Covers mail up to {time}".
+- **Setup** (`FinishSetup.tsx`): one strip, "Finish setting up NexusAI · n of m done", only the steps left; Later moves it to a "Setup n of m" row under Today in the sidebar (`SetupRow`, passed into the shell from the app layout), which brings it back (`onboarding.dismissChecklist` with `back`). Mail or a model missing, or a failed step, keeps it on Today with no Later.
+- **Menus** (`matters/matterActions.ts`; `ContextMenu` now has dividers and lists of their own): the matter menu on the matter header, list, Brief rows and Week lanes; a timeline entry's menu; Open and Merge on related matters; Open, Not part of this matter and Hide from AI on its conversations. The Hide from AI, Jump to start, Merge, Not part of this, Brief Done and Week hide buttons are gone; Home goes to the start.
+- **Sort page:** every sender group in no folder is listed on its side, greyed with an empty tick; ticking makes it a folder and shows it, unticking a folder made on the page turns it back into a group; an existing folder unticked only leaves the sidebar. Unticked folders are saved as hidden from the sidebar (`useHiddenFolders`), so a folder made or renamed later shows by default. The sort lab already lists each hidden sender with its own tick.
 
 ## 5. Order
 

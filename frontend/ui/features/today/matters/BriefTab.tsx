@@ -9,13 +9,15 @@ import { AskAgent } from "@/ui/features/agent/AskAgent";
 import { fullHref, mailSource } from "@/ui/features/sources/kinds";
 import { Icon, type IconName } from "@/ui/icons";
 import { Button } from "@/ui/primitives/Button";
+import { ContextMenu } from "@/ui/primitives/ContextMenu";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Presence, Rise } from "@/ui/primitives/Motion";
 import { Pressable } from "@/ui/primitives/Pressable";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { MarkGlyph } from "@/ui/primitives/Track";
 import { t } from "@/ui/strings";
-import { KIND_MARK, SourceLink, countsOf, kindLabel, useDue, useMatterDoneWithUndo, useTodayView } from "./parts";
+import { useMatterActions } from "./matterActions";
+import { KIND_MARK, SourceLink, countsOf, kindLabel, useDue, useTodayView } from "./parts";
 
 // How long a conversation can sit quietly before it's worth a nudge.
 const QUIET_DAYS = 3;
@@ -75,11 +77,12 @@ function ChangeLine({ change, onOpen }: { change: MatterChange; onOpen: () => vo
 
 function MatterCard({ matter, chase = false }: { matter: MatterRow; chase?: boolean }) {
   const due = useDue();
-  const finish = useMatterDoneWithUndo();
+  const actions = useMatterActions(matter);
   const { go } = useTodayView();
   const when = matter.due ? due(matter.due) : null;
   const thread = matter.latest ? Number(matter.latest.ref) : null;
   return (
+    <ContextMenu items={actions}>
     <Rise as="li" settle data-testid="matter-row" className="flex flex-col gap-2 border-t border-line-subtle py-3 first:border-t-0">
       <div className="flex items-baseline justify-between gap-3">
         <span className="flex min-w-0 items-center gap-2">
@@ -99,9 +102,9 @@ function MatterCard({ matter, chase = false }: { matter: MatterRow; chase?: bool
       <span className="flex flex-wrap items-center gap-2">
         {chase && thread ? <AskAgent context={[`mail:${thread}`]} title={t("today.chase.title")} label={t("today.chase.draft")} text={t("today.chase.ask")} /> : null}
         {!chase && thread && matter.state === "waiting_on_you" ? <Link href={`${fullHref(mailSource(thread))}?draft`} data-testid="today-draft" className="focus-ring press ai-glow relative inline-flex items-center rounded-md px-3 py-2 text-md font-medium text-ink-primary">{t("mail.draftReply")}</Link> : null}
-        <Button variant="quiet" data-testid="matter-done" onClick={() => finish(matter)}>{t("matters.done")}</Button>
       </span>
     </Rise>
+    </ContextMenu>
   );
 }
 

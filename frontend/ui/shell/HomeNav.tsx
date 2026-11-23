@@ -25,7 +25,7 @@ export function HomeNav({ side, collapsed }: { side: Side; collapsed: boolean })
   const folders = useMailFolders();
   const pathname = usePathname();
   const { hidden } = useHiddenFolders();
-  const { shown: chosen } = useShownFolders();
+  const { chosen } = useShownFolders();
   const [all, setAll] = useState(false);
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   const items = categories.data?.categories ?? [];
@@ -58,8 +58,7 @@ export function HomeNav({ side, collapsed }: { side: Side; collapsed: boolean })
   const top = rows.filter((row) => row.depth === 0);
   const biggest = Math.max(1, ...top.map((row) => row.count));
   const rootOf = (row: TreeRow) => [row.item.name, ...ancestors(items, row.item.name)].at(-1) as string;
-  const ticked = chosen(side);
-  const preview = (ticked ? top.filter((row) => ticked.includes(row.item.name)) : top.slice(0, HOME_PREVIEW))
+  const preview = (chosen ? top : top.slice(0, HOME_PREVIEW))
     .filter((row) => !hidden.has(row.item.name))
     .map((row) => row.item.name);
   const opened = current ? rootOf({ item: current, depth: 0, children: 0, unread: 0, count: 0 }) : null;
