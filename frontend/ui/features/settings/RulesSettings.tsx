@@ -41,10 +41,16 @@ export function phrase(condition: RuleCondition): string {
     case "sender_exact": return t("rules.said.from", { sender: value });
     case "tag": return t("rules.said.tag", { tag: value });
     case "subject_prefix": return t("rules.said.startsWith", { value });
+    case "subject": return t("rules.said.has", { value });
     case "has_attachment": return t("rules.field.attachment");
     case "header": return t("rules.said.header", { header: condition.header ?? "", value });
     default: return t("rules.matches", { field: FIELDS.find((item) => item.value === condition.field)?.label ?? condition.field, value });
   }
+}
+
+/** A whole rule in words: every condition it needs, joined. */
+export function phraseRule(rule: MailRule): string {
+  return rule.conditions.map(phrase).join(t("rules.said.and"));
 }
 
 function RuleEditor({ rule, onChange, onRemove, startsOpen }: { rule: MailRule; onChange: (rule: MailRule) => void; onRemove: () => void; startsOpen: boolean }) {

@@ -79,7 +79,8 @@ input[type=text], input[type=password] { font: 14px var(--sans); color: var(--in
 .why { font-size: 11px; color: var(--reads); }
 .emails { grid-column: 1 / -1; border-top: 1px solid var(--line); margin-top: 4px; padding-top: 4px; display: flex; flex-direction: column; font-size: 12px; }
 .emails div { display: flex; gap: 10px; padding: 3px 0; min-width: 0; }
-.emails .subject { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.emails .subject { flex: 1 1 auto; min-width: 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.emails .starts { font-size: 12px; color: var(--muted); }
 .emails .when { color: var(--muted); flex: none; }
 .cat { background: var(--raised); border: 1px solid var(--line-strong); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
 .cat-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: baseline; padding: 0 2px; }
@@ -316,9 +317,11 @@ function row(s, inCard = false) {
   const tick = h("input", { type: "checkbox", checked: st.own, "aria-label": `Own folder for ${st.name}`, onchange: (e) => { st.own = e.target.checked; render(); } });
   const pct = Math.round(s.score * 100);
   const emails = openEmails[s.sender]
-    ? h("div", { class: "emails" }, s.emails.map((email) => h("div", {},
-        h("span", { class: "subject" }, email.subject || "(no subject)"),
-        h("span", { class: "when" }, email.when))))
+    ? h("div", { class: "emails" }, ...s.emails.map((email) => h("div", {},
+        h("span", { class: "subject", title: email.subject }, email.subject || "(no subject)"),
+        h("span", { class: "when" }, email.when))),
+        // Kept from the AI, a sender like this gets a rule for each way its subjects start.
+        ...(s.starts && s.starts.length ? [h("div", { class: "starts" }, `Its subjects start ${s.starts.length === 1 ? "one way" : s.starts.length + " ways"}: ${s.starts.map((x) => `“${x}”`).join(", ")}`)] : []))
     : null;
   return h("div", { class: `row${ignored && st.own ? " own" : ""}` },
     ignored ? tick : move,

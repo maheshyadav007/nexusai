@@ -90,3 +90,45 @@ def test_a_new_address_of_the_same_tool_is_still_filed_by_its_tag() -> None:
     engine = rules.Engine(sort_rules.rules_for("Automated/PLM", ["plm@corp.example"], box))
     (moved,) = engine.decide([mail("[PLM-77] Released", sender="plm-notify9@corp.example")])
     assert not moved.reaches_ai and moved.category == "Automated/PLM"
+
+
+def test_a_sender_whose_subjects_start_the_same_ways_gets_a_rule_for_each() -> None:
+    bank = "alerts@bank.example"
+    box = [
+        *(Seen(bank, f"Your OTP for login is {n}", False) for n in range(6)),
+        *(Seen(bank, f"[Bank] Your statement for month {n}", False) for n in range(3)),
+        Seen(bank, "We have updated our privacy policy", False),
+    ]
+    ways = sort_rules.subject_starts([seen.subject for seen in box])
+    made = sort_rules.rules_for("Bank", [bank], box, starts={bank: ways})
+    assert [[(c.field, c.value) for c in rule.conditions] for rule in made] == [
+        [("sender_exact", bank), ("subject", "your otp for")],
+        [("sender_exact", bank), ("subject", "your statement for")],
+    ]
+    assert rules.describe_rule(made[0]) == (
+        "If it's from alerts@bank.example and the subject has “your otp for”"
+        " → file in Bank, the AI skips it"
+    )
+    engine = rules.Engine(made)
+    otp, new = engine.decide(
+        [mail("Your  OTP for login is 99", sender=bank), mail("Your card is blocked", sender=bank)]
+    )
+    assert not otp.reaches_ai and otp.category == "Bank"
+    # Something new from it isn't what was sorted, so the AI reads it.
+    assert new.reaches_ai
+
+
+def test_a_sender_whose_subjects_vary_keeps_one_rule_for_all_its_mail() -> None:
+    shop = "news@shop.example"
+    box = [Seen(shop, subject, False) for subject in
+           ["Big sale this weekend", "New arrivals for you", "Last chance: 40% off", "Hello again"]]  # fmt: skip
+    assert sort_rules.subject_starts([seen.subject for seen in box]) == []
+    made = sort_rules.rules_for("Shopping", [shop], box, starts={shop: []})
+    assert [[c.field for c in rule.conditions] for rule in made] == [["sender_exact"]]
+
+
+def test_a_subject_starts_after_its_tags_and_before_its_numbers() -> None:
+    assert sort_rules.start_of("[PLM] Workflow task CR-123 is due") == "workflow task cr"
+    assert sort_rules.start_of("Re: [HR] Your  payslip for Oct") == "your payslip for"
+    assert sort_rules.start_of("Order #123 shipped") == ""
+    assert sort_rules.start_of("Invoice: March 2026") == "invoice march"

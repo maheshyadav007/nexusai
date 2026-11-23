@@ -50,6 +50,28 @@ export function TrackMark({ at, shape, tone, label }: { at: number; shape: MarkS
   );
 }
 
+/** A count in a filled circle: several marks shown as one, here and in a track's key. */
+export function CountGlyph({ count, tone }: { count: number; tone: MarkTone }) {
+  return <span aria-hidden className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums text-ink-inverse ring-2 ring-surface-raised ${TONES[tone].fill}`}>{count}</span>;
+}
+
+/** Several events too close to tell apart, as one mark with their count, in the colour of the
+ * last. The tooltip lists them in order, each with when it happened. */
+export function TrackCluster({ at, tone, title, steps }: { at: number; tone: MarkTone; title: string; steps: readonly { when: string; what: string }[] }) {
+  const ref = usePlace<HTMLSpanElement>({ at });
+  const said = [title, ...steps.map((step) => `${step.when} ${step.what}`)].join(". ");
+  return (
+    <Tooltip content={<span className="flex max-w-popover flex-col gap-1 py-1">
+      <span className="font-medium">{title}</span>
+      {steps.map((step, index) => <span key={index} className="flex gap-3"><span className="shrink-0 tabular-nums opacity-70">{step.when}</span><span>{step.what}</span></span>)}
+    </span>}>
+      <span ref={ref} role="img" aria-label={said} tabIndex={0} className="nx-track-at focus-ring rounded-full p-1">
+        <CountGlyph count={steps.length} tone={tone} />
+      </span>
+    </Tooltip>
+  );
+}
+
 /** The stretch between two points: how long something has been going on. */
 export function TrackSpan({ from, to, strong = false }: { from: number; to: number; strong?: boolean }) {
   const ref = usePlace<HTMLSpanElement>({ from, width: Math.max(to - from, 0) });

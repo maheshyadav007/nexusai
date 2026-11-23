@@ -258,8 +258,10 @@ def rule_preview(lab: Lab, chosen: Sorted) -> dict[str, Any]:
     # Kept folders are plain names at the top of Kept from the AI, as the app makes them.
     entries = [(c.name.strip(), c.senders) for c in chosen.categories]
     entries.append((AUTOMATED, chosen.automated))
+    starts = {row.sender: row.starts for row in lab.report.senders}
     made = {
-        name: sort_rules.rules_for(name, senders, seen, owner=owner) for name, senders in entries
+        name: sort_rules.rules_for(name, senders, seen, owner=owner, starts=starts)
+        for name, senders in entries
     }
     decisions = rules.Engine([rule for found in made.values() for rule in found]).decide(lab.mail)
     found = []

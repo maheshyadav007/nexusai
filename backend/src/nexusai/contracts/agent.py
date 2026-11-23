@@ -1726,7 +1726,7 @@ MatterEventKind = Literal[
     "accepted",
     "declined",
 ]
-MatterMarkKind = Literal["in", "sent", "due", "reminder", "closed"]
+MatterMarkKind = Literal["in", "sent", "due", "reminder", "closed", "reopened", "step"]
 
 
 class MatterWork(BaseModel):

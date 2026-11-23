@@ -198,3 +198,45 @@ def test_the_week_has_a_lane_per_matter_with_its_emails(
     start = (date.today() - timedelta(days=21)).isoformat()
     longer = query(client, "matters.week", start=start, days=42)
     assert longer["start"] == start and [m["kind"] for m in longer["lanes"][0]["marks"]] == ["in"]
+
+
+def test_every_step_on_a_task_shows_on_the_week_in_order(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    connect(client, fake)
+    script.replies = [triage_reply(tasks=[{"title": "Send the RCA", "due": "2099-01-08"}])]
+    fake.state.deliver(make_mail(subject="RCA for the field call drops", sender=KARTHIK))
+    triaged(client, "field call drops")
+    wait(lambda: matters(client), "matter")
+    task = query(client, "tasks.list", include_done=True)["tasks"][0]
+    save = {"id": task["id"], "title": task["title"], "thread": task["thread"]}
+    command(client, "tasks.save", **save, proposed=False)
+    command(client, "tasks.save", **save, status="done")
+    command(client, "tasks.save", **save, status="todo")
+    command(client, "tasks.save", **save, status="done")
+
+    def steps() -> list[str] | None:
+        marks = query(client, "matters.week")["lanes"][0]["marks"]
+        said = [m["label"] for m in marks if "Send the RCA" in m["label"]]
+        return said if len(said) == 5 else None
+
+    assert wait(steps, "steps") == [
+        'Suggested: To-do: "Send the RCA"',
+        'Accepted: To-do: "Send the RCA"',
+        'Task done: "Send the RCA"',
+        'Task opened again: "Send the RCA"',
+        'Task done: "Send the RCA"',
+    ]
+
+
+def test_a_task_the_person_keeps_makes_a_matter_of_mail_that_needed_nothing(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    connect(client, fake)
+    script.replies = [triage_reply(status="fyi", importance="low", reason="An update.")]
+    fake.state.deliver(make_mail(subject="Lab move next month"))
+    thread = triaged(client, "Lab move")
+    assert matters(client) == []
+    command(client, "tasks.save", title="Book a slot in the new lab", thread=thread["id"])
+    found = wait(lambda: matters(client), "matter")
+    assert [m["title"] for m in found] == ["Lab move next month"]

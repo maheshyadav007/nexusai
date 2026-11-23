@@ -292,3 +292,13 @@ def test_an_ignored_sender_keeps_all_its_mail_from_the_ai_even_what_names_the_pe
     assert tool.side == "ignores"
     # The folder is the gate: the one that names them stays away from the AI too.
     assert report.quiet == {str(n) for n in range(len(builds) + 1)}
+
+
+def test_only_mail_sent_to_one_person_gets_rules_by_how_its_subjects_start() -> None:
+    bank = [_mail("alerts@bank.example", f"Your OTP for login is {n}", "Use it.") for n in range(5)]
+    sale = [_mail("deals@shop.example", f"Mahesh take off {n}0%", "Shop now", List_Unsubscribe="<https://x>") for n in range(5)]  # fmt: skip
+    report = grouping.score_senders(enumerate_mail(bank + sale))
+    starts = {row.sender: row.starts for row in report.senders}
+    assert starts["alerts@bank.example"] == ["your otp for"]
+    # A newsletter is all one thing: one rule takes all of it, so the next sale stays hidden.
+    assert starts["deals@shop.example"] == []

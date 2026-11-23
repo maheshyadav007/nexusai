@@ -58,6 +58,7 @@ def describe_senders(report: grouping.SenderReport, read: Callable[[str], bytes]
                 "examples": [pattern for pattern, _ in row.examples],
                 "emails": [_summary(key, read(key)) for key in row.members[:SAMPLES]],
                 "folder": "",
+                "starts": row.starts,
             }
         )
     return {

@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { MatterLane, MatterMark } from "@/ui/client/contracts.generated";
-import { useDateOnly, useDateTime } from "@/ui/client/format";
+import { useDateOnly, useDateTime, useTimeOnly } from "@/ui/client/format";
 import { useMattersWeek } from "@/ui/client/work";
 import { Button } from "@/ui/primitives/Button";
 import { EmptyState } from "@/ui/primitives/EmptyState";
@@ -10,7 +10,7 @@ import { ErrorState } from "@/ui/primitives/ErrorState";
 import { IconButton } from "@/ui/primitives/IconButton";
 import { Pressable } from "@/ui/primitives/Pressable";
 import { Skeleton } from "@/ui/primitives/Skeleton";
-import { MarkGlyph, Track, TrackMark, TrackNow, TrackSpan, type MarkShape, type MarkTone } from "@/ui/primitives/Track";
+import { CountGlyph, MarkGlyph, Track, TrackCluster, TrackMark, TrackNow, TrackSpan, type MarkShape, type MarkTone } from "@/ui/primitives/Track";
 import light from "@/ui/theme/themes/nexus-light.json";
 import { t, type StringKey } from "@/ui/strings";
 import { ContextMenu } from "@/ui/primitives/ContextMenu";
@@ -31,7 +31,24 @@ const MARKS: Record<MatterMarkKind, { shape: MarkShape; tone: MarkTone }> = {
   due: { shape: "diamond", tone: "warning" },
   reminder: { shape: "diamondRing", tone: "warning" },
   closed: { shape: "dot", tone: "success" },
+  reopened: { shape: "ring", tone: "success" },
+  step: { shape: "ring", tone: "muted" },
 };
+
+// Marks closer than this many pixels sit on each other, so they show as one numbered mark.
+const APART_PX = 20;
+
+/** The marks, in order, grouped where they'd overlap: each group is their indexes. */
+function closeTogether(points: readonly number[], days: number): number[][] {
+  const groups: number[][] = [];
+  points.forEach((at, index) => {
+    const group = groups.at(-1);
+    const start = group ? (points[group[0] as number] ?? 0) : 0;
+    if (group && (at - start) * days * DAY_PX < APART_PX) group.push(index);
+    else groups.push([index]);
+  });
+  return groups;
+}
 
 function mondayOf(date: Date): Date {
   const day = new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -63,6 +80,7 @@ function Lane({ lane, start, days, now }: { lane: MatterLane; start: Date; days:
   const { go } = useTodayView();
   const moment = useDateTime();
   const day = useDateOnly();
+  const clock = useTimeOnly();
   const strip = useDayCount<HTMLDivElement>(days);
   const matter = lane.matter;
   const actions = useMatterActions(matter);
@@ -71,7 +89,9 @@ function Lane({ lane, start, days, now }: { lane: MatterLane; start: Date; days:
   const open = matter.state !== "done";
   const from = Math.min(...points, open ? nowAt : 1);
   const to = open ? Math.max(...points, Math.min(nowAt, 1)) : Math.max(...points);
-  const label = (mark: MatterMark) => `${mark.time.length > 10 ? moment(mark.time) : day(mark.time)} · ${t(`matters.week.mark.${mark.kind}` as StringKey)}: ${mark.label}`;
+  // A step says what it was; every other mark is named by its kind.
+  const what = (mark: MatterMark) => (mark.kind === "step" ? mark.label : `${t(`matters.week.mark.${mark.kind}` as StringKey)}: ${mark.label}`);
+  const label = (mark: MatterMark) => `${mark.time.length > 10 ? moment(mark.time) : day(mark.time)} · ${what(mark)}`;
   const overdue = (mark: MatterMark) => open && mark.kind === "due" && new Date(mark.time.length > 10 ? mark.time : `${mark.time}T23:59`).getTime() < now;
   const today = Math.floor(nowAt * days);
   return (
@@ -90,9 +110,18 @@ function Lane({ lane, start, days, now }: { lane: MatterLane; start: Date; days:
         <span className="absolute inset-x-0 top-1/2 -translate-y-1/2"><Track>
           {points.length ? <TrackSpan from={from} to={to} strong={matter.state === "waiting_on_you"} /> : null}
           {nowAt >= 0 && nowAt <= 1 ? <TrackNow at={nowAt} /> : null}
-          {lane.marks.map((mark, index) => {
-            const look = MARKS[mark.kind];
-            return <TrackMark key={`${mark.time}-${index}`} at={points[index] ?? 0} shape={look.shape} tone={overdue(mark) ? "danger" : look.tone} label={label(mark)} />;
+          {closeTogether(points, days).map((group) => {
+            const first = group[0] as number;
+            const last = lane.marks[group.at(-1) as number] as MatterMark;
+            const tone = (mark: MatterMark) => (overdue(mark) ? "danger" : MARKS[mark.kind].tone);
+            if (group.length === 1) {
+              const look = MARKS[last.kind];
+              return <TrackMark key={`${last.time}-${first}`} at={points[first] ?? 0} shape={look.shape} tone={tone(last)} label={label(last)} />;
+            }
+            const marks = group.map((index) => lane.marks[index] as MatterMark);
+            return <TrackCluster key={`${last.time}-${first}`} at={points[first] ?? 0} tone={tone(last)}
+              title={t("matters.week.steps", { day: day(marks[0]?.time ?? last.time), count: marks.length })}
+              steps={marks.map((mark) => ({ when: mark.time.length > 10 ? clock(mark.time) : "", what: what(mark) }))} />;
           })}
         </Track></span>
       </div>
@@ -190,6 +219,7 @@ export function WeekTab() {
         {(Object.keys(MARKS) as MatterMarkKind[]).map((kind) => (
           <span key={kind} className="flex items-center gap-2"><MarkGlyph {...MARKS[kind]} />{t(`matters.week.mark.${kind}` as StringKey)}</span>
         ))}
+        <span className="flex items-center gap-2"><CountGlyph count={3} tone="ink" />{t("matters.week.mark.many")}</span>
         <span className="flex items-center gap-2"><span aria-hidden className="h-3 w-px bg-accent-default" />{t("matters.week.mark.now")}</span>
       </section>
     </div>
