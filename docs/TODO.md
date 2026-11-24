@@ -31,3 +31,7 @@ Design locked 2026-11-17: https://claude.ai/artifact/1vrr8wWijF8pFGMUYdETgv (the
 - The live "Thought" line shows the step and elapsed time.
 - "Organizer is on 2 tasks" above the message box while hand-overs run.
 - The giver's wake-up shows as a divider ("Organizer reported · 9:42 PM"), not as a message from the person.
+
+## Clear all in notifications
+
+Noted 2026-11-24. The notifications panel needs a "Clear all" button that clears every notification in one step, instead of one at a time.
