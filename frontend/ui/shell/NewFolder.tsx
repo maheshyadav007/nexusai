@@ -36,7 +36,7 @@ const COUNT_AFTER_MS = 400;
 const blank = (field: RuleCondition["field"] = "body"): RuleCondition => ({ field, value: "" });
 
 /** Whether a name is free anywhere in the tree, whatever its case, and if not, where it's used. */
-function clashOf(name: string, categories: readonly MailCategory[]): string | null {
+export function clashOf(name: string, categories: readonly MailCategory[]): string | null {
   const clean = name.trim().replace(/\s+/g, " ").toLocaleLowerCase();
   if (!clean) return null;
   if (RESERVED.some((key) => t(key).toLocaleLowerCase() === clean)) return t("folder.new.reserved", { name: name.trim() });

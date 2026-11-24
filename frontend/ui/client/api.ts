@@ -3,6 +3,7 @@ import type { HiddenFromAi, HideFromAi, HideFromAiPreview, HidePreview, UndoHide
 import type { AddSkill, DecideSkill, ListSkills, SkillList, SkillName } from "./contracts.generated";
 import type { CancelTeamTask, CardList, GetTeamTask, ListCards, ListTeamTasks, NoteOnTeamTask, RenameAgent, ResetAgentName, RetryTeamTask, SetMascot, TeamTaskList, TeamTaskView } from "./contracts.generated";
 import type { MarkFolderRead } from "./contracts.generated";
+import type { GetMailMe, GetNamedYou, MailMe, MePreview, NamedYouList, NotAboutMe, PreviewMe, PreviewRule, RulePreview } from "./contracts.generated";
 import type { CategoryRulePreview, ListMixedFolders, MixedFolders, PreviewCategoryRule, SplitFolders } from "./contracts.generated";
 import type { AttachToMatter, CloseMatterItems, GetMatter, GetMatterEvents, GetMatterRelated, GetMattersBrief, GetMattersWeek, ListMatters, MatterAction, MatterDetail, MatterDone, MatterEvents, MatterList, MatterRelated, MattersBrief, MattersWeek, MergeMatters, ReopenMatterItems, UnlinkThread } from "./contracts.generated";
 import type { MailOrganization, FinishMailLearning, MergeCategories, SortCategory, CategorySortEstimate } from "./contracts.generated";
@@ -304,6 +305,8 @@ interface Commands {
   "thread.setImportance": [SetThreadImportance, MailDone];
   "thread.setCategory": [SetThreadCategory, MailDone];
   "rules.save": [RuleSet, RuleSet];
+  "me.save": [MailMe, MailMe];
+  "me.notAboutMe": [NotAboutMe, MailMe];
   "drafts.save": [Draft, Draft];
   "drafts.remove": [RemoveDraft, MailDone];
   "mail.send": [SendDraft, MailDone];
@@ -448,6 +451,10 @@ interface Queries {
   "threads.list": [ListThreads, ThreadList];
   "thread.get": [GetThread, ThreadView];
   "rules.get": [GetRules, RuleSet];
+  "rules.preview": [PreviewRule, RulePreview];
+  "me.get": [GetMailMe, MailMe];
+  "me.named": [GetNamedYou, NamedYouList];
+  "me.preview": [PreviewMe, MePreview];
   "mail.hide.preview": [HidePreview, HideFromAiPreview];
   "drafts.list": [ListDrafts, DraftList];
   "mail.replyDraft": [ReplyContext, ReplyDraft];

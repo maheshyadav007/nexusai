@@ -433,7 +433,13 @@ test("a rule files new mail, and the reason is shown", async ({ page }) => {
   }).toPass();
   await ruleName.fill("Invoices");
   await page.getByRole("textbox", { name: "Contains" }).fill("invoice");
-  await page.getByRole("textbox", { name: "Category" }).fill("Finance");
+  await page.getByRole("combobox", { name: "Category" }).fill("Finance");
+  // The rule says itself back as a sentence, exceptions included, as it's built.
+  await page.getByRole("button", { name: "Add an exception" }).click();
+  await page.getByRole("textbox", { name: "Contains" }).nth(1).fill("draft");
+  await expect(page.getByTestId("rule-sentence")).toHaveText(
+    "Mail where subject has the words “invoice” goes to Finance, except when subject has the words “draft”. The AI reads it.",
+  );
   await noViolations(page);
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Rules saved").first()).toBeVisible();
@@ -445,6 +451,26 @@ test("a rule files new mail, and the reason is shown", async ({ page }) => {
   await expect(row).toContainText("Finance", { timeout: 15_000 });
   await row.getByRole("link").click();
   await expect(page.getByText("Matched the rule “Invoices”").first()).toBeVisible();
+});
+
+test("who the person is can be changed, and starts from their account", async ({ page }) => {
+  await page.goto("/settings?section=me");
+  const ids = page.getByTestId("me-ids");
+  await expect(ids).toContainText("tester");
+  await expect(page.getByTestId("me-addresses")).toContainText(USER);
+  const names = page.getByTestId("me-names");
+  await names.getByRole("textbox", { name: "Add a name" }).fill("Tess Ter");
+  await names.getByRole("button", { name: "Add" }).click();
+  await expect(names).toContainText("Tess Ter");
+  const notYou = page.getByTestId("me-not_you");
+  await notYou.getByRole("textbox", { name: "Add someone else's name" }).fill("Tess Kumar");
+  await notYou.getByRole("button", { name: "Add" }).click();
+  await page.reload();
+  await expect(page.getByTestId("me-not_you")).toContainText("Tess Kumar");
+  await expect(page.getByText("No replies have named you on hidden mail yet.")).toBeVisible();
+  await noViolations(page);
+  await page.getByTestId("me-names").getByRole("button", { name: "Remove Tess Ter" }).click();
+  await expect(page.getByTestId("me-names")).not.toContainText("Tess Ter");
 });
 
 test("status and star are kept, and archive removes it from the inbox", async ({ page }) => {

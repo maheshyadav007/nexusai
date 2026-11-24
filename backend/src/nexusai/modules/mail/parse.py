@@ -108,6 +108,14 @@ SUBJECT_TAG = re.compile(r"\[([^\[\]]{1,40})\]")
 TAG_NUMBER = re.compile(r"[\s#:_-]+\d[\d.]*$|(?<=[A-Za-z])\d+$")
 
 
+WORD = re.compile(r"\w+")
+
+
+def subject_words(subject: str) -> tuple[str, ...]:
+    """The words of a subject, lowercased, without Re: and without its [tags], in order."""
+    return tuple(WORD.findall(SUBJECT_TAG.sub(" ", SUBJECT_PREFIX.sub("", subject or "")).lower()))
+
+
 def tags_of(subject: str) -> tuple[str, ...]:
     """Every [tag] in a subject, in order, without a trailing number:
     "Re: [PLM-1104][Reminder] Due" gives ("PLM", "Reminder"). A tag that is only a number, like

@@ -126,7 +126,7 @@ input[type=text], input[type=password] { font: 14px var(--sans); color: var(--in
     <p class="flow" id="flow"></p>
   </div>
   <div class="rule">
-    <span>Each sender is scored by how <b>automated</b> it looks: repeated subjects, bulk-mail headers, or many emails nobody answers.</span>
+    <span>Each sender is scored by how <b>automated</b> it looks: repeated subjects, bulk-mail headers, many emails nobody answers, or a no-reply address.</span>
     <span><b>50% or more</b> → Hidden from AI. Below that, and every new sender → Read by AI.</span>
     <span>What's hidden from the AI, the AI <b>never sees</b>, whatever it says.</span>
   </div>
@@ -300,6 +300,7 @@ function why(s) {
   if (s.repeats >= 0.5) parts.push(`repeats subjects ${Math.round(s.repeats * 100)}%`);
   if (s.bulk >= 0.5) parts.push("bulk-mail headers");
   if (s.one_way) parts.push("nobody writes back");
+  if (s.no_reply) parts.push("a no-reply address");
   return parts.join(" · ");
 }
 
@@ -320,8 +321,12 @@ function row(s, inCard = false) {
     ? h("div", { class: "emails" }, ...s.emails.map((email) => h("div", {},
         h("span", { class: "subject", title: email.subject }, email.subject || "(no subject)"),
         h("span", { class: "when" }, email.when))),
-        // Kept from the AI, a sender like this gets a rule for each way its subjects start.
-        ...(s.starts && s.starts.length ? [h("div", { class: "starts" }, `Its subjects start ${s.starts.length === 1 ? "one way" : s.starts.length + " ways"}: ${s.starts.map((x) => `“${x}”`).join(", ")}`)] : []))
+        // Kept from the AI, a sender like this gets a rule for each kind of its mail; what fits
+        // none is out of the ordinary, and the AI reads it.
+        ...(s.kinds && s.kinds.length ? [h("div", { class: "starts" },
+          `${s.kinds.length === 1 ? "One kind" : s.kinds.length + " kinds"} of mail: ` +
+          s.kinds.map((k) => `${k.tag ? "[" + k.tag + "] " : ""}${k.words.join(" ")} (${k.count})`).join(" · ") +
+          (s.odd ? ` · ${s.odd} fit none and reach the AI, like “${s.odd_examples[0] || ""}”` : ""))] : []))
     : null;
   return h("div", { class: `row${ignored && st.own ? " own" : ""}` },
     ignored ? tick : move,

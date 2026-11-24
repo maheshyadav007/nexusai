@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useHomeStatus, useLeadName } from "@/ui/client/home";
 import { useFinishOnboarding, useOnboarding, useSetStep } from "@/ui/client/onboarding";
-import { useMailStatus } from "@/ui/client/mail";
+import { useMailSort, useMailStatus } from "@/ui/client/mail";
 import { useSemantic } from "@/ui/client/semantic";
 import { useStarterPrompts } from "@/ui/client/work";
 import { AgentPresets } from "@/ui/features/settings/AgentSettings";
 import { HomeChooser } from "@/ui/features/home/HomeChooser";
 import { WELCOME_PARAM } from "@/ui/features/today/FinishSetup";
 import { EmailConnector } from "@/ui/features/connectors/ConnectorsScreen";
+import { ReachYouScreen } from "@/ui/features/mail/ReachYou";
 import { SortScreen } from "@/ui/features/mail/SortScreen";
 import { LocalModelSettings } from "@/ui/features/settings/LocalModelSettings";
 import { ProfileForm } from "@/ui/features/settings/ProfileForm";
@@ -37,6 +38,8 @@ const STEPS: readonly Step[] = [
   { id: "mail", label: "setup.mail.label", title: "setup.mail.title", formTitle: "setup.mail.formTitle", formNote: "setup.mail.formNote" },
   // Right after mail and before search, so what the person keeps from the AI is never embedded.
   { id: "sort", label: "setup.sort.label", title: "setup.sort.label", formTitle: "setup.sort.label", formNote: "setup.sort.label" },
+  // Right after sorting, when what's hidden is known: the names that still let a reply through.
+  { id: "reach", label: "setup.reach.label", title: "setup.reach.label", formTitle: "setup.reach.label", formNote: "setup.reach.label" },
   { id: "search", label: "setup.search.label", title: "setup.search.title", formTitle: "setup.search.formTitle", formNote: "setup.search.formNote" },
   { id: "permissions", label: "setup.agent.label", title: "setup.permissions.title", formTitle: "setup.permissions.formTitle", formNote: "setup.permissions.formNote" },
 ];
@@ -111,6 +114,7 @@ export function OnboardingFlow() {
   const finish = useFinishOnboarding();
   const starters = useStarterPrompts();
   const mail = useMailStatus();
+  const sorting = useMailSort(Boolean(mail.data?.account));
   const semantic = useSemantic();
   // Skipping mail leaves the app with little to do, so it's confirmed rather than one click.
   const [confirmSkip, setConfirmSkip] = useState(false);
@@ -149,6 +153,8 @@ export function OnboardingFlow() {
   const isLast = index === STEPS.length - 1;
   // With mail connected, setup waits for it: sorting needs all of it, and starts by itself.
   const downloading = step.id === "mail" && Boolean(mail.data?.account) && !mail.data?.history_finished;
+  // Without mail there's nothing to sort, and with sorting skipped nothing is hidden to let through.
+  const skipped = (id: string) => (id === "sort" || id === "reach") && (!mail.data?.account || (id === "reach" && sorting.data?.state === "skipped"));
   const goNext = () => {
     if (downloading) return;
     if (step.id === "mail" && !mail.data?.account && !confirmSkip) {
@@ -157,7 +163,7 @@ export function OnboardingFlow() {
     }
     setConfirmSkip(false);
     // Without mail there's nothing to sort.
-    const next = STEPS[index + 1]?.id === "sort" && !mail.data?.account ? STEPS[index + 2] : STEPS[index + 1];
+    const next = STEPS.slice(index + 1).find((item) => !skipped(item.id));
     if (next) setStep.mutate(next.id);
     else {
       // So the mail agent has something sensible to judge by, even if the person never edits it.
@@ -168,11 +174,21 @@ export function OnboardingFlow() {
   };
   const back =
     index > 1 ? (
-      <Button variant="quiet" onClick={() => setStep.mutate((STEPS[STEPS[index - 1]?.id === "sort" && !mail.data?.account ? index - 2 : index - 1] as Step).id)}>
+      <Button variant="quiet" onClick={() => setStep.mutate((STEPS.slice(0, index).reverse().find((item) => !skipped(item.id)) as Step).id)}>
         {t("setup.back")}
       </Button>
     ) : null;
 
+  if (step.id === "reach") {
+    return (
+      <div className="flex h-screen flex-col overflow-hidden bg-surface-page text-ink-primary">
+        <Topbar index={index} />
+        <main className="flex min-h-0 flex-1 flex-col overflow-y-auto border-t border-line-subtle">
+          <ReachYouScreen onDone={goNext} onBack={() => setStep.mutate("sort")} />
+        </main>
+      </div>
+    );
+  }
   // The sorting page needs the whole width, so it has the setup bar and nothing else.
   if (step.id === "sort") {
     return (

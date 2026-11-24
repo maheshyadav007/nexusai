@@ -86,7 +86,43 @@ The description of every Smart folder goes into that one call, so Smart folders 
 
 ### Header rules
 
-The header rules in `modules/mail/rules.py` don't change. Since 2026-11-23 there are **no exceptions**: mail filed where the AI doesn't read never reaches the model, whatever it says (the folder is the gate; see `docs/FLOW_FIXES_PLAN.md`). The earlier exceptions (mail that names the person, replies, and generated or no-reply mail with a `WORTH_A_LOOK` subject such as a sign-in alert) were removed at the person's request. `WORTH_A_LOOK` now only raises importance by code, on mail the AI reads.
+The header rules in `modules/mail/rules.py` don't change. Since 2026-11-23 there is **one exception**, below: mail filed where the AI doesn't read never reaches the model unless a person replying there named the person (the folder is the gate; see `docs/FLOW_FIXES_PLAN.md`). The earlier exceptions (mail that names the person, replies, and generated or no-reply mail with a `WORTH_A_LOOK` subject such as a sign-in alert) were removed at the person's request. `WORTH_A_LOOK` now only raises importance by code, on mail the AI reads.
+
+### One exception: a reply that names the person
+
+Built 2026-11-23 (`modules/mail/mentions.py`). Mail a hidden folder keeps still reaches the AI when **a person replies or forwards and names the person** in what they wrote: "@Mahesh please check the BOM" on a PLM thread. A tool passing on a mention ("Rahul Menon mentioned you on RND-1112") counts too. Tool mail that greets the person ("Dear Mahesh Yadav, ECO-1112 is assigned to you") never does, nor does a name only in the quoted mail below a reply or in a signature.
+
+- **Who the person is** is one object they can change (Settings › This is you, saved in `system/me.json`): names, addresses, work ids, and **Not you**, people whose names look like theirs. It starts from the account's addresses and the name they send as: "Mahesh Yadav" also counts as "Mahesh" and "M. Yadav", and the part of each address before the @ as an id.
+- **What counts as a person:** the mail has no bulk or automated headers and isn't from a no-reply address (`_builtin` in `rules.py` matches nothing).
+- **Matching:** whole words only ("Maheshwari" isn't "Mahesh"); a single name followed by a different capitalised surname is someone else ("Mahesh Kumar"); Not you names are blanked before looking.
+- **Where it goes:** the mail stays filed in its folder. The conversation's `named` column holds who named the person and the words, and `hidden_from_ai()` lets a named conversation through. Rows show **Named you** with the words on hover. **Not about me** (right-click, or in This is you) clears it, and can add the misleading name to Not you or stop counting one of the person's names.
+
+### Rules: all or any, and exceptions
+
+A rule matches when **all** its conditions hold, or **any** one (`match`), and **none** of its `exceptions` do. Conditions look at From (is, has), Subject (has the words, has, starts with, has the tag), Message text, Sent to (To or Cc has), an attachment, or a header. The editor says the rule back as a sentence and shows what it catches among the mail already here (`rules.preview`).
+
+### Kinds of mail: what a hidden sender's rules name
+
+Built 2026-11-23 (`modules/mail/subject_kinds.py`). The Sort page used to write one rule per sender. Now a sender that mails only the person (no bulk headers) gets one rule per **kind** of mail it sends, so mail from it that fits no kind is out of the ordinary and reaches the AI.
+
+1. **Words that don't change.** Each subject becomes a bag of words without Re:/Fwd:, its `[tags]`, any word with a digit (numbers, ids, amounts), dates in words, the person's own name, and filler words. "Rs 2,450 debited from your account XX8812" is {rs, debited, account}.
+2. **Split by first tag.** Mail with different tags never shares a kind. A tag that carries a number, like `[RND-1112]`, is a ticket: the tag alone is the kind, since titles change per ticket.
+3. **Cluster.** Subjects most common first, each joining the first kind whose words it shares at least 60% of (Jaccard); otherwise it starts one. The same mail always gives the same kinds.
+4. **Core.** A kind is named by the words at least 90% of its emails carry, and needs 2 emails and 2 words (or a tag and a word).
+5. **Check.** The kind's rule (sender + tag + every core word) must catch at least 95% its own mail among all the sender's, or the kind is dropped.
+6. **Names that change.** If the kinds cover under 75% of a tag's mail and nearly all of it shares a word ("Rahul Menon edited 'Roadmap'"), that word is the kind.
+7. **Is there an ordinary?** If the kinds explain under 80% of the sender's mail (a store writing a new offer each day), it has no kinds: one rule takes all of it.
+
+A kind's rule is `sender_exact` + `tag` + `subject_words` (every word, whole words, any order). A folder's own tag rule files its tagged kinds already, so they get no rule of their own. Bulk mail (newsletters) is always one rule per sender.
+
+Measured 2026-11-23, of non-bulk senders with 2+ emails:
+
+| Mailbox | Fit a kind | One rule for the sender | Odd → AI |
+|---|---|---|---|
+| Personal Gmail (184 senders, 4,165 emails) | 45% | 53% | 2% (84) |
+| Test company mailbox, hidden side (8 senders, 456 emails) | 100% | 0% | 0% |
+
+The odd ones on the personal mailbox are what the gate is for: "Login attempted from new IP" (Binance), "Add Authenticator Request" (Steam), "Account Restricted: ReKYC Not Completed" (Delta Exchange), "Your subscription is expiring" (Apple). Mail already filed when sorting stays where it is; only new mail is matched by kind.
 
 ## The Priority rule
 

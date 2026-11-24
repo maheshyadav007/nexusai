@@ -52,13 +52,24 @@ def describe_senders(report: grouping.SenderReport, read: Callable[[str], bytes]
                 "repeats": row.repeats,
                 "bulk": row.bulk,
                 "one_way": row.one_way,
+                "no_reply": row.no_reply,
                 "side": row.side,
                 "kept": row.kept,
                 "own": row.sender in own,
                 "examples": [pattern for pattern, _ in row.examples],
                 "emails": [_summary(key, read(key)) for key in row.members[:SAMPLES]],
                 "folder": "",
-                "starts": row.starts,
+                "kinds": [
+                    {
+                        "tag": k.tag,
+                        "words": list(k.words),
+                        "count": k.count,
+                        "examples": list(k.examples),
+                    }
+                    for k in row.kinds
+                ],
+                "odd": row.odd,
+                "odd_examples": list(row.odd_examples),
             }
         )
     return {

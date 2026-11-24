@@ -282,6 +282,49 @@ def test_each_sender_gets_one_score_and_a_side() -> None:
     )
 
 
+def test_ten_unanswered_emails_are_enough_to_hide_an_order_sender_and_its_newest_come_first() -> (
+    None
+):
+    items = ["a lamp", "a mug", "socks", "a kettle", "a rug", "a pan", "tape", "a bag", "soap"]
+    orders = [_mail("orders@shop.example", f"Ordered: {item}", "Thanks for your order.",
+                    Date=f"Mon, {day + 1:02d} Sep 2026 10:00:00 +0000")
+              for day, item in enumerate([*items, "a fan"])]  # fmt: skip
+    nine = [_mail("deals@market.example", f"Ordered: {item}", "Thanks.") for item in items]
+    mine = [_mail(OWNER, f"Note {n}", "Hi", to=f"friend{n}@else.example") for n in range(grouping.ENOUGH)]  # fmt: skip
+    report = grouping.score_senders(enumerate_mail(orders + nine + mine))
+    rows = {row.sender: row for row in report.senders}
+    # Every subject differs and there are no bulk headers: only nobody answering can tell.
+    assert rows["orders@shop.example"].one_way and rows["orders@shop.example"].side == "ignores"
+    assert rows["deals@market.example"].side == "reads"
+    assert rows["orders@shop.example"].members[0] == str(len(orders) - 1)
+
+
+def test_a_no_reply_address_or_a_single_mailing_is_a_tool_but_a_new_person_is_not() -> None:
+    raws = [
+        _mail("payments-noreply@pay.example", "Receipt for your order", "Paid."),
+        _mail("do-not-reply@shop.example", "Your enquiry", "We got it."),
+        _mail("donotreply_careers@firm.example", "Application received", "Thanks."),
+        _mail(
+            "history-space@forum.example",
+            "Why did Rome fall?",
+            "Read",
+            List_Unsubscribe="<https://x>",
+        ),  # fmt: skip
+        _mail("casino-reply@play.example", "Hello", "Hi"),
+        _mail("kim@else.example", "Coffee?", "Free on Friday?"),
+    ]
+    rows = {row.sender: row for row in grouping.score_senders(enumerate_mail(raws)).senders}
+    hidden = {sender for sender, row in rows.items() if row.side == "ignores"}
+    assert hidden == {
+        "payments-noreply@pay.example",
+        "do-not-reply@shop.example",
+        "donotreply_careers@firm.example",
+        "history-space@forum.example",
+    }
+    assert rows["kim@else.example"].kept == "A new sender"
+    assert not rows["casino-reply@play.example"].no_reply
+
+
 def test_an_ignored_sender_keeps_all_its_mail_from_the_ai_even_what_names_the_person() -> None:
     builds = [
         _mail("ci@tools.example", f"Build {n} passed", "Done.\nLogs\nMore\nCI") for n in range(6)
@@ -294,11 +337,11 @@ def test_an_ignored_sender_keeps_all_its_mail_from_the_ai_even_what_names_the_pe
     assert report.quiet == {str(n) for n in range(len(builds) + 1)}
 
 
-def test_only_mail_sent_to_one_person_gets_rules_by_how_its_subjects_start() -> None:
+def test_only_mail_sent_to_one_person_gets_rules_by_kind() -> None:
     bank = [_mail("alerts@bank.example", f"Your OTP for login is {n}", "Use it.") for n in range(5)]
     sale = [_mail("deals@shop.example", f"Mahesh take off {n}0%", "Shop now", List_Unsubscribe="<https://x>") for n in range(5)]  # fmt: skip
     report = grouping.score_senders(enumerate_mail(bank + sale))
-    starts = {row.sender: row.starts for row in report.senders}
-    assert starts["alerts@bank.example"] == ["your otp for"]
+    kinds = {row.sender: [k.words for k in row.kinds] for row in report.senders}
+    assert kinds["alerts@bank.example"] == [("login", "otp")]
     # A newsletter is all one thing: one rule takes all of it, so the next sale stays hidden.
-    assert starts["deals@shop.example"] == []
+    assert kinds["deals@shop.example"] == []

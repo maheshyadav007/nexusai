@@ -1,10 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { ApiRequestError } from "@/ui/client/api";
 import type { MailRule, RuleCondition } from "@/ui/client/contracts.generated";
-import { useRules, useSaveRules } from "@/ui/client/mail";
+import { useCategories, useRules, useSaveRules, useWholeRulePreview } from "@/ui/client/mail";
 import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
 import { Checkbox } from "@/ui/primitives/Checkbox";
@@ -17,22 +17,48 @@ import { Input } from "@/ui/primitives/Input";
 import { Select } from "@/ui/primitives/Select";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { Switch } from "@/ui/primitives/Switch";
+import { TextLink } from "@/ui/primitives/TextLink";
 import { useToast } from "@/ui/primitives/Toast";
 import { t, tn } from "@/ui/strings";
 
 const FIELDS = [
   { value: "subject", label: t("rules.field.subject") },
   { value: "subject_prefix", label: t("rules.field.subjectPrefix") },
+  { value: "subject_words", label: t("rules.field.subjectWords") },
   { value: "tag", label: t("rules.field.tag") },
   { value: "sender", label: t("rules.field.sender") },
   { value: "sender_exact", label: t("rules.field.senderExact") },
+  { value: "to", label: t("rules.field.to") },
   { value: "body", label: t("rules.field.body") },
   { value: "header", label: t("rules.field.header") },
   { value: "has_attachment", label: t("rules.field.attachment") },
 ];
 
-const emptyCondition = (): RuleCondition => ({ field: "subject", value: "" });
-const emptyRule = (): MailRule => ({ name: t("rules.newName"), enabled: true, conditions: [emptyCondition()] as MailRule["conditions"], actions: { category: null, mark_read: false, skip_agent: false, notify: false, tag: null } });
+type Field = RuleCondition["field"];
+// What a condition looks at, then how: "From · is", "Subject · has the tag". The second list only
+// offers what fits the first, so no wrong pair can be built.
+const PARTS: readonly { value: string; label: string; ways: readonly { value: Field; label: string }[] }[] = [
+  { value: "from", label: t("rules.part.from"), ways: [{ value: "sender_exact", label: t("rules.way.is") }, { value: "sender", label: t("rules.way.has") }] },
+  {
+    value: "subject",
+    label: t("rules.part.subject"),
+    ways: [
+      { value: "subject_words", label: t("rules.way.words") },
+      { value: "subject", label: t("rules.way.has") },
+      { value: "subject_prefix", label: t("rules.way.startsWith") },
+      { value: "tag", label: t("rules.way.tag") },
+    ],
+  },
+  { value: "body", label: t("rules.part.body"), ways: [{ value: "body", label: t("rules.way.has") }] },
+  { value: "to", label: t("rules.part.to"), ways: [{ value: "to", label: t("rules.way.has") }] },
+  { value: "attachment", label: t("rules.part.attachment"), ways: [{ value: "has_attachment", label: t("rules.way.any") }] },
+  { value: "header", label: t("rules.part.header"), ways: [{ value: "header", label: t("rules.way.has") }] },
+];
+const partOf = (field: Field) => PARTS.find((part) => part.ways.some((way) => way.value === field)) ?? (PARTS[0] as (typeof PARTS)[number]);
+
+const emptyCondition = (): RuleCondition => ({ field: "subject_words", value: "" });
+const emptyRule = (): MailRule => ({ name: t("rules.newName"), enabled: true, match: "all", conditions: [emptyCondition()] as MailRule["conditions"], exceptions: [], actions: { category: null, mark_read: false, skip_agent: false, notify: false, tag: null } });
+const filled = (condition: RuleCondition) => condition.field === "has_attachment" || Boolean((condition.value ?? "").trim());
 
 /** One condition in words, the way a person would say it. */
 export function phrase(condition: RuleCondition): string {
@@ -42,24 +68,103 @@ export function phrase(condition: RuleCondition): string {
     case "tag": return t("rules.said.tag", { tag: value });
     case "subject_prefix": return t("rules.said.startsWith", { value });
     case "subject": return t("rules.said.has", { value });
+    case "subject_words": return t("rules.said.words", { value });
+    case "to": return t("rules.said.to", { value });
     case "has_attachment": return t("rules.field.attachment");
     case "header": return t("rules.said.header", { header: condition.header ?? "", value });
     default: return t("rules.matches", { field: FIELDS.find((item) => item.value === condition.field)?.label ?? condition.field, value });
   }
 }
 
-/** A whole rule in words: every condition it needs, joined. */
+/** A whole rule in words: every condition it needs, joined by and or or, then what it leaves alone. */
 export function phraseRule(rule: MailRule): string {
-  return rule.conditions.map(phrase).join(t("rules.said.and"));
+  const joined = rule.conditions.filter(filled).map(phrase).join(t(rule.match === "any" ? "rules.said.or" : "rules.said.and"));
+  const except = (rule.exceptions ?? []).filter(filled).map(phrase).join(t("rules.said.or"));
+  return except ? t("rules.said.except", { rule: joined, except }) : joined;
+}
+
+/** The rule said back as one sentence, so what it does is never a guess: "Mail where from x or
+ * subject has the tag [PLM] goes to PLM, except when subject has the words “escalated”. The AI
+ * doesn't read it." */
+function RuleSentence({ rule }: { rule: MailRule }) {
+  const lower = (text: string) => text.charAt(0).toLocaleLowerCase() + text.slice(1);
+  const what = rule.conditions.filter(filled).map((c) => lower(phrase(c))).join(t(rule.match === "any" ? "rules.said.or" : "rules.said.and"));
+  const except = (rule.exceptions ?? []).filter(filled).map((c) => lower(phrase(c))).join(t("rules.said.or"));
+  const where = rule.actions.category;
+  return (
+    <p data-testid="rule-sentence" className="rounded-md bg-surface-sunken px-3 py-2 text-md text-ink-primary">
+      {what
+        ? [
+            t("rules.sentence.mail", { what }),
+            where ? t("rules.sentence.goes", { folder: where }) : "",
+            except ? t("rules.sentence.except", { except }) : "",
+            ". ",
+            t(rule.actions.skip_agent ? "rules.sentence.hidden" : "rules.sentence.reads"),
+          ].join("")
+        : t("rules.sentence.empty")}
+    </p>
+  );
+}
+
+function ConditionRow({ condition, label, onChange, onRemove }: { condition: RuleCondition; label: string; onChange: (changes: Partial<RuleCondition>) => void; onRemove: () => void }) {
+  const part = partOf(condition.field);
+  return (
+    <div data-testid="rule-condition" className="flex flex-wrap items-center gap-2">
+      <div className="w-36"><Select label={t("rules.part")} value={part.value} options={PARTS} compact onChange={(value) => onChange({ field: (PARTS.find((item) => item.value === value) ?? part).ways[0]?.value ?? "subject" })} /></div>
+      {part.ways.length > 1 ? <div className="w-40"><Select label={t("rules.way")} value={condition.field} options={part.ways} compact onChange={(field) => onChange({ field: field as Field })} /></div> : <span className="text-sm text-ink-muted">{part.ways[0]?.label}</span>}
+      {condition.field === "header" ? <div className="w-32"><Input aria-label={t("rules.header")} placeholder={t("rules.header")} value={condition.header ?? ""} onChange={(event) => onChange({ header: event.target.value })} /></div> : null}
+      {condition.field === "has_attachment" ? <span className="flex-1" /> : <div className="min-w-40 flex-1"><Input aria-label={label} value={condition.value ?? ""} onChange={(event) => onChange({ value: event.target.value })} /></div>}
+      <IconButton icon="close" label={t("rules.removeCondition")} onClick={onRemove} />
+    </div>
+  );
+}
+
+function Conditions({ items, label, add, onChange }: { items: readonly RuleCondition[]; label: string; add: string; onChange: (items: RuleCondition[]) => void }) {
+  return (
+    <div className="flex flex-col gap-2">
+      {items.map((condition, position) => (
+        <ConditionRow key={position} condition={condition} label={label} onChange={(changes) => onChange(items.map((item, i) => (i === position ? { ...item, ...changes } : item)))} onRemove={() => onChange(items.filter((_, i) => i !== position))} />
+      ))}
+      <div><Button variant="quiet" onClick={() => onChange([...items, emptyCondition()])}>{add}</Button></div>
+    </div>
+  );
+}
+
+/** What the rule as written catches among the mail already here, and which of it still reaches the AI. */
+function RuleCatches({ rule }: { rule: MailRule }) {
+  const [settled, setSettled] = useState<MailRule | null>(null);
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled(rule.conditions.some(filled) ? rule : null), 400);
+    return () => clearTimeout(timer);
+  }, [rule]);
+  const preview = useWholeRulePreview(settled);
+  if (!settled || !preview.data) return null;
+  const { conversations, named, examples } = preview.data;
+  return (
+    <div data-testid="rule-catches" className="flex flex-col gap-1 border-t border-line-subtle pt-3">
+      <p className="text-sm text-ink-secondary">
+        <span className="font-medium text-ink-primary">{tn("rules.catches", conversations)}</span>
+        {rule.actions.skip_agent && named ? ` · ${tn("rules.catches.named", named)}` : ""}
+      </p>
+      {examples.map((example) => (
+        <div key={example.thread} className="flex justify-between gap-4 border-t border-line-subtle py-1 text-sm first:border-t-0">
+          <span className="min-w-0 truncate text-ink-primary">{example.subject}{example.named ? <span className="text-ink-muted"> — {example.named}</span> : null}</span>
+          <span className={`shrink-0 ${example.named ? "text-accent-default" : "text-ink-muted"}`}>{example.named ? t("rules.catches.reaches") : example.sender}</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function RuleEditor({ rule, onChange, onRemove, startsOpen }: { rule: MailRule; onChange: (rule: MailRule) => void; onRemove: () => void; startsOpen: boolean }) {
   const actions = rule.actions;
-  const matching = rule.conditions
-    .filter((condition) => condition.value || condition.field === "has_attachment")
-    .map(phrase)
-    .join(", ");
-  const setCondition = (position: number, changes: Partial<RuleCondition>) => onChange({ ...rule, conditions: rule.conditions.map((item, i) => (i === position ? { ...item, ...changes } : item)) as MailRule["conditions"] });
+  const folders = useCategories().data?.categories ?? [];
+  const suggestions = useId();
+  // A folder that exists brings its side with it; a new name keeps what's ticked below.
+  const setFolder = (name: string) => {
+    const folder = folders.find((item) => item.name === name);
+    onChange({ ...rule, actions: { ...actions, category: name || null, skip_agent: folder ? folder.ai_reads === false : actions.skip_agent } });
+  };
   return (
     <ExpandRow
       testid="rule"
@@ -69,7 +174,7 @@ function RuleEditor({ rule, onChange, onRemove, startsOpen }: { rule: MailRule; 
       meta={
         <>
           {t(rule.enabled === false ? "rules.off" : "rules.on")}
-          {matching ? ` · ${matching}` : ""}
+          {rule.conditions.some(filled) ? ` · ${phraseRule(rule)}` : ""}
           {actions.category ? ` · ${t("rules.filesInto", { category: actions.category })}` : ""}
         </>
       }
@@ -79,22 +184,29 @@ function RuleEditor({ rule, onChange, onRemove, startsOpen }: { rule: MailRule; 
         <div className="min-w-0 flex-1"><Field label={t("rules.name")}>{({ invalid, ...control }) => <Input invalid={invalid} value={rule.name} onChange={(event) => onChange({ ...rule, name: event.target.value })} {...control} />}</Field></div>
         <IconButton icon="close" label={t("rules.remove", { name: rule.name })} onClick={onRemove} />
       </div>
-      <p className="text-md font-medium text-ink-primary">{t("rules.when")}</p>
-      {rule.conditions.map((condition, position) => (
-        <div key={position} className="grid gap-2 md:grid-cols-2">
-          <Field label={t("rules.field")}>{({ invalid, id }) => <Select id={id} invalid={invalid} value={condition.field} options={FIELDS} onChange={(field) => setCondition(position, { field: field as RuleCondition["field"] })} />}</Field>
-          {condition.field === "has_attachment" ? null : <Field label={t("rules.contains")}>{({ invalid, ...control }) => <Input invalid={invalid} value={condition.value ?? ""} onChange={(event) => setCondition(position, { value: event.target.value })} {...control} />}</Field>}
-          {condition.field === "header" ? <Field label={t("rules.header")}>{({ invalid, ...control }) => <Input invalid={invalid} value={condition.header ?? ""} onChange={(event) => setCondition(position, { header: event.target.value })} {...control} />}</Field> : null}
+      <RuleSentence rule={rule} />
+      <div className="flex flex-wrap items-center gap-2 text-md font-medium text-ink-primary">
+        <span>{t("rules.when.lead")}</span>
+        <div className="w-24"><Select label={t("rules.match")} value={rule.match ?? "all"} options={[{ value: "all", label: t("rules.match.all") }, { value: "any", label: t("rules.match.any") }]} compact onChange={(match) => onChange({ ...rule, match: match as MailRule["match"] })} /></div>
+        <span>{t("rules.when.tail")}</span>
+      </div>
+      <Conditions items={rule.conditions} label={t("rules.contains")} add={t("rules.addCondition")} onChange={(conditions) => onChange({ ...rule, conditions: (conditions.length ? conditions : [emptyCondition()]) as MailRule["conditions"] })} />
+      <p className="text-md font-medium text-ink-primary">{t("rules.except")}</p>
+      <Conditions items={rule.exceptions ?? []} label={t("rules.contains")} add={t("rules.addException")} onChange={(exceptions) => onChange({ ...rule, exceptions: exceptions as MailRule["exceptions"] })} />
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-md font-medium text-ink-primary">{t("rules.then.put")}</span>
+        <div className="w-60">
+          <Input aria-label={t("rules.category")} list={suggestions} placeholder={t("rules.noFolder")} value={actions.category ?? ""} onChange={(event) => setFolder(event.target.value)} />
+          <datalist id={suggestions}>{folders.map((folder) => <option key={folder.name} value={folder.name} />)}</datalist>
         </div>
-      ))}
-      <div><Button variant="quiet" onClick={() => onChange({ ...rule, conditions: [...rule.conditions, emptyCondition()] as MailRule["conditions"] })}>{t("rules.addCondition")}</Button></div>
-      <p className="text-md font-medium text-ink-primary">{t("rules.then")}</p>
-      <Field label={t("rules.category")}>{({ invalid, ...control }) => <Input invalid={invalid} value={actions.category ?? ""} onChange={(event) => onChange({ ...rule, actions: { ...actions, category: event.target.value || null } })} {...control} />}</Field>
+      </div>
       <div className="flex flex-col gap-2">
         <Checkbox label={t("rules.markRead")} checked={actions.mark_read ?? false} onChange={(mark_read) => onChange({ ...rule, actions: { ...actions, mark_read } })} />
         <Checkbox label={t("rules.skipAgent")} checked={actions.skip_agent ?? false} onChange={(skip_agent) => onChange({ ...rule, actions: { ...actions, skip_agent } })} />
         <Checkbox label={t("rules.notify")} checked={actions.notify ?? false} onChange={(notify) => onChange({ ...rule, actions: { ...actions, notify } })} />
       </div>
+      {actions.skip_agent ? <p className="text-sm text-ink-muted">{t("rules.namedStill")} <TextLink href="/settings?section=me">{t("me.title")}</TextLink></p> : null}
+      <RuleCatches rule={rule} />
     </ExpandRow>
   );
 }
@@ -106,7 +218,7 @@ const written = (rule: MailRule) => rule.name.startsWith(SORTED) || rule.name.st
 
 /** One rule the app wrote, as a sentence: what it matches. */
 function said(rule: MailRule): string {
-  return rule.conditions.map(phrase).join(", ");
+  return phraseRule(rule);
 }
 
 /** The rules sorting wrote for one folder: what goes there, and a way to take any one back. */
