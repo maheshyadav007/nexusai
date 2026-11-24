@@ -466,6 +466,7 @@ function FolderCard({ card, name, also, moves, tick, rename }: { card: Card; nam
     onDrop={(event) => { setOver(false); const sender = all.flatMap((c) => c.members).find((s) => s.sender === event.dataTransfer.getData(DRAG)); if (sender) move([sender], to); }}
     data-ticked={tick ? String(tick.on) : undefined}
     data-group={card.group ? "true" : undefined}
+    data-real={card.real ? "true" : undefined}
     className={`flex flex-col gap-2 rounded-lg border p-3 transition-shadow duration-normal ${greyed ? "bg-transparent" : "bg-surface-raised"} ${catchAll ? "border-dashed border-line-strong" : "border-line-subtle"} ${over ? "ring-2 ring-accent-default" : ""} ${flashClass(landed)}`}>
     <div data-testid="sort-folder-head" className="flex items-center gap-3">
       {tick ? <Checkbox hideLabel label={t("mail.sort.tick", { name })} checked={tick.on} onChange={tick.set} /> : null}

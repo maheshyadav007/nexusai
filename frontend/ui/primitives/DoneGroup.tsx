@@ -36,11 +36,11 @@ export function DoneRow({ title, meta, action, testid, onOpen, current = false }
     </>
   );
   return (
-    <li data-testid={testid} className={`flex items-start gap-2 rounded-md py-2 text-ink-faint ${onOpen ? "px-2" : ""} ${current ? "bg-surface-sunken" : ""}`}>
+    <li data-testid={testid} className={`flex items-start gap-2 rounded-md py-2 text-ink-muted ${onOpen ? "px-2" : ""} ${current ? "bg-surface-sunken" : ""}`}>
       <Icon name="check" className="mt-px h-4 w-4 shrink-0 text-status-success" />
       {/* Something done can still be opened, to read it back. */}
       {onOpen ? (
-        <button type="button" aria-current={current ? "true" : undefined} onClick={onOpen} className="focus-ring flex min-w-0 flex-1 flex-col rounded-sm text-left transition-colors duration-fast hover:text-ink-secondary">{words}</button>
+        <button type="button" aria-current={current ? "true" : undefined} onClick={onOpen} className="focus-ring flex min-w-0 flex-1 flex-col rounded-sm text-left transition-colors duration-fast hover:text-ink-primary">{words}</button>
       ) : (
         <span className="flex min-w-0 flex-1 flex-col">{words}</span>
       )}

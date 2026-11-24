@@ -343,7 +343,7 @@ test("what the agent knows, and is told, can be seen and it asks before moving m
   await noViolations(page);
 });
 
-test("agent screens open cleanly and memory proposals are decided", async ({ page }) => {
+test("agent screens open cleanly and what Posty learned is kept without asking", async ({ page }) => {
   for (const path of ["/cockpit", "/agent/activity", "/agent/channel"]) {
     await page.goto(path);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
@@ -351,11 +351,11 @@ test("agent screens open cleanly and memory proposals are decided", async ({ pag
   }
   await page.goto("/agent/memory");
   await page.getByRole("tab", { name: "Memory" }).click();
-  const proposal = page.getByTestId("memory-proposal").filter({ hasText: "Remember this person." }).first();
-  await expect(proposal).toBeVisible();
+  // Learned from mail, it's kept at once with its source, with nothing waiting to be approved.
+  await expect(page.getByTestId("memory-proposal")).toHaveCount(0);
+  const kept = (await (await page.request.post("/api/queries/memory.list", { data: { query: "" } })).json()) as { files: { content: string }[] };
+  expect(kept.files.some((file) => file.content.includes("Remember this person."))).toBe(true);
   await noViolations(page);
-  await proposal.getByRole("button", { name: "Keep" }).click();
-  await expect(page.getByTestId("memory-file").filter({ hasText: /note|memory|proposal/i }).first()).toBeVisible();
 
   const note = unique("Prefers short mails");
   await page.getByRole("textbox", { name: "Add something to remember" }).fill(note);

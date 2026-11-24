@@ -147,6 +147,8 @@ function AskRow({ message }: { message: ChannelMessage }) {
 /** One thing waiting on the person, however it came to be, so it can be done alone or in bulk. */
 // Past this many of one kind, they fold into one row: twenty memory notes read as one decision.
 const GROUP_AT = 3;
+// How long Today has to be open before leaving it counts as having looked.
+const SEEN_AFTER_MS = 1000;
 // Up to this many suggestions show as they are; more fold into one line to open.
 const SUGGESTIONS_SHOWN = 3;
 
@@ -649,8 +651,14 @@ export function TodayScreen() {
   const mail = useMailStatus();
   const greeting = useGreeting();
   const { mutate: markSeen } = useMarkTodaySeen();
-  // Marked on leaving, so what came in stays listed while the person is reading it.
-  useEffect(() => () => markSeen(), [markSeen]);
+  // Marked on leaving, so what came in stays marked while the person is reading it. A visit of
+  // under a second isn't a look: React's development mode leaves and comes back at once.
+  useEffect(() => {
+    const opened = Date.now();
+    return () => {
+      if (Date.now() - opened >= SEEN_AFTER_MS) markSeen();
+    };
+  }, [markSeen]);
   const noMail = mail.data?.state === "off" && !today.data?.needs_you.length && !today.data?.waiting.length;
   const needed = useWaitingCount();
   const [shown, setShown] = useTodayShown();
