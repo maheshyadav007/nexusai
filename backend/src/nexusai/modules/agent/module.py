@@ -23,6 +23,7 @@ from nexusai.contracts.agent import (
     AttachToMatter,
     BoardList,
     BriefReacted,
+    BriefSections,
     CancelTeamTask,
     CardList,
     ChangeLearnedNote,
@@ -41,6 +42,7 @@ from nexusai.contracts.agent import (
     DecideMemoryProposal,
     DecideSkill,
     DismissChannel,
+    DoneItem,
     DraftedReply,
     DraftThreadReply,
     DueItem,
@@ -299,6 +301,7 @@ agent_module = Module(
         personalization.MIGRATION,
         briefs.MIGRATION,
         briefs.SOURCES_MIGRATION,
+        briefs.SECTIONS_MIGRATION,
         facts.MIGRATION,
         summaries.MIGRATION,
         cards.MIGRATION,
@@ -1834,6 +1837,18 @@ def today_view(query: GetToday, ctx: Context) -> TodayView:
         else []
     )
     prep_at = artifact["created"] if artifact else None
+    prep_sections = (
+        BriefSections.model_validate(json.loads(artifact["sections"]))
+        if artifact and artifact["sections"]
+        else None
+    )
+    # Since the start of yesterday, local time: what "done since yesterday" means to a person.
+    yesterday = (datetime.now().astimezone() - timedelta(days=1)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    prep_done = [
+        DoneItem(**item) for item in briefs.done_since(ctx, yesterday.astimezone(UTC).isoformat())
+    ]
     rating, comment = (artifact["rating"], artifact["comment"] or "") if artifact else (None, "")
     freshness = "none"
     if artifact:
@@ -1859,6 +1874,8 @@ def today_view(query: GetToday, ctx: Context) -> TodayView:
         automated_count=automated,
         prep_session=prep_session,
         prep_text=prep_text,
+        prep_sections=prep_sections,
+        prep_done=prep_done,
         prep_sources=prep_sources,
         prep_at=prep_at,
         prep_artifact=artifact["id"] if artifact else None,

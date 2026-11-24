@@ -361,3 +361,17 @@ def test_only_a_kept_task_puts_a_matter_on_waiting_on_you(
         "kept",
     )
     assert brief["needs_you"][0]["next"] == "Book the venue" and brief["suggested"] == []
+
+
+def test_what_got_done_since_yesterday_is_listed_by_the_app(client: TestClient) -> None:
+    command(client, "tasks.save", title="Share the test plan")
+    task = tasks(client)[0]
+    command(
+        client,
+        "tasks.save",
+        **{k: task[k] for k in ("id", "title", "notes", "due", "thread")},
+        status="done",
+    )
+    command(client, "tasks.save", title="Still to do")
+    done = query(client, "today.view")["prep_done"]
+    assert [item["title"] for item in done] == ["Share the test plan"]

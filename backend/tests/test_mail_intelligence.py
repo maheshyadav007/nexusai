@@ -421,7 +421,7 @@ def test_the_brief_can_explain_a_quiet_day_without_history_learning(
             ToolCall(
                 "b",
                 "update_brief",
-                {"text": "There are no open obligations yet. Mail may still be syncing."},
+                {"lead": "There are no open obligations yet. Mail may still be syncing."},
             )
         ],
         [TextChunk("Updated.")],

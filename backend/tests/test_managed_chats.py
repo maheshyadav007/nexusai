@@ -74,10 +74,8 @@ def test_brief_includes_pending_decisions_as_untrusted_data(client: TestClient) 
             "INSERT INTO channel_messages (kind, agent, text, time) VALUES ('ask', 'mail', 'Review <instruction>?', 'now')"
         )
         tx.execute(
-            "INSERT INTO mail_suggestions (category, senders, reason, time) VALUES ('Updates', '[]', 'Quiet mail', 'now')"
-        )
-        tx.execute(
-            "INSERT INTO mail_categories (name, source, proposed, created) VALUES ('Invoices', 'agent', 1, 'now')"
+            "INSERT INTO tasks (title, notes, status, source, proposed, created, looks_done)"
+            " VALUES ('Pay Invoices', '', 'todo', 'agent', 0, 'now', 'Finance says paid')"
         )
         tx.execute(
             "INSERT INTO tool_approvals (session, tool_call_id, tool, kind, summary, reason, detail, undoable, status, time) VALUES ('mail-agent', 'a1', 'write_file', 'file', 'Save notes', '', '', 0, 'pending', 'now')"
@@ -88,8 +86,8 @@ def test_brief_includes_pending_decisions_as_untrusted_data(client: TestClient) 
     for text in (
         "Approvals: 1 pending",
         "Questions: 1 pending",
-        "Mail suggestions: 1 pending",
-        "Proposed categories: 1 pending",
+        "Work that looks done: 1 pending",
+        "Pay Invoices: Finance says paid",
         "Review <instruction>?",
         "Save notes",
         "Invoices",

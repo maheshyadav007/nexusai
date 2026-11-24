@@ -2348,6 +2348,12 @@ export type Id68 = number;
 export type Text11 = string;
 export type Id69 = number;
 export type Id70 = number;
+export type Lead = string;
+export type New = string[];
+export type Open = string[];
+export type Title16 = string;
+export type When5 = string | null;
+export type Why4 = string;
 export type Brief = string;
 export type NeedsYou = TodayThread[];
 export type FollowUps = TodayThread[];
@@ -2355,6 +2361,7 @@ export type Waiting = TodayThread[];
 export type AutomatedCount = number;
 export type PrepSession = string | null;
 export type PrepText = string | null;
+export type PrepDone = DoneItem[];
 export type PrepSources = SourceRef[];
 export type PrepAt = string | null;
 export type PrepArtifact = number | null;
@@ -2483,7 +2490,7 @@ export type Examples4 = string[];
 export type Instruction4 = string;
 export type Explanation = string;
 export type Id80 = number;
-export type Title16 = string;
+export type Title17 = string;
 export type Status17 = string;
 export type Time14 = string;
 export type Error5 = string | null;
@@ -2581,13 +2588,13 @@ export type Runs1 = RunSpan[];
 export type Turn2 = number;
 export type Kind21 = "task" | "reminder" | "deadline";
 export type Id87 = number;
-export type Title17 = string;
-export type When5 = string | null;
+export type Title18 = string;
+export type When6 = string | null;
 export type Thread14 = number | null;
 export type Proposed2 = boolean;
 export type Parent5 = number | null;
 export type Id88 = number;
-export type Title18 = string;
+export type Title19 = string;
 export type State12 = "waiting_on_you" | "waiting_on_others" | "fyi" | "done";
 export type Next = string | null;
 export type Due3 = string | null;
@@ -2601,7 +2608,7 @@ export type QuietDays1 = number;
 export type Started1 = string | null;
 export type Id89 = number;
 export type Matter = number;
-export type Title19 = string;
+export type Title20 = string;
 export type Time17 = string;
 export type Kind22 =
   | "started"
@@ -2622,11 +2629,11 @@ export type Kind22 =
   | "accepted"
   | "declined";
 export type Text17 = string;
-export type Why4 = string;
+export type Why5 = string;
 export type Matter1 = number;
-export type Title20 = string;
+export type Title21 = string;
 export type What = string;
-export type When6 = string;
+export type When7 = string;
 export type Kind23 = "task" | "reminder" | "deadline";
 export type Seen1 = string | null;
 export type Changes = MatterChange[];
@@ -2647,13 +2654,13 @@ export type Status21 = string;
 export type Emails7 = number;
 export type LastDate3 = string;
 export type How1 = string;
-export type Why5 = string;
-export type Matter2 = number;
-export type Title21 = string;
-export type State13 = "waiting_on_you" | "waiting_on_others" | "fyi" | "done";
 export type Why6 = string;
-export type Ref2 = string;
+export type Matter2 = number;
 export type Title22 = string;
+export type State13 = "waiting_on_you" | "waiting_on_others" | "fyi" | "done";
+export type Why7 = string;
+export type Ref2 = string;
+export type Title23 = string;
 export type Events2 = MatterChange[];
 export type Earlier = boolean;
 export type Threads4 = MatterThread[];
@@ -2666,14 +2673,14 @@ export type Events3 = MatterChange[];
 export type Earlier1 = boolean;
 export type Ref3 = string;
 export type Kind25 = "task" | "reminder" | "deadline" | "thread";
-export type Title23 = string;
-export type When7 = string | null;
+export type Title24 = string;
+export type When8 = string | null;
 export type Suggested2 = boolean;
 export type Proposed3 = boolean;
-export type Why7 = string;
+export type Why8 = string;
 export type Ref4 = string;
 export type Matter3 = number | null;
-export type Title24 = string;
+export type Title25 = string;
 export type Items5 = MatterItem[];
 export type Trigger1 = string;
 /**
@@ -2692,7 +2699,7 @@ export type Id92 = number;
 export type Into2 = number;
 export type Matter4 = number;
 export type Ref5 = string;
-export type Why8 = string;
+export type Why9 = string;
 export type Start2 = string | null;
 export type Days = number;
 export type IncludeDone = boolean;
@@ -2702,7 +2709,7 @@ export type Id94 = number;
 export type Thread15 = number;
 export type Closed = number;
 export type Id95 = number;
-export type Title25 = string;
+export type Title26 = string;
 export type Notes1 = string;
 export type Status22 = "todo" | "in_progress" | "done";
 export type Due4 = string | null;
@@ -2716,7 +2723,7 @@ export type LooksDone = string | null;
 export type IncludeDone1 = boolean;
 export type Tasks1 = Task[];
 export type Id96 = number | null;
-export type Title26 = string;
+export type Title27 = string;
 export type Notes2 = string;
 export type Status23 = "todo" | "in_progress" | "done";
 export type Due5 = string | null;
@@ -2724,8 +2731,8 @@ export type Thread17 = number | null;
 export type Proposed5 = boolean;
 export type Id97 = number;
 export type Id98 = number;
-export type Title27 = string;
-export type When8 = string;
+export type Title28 = string;
+export type When9 = string;
 export type Repeat = "none" | "day" | "week" | "month" | "year";
 export type Thread18 = number | null;
 export type Task1 = number | null;
@@ -2735,10 +2742,11 @@ export type Fired = boolean;
 export type Created7 = string | null;
 export type Updated9 = string | null;
 export type LooksDone1 = string | null;
+export type IncludeDone2 = boolean;
 export type Reminders = Reminder[];
 export type Id99 = number | null;
-export type Title28 = string;
-export type When9 = string;
+export type Title29 = string;
+export type When10 = string;
 export type Repeat1 = "none" | "day" | "week" | "month" | "year";
 export type Thread19 = number | null;
 export type Task2 = number | null;
@@ -2934,7 +2942,7 @@ export type Id112 = number | null;
 export type Id113 = number;
 export type Time22 = string;
 export type Kind31 = string;
-export type Title29 = string;
+export type Title30 = string;
 export type Detail8 = string;
 export type Link5 = string | null;
 export type Read3 = boolean;
@@ -2942,7 +2950,7 @@ export type Items6 = Notification[];
 export type Unread3 = number;
 export type Kinds1 = string[];
 export type Kind32 = string;
-export type Title30 = string;
+export type Title31 = string;
 export type Detail9 = string;
 export type Link6 = string | null;
 export type Unread4 = number;
@@ -3301,6 +3309,8 @@ export interface Contracts {
   NoteOnTeamTask?: NoteOnTeamTask;
   CancelTeamTask?: CancelTeamTask;
   RetryTeamTask?: RetryTeamTask;
+  BriefSections?: BriefSections;
+  DoneItem?: DoneItem;
   TodayView?: TodayView;
   MarkTodaySeen?: MarkTodaySeen;
   MailSuggestion?: MailSuggestion;
@@ -6760,6 +6770,29 @@ export interface RetryTeamTask {
   id: Id70;
 }
 /**
+ * The brief in the parts Today lays out: one line on what matters most, then what's new and
+ * what's still open, one line per matter.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "BriefSections".
+ */
+export interface BriefSections {
+  lead: Lead;
+  new?: New;
+  open?: Open;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "DoneItem".
+ */
+export interface DoneItem {
+  title: Title16;
+  when?: When5;
+  why?: Why4;
+  [k: string]: unknown;
+}
+/**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "TodayView".
  */
@@ -6771,6 +6804,8 @@ export interface TodayView {
   automated_count: AutomatedCount;
   prep_session: PrepSession;
   prep_text: PrepText;
+  prep_sections?: BriefSections | null;
+  prep_done?: PrepDone;
   prep_sources?: PrepSources;
   prep_at?: PrepAt;
   prep_artifact?: PrepArtifact;
@@ -7119,7 +7154,7 @@ export interface PreferencePreview {
  */
 export interface AgentQueueItem {
   id: Id80;
-  title: Title16;
+  title: Title17;
   status: Status17;
   time: Time14;
   error?: Error5;
@@ -7389,8 +7424,8 @@ export interface SeeAlerts {
 export interface MatterWork {
   kind: Kind21;
   id: Id87;
-  title: Title17;
-  when?: When5;
+  title: Title18;
+  when?: When6;
   thread?: Thread14;
   proposed?: Proposed2;
   parent?: Parent5;
@@ -7402,7 +7437,7 @@ export interface MatterWork {
  */
 export interface MatterRow {
   id: Id88;
-  title: Title18;
+  title: Title19;
   state: State12;
   next?: Next;
   due?: Due3;
@@ -7424,11 +7459,11 @@ export interface MatterRow {
 export interface MatterChange {
   id: Id89;
   matter: Matter;
-  title: Title19;
+  title: Title20;
   time: Time17;
   kind: Kind22;
   text: Text17;
-  why?: Why4;
+  why?: Why5;
   source?: SourceRef | null;
   [k: string]: unknown;
 }
@@ -7438,9 +7473,9 @@ export interface MatterChange {
  */
 export interface MatterDue {
   matter: Matter1;
-  title: Title20;
+  title: Title21;
   what: What;
-  when: When6;
+  when: When7;
   kind: Kind23;
   [k: string]: unknown;
 }
@@ -7497,7 +7532,7 @@ export interface MatterThread {
   emails: Emails7;
   last_date: LastDate3;
   how: How1;
-  why: Why5;
+  why: Why6;
   [k: string]: unknown;
 }
 /**
@@ -7508,9 +7543,9 @@ export interface MatterThread {
  */
 export interface MatterLinkRow {
   matter: Matter2;
-  title: Title21;
+  title: Title22;
   state: State13;
-  why: Why6;
+  why: Why7;
   [k: string]: unknown;
 }
 /**
@@ -7519,7 +7554,7 @@ export interface MatterLinkRow {
  */
 export interface MatterFile {
   ref: Ref2;
-  title: Title22;
+  title: Title23;
   source?: SourceRef | null;
   [k: string]: unknown;
 }
@@ -7563,11 +7598,11 @@ export interface MatterEvents {
 export interface MatterItem {
   ref: Ref3;
   kind: Kind25;
-  title: Title23;
-  when?: When7;
+  title: Title24;
+  when?: When8;
   suggested?: Suggested2;
   proposed?: Proposed3;
-  why?: Why7;
+  why?: Why8;
   [k: string]: unknown;
 }
 /**
@@ -7583,7 +7618,7 @@ export interface GetMatterRelated {
  */
 export interface MatterRelated {
   matter?: Matter3;
-  title?: Title24;
+  title?: Title25;
   items?: Items5;
   [k: string]: unknown;
 }
@@ -7618,7 +7653,7 @@ export interface MergeMatters {
 export interface AttachToMatter {
   matter: Matter4;
   ref: Ref5;
-  why?: Why8;
+  why?: Why9;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -7683,7 +7718,7 @@ export interface MatterDone {
  */
 export interface Task {
   id: Id95;
-  title: Title25;
+  title: Title26;
   notes: Notes1;
   status: Status22;
   due: Due4;
@@ -7718,7 +7753,7 @@ export interface TaskList {
  */
 export interface SaveTask {
   id?: Id96;
-  title: Title26;
+  title: Title27;
   notes?: Notes2;
   status?: Status23;
   due?: Due5;
@@ -7738,8 +7773,8 @@ export interface TaskAction {
  */
 export interface Reminder {
   id: Id98;
-  title: Title27;
-  when: When8;
+  title: Title28;
+  when: When9;
   repeat: Repeat;
   thread: Thread18;
   task: Task1;
@@ -7757,6 +7792,7 @@ export interface Reminder {
  * via the `definition` "ListReminders".
  */
 export interface ListReminders {
+  include_done?: IncludeDone2;
   [k: string]: unknown;
 }
 /**
@@ -7773,8 +7809,8 @@ export interface ReminderList {
  */
 export interface SaveReminder {
   id?: Id99;
-  title: Title28;
-  when: When9;
+  title: Title29;
+  when: When10;
   repeat?: Repeat1;
   thread?: Thread19;
   task?: Task2;
@@ -8508,7 +8544,7 @@ export interface Notification {
   id: Id113;
   time: Time22;
   kind: Kind31;
-  title: Title29;
+  title: Title30;
   detail: Detail8;
   link: Link5;
   read: Read3;
@@ -8532,7 +8568,7 @@ export interface NotificationList {
  */
 export interface NotificationRequested {
   kind: Kind32;
-  title: Title30;
+  title: Title31;
   detail?: Detail9;
   link?: Link6;
   [k: string]: unknown;

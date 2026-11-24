@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Task } from "@/ui/client/contracts.generated";
-import { useDateOnly, useRelativeTime } from "@/ui/client/format";
+import { useDateOnly, useRelativeTime, useShortDate } from "@/ui/client/format";
 import { AddBar, DuePicker } from "./AddBar";
 import { useRemoveTask, useSaveTask, useTasks } from "@/ui/client/work";
 import { AskAgent } from "@/ui/features/agent/AskAgent";
@@ -11,6 +11,7 @@ import { useLeadName } from "@/ui/client/home";
 import { RoundCheck, SuggestedCheck } from "@/ui/primitives/Checkbox";
 import { Button } from "@/ui/primitives/Button";
 import { ContextMenu } from "@/ui/primitives/ContextMenu";
+import { DoneGroup, DoneRow } from "@/ui/primitives/DoneGroup";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { ExpandRow } from "@/ui/primitives/ExpandRow";
@@ -32,7 +33,7 @@ const STATUSES = [
   { value: "done", label: t("tasks.status.done") },
 ];
 
-type View = "open" | "suggested" | "done";
+type View = "open" | "suggested";
 
 const fields = (task: Task) => ({ id: task.id, title: task.title, notes: task.notes, status: task.status, due: task.due ?? null, thread: task.thread ?? null, proposed: task.proposed });
 
@@ -84,6 +85,7 @@ function TaskRow({ task }: { task: Task }) {
               task.due ? <span key="due" className={overdue ? "font-medium text-status-danger" : ""}>{formatDay(task.due)}</span> : null,
               task.source_ref ? <SourceChip key="source" source={task.source_ref} look="inline" /> : null,
               task.source === "agent" && !task.proposed ? <span key="agent">{t("tasks.byAgent")}</span> : null,
+              task.looks_done ? <span key="looks" className="font-medium text-status-success">{t("today.looksDone")}</span> : null,
               task.notes ? <span key="notes" className="min-w-0 truncate">{task.notes.split("\n")[0]}</span> : null,
             ].filter(Boolean).flatMap((item, index) => (index ? [<MetaDot key={`dot-${index}`} />, item] : [item]))}
           </span>
@@ -141,7 +143,8 @@ export function TasksScreen() {
   const open = all.filter((task) => !task.proposed && task.status !== "done");
   const done = all.filter((task) => task.status === "done");
   const overdue = open.filter((task) => bucket(task) === "tasks.group.overdue").length;
-  const shown = view === "open" ? open : view === "suggested" ? suggested : done;
+  const shown = view === "open" ? open : suggested;
+  const day = useShortDate();
   const add = () => save.mutate({ title: title.trim(), ...(due ? { due } : {}) }, { onSuccess: () => { setTitle(""); setDue(null); } });
   const groups = view === "open" ? ORDER.map((key) => ({ key, rows: shown.filter((task) => bucket(task) === key) })).filter((group) => group.rows.length) : [{ key: null, rows: shown }];
   return (
@@ -152,18 +155,17 @@ export function TasksScreen() {
         action={<Segmented hideLabel label={t("tasks.show")} value={view} onChange={setView} options={[
           { value: "open", label: t("tasks.view.open", { count: open.length }) },
           { value: "suggested", label: t("tasks.view.suggested", { count: suggested.length }) },
-          { value: "done", label: t("tasks.view.done", { count: done.length }) },
         ]} />}
       />
       <AddBar label={t("tasks.new")} placeholder={t("tasks.new.placeholder")} icon="add" value={title} onChange={setTitle} onSubmit={add} pending={save.isPending} ready={Boolean(title.trim())} picker={<DuePicker value={due} onChange={setDue} />} />
       {save.isError ? <ErrorState title={t("planner.saveFailed")} description={save.error.message} /> : null}
       {tasks.isPending ? <Skeleton className="h-6 w-full" /> : null}
       {tasks.isError ? <ErrorState title={t("tasks.error")} onRetry={() => void tasks.refetch()} /> : null}
-      {tasks.isSuccess && shown.length === 0 ? <EmptyState icon="tasks" title={t(view === "open" ? "tasks.empty" : view === "suggested" ? "tasks.empty.suggested" : "tasks.empty.done")} /> : null}
+      {tasks.isSuccess && shown.length === 0 ? <EmptyState icon="tasks" title={t(view === "open" ? "tasks.empty" : "tasks.empty.suggested")} /> : null}
       <Presence>
         {groups.map((group) => (
           <Rise key={group.key ?? "all"} settle="position">
-            <ListGroup title={group.key ? t(group.key) : t(view === "suggested" ? "tasks.view.suggestedTitle" : "tasks.view.doneTitle")} detail={String(group.rows.length)} {...(group.key === "tasks.group.overdue" ? { tone: "danger" as const } : {})}>
+            <ListGroup title={group.key ? t(group.key) : t("tasks.view.suggestedTitle")} detail={String(group.rows.length)} {...(group.key === "tasks.group.overdue" ? { tone: "danger" as const } : {})}>
               <Presence>
                 {group.rows.map((task) => (
                   <TaskRow key={task.id} task={task} />
@@ -173,6 +175,11 @@ export function TasksScreen() {
           </Rise>
         ))}
       </Presence>
+      {view === "open" ? (
+        <DoneGroup label={t("done.label")} count={done.length} testid="tasks-done">
+          {done.map((task) => <DoneRow key={task.id} testid="task-done" title={task.title} meta={[task.completed ? day(task.completed) : null, task.looks_done || null].filter(Boolean).join(" · ")} action={<Button variant="quiet" onClick={() => save.mutate({ ...fields(task), status: "todo" })}>{t("menu.markOpen")}</Button>} />)}
+        </DoneGroup>
+      ) : null}
     </div>
   );
 }

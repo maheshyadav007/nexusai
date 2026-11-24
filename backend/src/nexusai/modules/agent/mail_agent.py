@@ -704,12 +704,9 @@ def brief_task(ctx: Context) -> str:
             "SELECT id, text FROM channel_messages WHERE kind = 'ask' AND status = 'open'",
         ),
         (
-            "Mail suggestions",
-            "SELECT id, category AS text FROM mail_suggestions WHERE status = 'open'",
-        ),
-        (
-            "Proposed categories",
-            "SELECT name AS id, name AS text FROM mail_categories WHERE proposed = 1",
+            "Work that looks done",
+            "SELECT id, title || ': ' || looks_done AS text FROM tasks"
+            " WHERE looks_done IS NOT NULL AND status != 'done'",
         ),
     ):
         rows = ctx.bus.db.fetch_all(query)

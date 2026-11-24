@@ -1256,6 +1256,21 @@ class RetryTeamTask(BaseModel):
     id: int
 
 
+class BriefSections(BaseModel):
+    """The brief in the parts Today lays out: one line on what matters most, then what's new and
+    what's still open, one line per matter."""
+
+    lead: str
+    new: list[str] = Field(default_factory=list)
+    open: list[str] = Field(default_factory=list)
+
+
+class DoneItem(BaseModel):
+    title: str
+    when: str | None = None
+    why: str = ""
+
+
 class TodayView(BaseModel):
     brief: str
     needs_you: list[TodayThread]
@@ -1265,6 +1280,9 @@ class TodayView(BaseModel):
     automated_count: int
     prep_session: str | None
     prep_text: str | None
+    prep_sections: BriefSections | None = None
+    # What got done since yesterday began, worked out by the app rather than the brief.
+    prep_done: list[DoneItem] = Field(default_factory=list)
     # What the brief's citation numbers point to.
     prep_sources: list[SourceRef] = Field(default_factory=list)
     prep_at: str | None = None

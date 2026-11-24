@@ -15,10 +15,10 @@ import { Icon } from "@/ui/icons";
 import { Avatar } from "@/ui/primitives/Avatar";
 import { Button } from "@/ui/primitives/Button";
 import { Checkbox, SuggestedCheck } from "@/ui/primitives/Checkbox";
+import { DoneGroup, DoneRow } from "@/ui/primitives/DoneGroup";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Pressable, RowButton } from "@/ui/primitives/Pressable";
-import { Segmented } from "@/ui/primitives/Segmented";
 import { Skeleton } from "@/ui/primitives/Skeleton";
 import { useToast } from "@/ui/primitives/Toast";
 import { MarkGlyph } from "@/ui/primitives/Track";
@@ -355,20 +355,28 @@ function Detail({ detail }: { detail: MatterDetail }) {
 
 /** Every matter, and the one picked with everything that happened to it. */
 export function MattersTab() {
-  const [scope, setScope] = useState<"open" | "all">("open");
-  const list = useMatterList(scope === "all");
+  // Done ones too, so they can sit at the bottom the way done things do everywhere.
+  const list = useMatterList(true);
   const { matter: chosen, go } = useTodayView();
-  const rows = list.data?.matters ?? [];
+  const day = useShortDate();
+  const everything = list.data?.matters ?? [];
+  const rows = everything.filter((row) => row.state !== "done");
+  const done = everything.filter((row) => row.state === "done");
   const id = chosen ?? rows[0]?.id ?? null;
   const detail = useMatter(id);
   if (list.isError) return <ErrorState title={t("matters.error")} onRetry={() => void list.refetch()} />;
   return (
     <div className="grid items-start gap-4 md:grid-cols-matters">
       <aside aria-label={t("matters.list.label")} className="flex flex-col gap-2 rounded-lg border border-line-subtle bg-surface-raised p-2 shadow-raised md:sticky md:top-4">
-        <div className="px-2 pt-2"><Segmented label={t("matters.list.label")} hideLabel value={scope} options={[{ value: "open", label: t("matters.list.open") }, { value: "all", label: t("matters.list.all") }]} onChange={setScope} /></div>
+        <h2 className="px-2 pt-2 text-lg font-medium text-ink-primary">{t("matters.list.label")}</h2>
         {list.isPending ? <Skeleton className="h-6 w-full" /> : null}
         {list.isSuccess && !rows.length ? <p className="p-3 text-md text-ink-muted">{t("matters.group.empty")}</p> : null}
         <ul data-testid="matter-list" className="flex flex-col">{rows.map((row) => <ListItem key={row.id} matter={row} selected={row.id === id} onPick={() => go("matters", row.id)} />)}</ul>
+        <div className="px-2">
+          <DoneGroup label={t("done.label")} count={done.length} testid="matters-done">
+            {done.map((row) => <DoneRow key={row.id} testid="matter-done-row" title={row.title} meta={row.last_date ? day(row.last_date) : null} current={row.id === id} onOpen={() => go("matters", row.id)} />)}
+          </DoneGroup>
+        </div>
       </aside>
       <div className="min-w-0">
         {id === null ? <EmptyState icon="tasks" title={t("matters.pick")} /> : null}

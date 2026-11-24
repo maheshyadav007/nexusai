@@ -1041,7 +1041,7 @@ def test_daily_prep_shows_on_today(client: TestClient, script: Script, fake: Fak
     assert today["prep_text"] is None
 
     script.replies = [
-        [ToolCall("b", "update_brief", {"text": "Your morning: one thing needs you."})],
+        [ToolCall("b", "update_brief", {"lead": "Your morning: one thing needs you."})],
         [TextChunk("Updated.")],
     ]
     made = client.post(

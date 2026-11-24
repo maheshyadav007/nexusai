@@ -177,7 +177,7 @@ def test_documents_rank_a_name_above_a_mention(
 
 
 def brief_replies(text: str) -> list[list[Any]]:
-    return [[ToolCall("brief", "update_brief", {"text": text})], [TextChunk("Updated.")]]
+    return [[ToolCall("brief", "update_brief", {"lead": text})], [TextChunk("Updated.")]]
 
 
 def test_a_brief_reaction_reaches_the_next_brief_and_the_person_can_see_it(
@@ -286,13 +286,16 @@ def test_a_brief_without_markers_is_saved_with_a_note_naming_them(
     with current().db.transaction() as tx:
         tx.execute("UPDATE threads SET status = 'waiting_on_you' WHERE id = ?", (thread,))
     session_id = str(current().create("Your brief", [], "daily-prep").id)
-    bare = "- Reply to the quarterly budget numbers from Priya."
+    lead = "One reply is owed."
+    bare = "Reply to the quarterly budget numbers from Priya."
     script.replies = [
         [ToolCall("p", "read_plate", {})],
-        [ToolCall("b1", "update_brief", {"text": bare})],
+        [ToolCall("b1", "update_brief", {"lead": lead, "new": [bare]})],
         [
             ToolCall(
-                "b2", "update_brief", {"text": f"{bare} [mail:{thread}] Made up [mail:987654]."}
+                "b2",
+                "update_brief",
+                {"lead": lead, "new": [f"{bare} [mail:{thread}] Made up [mail:987654]."]},
             )
         ],
         [TextChunk("Updated.")],
@@ -307,15 +310,24 @@ def test_a_brief_without_markers_is_saved_with_a_note_naming_them(
     assert "Note:" not in script.requests[-1].messages[-1].text
     today = post(client, "today.view").json()
     assert "[1](#cite-1)" in today["prep_text"] and "987654" not in today["prep_text"]
+    # Laid out in its parts, with the same numbers.
+    assert today["prep_sections"]["lead"] == lead
+    assert (
+        today["prep_sections"]["new"][0].startswith(bare)
+        and "[1](#cite-1)" in today["prep_sections"]["new"][0]
+    )
     assert [(s["n"], s["title"]) for s in today["prep_sources"]] == [
         (1, "Quarterly budget numbers")
     ]
 
     # Asked once in a run: the next try is saved as it is.
     script.replies = [
-        [ToolCall("b3", "update_brief", {"text": bare})],
-        [ToolCall("b4", "update_brief", {"text": bare})],
+        [ToolCall("b3", "update_brief", {"lead": lead, "new": [bare]})],
+        [ToolCall("b4", "update_brief", {"lead": lead, "new": [bare]})],
         [TextChunk("Updated.")],
     ]
     current().dispatch(TurnRequest(session_id, "Again", "schedule"))
-    wait(lambda: post(client, "today.view").json()["prep_text"] == bare, "saved as it is")
+    wait(
+        lambda: post(client, "today.view").json()["prep_text"] == f"{lead}\n\n**New**\n- {bare}",
+        "saved as it is",
+    )

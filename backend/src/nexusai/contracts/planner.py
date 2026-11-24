@@ -73,7 +73,8 @@ class Reminder(BaseModel):
 
 
 class ListReminders(BaseModel):
-    pass
+    # Those that went off lately too, to show as done.
+    include_done: bool = False
 
 
 class ReminderList(BaseModel):
