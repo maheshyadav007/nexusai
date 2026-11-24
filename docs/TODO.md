@@ -35,3 +35,7 @@ Design locked 2026-11-17: https://claude.ai/artifact/1vrr8wWijF8pFGMUYdETgv (the
 ## Clear all in notifications
 
 Noted 2026-11-24. The notifications panel needs a "Clear all" button that clears every notification in one step, instead of one at a time.
+
+## Posty sees what the app shows
+
+Planned 2026-11-24 in `docs/AGENT_SYNC_PLAN.md`: one shared day view for Today and Posty, the object model in Posty's prompt, one address per object used to open, cite and act, citations for every kind, and where to start set by the prompt, not by code.
