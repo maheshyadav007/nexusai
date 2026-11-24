@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import appConfig from "@/app.config.json";
+import { useEffect, useState, type ReactNode } from "react";
 import type { MatterRow } from "@/ui/client/contracts.generated";
 import { useAgentName, useMattersBrief } from "@/ui/client/work";
 import { AskAgent } from "@/ui/features/agent/AskAgent";
@@ -96,23 +97,48 @@ function Group({ id, icon, title, urgent = false, matters, quiet = false, sugges
   );
 }
 
+/** Whether Posty's suggestions join Waiting on you. Remembered on this computer, like the rest
+ *  of how Today looks here. */
+function useIncludeSuggested(): [boolean, (next: boolean) => void] {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    try {
+      setOn(localStorage.getItem(appConfig.storageKeys.includeSuggested) === "true");
+    } catch {
+      // Storage can be blocked; the switch then starts off.
+    }
+  }, []);
+  const change = (next: boolean) => {
+    setOn(next);
+    try {
+      localStorage.setItem(appConfig.storageKeys.includeSuggested, String(next));
+    } catch {
+      // Storage can be blocked; the choice then lasts until reload.
+    }
+  };
+  return [on, change];
+}
+
 /** What's going on, by who moves next. Each matter once, with its work and its latest email.
  *  Waiting on you is only what's theirs; Posty's suggestions join it when they ask. */
 export function MatterGroups() {
   const brief = useMattersBrief();
   const agent = useAgentName()("mail");
-  const [withSuggested, setWithSuggested] = useState(false);
+  const [withSuggested, setWithSuggested] = useIncludeSuggested();
   const data = brief.data;
   if (!data) return brief.isPending ? <Skeleton className="h-6 w-full" /> : null;
   const suggested = data.suggested ?? [];
+  // Shown with Waiting on you, a matter leaves the group it was in: each matter once.
+  const moved = new Set(withSuggested ? suggested.map((matter) => matter.id) : []);
+  const rest = (matters: readonly MatterRow[]) => matters.filter((matter) => !moved.has(matter.id));
   // Empty, the page's one "All clear" line says it.
   if (!data.needs_you.length && !data.waiting.length && !data.fyi.length && !suggested.length) return null;
   const toggle = suggested.length ? <span data-testid="include-suggested"><Checkbox label={t("matters.includeSuggested", { agent, count: suggested.length })} checked={withSuggested} onChange={setWithSuggested} /></span> : undefined;
   return (
     <>
       <Group id="today-important" icon="priority" title={t("matters.group.needsYou")} urgent matters={data.needs_you} suggested={withSuggested ? suggested : []} {...(toggle ? { aside: toggle } : {})} />
-      <Group id="today-waiting" icon="sent" title={t("matters.group.waiting")} matters={data.waiting} quiet />
-      <Group icon="info" title={t("matters.group.fyi")} matters={data.fyi} />
+      <Group id="today-waiting" icon="sent" title={t("matters.group.waiting")} matters={rest(data.waiting)} quiet />
+      <Group icon="info" title={t("matters.group.fyi")} matters={rest(data.fyi)} />
     </>
   );
 }
