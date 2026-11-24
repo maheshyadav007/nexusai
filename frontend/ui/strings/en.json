@@ -1338,6 +1338,8 @@
   "tool.suggest": "Sent you a suggestion",
   "tool.tell": "Sent you an update",
   "tool.read_plate": "Read what's on your plate",
+  "tool.open_item": "Opened a matter or its work",
+  "tool.find_matters": "Looked through matters",
   "tool.update_brief": "Updated your brief on Today",
   "tool.notify_person": "Sent a notification",
   "tool.create_schedule": "New schedule",

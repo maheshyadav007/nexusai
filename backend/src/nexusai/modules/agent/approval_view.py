@@ -52,7 +52,7 @@ READ_TOOLS = {
     "read_file", "list_folder", "search_mail", "read_thread", "read_recipients", "search_documents", "read_document",
     "list_documents", "list_tasks", "list_reminders", "list_categories", "list_rules",
     "list_drafts", "list_memory", "list_panels", "list_schedules", "read_database", "semantic_search",
-    "read_work_board", "list_mail", "read_plate", "read_matter",
+    "read_work_board", "list_mail", "read_plate", "open_item", "find_matters",
 }  # fmt: skip
 
 

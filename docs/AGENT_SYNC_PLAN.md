@@ -30,7 +30,7 @@ Found by reading the code on 2026-11-24.
 - **Addresses come from `kinds.py`.** It already names every object `kind:id`. In text for a model, an object is written in brackets: `[matter:12]`, `[task:88]`, `[reminder:5]`, `[mail:123]` (a conversation), `[doc:KEY]`. Home files are documents (`doc:h:N`), so there's no separate file kind.
 - **One address is also the citation**, for every kind above.
 - **The object model is shared.** It goes in `system.md`, which every agent gets, kept short (about 150 words) because the mail agent runs it on every email. Where to start and how to answer stay in each agent's own prompt.
-- **Tools:** `open_item(address)` opens any object with its owner, state and links. `find_matters(words, state)` lists matters. They replace `read_matter`, `read_plate` and `read_work_board`. `list_tasks` and `list_reminders` stay, as lists for the organizer, with addresses and the last two days of finished work.
+- **Tools:** `open_item(address)` opens any object with its owner, state and links. `find_matters(words, state)` lists matters. They replace `read_matter`; `read_work_board` goes with the board. `read_plate` stays as the brief agent's own tool, for a run that wasn't handed the plate; it returns the same plate. `list_tasks` and `list_reminders` stay, as lists for the organizer, with addresses and the last two days of finished work.
 - **The work board is retired.** Open deadlines become due dates on tasks; the board tools go.
 - No real-model evals without asking first; fake-model tests are fine.
 
@@ -74,7 +74,7 @@ Found by reading the code on 2026-11-24.
 ### 5. `open_item` and `find_matters`, and where to start
 
 - `open_item` takes any address and shows the object, its owner, state, work, links and recent history, each as an address. `find_matters` lists matters by words and state.
-- They replace `read_matter` and `read_plate` in every tool set.
+- They replace `read_matter` in every tool set.
 - `session.md`: for the day, answer from "Your day"; for how something is going, open that matter; search mail only for what those don't cover. Answers about the day take the brief's shape, one cited line per matter.
 - **Done when:** a scripted chat opens a matter and a task by address, and the prompt names no retired tool.
 

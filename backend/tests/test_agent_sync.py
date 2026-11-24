@@ -206,3 +206,33 @@ def test_every_agent_is_taught_the_object_model_as_the_code_has_it() -> None:
     assert set(re.findall(r"\b([a-z]+) \(", linked)) == set(links.KINDS_OF_LINK)
     assert set(re.findall(r"\[([a-z]+):", taught)) == set(citations.CITED)
     assert len(taught.split()) < 200
+
+
+def test_a_matter_and_its_work_open_by_address_and_name_what_to_open_next(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    matter, task = ticked_one(client, script, fake)
+    other = next(t for t in open_tasks(client) if t["title"] == "Sign the 88213 cost sheet")
+    whole = tool_said(client, script, "open_item", {"address": f"[matter:{matter['id']}]"})
+    assert whole.splitlines()[1].startswith(f"[matter:{matter['id']}]")
+    assert "[mail:" in whole
+    assert f"- suggested, not kept yet [task:{other['id']}] Sign the 88213 cost sheet" in whole
+    assert f"- done [task:{task['id']}] Get CL 88213 merged" in whole
+    one = tool_said(client, script, "open_item", {"address": f"task:{other['id']}"})
+    assert f"In [matter:{matter['id']}]" in one and "Asked in [mail:" in one
+    found = tool_said(client, script, "find_matters", {"words": "88213"})
+    assert f"[matter:{matter['id']}]" in found
+    assert "isn't an address" in tool_said(client, script, "open_item", {"address": "matter 12"})
+
+
+RETIRED = {"read_matter"}
+
+
+def test_no_prompt_names_a_retired_tool() -> None:
+    from importlib import resources
+
+    folder = resources.files("nexusai.modules.agent").joinpath("prompts")
+    for prompt in folder.iterdir():
+        if prompt.name.endswith(".md"):
+            text = prompt.read_text("utf-8")
+            assert not [name for name in RETIRED if name in text], prompt.name

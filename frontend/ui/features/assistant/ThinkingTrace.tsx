@@ -73,6 +73,8 @@ const TOOL_SHOWN: Readonly<Record<string, { label: StringKey; icon: IconName; ch
   suggest: { label: "tool.suggest", icon: "channel" },
   tell: { label: "tool.tell", icon: "channel" },
   read_plate: { label: "tool.read_plate", icon: "tasks" },
+  open_item: { label: "tool.open_item", icon: "today" },
+  find_matters: { label: "tool.find_matters", icon: "today", chip: "words" },
   update_brief: { label: "tool.update_brief", icon: "thinking" },
   notify_person: { label: "tool.notify_person", icon: "notifications" },
 };

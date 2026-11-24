@@ -1376,7 +1376,135 @@ def context_for(ctx: Context, thread: int) -> str:
 # What the brief is given -------------------------------------------------------------------------
 
 PLATE_MATTERS = 15
+# As many matters as find_matters lists before asking for more words.
+FOUND_MATTERS = 30
 PLATE_LOOSE = 10
+
+
+# Opening one thing by its address --------------------------------------------------------------
+
+
+def _file_address(file: MatterFile) -> str:
+    """A matter's file as the document it is: an email's attachment, or a document linked to it."""
+    kind, _, rest = file.ref.partition(":")
+    return address("doc", f"m:{rest}" if kind == "attachment" else f"u:{rest}")
+
+
+def open_text(ctx: Context, kind: str, identifier: int) -> str:
+    """A matter, task or reminder in full, with everything it points to written by address, so
+    the next thing to open is right there."""
+    if kind == "matter":
+        return _open_matter(ctx, identifier)
+    db = ctx.bus.db
+    table, when = ("tasks", "due") if kind == "task" else ("reminders", "due_at")
+    rows = db.fetch_all(f"SELECT * FROM {table} WHERE id = ?", (identifier,))  # noqa: S608
+    if not rows:
+        return f"{address(kind, identifier)} no longer exists."
+    r = rows[0]
+    if kind == "task":
+        state = f"done {_local(r['completed'])}" if r["status"] == "done" else r["status"]
+    else:
+        state = (
+            f"went off {r['due_at']}" if r["fired"] else f"at {r['due_at']}, repeats {r['repeat']}"
+        )
+    lines = [
+        f'{address(kind, identifier)} "{r["title"]}" · {state}'
+        + (" · suggested, not kept yet" if r["proposed"] else "")
+        + (f" · due {r[when]}" if kind == "task" and r[when] else "")
+    ]
+    if kind == "task" and r["notes"]:
+        lines.append(f"Notes: {_short(r['notes'], 300)}")
+    if r["looks_done"]:
+        lines.append(f"Looks done: {_short(r['looks_done'], 200)}")
+    owner, _, thread = home(db, kind, identifier)
+    if owner:
+        found = db.fetch_all("SELECT * FROM matters WHERE id = ?", (owner,))
+        if found:
+            shown = row(ctx, found[0])
+            lines.append(f'In {address("matter", owner)} "{shown.title}" · {shown.state}')
+    else:
+        lines.append("Not part of a matter.")
+    if kind == "reminder" and r["task"]:
+        lines.append(f"For {address('task', r['task'])}")
+    if thread:
+        lines.append(f"Asked in {address('thread', thread)}")
+    if kind == "task":
+        lines += [
+            f"- reminder {address('reminder', w['id'])} at {w['due_at']}"
+            for w in db.fetch_all(
+                "SELECT id, due_at FROM reminders WHERE task = ? AND fired = 0", (identifier,)
+            )
+        ]
+    return "\n".join(lines)
+
+
+def _open_matter(ctx: Context, matter: int) -> str:
+    db = ctx.bus.db
+    into = links.live(db, ref("matter", matter), "merged")
+    if into:
+        other = parse(into[0]["other"])
+        return f"{address('matter', matter)} was merged into {address(*other) if other else 'another'}. Open that one."
+    try:
+        whole = detail(ctx, matter)
+    except CommandError as error:
+        return error.message
+    m = whole.matter
+    looks = {
+        (kind, r["id"]): r["looks_done"]
+        for kind, table in (("task", "tasks"), ("reminder", "reminders"))
+        for r in db.fetch_all(f"SELECT id, looks_done FROM {table} WHERE looks_done IS NOT NULL")  # noqa: S608
+    }
+    lines = [f'{address("matter", m.id)} "{m.title}" · {m.state} · due {m.due or "none"}']
+    lines.append("Conversations:")
+    lines += [f"- {address('thread', t.id)} {t.subject} ({t.status})" for t in whole.threads]
+    if m.work or whole.done:
+        lines.append("Work:")
+    for w in m.work:
+        label = (
+            "suggested, not kept yet"
+            if w.proposed
+            else "looks done"
+            if (w.kind, w.id) in looks
+            else "open"
+        )
+        lines.append(
+            f"- {label} {address(w.kind, w.id)} {w.title}"
+            + (f" due {w.when}" if w.when else "")
+            + (f": {_short(looks[(w.kind, w.id)], 120)}" if (w.kind, w.id) in looks else "")
+        )
+    lines += [f"- done {address(w.kind, w.id)} {w.title} {_local(w.when)}" for w in whole.done[:10]]
+    if whole.related:
+        lines.append("Related:")
+        lines += [
+            f"- {address('matter', r.matter)} {r.title} ({r.state}): {r.why}" for r in whole.related
+        ]
+    if whole.files:
+        lines.append("Files:")
+        lines += [f"- {_file_address(f)} {f.title}" for f in whole.files]
+    lines.append("What happened, oldest first:")
+    lines += [f"  {e.time[:10]} {e.kind}: {e.text}" for e in whole.events[-20:]]
+    return "\n".join(lines)
+
+
+def find(ctx: Context, words: str, state: str) -> str:
+    """Matters by words in their title or people, and by state, newest first."""
+    rows = _matters(ctx, include_done=state == "done")
+    if state != "open":
+        rows = [r for r in rows if r.state == state]
+    wanted = words.casefold().split()
+    rows = [
+        r for r in rows if all(w in f"{r.title} {' '.join(r.people)}".casefold() for w in wanted)
+    ]
+    rows.sort(key=lambda r: r.last_date, reverse=True)
+    lines = [
+        f'{address("matter", r.id)} "{_short(r.title, 90)}" · {r.state}'
+        + (f" · due {r.due}" if r.due else "")
+        + f" · {r.emails} emails · last {r.last_date[:10]}"
+        for r in rows[:FOUND_MATTERS]
+    ]
+    if len(rows) > FOUND_MATTERS:
+        lines.append(f"and {len(rows) - FOUND_MATTERS} more: add words to narrow it.")
+    return "\n".join(lines) or "No matter matches. Try fewer words, or search_mail."
 
 
 # Finished work stays in view this long, so an email isn't read as an open ask once it's done.
