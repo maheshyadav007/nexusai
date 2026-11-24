@@ -1179,3 +1179,45 @@ def test_memory_suggestions_waiting_from_before_are_kept_as_learned_notes(
     learned = (config.home / "memory" / "agents" / "mail" / "learned.md").read_text()
     assert "- Ravi leads the RRC team" in learned
     assert memory.settle_proposals(db, config.home) == 0
+
+
+def test_reading_past_mail_is_one_running_job_not_three(client: TestClient) -> None:
+    from nexusai.modules.agent import mail_agent
+
+    db = client.app.state.bus.db  # type: ignore[attr-defined]
+    with db.transaction() as tx:
+        tx.execute(
+            "INSERT OR REPLACE INTO agent_defaults (key, value) VALUES (?, 'reading')",
+            (mail_agent.LEARNING_STATE,),
+        )
+        tx.execute(
+            "INSERT OR REPLACE INTO agent_defaults (key, value) VALUES (?, '10')",
+            (mail_agent.LEARNING_TOTAL,),
+        )
+        tx.execute(
+            "INSERT INTO trigger_runs (trigger, event, time, status) VALUES (?, 'learn-group-1', 'now', 'pending')",
+            (mail_agent.MAIL_TRIGGER,),
+        )
+        tx.execute(
+            "INSERT OR IGNORE INTO agent_sessions (id, title, agent, status, untrusted, created, updated)"
+            " VALUES (?, 'Mail agent', 'mail', 'running', 1, 'now', 'now')",
+            (mail_agent.SESSION_ID,),
+        )
+        tx.execute(
+            "UPDATE agent_sessions SET status = 'running' WHERE id = ?", (mail_agent.SESSION_ID,)
+        )
+    jobs = client.post("/api/queries/jobs.list", json={}).json()["jobs"]
+    assert [job["id"] for job in jobs if job["link"].endswith(mail_agent.SESSION_ID)] == [
+        "mail-learning"
+    ]
+    # New mail arriving meanwhile shows as the queue, once.
+    with db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO trigger_runs (trigger, event, time, status, thread) VALUES (?, 'm-1', 'now', 'pending', 1)",
+            (mail_agent.MAIL_TRIGGER,),
+        )
+    jobs = client.post("/api/queries/jobs.list", json={}).json()["jobs"]
+    assert [job["id"] for job in jobs if job["link"].endswith(mail_agent.SESSION_ID)] == [
+        "mail-learning",
+        "triage",
+    ]

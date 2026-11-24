@@ -1783,7 +1783,8 @@ def list_jobs(query: ListJobs, ctx: Context) -> JobList:
                     link="/settings?section=local-models",
                 )
             )
-    waiting = mail_agent.waiting_count(ctx)
+    # Reading past mail is one job, shown above with its progress, not again as the queue.
+    waiting = mail_agent.new_mail_waiting(ctx)
     if waiting:
         status = "waiting for the model" if _triggers and _triggers.waiting_for_model else "running"
         jobs.append(
@@ -1797,9 +1798,13 @@ def list_jobs(query: ListJobs, ctx: Context) -> JobList:
                 link=f"/agent/sessions/{mail_agent.SESSION_ID}",
             )
         )
+    # A chat already shown as one of the jobs above isn't listed a second time as itself.
+    shown = {job.link for job in jobs}
     for row in db.fetch_all(
         "SELECT id, title, status, agent FROM agent_sessions WHERE status IN ('queued', 'running', 'waiting') ORDER BY updated DESC"
     ):
+        if f"/agent/sessions/{row['id']}" in shown:
+            continue
         jobs.append(
             Job(
                 id=f"session-{row['id']}",
