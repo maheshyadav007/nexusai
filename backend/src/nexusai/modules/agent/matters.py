@@ -970,7 +970,7 @@ def unlink(ctx: Context, thread: int) -> int:
 # The rest of the matter -------------------------------------------------------------------------
 
 
-def _home(db: Database, kind: str, identifier: int) -> tuple[int | None, int | None, int | None]:
+def home(db: Database, kind: str, identifier: int) -> tuple[int | None, int | None, int | None]:
     """The matter something belongs to, the email that asked for it, and its conversation."""
     if kind == "thread":
         return matter_of(db, identifier), None, identifier
@@ -994,7 +994,7 @@ def _home(db: Database, kind: str, identifier: int) -> tuple[int | None, int | N
             return None, None, None
         r = rows[0]
         if r["task"]:
-            return _home(db, "task", r["task"])
+            return home(db, "task", r["task"])
         return (
             r["matter"] or (matter_of(db, r["thread"]) if r["thread"] else None),
             None,
@@ -1019,7 +1019,7 @@ def related_open(ctx: Context, trigger: str) -> MatterRelated:
         return MatterRelated()
     db = ctx.bus.db
     kind, identifier = found
-    matter, source, thread = _home(db, kind, identifier)
+    matter, source, thread = home(db, kind, identifier)
     titled = db.fetch_all("SELECT title FROM matters WHERE id = ?", (matter,)) if matter else []
     if matter is None or not titled:
         return MatterRelated()

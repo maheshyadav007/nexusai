@@ -6,7 +6,7 @@ from typing import Any
 from nexusai.kernel.database import Database, Migration
 from nexusai.kernel.module import Context
 from nexusai.modules.agent import sources as source_names
-from nexusai.modules.agent.sources import DOCUMENT, MAIL
+from nexusai.modules.agent.sources import DOCUMENT, MAIL, MATTER, REMINDER, TASK
 
 MIGRATION = Migration(
     "agent_citations_001",
@@ -18,11 +18,26 @@ CREATE TABLE agent_turn_sources (
 )
 # A message in a thread is cited as a page of the thread: [mail:123#m456].
 MESSAGE = re.compile(r"^m(\d+)$")
-MARKER = re.compile(r"\[(mail|doc):([^\]\s#]{1,200})(?:#([^\]\s]{1,40}))?\]")
+CITED = (MAIL, DOCUMENT, MATTER, TASK, REMINDER)
+_KINDS = "|".join(CITED)
+_STARTS = "|".join(sorted({kind[:size] for kind in CITED for size in range(1, len(kind) + 1)}))
+MARKER = re.compile(rf"\[({_KINDS}):([^\]\s#]{{1,200}})(?:#([^\]\s]{{1,40}}))?\]")
 # The start of a marker that may finish in the next chunk of a stream.
-PARTIAL = re.compile(r"\[(?:m|ma|mai|mail|d|do|doc|(?:mail|doc):[^\]\s]{0,240})?$")
+PARTIAL = re.compile(rf"\[(?:{_STARTS}|(?:{_KINDS}):[^\]\s]{{0,240}})?$")
+# A key written bare, outside a marker: task:88, thread:12, or a document's m:12:2. It's internal,
+# so it's never shown: it becomes a citation when the turn read it, and goes otherwise.
+_NAMED = "matter|task|reminder|mail|thread|deadline"
+_OWN = r"(?<![\w\[/#:.@-])"
+RAW = re.compile(rf"{_OWN}(?:({_NAMED}):(\d+)|(?:doc:)?([muh]:\d+(?::\d+)?))(?![\w:])")
+# The start of a bare key that may finish in the next chunk.
+_WORD_STARTS = "|".join(
+    sorted(
+        {word[:size] for word in (*_NAMED.split("|"), "doc") for size in range(1, len(word) + 1)}
+    )
+)
+RAW_PARTIAL = re.compile(rf"{_OWN}(?:{_WORD_STARTS}|(?:{_NAMED}):\d*|(?:doc:)?[muh](?::[\d:]*)?)$")
 REPEATED = re.compile(r"(\[(\d+)\]\(#cite-\2\))(?:\s*\[\2\]\(#cite-\2\))+")
-__all__ = ["DOCUMENT", "MAIL", "Citations", "note"]
+__all__ = ["DOCUMENT", "MAIL", "MATTER", "REMINDER", "TASK", "Citations", "note"]
 
 
 def note(db: Database, session: str, kind: str, ref: str, *, opened: bool = False) -> None:
@@ -42,7 +57,7 @@ def note(db: Database, session: str, kind: str, ref: str, *, opened: bool = Fals
 
 
 def mark(kind: str, ref: object) -> str:
-    """How a tool shows an email or a document, so the model cites it by copying it as written."""
+    """How a tool shows anything that can be cited, so the model cites it by copying it as written."""
     return f"[{kind}:{ref}]"
 
 
@@ -89,7 +104,16 @@ class Citations:
         )
 
     def _replace(self, match: re.Match[str]) -> str:
-        kind, ref, page = match.group(1), match.group(2), match.group(3)
+        return self._number(match.group(1), match.group(2), match.group(3))
+
+    def _bare(self, match: re.Match[str]) -> str:
+        named, number, key = match.group(1), match.group(2), match.group(3)
+        if key:
+            return self._number(DOCUMENT, key, None)
+        kind = MAIL if named == "thread" else named
+        return self._number(kind, number, None) if kind in CITED else ""
+
+    def _number(self, kind: str, ref: str, page: str | None) -> str:
         if not self._was_read(kind, ref):
             return ""
         number = self.numbers.setdefault((kind, ref), len(self.numbers) + 1)
@@ -102,7 +126,7 @@ class Citations:
 
     def rewrite(self, text: str) -> str:
         # Two messages of one thread cited side by side are one source, so one number.
-        return REPEATED.sub(r"\1", MARKER.sub(self._replace, text))
+        return REPEATED.sub(r"\1", RAW.sub(self._bare, MARKER.sub(self._replace, text)))
 
     def part(self) -> list[dict[str, Any]]:
         """Everything this turn drew on, cited first, as one part for the message."""

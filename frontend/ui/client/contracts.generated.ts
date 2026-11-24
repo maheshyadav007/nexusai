@@ -1856,7 +1856,7 @@ export type Prompts = PromptFile[];
 export type Kind6 = "personal" | "agent";
 export type Name34 = string;
 export type Content4 = string;
-export type Kind7 = "mail" | "doc";
+export type Kind7 = "mail" | "doc" | "matter" | "task" | "reminder";
 export type Ref = string;
 export type Message3 = number | null;
 export type Page = string | null;
@@ -1864,6 +1864,7 @@ export type Title5 = string;
 export type Detail2 = string;
 export type Date4 = string | null;
 export type N = number | null;
+export type Matter = number | null;
 export type Id36 = number;
 export type Kind8 = "ask" | "suggest" | "tell";
 export type Agent7 = string;
@@ -2349,7 +2350,7 @@ export type Text11 = string;
 export type Id69 = number;
 export type Id70 = number;
 export type Text12 = string;
-export type Matter = number | null;
+export type Matter1 = number | null;
 export type Mark = ("added" | "updated") | null;
 export type At = string | null;
 export type Lead = string;
@@ -2612,7 +2613,7 @@ export type LastDate2 = string;
 export type QuietDays1 = number;
 export type Started1 = string | null;
 export type Id89 = number;
-export type Matter1 = number;
+export type Matter2 = number;
 export type Title20 = string;
 export type Time17 = string;
 export type Kind22 =
@@ -2635,7 +2636,7 @@ export type Kind22 =
   | "declined";
 export type Text18 = string;
 export type Why5 = string;
-export type Matter2 = number;
+export type Matter3 = number;
 export type Title21 = string;
 export type What = string;
 export type When7 = string;
@@ -2660,7 +2661,7 @@ export type Emails7 = number;
 export type LastDate3 = string;
 export type How1 = string;
 export type Why6 = string;
-export type Matter3 = number;
+export type Matter4 = number;
 export type Title22 = string;
 export type State13 = "waiting_on_you" | "waiting_on_others" | "fyi" | "done";
 export type Why7 = string;
@@ -2685,7 +2686,7 @@ export type Suggested2 = boolean;
 export type Proposed3 = boolean;
 export type Why8 = string;
 export type Ref4 = string;
-export type Matter4 = number | null;
+export type Matter5 = number | null;
 export type Title25 = string;
 export type Items5 = MatterItem[];
 export type Trigger1 = string;
@@ -2703,7 +2704,7 @@ export type Keep = string[];
 export type Refs = string[];
 export type Id92 = number;
 export type Into2 = number;
-export type Matter5 = number;
+export type Matter6 = number;
 export type Ref5 = string;
 export type Why9 = string;
 export type Start2 = string | null;
@@ -5766,8 +5767,8 @@ export interface SavePrompt {
   content: Content4;
 }
 /**
- * Where something came from: an email thread or a document. Its title, detail and date are
- * read from the database, never written by a model.
+ * Where something came from: an email thread, a document, a matter or a task or reminder.
+ * Its title, detail and date are read from the database, never written by a model.
  *
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "SourceRef".
@@ -5781,6 +5782,7 @@ export interface SourceRef {
   detail?: Detail2;
   date?: Date4;
   n?: N;
+  matter?: Matter;
   [k: string]: unknown;
 }
 /**
@@ -6782,7 +6784,7 @@ export interface RetryTeamTask {
  */
 export interface BriefLine {
   text: Text12;
-  matter?: Matter;
+  matter?: Matter1;
   mark?: Mark;
   at?: At;
   [k: string]: unknown;
@@ -7477,7 +7479,7 @@ export interface MatterRow {
  */
 export interface MatterChange {
   id: Id89;
-  matter: Matter1;
+  matter: Matter2;
   title: Title20;
   time: Time17;
   kind: Kind22;
@@ -7491,7 +7493,7 @@ export interface MatterChange {
  * via the `definition` "MatterDue".
  */
 export interface MatterDue {
-  matter: Matter2;
+  matter: Matter3;
   title: Title21;
   what: What;
   when: When7;
@@ -7561,7 +7563,7 @@ export interface MatterThread {
  * via the `definition` "MatterLinkRow".
  */
 export interface MatterLinkRow {
-  matter: Matter3;
+  matter: Matter4;
   title: Title22;
   state: State13;
   why: Why7;
@@ -7637,7 +7639,7 @@ export interface GetMatterRelated {
  * via the `definition` "MatterRelated".
  */
 export interface MatterRelated {
-  matter?: Matter4;
+  matter?: Matter5;
   title?: Title25;
   items?: Items5;
   [k: string]: unknown;
@@ -7671,7 +7673,7 @@ export interface MergeMatters {
  * via the `definition` "AttachToMatter".
  */
 export interface AttachToMatter {
-  matter: Matter5;
+  matter: Matter6;
   ref: Ref5;
   why?: Why9;
 }

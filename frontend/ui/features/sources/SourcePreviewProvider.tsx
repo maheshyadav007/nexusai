@@ -1,15 +1,16 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { DocumentPreviewPanel } from "@/ui/features/documents/DocumentPreview";
 import { SourcePreviewContext } from "./context";
-import { sameSource, type PreviewSource } from "./kinds";
+import { fullHref, sameSource, type PreviewSource } from "./kinds";
 import { MailPreview } from "./MailPreview";
 import type { PreviewProps } from "./PreviewFrame";
 
 // How each kind of source shows in the quick preview. A new kind is one more line here, and its
-// full page one more case in kinds.fullHref.
-const PREVIEWS: Record<PreviewSource["kind"], ComponentType<PreviewProps>> = {
+// full page one more case in kinds.fullHref. A kind with no preview, like a matter, opens its page.
+const PREVIEWS: Partial<Record<PreviewSource["kind"], ComponentType<PreviewProps>>> = {
   mail: MailPreview,
   doc: DocumentPreviewPanel,
   file: DocumentPreviewPanel,
@@ -20,13 +21,18 @@ export function SourcePreviewProvider({ children }: { children: ReactNode }) {
   const [list, setList] = useState<readonly PreviewSource[]>([]);
   const [position, setPosition] = useState(-1);
   const source = list[position];
+  const router = useRouter();
   const open = useCallback((chosen: PreviewSource, siblings?: readonly PreviewSource[]) => {
-    const all = siblings?.length ? siblings : [chosen];
+    if (!PREVIEWS[chosen.kind]) {
+      router.push(fullHref(chosen));
+      return;
+    }
+    const all = (siblings?.length ? siblings : [chosen]).filter((item) => PREVIEWS[item.kind]);
     const found = all.findIndex((item) => sameSource(item, chosen));
     // The one clicked keeps its own message or page, even if the list's copy has none.
     setList(found < 0 ? [chosen] : all.map((item, index) => (index === found ? chosen : item)));
     setPosition(Math.max(found, 0));
-  }, []);
+  }, [router]);
   const move = useCallback((by: number) => setPosition((current) => Math.min(Math.max(current + by, 0), list.length - 1)), [list.length]);
   const close = useCallback(() => setPosition(-1), []);
   const showing = Boolean(source);

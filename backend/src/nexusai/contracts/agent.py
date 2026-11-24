@@ -446,12 +446,12 @@ class SavePrompt(BaseModel):
     content: str = Field(max_length=100000)
 
 
-SourceKind = Literal["mail", "doc"]
+SourceKind = Literal["mail", "doc", "matter", "task", "reminder"]
 
 
 class SourceRef(BaseModel):
-    """Where something came from: an email thread or a document. Its title, detail and date are
-    read from the database, never written by a model."""
+    """Where something came from: an email thread, a document, a matter or a task or reminder.
+    Its title, detail and date are read from the database, never written by a model."""
 
     kind: SourceKind
     # The thread id, or the document key.
@@ -465,6 +465,8 @@ class SourceRef(BaseModel):
     date: str | None = None
     # Its number in the text that cites it. None when it was read but not cited.
     n: int | None = None
+    # The matter a matter, task or reminder opens on, when it has one.
+    matter: int | None = None
 
 
 class ChannelMessage(BaseModel):

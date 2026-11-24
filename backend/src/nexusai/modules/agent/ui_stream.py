@@ -4,16 +4,16 @@ This is the only file that knows either format, so a change in v3 stops here.
 """
 
 import json
-import re
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
+
+from nexusai.modules.agent.citations import PARTIAL, RAW_PARTIAL
 
 if TYPE_CHECKING:
     from nexusai.modules.agent.citations import Citations
 
 MODEL_NODE = "model"
-PARTIAL = re.compile(r"\[(?:m|ma|mai|mail|d|do|doc|(?:mail|doc):[^\]\s]{0,240})?$")
 FOLLOWUPS_OPEN = "<followups>"
 FOLLOWUPS_CLOSE = "</followups>"
 MAX_FOLLOWUPS = 4
@@ -234,19 +234,22 @@ class UiTranslator:
         if self.citations is None:
             return text
         text = block.pop("cite_held", "") + text
-        partial = PARTIAL.search(text)
-        if partial:
-            block["cite_held"] = text[partial.start() :]
-            text = text[: partial.start()]
+        starts = [
+            found.start() for found in (PARTIAL.search(text), RAW_PARTIAL.search(text)) if found
+        ]
+        if starts:
+            block["cite_held"] = text[min(starts) :]
+            text = text[: min(starts)]
         return self.citations.rewrite(text)
 
     def _end_text(self, block: dict[str, Any]) -> list[dict[str, Any]]:
         parts: list[dict[str, Any]] = []
         held = self._cited(block, block["held"]) if block.get("held") else ""
-        # Anything still kept back never became a marker, so it's only words, unless it was cut off.
+        # Anything still kept back never became a marker, so it's only words, unless it was a marker
+        # cut off. A bare key at the very end is rewritten like any other.
         leftover = block.pop("cite_held", "")
-        if ":" not in leftover:
-            held += leftover
+        if not (leftover.startswith("[") and ":" in leftover):
+            held += self.citations.rewrite(leftover) if self.citations is not None else leftover
         if held:
             parts.append({"type": "text-delta", "id": block["id"], "delta": held})
         parts.append({"type": "text-end", "id": block["id"]})
