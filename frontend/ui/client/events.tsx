@@ -10,7 +10,7 @@ import type { GenerationState } from "./contracts.generated";
 /** Which saved query goes out of date when an event happens. Screens never poll. */
 const INVALIDATES: Record<string, readonly string[]> = {
   "settings.changed": ["settings"],
-  "models.changed": ["models", "models-available"],
+  "models.changed": ["models", "models-available", "cockpit"],
   "onboarding.changed": ["onboarding"],
   "profile.changed": ["profile"],
   "sidebar.changed": ["sidebar"],
