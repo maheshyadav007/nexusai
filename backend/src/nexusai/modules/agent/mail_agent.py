@@ -1459,6 +1459,17 @@ def waiting_count(ctx: Context) -> int:
     return int(rows[0]["n"])
 
 
+def new_mail_waiting(ctx: Context) -> int:
+    """Mail waiting to be judged, leaving out past mail being read to learn, which shows as its
+    own job."""
+    rows = ctx.bus.db.fetch_all(
+        "SELECT COUNT(*) AS n FROM trigger_runs WHERE trigger = ? AND status IN ('pending', 'running')"
+        " AND event NOT LIKE ?",
+        (MAIL_TRIGGER, f"{LEARN_PREFIX}%"),
+    )
+    return int(rows[0]["n"])
+
+
 def estimate(ctx: Context) -> TriageEstimate:
     account = accounts.current_account(ctx.config)
     rows = ctx.bus.db.fetch_all(
