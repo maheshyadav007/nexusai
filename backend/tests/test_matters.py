@@ -375,3 +375,25 @@ def test_what_got_done_since_yesterday_is_listed_by_the_app(client: TestClient) 
     command(client, "tasks.save", title="Still to do")
     done = query(client, "today.view")["prep_done"]
     assert [item["title"] for item in done] == ["Share the test plan"]
+
+
+def test_a_matter_lists_its_finished_work_apart_from_its_open_work(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    connect(client, fake)
+    script.replies = [triage_reply(reason="Needs a reply.")]
+    fake.state.deliver(make_mail(subject="Lab move next month", sender=KARTHIK))
+    thread = triaged(client, "Lab move")
+    command(client, "tasks.save", title="Book a slot", thread=thread["id"])
+    command(client, "tasks.save", title="Tell the team", thread=thread["id"])
+    booked = next(t for t in tasks(client) if t["title"] == "Book a slot")
+    command(
+        client,
+        "tasks.save",
+        **{k: booked[k] for k in ("id", "title", "notes", "due", "thread")},
+        status="done",
+    )
+    matter = wait(lambda: matters(client), "matter")[0]
+    detail = query(client, "matters.get", id=matter["id"])
+    assert [w["title"] for w in detail["matter"]["work"]] == ["Tell the team"]
+    assert [w["title"] for w in detail["done"]] == ["Book a slot"] and detail["done"][0]["when"]

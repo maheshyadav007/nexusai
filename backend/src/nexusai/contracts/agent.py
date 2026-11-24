@@ -1858,6 +1858,8 @@ class MatterDetail(BaseModel):
     people: list[str]
     related: list[MatterLinkRow] = Field(default_factory=list)
     files: list[MatterFile] = Field(default_factory=list)
+    # What's finished in it, newest first, shown closed under its open work.
+    done: list[MatterWork] = Field(default_factory=list)
 
 
 class GetMatterEvents(BaseModel):
