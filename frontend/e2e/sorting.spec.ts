@@ -42,7 +42,8 @@ test("sorting files tool mail in a folder of its own in Hidden from AI, renamed,
   // The AI's side gives its biggest senders folders of their own too, ticked to show in the
   // sidebar. Unticked, one the page made goes back to being a group in no folder; ticked again,
   // it's a folder again.
-  const made = page.locator('[data-testid="sort-folder"][data-side="reads"][data-ticked="true"]:not([data-group])').first();
+  // One the page made: a folder that already exists stays a folder whatever its tick says.
+  const made = page.locator('[data-testid="sort-folder"][data-side="reads"][data-ticked="true"]:not([data-group]):not([data-real])').first();
   const label = (await made.getAttribute("data-folder")) as string;
   await made.getByRole("checkbox").click();
   const group = page.locator(`[data-testid="sort-folder"][data-side="reads"][data-folder="${label}"][data-group="true"]`);

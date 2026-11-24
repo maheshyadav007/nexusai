@@ -1087,7 +1087,7 @@ class Triage:
             provisional = False
             notify = False
             why = reason
-            parsed = {**parsed, "draft": None, "memory": None}
+            parsed = {**parsed, "draft": None}
             if status not in {"waiting_on_others", "resolved"}:
                 status = "waiting_on_others"
             if status != "waiting_on_others":
@@ -1320,9 +1320,6 @@ class Triage:
             self._finished(thread, matter, str(ref), why, sent_at)
         if parsed.get("draft"):
             self._draft(thread, str(parsed["draft"]), subject)
-        # An older model may still send memory: it's a note learned from mail, like learned.
-        if parsed.get("memory"):
-            memory.add_learned(ctx.config.home, [str(parsed["memory"])], thread)
 
     def _finished(
         self, thread: int, matter: int | None, ref: str, why: str, sent_at: str | None

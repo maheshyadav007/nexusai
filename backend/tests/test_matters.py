@@ -442,7 +442,8 @@ def test_the_brief_follows_its_matters_through_the_day_without_a_model(
         )
     )
     updated = wait(
-        lambda: (lambda l: l if l and l[0].get("mark") == "updated" else None)(lines()), "updated"
+        lambda: (lambda got: got if got and got[0].get("mark") == "updated" else None)(lines()),
+        "updated",
     )
     assert updated[0]["text"].startswith("**RCA please** · waiting on you")
     assert "drive-test logs" in updated[0]["text"] and "(#cite-" in updated[0]["text"]
@@ -455,7 +456,7 @@ def test_the_brief_follows_its_matters_through_the_day_without_a_model(
     badge = triaged(client, "Badge renewal")["id"]
     tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
     command(client, "tasks.save", title="Sign the badge form", thread=badge, due=tomorrow)
-    added = wait(lambda: (lambda l: l if len(l) == 2 else None)(lines()), "added")
+    added = wait(lambda: (lambda got: got if len(got) == 2 else None)(lines()), "added")
     assert added[0]["mark"] == "added" and added[0]["text"].startswith("**Badge renewal**")
 
     # Finished, it leaves the brief and shows with what got done.
