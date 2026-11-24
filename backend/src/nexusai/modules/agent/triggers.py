@@ -476,6 +476,8 @@ class Triggers:
         self.wake.set()
 
     def model_changed(self) -> None:
+        # Tried again at once; if it's still not usable, the next check holds it again.
+        self.waiting_for_model = None
         self.retry_at = 0.0
         self.wake.set()
 

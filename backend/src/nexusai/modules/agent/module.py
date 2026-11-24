@@ -1680,6 +1680,8 @@ def cockpit_events(query: GetCockpitEvents, ctx: Context) -> CockpitEvents:
 def list_jobs(query: ListJobs, ctx: Context) -> JobList:
     db = ctx.bus.db
     jobs: list[Job] = []
+    # Without a model nothing moves, and the row says so rather than "running".
+    stalled = bool(_triggers and _triggers.waiting_for_model)
     reading, read_total = mail_agent.learning_progress(ctx)
     if mail_agent.learning_state(ctx) == "reading" and read_total:
         jobs.append(
@@ -1687,7 +1689,7 @@ def list_jobs(query: ListJobs, ctx: Context) -> JobList:
                 id="mail-learning",
                 kind="trigger",
                 title=f"{cards.name(db, mail_agent.AGENT)} reading your past mail",
-                status="running",
+                status="waiting for the model" if stalled else "running",
                 progress=reading,
                 total=read_total,
                 link=f"/agent/sessions/{mail_agent.SESSION_ID}",
@@ -1786,7 +1788,7 @@ def list_jobs(query: ListJobs, ctx: Context) -> JobList:
     # Reading past mail is one job, shown above with its progress, not again as the queue.
     waiting = mail_agent.new_mail_waiting(ctx)
     if waiting:
-        status = "waiting for the model" if _triggers and _triggers.waiting_for_model else "running"
+        status = "waiting for the model" if stalled else "running"
         jobs.append(
             Job(
                 id="triage",
