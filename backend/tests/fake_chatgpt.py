@@ -122,7 +122,7 @@ def create_fake() -> FastAPI:
                     else [],
                     "reminders": [],
                     "draft": "Thanks, I'll look at this." if "draft" in said.lower() else None,
-                    "memory": "Remember this person." if "remember" in said.lower() else None,
+                    "learned": ["Remember this person."] if "remember" in said.lower() else [],
                     "question": "Is this urgent for you?" if "question" in said.lower() else None,
                 }
                 yield event(
