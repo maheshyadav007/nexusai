@@ -285,10 +285,13 @@ function Detail({ detail }: { detail: MatterDetail }) {
         {done ? <Button onClick={() => reopen.mutate(matter.id)} loading={reopen.isPending}>{t("matters.undo")}</Button> : <Button variant="primary" data-testid="matter-done" onClick={() => finish(matter)}>{t("matters.done")}</Button>}
       </header>
       </ContextMenu>
-      {matter.work?.length ? (
+      {matter.work?.length || detail.done?.length ? (
         <section aria-label={t("matters.work")} className="flex flex-col gap-3 border-t border-line-subtle pt-4">
           <h3 className="text-md font-medium text-ink-primary">{t("matters.work")}</h3>
-          <WorkList work={matter.work} />
+          {matter.work?.length ? <WorkList work={matter.work} /> : null}
+          <DoneGroup label={t("done.label")} count={detail.done?.length ?? 0} testid="matter-work-done">
+            {(detail.done ?? []).map((item) => <DoneRow key={`${item.kind}-${item.id}`} testid="work-done" title={item.title} meta={[t(`matters.work.${item.kind}` as StringKey), item.when ? short(item.when) : null].filter(Boolean).join(" · ")} />)}
+          </DoneGroup>
         </section>
       ) : null}
       <Timeline detail={detail} startRef={startRef} />

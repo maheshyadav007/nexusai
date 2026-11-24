@@ -484,6 +484,28 @@ def _work(db: Database, matter: int, threads: list[int]) -> list[MatterWork]:
     return found
 
 
+def _done_work(db: Database, matter: int, threads: list[int]) -> list[MatterWork]:
+    """What's finished in the matter, newest first, with when: tasks ticked and reminders gone off."""
+    marks = ",".join("?" * len(threads)) or "NULL"
+    found = [
+        MatterWork(kind="task", id=r["id"], title=r["title"], when=r["completed"], thread=r["thread"])
+        for r in db.fetch_all(
+            f"SELECT * FROM tasks WHERE status = 'done' AND proposed = 0"  # noqa: S608
+            f" AND (matter = ? OR thread IN ({marks}))",
+            (matter, *threads),
+        )
+    ]  # fmt: skip
+    found += [
+        MatterWork(kind="reminder", id=r["id"], title=r["title"], when=r["due_at"], thread=r["thread"])
+        for r in db.fetch_all(
+            f"SELECT * FROM reminders WHERE fired = 1 AND proposed = 0"  # noqa: S608
+            f" AND (matter = ? OR thread IN ({marks}))",
+            (matter, *threads),
+        )
+    ]  # fmt: skip
+    return sorted(found, key=lambda item: item.when or "", reverse=True)
+
+
 def _people(db: Database, threads: list[int], own: set[str]) -> list[str]:
     if not threads:
         return []
@@ -854,6 +876,7 @@ def detail(ctx: Context, matter: int) -> MatterDetail:
         people=_people(db, [t["id"] for t in threads], signals.own_addresses(ctx)),
         related=_related(ctx, matter),
         files=_files(db, matter, [t["id"] for t in threads]),
+        done=_done_work(db, matter, [t["id"] for t in threads]),
     )
 
 

@@ -2667,6 +2667,7 @@ export type Threads4 = MatterThread[];
 export type People3 = string[];
 export type Related = MatterLinkRow[];
 export type Files3 = MatterFile[];
+export type Done4 = MatterWork[];
 export type Id91 = number;
 export type Before3 = number;
 export type Events3 = MatterChange[];
@@ -7570,6 +7571,7 @@ export interface MatterDetail {
   people: People3;
   related?: Related;
   files?: Files3;
+  done?: Done4;
   [k: string]: unknown;
 }
 /**
