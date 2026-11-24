@@ -288,7 +288,7 @@ def test_a_day_question_that_searched_mail_first_is_flagged_quietly(
         script.replies = [*steps, [TextChunk("Here it is.")]]
         session = new_session(client)
         chat(client, session, question)
-        wait(lambda: status(client, session) == "done", question)
+        wait(lambda chat_id=session: status(client, chat_id) == "done", question)
     ctx = ctx_of(client)
     monitor._detours(ctx)
     monitor._detours(ctx)
