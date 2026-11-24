@@ -1221,3 +1221,14 @@ def test_reading_past_mail_is_one_running_job_not_three(client: TestClient) -> N
         "mail-learning",
         "triage",
     ]
+    # With no model to read with, it says so instead of "running".
+    from nexusai.modules.agent import module
+
+    assert module._triggers is not None
+    module._triggers.hold_for_model("No model connected.")
+    jobs = client.post("/api/queries/jobs.list", json={}).json()["jobs"]
+    waiting = {job["status"] for job in jobs if job["id"] in {"mail-learning", "triage"}}
+    assert waiting == {"waiting for the model"}
+    module._triggers.model_changed()
+    jobs = client.post("/api/queries/jobs.list", json={}).json()["jobs"]
+    assert next(job for job in jobs if job["id"] == "mail-learning")["status"] == "running"
