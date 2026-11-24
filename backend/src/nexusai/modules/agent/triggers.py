@@ -959,7 +959,7 @@ class Triggers:
             with self.ctx.bus.db.transaction() as tx:
                 tx.execute("UPDATE agent_sessions SET untrusted = 1 WHERE id = ?", (session,))
         if not task and schedule["kind"] == "daily-prep":
-            task = briefs.snapshot(self.ctx)
+            task = mail_agent.brief_task(self.ctx)
         account = accounts.current_account(self.ctx.config)
         own["account"] = account
         if is_brief or schedule["kind"] == "daily-prep":

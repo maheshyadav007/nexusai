@@ -491,6 +491,7 @@ def test_prompts_join_every_run_and_outside_edits_are_picked_up(
         "About the person",
         "Personalized prompts",
         "Your other tools",
+        "Your day",
         "This run",
         "Task content",
     ]

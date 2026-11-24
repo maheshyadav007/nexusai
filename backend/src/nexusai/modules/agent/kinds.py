@@ -41,6 +41,12 @@ def ref(kind: str, identifier: int) -> str:
     return f"{kind}:{identifier}"
 
 
+def address(kind: str, identifier: object) -> str:
+    """How a thing is written for a model, in brackets, to open and to cite it. A conversation is
+    written as mail, as citations have always named it."""
+    return f"[{'mail' if kind == 'thread' else kind}:{identifier}]"
+
+
 def parse(value: object) -> tuple[str, int] | None:
     """A name like "task:88", or None for anything else, so what a model writes can't reach SQL."""
     kind, _, number = str(value or "").strip().partition(":")

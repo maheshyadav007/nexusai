@@ -1,10 +1,28 @@
 """Posty sees what the app shows: every object has one address, used to open and to cite it, and
 no internal key reaches the screen (docs/AGENT_SYNC_PLAN.md)."""
 
+# ruff: noqa: F811
+
 from typing import Any
 
+from fastapi.testclient import TestClient
+
+from fake_mail import FakeMail
+from nexusai.modules.agent import mail_agent, matters
 from nexusai.modules.agent.citations import Citations
+from nexusai.modules.agent.providers import TextChunk
 from nexusai.modules.agent.ui_stream import UiTranslator
+from test_agent_work import (  # noqa: F401  (fixtures)
+    Script,
+    app_config,
+    client,
+    fake,
+    script,
+    wait,
+)
+from test_chat_engine import chat, new_session, status, view
+from test_matter_objects import one_matter_two_tasks, open_tasks, save_task
+from test_matters import query
 
 
 class Read(Citations):
@@ -51,3 +69,80 @@ def test_a_bare_key_at_the_very_end_is_still_rewritten() -> None:
 def test_times_links_and_words_are_left_alone() -> None:
     text = "At 21:45 I'm done with the task, see https://x.example/m:12 and ratio 3:2."
     assert stream([text[:9], text[9:30], text[30:]], set()) == text
+
+
+def ctx_of(client: TestClient) -> Any:
+    from nexusai.modules.agent.module import current
+
+    return current().ctx
+
+
+def ticked_one(
+    client: TestClient, script: Script, fake: FakeMail
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """A matter with two tasks, one of them ticked."""
+    matter = one_matter_two_tasks(client, script, fake)
+    task = next(t for t in open_tasks(client) if t["title"] == "Get CL 88213 merged")
+    save_task(client, task, status="done")
+    return matter, task
+
+
+def test_a_ticked_task_shows_as_done_on_the_plate_not_open(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    matter, task = ticked_one(client, script, fake)
+    plate = matters.plate(ctx_of(client))
+    going_on, done = plate.split("What's going on")[1].split("Done since yesterday:")
+    assert f"[matter:{matter['id']}]" in going_on
+    assert f"[task:{task['id']}]" not in going_on
+    assert f"[task:{task['id']}] Get CL 88213 merged, done" in done
+
+
+def test_the_plate_counts_and_lists_the_same_matters_as_today(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    ticked_one(client, script, fake)
+    today = query(client, "matters.brief")
+    plate = matters.plate(ctx_of(client))
+    assert (
+        f"Matters waiting on them: {len(today['needs_you'])} · waiting on others:"
+        f" {len(today['waiting'])} · worth knowing: {len(today['fyi'])}"
+    ) in plate
+    for row in [*today["needs_you"], *today["waiting"], *today["fyi"]]:
+        assert f"[matter:{row['id']}]" in plate
+
+
+def test_posty_is_shown_your_day_and_can_cite_a_matter_and_a_task_from_it(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    matter, _ = ticked_one(client, script, fake)
+    other = next(t for t in open_tasks(client) if t["title"] == "Sign the 88213 cost sheet")
+    script.replies = [
+        [TextChunk(f"Sign the cost sheet [task:{other['id']}] for [matter:{matter['id']}].")]
+    ]
+    session = new_session(client)
+    chat(client, session, "What needs me today?")
+    wait(lambda: status(client, session) == "done", "the answer")
+    told = script.requests[-1].instructions
+    assert "Your day" in told
+    assert f"[matter:{matter['id']}]" in told
+    answer = view(client, session)["messages"][-1]
+    words = "".join(p["text"] for p in answer["parts"] if p["type"] == "text")
+    assert words == "Sign the cost sheet [1](#cite-1) for [2](#cite-2)."
+    sources = next(p for p in answer["parts"] if p["type"] == "data-sources")["data"]["sources"]
+    assert [(s["kind"], s["title"], s["matter"]) for s in sources] == [
+        ("task", "Sign the 88213 cost sheet", matter["id"]),
+        ("matter", matter["title"], matter["id"]),
+    ]
+
+
+def test_decisions_name_work_by_its_address(client: TestClient) -> None:
+    ctx = ctx_of(client)
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO tasks (title, notes, status, source, proposed, created)"
+            " VALUES ('Book the venue', '', 'todo', 'agent', 1, 'now')"
+        )
+    waiting = mail_agent.decisions(ctx)
+    assert "Suggested tasks: 1 pending" in waiting
+    assert "- [task:1] Book the venue" in waiting

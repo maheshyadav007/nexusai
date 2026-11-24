@@ -1880,12 +1880,9 @@ def today_view(query: GetToday, ctx: Context) -> TodayView:
             new=[BriefLine(**line) for line in briefs.lines_of(saved.get("new"))],
             open=[BriefLine(**line) for line in briefs.lines_of(saved.get("open"))],
         )
-    # Since the start of yesterday, local time: what "done since yesterday" means to a person.
-    yesterday = (datetime.now().astimezone() - timedelta(days=1)).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
     prep_done = [
-        DoneItem(**item) for item in briefs.done_since(ctx, yesterday.astimezone(UTC).isoformat())
+        DoneItem(title=item["title"], when=item["when"], why=item["why"])
+        for item in briefs.done_since(ctx, briefs.since_yesterday())
     ]
     rating, comment = (artifact["rating"], artifact["comment"] or "") if artifact else (None, "")
     freshness = "none"

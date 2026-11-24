@@ -34,7 +34,7 @@ from nexusai.kernel import textmatch
 from nexusai.kernel.database import Database, Migration
 from nexusai.kernel.module import CommandError, Context
 from nexusai.modules.agent import conversations, links, signals
-from nexusai.modules.agent.kinds import parse, ref
+from nexusai.modules.agent.kinds import address, parse, ref
 from nexusai.modules.mail import accounts
 from nexusai.modules.mail.parse import normalize_subject
 from nexusai.modules.mail.source import thread_source
@@ -1380,11 +1380,22 @@ PLATE_LOOSE = 10
 
 
 def plate(ctx: Context) -> str:
-    """What's going on, one matter at a time, then what isn't part of one. Each list is cut short
-    with a count, so a full mailbox never floods the brief, and nothing appears twice."""
+    """What's going on, one matter at a time, then what isn't part of one and what finished since
+    yesterday. Each list is cut short with a count, so a full mailbox never floods the brief, and
+    nothing appears twice. Every object is written by its address, to open and to cite."""
     db = ctx.bus.db
     rows = _matters(ctx)
     parts: list[str] = []
+    counts = Counter(r.state for r in rows)
+    parts.append(
+        f"Matters waiting on them: {counts['waiting_on_you']} · waiting on others:"
+        f" {counts['waiting_on_others']} · worth knowing: {counts['fyi']}"
+    )
+    looks = {
+        (kind, r["id"]): r["looks_done"]
+        for kind, table in (("task", "tasks"), ("reminder", "reminders"))
+        for r in db.fetch_all(f"SELECT id, looks_done FROM {table} WHERE looks_done IS NOT NULL")  # noqa: S608
+    }
     lines: list[str] = []
     for shown in rows[:PLATE_MATTERS]:
         when = f" · due {shown.due}" if shown.due else ""
@@ -1394,24 +1405,36 @@ def plate(ctx: Context) -> str:
             else ""
         )
         lines.append(
-            f'[{shown.id}] "{_short(shown.title, 90)}" · {shown.state}{when}{quiet} · {shown.emails} emails'
+            f'{address("matter", shown.id)} "{_short(shown.title, 90)}" · {shown.state}{when}{quiet} · {shown.emails} emails'
         )
         if shown.next:
             lines.append(f"   next: {_short(shown.next, 100)}")
         work = [w for w in shown.work if not (w.kind == "reminder" and w.parent is not None)]
-        if work:
+        for label, chosen in (
+            ("open", [w for w in work if not w.proposed and (w.kind, w.id) not in looks]),
+            ("suggested, not kept yet", [w for w in work if w.proposed]),
+        ):
             listed = [
-                f"[{w.kind}:{w.id}] {_short(w.title, 70)}" + (f" due {w.when}" if w.when else "")
-                for w in work[:CONTEXT_ITEMS]
+                f"{address(w.kind, w.id)} {_short(w.title, 70)}"
+                + (f" due {w.when}" if w.when else "")
+                for w in chosen[:CONTEXT_ITEMS]
             ]
-            left = len(work) - len(listed)
-            lines.append(
-                "   open: " + " · ".join(listed) + (f" · and {left} more" if left > 0 else "")
-            )
+            left = len(chosen) - len(listed)
+            if listed:
+                lines.append(
+                    f"   {label}: "
+                    + " · ".join(listed)
+                    + (f" · and {left} more" if left > 0 else "")
+                )
+        for w in work:
+            if (w.kind, w.id) in looks and not w.proposed:
+                lines.append(
+                    f"   looks done: {address(w.kind, w.id)} {_short(w.title, 70)}: {_short(looks[(w.kind, w.id)], 100)}"
+                )
         if shown.latest:
             why = db.fetch_all("SELECT why FROM threads WHERE id = ?", (shown.latest.ref,))
             lines.append(
-                f"   latest: [mail:{shown.latest.ref}] {_short(shown.latest.detail or '', 40)}, "
+                f"   latest: {address('mail', shown.latest.ref)} {_short(shown.latest.detail or '', 40)}, "
                 f"{(shown.latest.date or '')[:10]}: {_short((why[0]['why'] if why else '') or shown.latest.title, 140)}"
             )
     if lines:
@@ -1454,4 +1477,30 @@ def plate(ctx: Context) -> str:
             + "\n".join(f"- {line}" for line in listed)
             + (f"\n- and {more} more" if more > 0 else "")
         )
+    from nexusai.modules.agent import briefs
+
+    # The same list Today shows under the brief.
+    finished = briefs.done_since(ctx, briefs.since_yesterday())
+    if finished:
+        listed = [
+            f"- {item['address']} {_short(item['title'], 80)}, done {_local(item['when'])}"
+            + (f": {_short(item['why'], 80)}" if item["why"] else "")
+            for item in finished[:PLATE_LOOSE]
+        ]
+        more = len(finished) - len(listed)
+        parts.append(
+            "Done since yesterday:\n"
+            + "\n".join(listed)
+            + (f"\n- and {more} more" if more > 0 else "")
+        )
     return "\n\n".join(parts)
+
+
+def _local(moment: str | None) -> str:
+    """A stored UTC time as the person's local day and time."""
+    if not moment:
+        return ""
+    try:
+        return datetime.fromisoformat(moment).astimezone().strftime("%Y-%m-%d %H:%M")
+    except ValueError:
+        return moment[:16]
