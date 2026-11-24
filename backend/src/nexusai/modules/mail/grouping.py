@@ -19,7 +19,7 @@ from email.utils import getaddresses
 from pathlib import Path
 from typing import Literal
 
-from nexusai.modules.mail import sort_rules
+from nexusai.modules.mail import subject_kinds
 from nexusai.modules.mail.parse import (
     SUBJECT_PREFIX,
     ParsedMessage,
@@ -38,6 +38,12 @@ SMART: dict[Section, bool] = {
 REPEATS = 2
 # Fewer emails than this give no pattern to go by, unless the headers say outright it's bulk mail.
 ENOUGH = 20
+# "Nobody ever answers" needs fewer: ten unanswered emails from one address is already a tool's
+# habit, and a shop's order mail, each subject naming a different item, has no other sign.
+ONE_WAY = 10
+# An address that says it takes no replies is a tool's by its own word: noreply, no-reply,
+# do-not-reply, donotreply, alone or joined to other words, as in payments-noreply.
+NO_REPLY = re.compile(r"(?:^|[\W_])(?:no|do[\W_]*not)[\W_]*reply", re.IGNORECASE)
 # When the subject repeats and nobody answers or writes to the address, this many are enough:
 # two when only a number changes between them, a few when the words are the same each time.
 SMALL = 2
@@ -418,7 +424,7 @@ class _Box:
         """Many emails nobody has ever answered. People don't keep writing to someone who never
         writes back; tools do. Needs either the person's sent mail or Outlook's marks to rule
         out a colleague whose announcements nobody answers."""
-        if len(items) < ENOUGH or any(self.writers[item.thread] != {sender} for item in items):
+        if len(items) < ONE_WAY or any(self.writers[item.thread] != {sender} for item in items):
             return []
         if self.sent_known and sender not in self.written_to:
             return ["Many emails, nobody ever writes back, and you never wrote to them"]
@@ -679,18 +685,22 @@ class SenderScore:
     count: int
     # Different subjects among the emails that start something, rather than answer it.
     subjects: int
-    # The three signs, each from 0 to 1, and the score: the strongest of them.
+    # The four signs, each from 0 to 1, and the score: the strongest of them.
     repeats: float
     bulk: float
     one_way: bool
+    no_reply: bool
     score: float
     side: Literal["reads", "ignores"]
     # Why it stays with the AI whatever its score, if it does.
     kept: str
     examples: list[tuple[str, int]]
     members: list[str] = field(repr=False)
-    # How its subjects start, when a few ways cover most of it: what its rules will name.
-    starts: list[str] = field(default_factory=list)
+    # The kinds of mail it sends, found from its subjects, and how many fit none: what its
+    # rules will name, and what still reaches the AI.
+    kinds: tuple[subject_kinds.Kind, ...] = ()
+    odd: int = 0
+    odd_examples: tuple[str, ...] = ()
 
 
 @dataclass
@@ -722,6 +732,7 @@ def score_senders(raws: Iterable[tuple[str, bytes]]) -> SenderReport:
         by_sender[mail.sender].append(mail)
     scored: list[SenderScore] = []
     quiet = set(calendar)
+    own = subject_kinds.own_words(box.owner_name, owner)
     for sender, items in by_sender.items():
         starts = [item for item in items if not item.reply] or items
         # A blank subject is no pattern, so each counts as different.
@@ -729,9 +740,12 @@ def score_senders(raws: Iterable[tuple[str, bytes]]) -> SenderReport:
         repeats = 1 - len(patterns) / len(starts) if len(starts) > 1 else 0.0
         bulk = _share(items, lambda m: m.bulk)
         one_way = bool(box.one_way(sender, items)) and sender != owner
-        score = max(repeats, bulk, 1.0 if one_way else 0.0)
+        no_reply = bool(NO_REPLY.search(sender.partition("@")[0]))
+        score = max(repeats, bulk, 1.0 if one_way else 0.0, 1.0 if no_reply else 0.0)
         kept = ""
-        if len(items) == 1:
+        # One email gives no pattern, so it reaches the AI, unless it says itself that it's a
+        # mailing or takes no replies: one address per list, like a forum's, is still bulk mail.
+        if len(items) == 1 and not (no_reply or bulk >= MOSTLY):
             kept = "A new sender"
         elif box.answers_people(sender, items):
             kept = "Answers people in conversations"
@@ -747,6 +761,13 @@ def score_senders(raws: Iterable[tuple[str, bytes]]) -> SenderReport:
         # Kept means all of it: what the folder keeps from the AI, the AI never sees.
         if side == "ignores":
             quiet |= {item.key for item in items}
+        # Only for mail a program sends one person, like a bank's alerts: there a new kind of
+        # subject can matter. Bulk mail, like a newsletter, is all one thing.
+        found = (
+            subject_kinds.find([item.parsed.subject for item in starts], own)
+            if bulk < THRESHOLD
+            else subject_kinds.Kinds((), 0, len(starts))
+        )
         scored.append(
             SenderScore(
                 sender=sender,
@@ -756,16 +777,18 @@ def score_senders(raws: Iterable[tuple[str, bytes]]) -> SenderReport:
                 repeats=round(repeats, 2),
                 bulk=round(bulk, 2),
                 one_way=one_way,
+                no_reply=no_reply,
                 score=round(score, 2),
                 side=side,
                 kept=kept,
                 examples=Counter(item.pattern for item in items).most_common(3),
-                members=[item.key for item in items],
-                # Only for mail a program sends one person, like a bank's alerts: there a new
-                # kind of subject can matter. Bulk mail, like a newsletter, is all one thing.
-                starts=sort_rules.subject_starts([item.parsed.subject for item in starts])
-                if bulk < THRESHOLD
-                else [],
+                # Newest first, so the emails a page shows are the latest.
+                members=[
+                    item.key for item in sorted(items, key=lambda m: m.parsed.date, reverse=True)
+                ],
+                kinds=found.kinds,
+                odd=found.odd,
+                odd_examples=found.odd_examples,
             )
         )
     scored.sort(key=lambda row: (-row.count, row.sender))

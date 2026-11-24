@@ -9,12 +9,10 @@ const post = async (request: APIRequestContext, path: string, data: unknown = {}
   return text ? JSON.parse(text) : {};
 };
 
-// A folder's senders open in its window over the page, on their own tab.
+// A folder's senders open in its window over the page, in groups, beside their emails.
 const sendersOf = async (page: import("@playwright/test").Page, card: import("@playwright/test").Locator) => {
   await card.getByTestId("sort-folder-head").getByRole("button", { name: /^Open .*: its emails, senders and rule$/ }).click();
-  const modal = page.getByTestId("sort-folder-modal");
-  await modal.getByRole("tab", { name: /sender/ }).click();
-  return modal;
+  return page.getByTestId("sort-folder-modal");
 };
 
 test.beforeAll(async ({ request }) => {
@@ -41,47 +39,45 @@ test("sorting files tool mail in a folder of its own in Hidden from AI, renamed,
   const card = page.locator('[data-testid="sort-folder"][data-sort-key="builds@ci.example"]');
   await expect(card).toBeVisible({ timeout: 60_000 });
   await expect(card).toHaveAttribute("data-side", "ignores");
-  // The AI's side gives its biggest senders folders of their own too, up to 3; counted down to 0,
-  // they have none, and the senders it reads stay in no folder.
-  const k = page.getByTestId("sort-k-reads");
-  const start = Number(await k.getByRole("status").textContent());
-  expect(start).toBeGreaterThan(0);
-  expect(start).toBeLessThanOrEqual(3);
-  for (let n = start; n > 0; n -= 1) await k.getByRole("button", { name: "One fewer" }).click();
-  await expect(k.getByRole("status")).toHaveText("0");
-  // Every group is still listed, greyed with an empty tick, to scroll and check; ticking one
-  // gives it a folder, and unticking takes it back.
-  const groups = page.locator('[data-testid="sort-folder"][data-side="reads"][data-group="true"]');
-  expect(await groups.count()).toBeGreaterThan(0);
-  const group = groups.first();
-  const label = (await group.getAttribute("data-folder")) as string;
+  // The AI's side gives its biggest senders folders of their own too, ticked to show in the
+  // sidebar. Unticked, one the page made goes back to being a group in no folder; ticked again,
+  // it's a folder again.
+  const made = page.locator('[data-testid="sort-folder"][data-side="reads"][data-ticked="true"]:not([data-group])').first();
+  const label = (await made.getAttribute("data-folder")) as string;
+  await made.getByRole("checkbox").click();
+  const group = page.locator(`[data-testid="sort-folder"][data-side="reads"][data-folder="${label}"][data-group="true"]`);
   await expect(group.getByRole("checkbox")).not.toBeChecked();
   await group.getByRole("checkbox").click();
-  const made = page.locator(`[data-testid="sort-folder"][data-side="reads"][data-folder="${label}"]:not([data-group])`);
-  await expect(made.getByRole("checkbox")).toBeChecked();
-  await made.getByRole("checkbox").click();
-  await expect(page.locator(`[data-testid="sort-folder"][data-side="reads"][data-folder="${label}"][data-group="true"]`)).toBeVisible();
-  // The page draws where the mail goes, with its counts.
-  await expect(page.getByTestId("sort-flow")).toBeVisible();
-  // Which side is said in words, as the sidebar says it: a press moves the whole folder across,
-  // to Read by AI, where it shows marked.
-  await expect(card.getByTestId("sort-folder-head").getByRole("radio", { name: "Hidden" })).toBeChecked();
-  await card.getByTestId("sort-folder-head").getByRole("radio", { name: "Read by AI" }).click();
+  await expect(page.locator(`[data-testid="sort-folder"][data-side="reads"][data-folder="${label}"]:not([data-group])`).getByRole("checkbox")).toBeChecked();
+  // Move to takes the whole folder across, to Read by AI, where it shows marked.
+  await card.getByRole("button", { name: /^Move .* to$/ }).click();
+  await page.getByRole("menuitem", { name: "Read by AI, as its own folder" }).click();
   await expect(card).toHaveAttribute("data-side", "reads");
   await expect(page.getByTestId("sort-moved-note")).toContainText("moved to");
   await page.getByTestId("sort-moved-note").getByRole("button", { name: "Undo" }).click();
   await expect(card).toHaveAttribute("data-side", "ignores");
-  await card.getByRole("textbox", { name: "Folder name" }).fill("Build bot");
-  await expect(card.getByRole("textbox", { name: "Folder name" })).toHaveValue("Build bot");
-  await expect(card).toContainText("In Hidden from AI");
+  // Renamed in place: a name another folder has is refused as it's typed, and Enter saves a free one.
+  await card.getByRole("button", { name: /^Rename / }).click();
+  const name = card.getByRole("textbox", { name: "Folder name" });
+  await name.fill("read by ai");
+  await expect(card.getByRole("alert")).toBeVisible();
+  await name.fill("Build bot");
+  await name.press("Enter");
+  await expect(card.getByRole("button", { name: /^Open Build bot: / })).toBeVisible();
   // Ticked, it shows in the sidebar; its emails and rule open in a window, the page stays put.
   await expect(card.getByRole("checkbox", { name: "Show Build bot in the sidebar" })).toBeChecked();
-  await card.getByRole("button", { name: "Rule for Build bot" }).click();
+  await card.getByRole("button", { name: /^Open Build bot: / }).click();
   const window = page.getByTestId("sort-folder-modal");
-  await expect(window.getByRole("tab", { name: "Rule" })).toHaveAttribute("aria-selected", "true");
-  await expect(window).toContainText("From builds@ci.example");
-  await window.getByRole("tab", { name: "Emails" }).click();
   await expect(window).toContainText("passed");
+  // The rules, by sender, as rules: each one a row of conditions.
+  await window.getByRole("tab", { name: /^Rules/ }).click();
+  await expect(window.getByTestId("sort-rules")).toContainText("builds@ci.example");
+  await expect(window.getByTestId("sort-rule").first()).toBeVisible();
+  // A sender pressed keeps the tab that was chosen, then shows only its mail on Emails.
+  await window.locator('[data-testid="sort-sender"][data-sort-key="builds@ci.example"]').getByRole("button", { name: "builds@ci.example", exact: true }).click();
+  await expect(window.getByRole("tab", { name: /^Rules/ })).toHaveAttribute("aria-selected", "true");
+  await window.getByRole("tab", { name: "Emails" }).click();
+  await expect(window).toContainText(/of \d+ emails/);
   await page.keyboard.press("Escape");
   await expect(window).toHaveCount(0);
   // Each side ends with its "No folder" card, and the columns are named like the two homes.
@@ -128,13 +124,17 @@ test("the Sort page opens again as things are now, and moving a sender saves its
   await expect(page.getByRole("button", { name: "Skip sorting" })).toHaveCount(0);
 
   // A move can be undone: from the note where it was, or from the list of changes beside Save.
-  await bot.getByTestId("sort-folder-head").getByRole("radio", { name: "Read by AI" }).click();
+  const moveBot = async () => {
+    await bot.getByRole("button", { name: /^Move .* to$/ }).click();
+    await page.getByRole("menuitem", { name: "Read by AI, as its own folder" }).click();
+  };
+  await moveBot();
   await expect(page.getByTestId("sort-moved-note")).toContainText("moved to Build bot");
   await page.getByTestId("sort-moved-note").getByRole("button", { name: "Undo" }).click();
   await expect(bot).toHaveAttribute("data-side", "ignores");
   await expect(page.getByTestId("sort-changes")).toHaveCount(0);
   // The whole folder moves to Read by AI: the bot in it is read by the AI, with one rule.
-  await bot.getByTestId("sort-folder-head").getByRole("radio", { name: "Read by AI" }).click();
+  await moveBot();
   await expect(page.getByTestId("sort-changes")).toHaveText("1 change · Review");
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await page.waitForURL("**/today");
@@ -152,34 +152,32 @@ test("the Sort page opens again as things are now, and moving a sender saves its
   await page.keyboard.press("Escape");
   // Kim goes the other way: hidden from the AI, with one rule.
   open = await sendersOf(page, inbox);
-  await open.locator('[data-testid="sort-sender"][data-sort-key="kim@people.example"]').getByRole("radio", { name: "Hidden" }).click();
-  await page.keyboard.press("Escape");
+  await open.locator('[data-testid="sort-sender"][data-sort-key="kim@people.example"]').getByRole("button", { name: "Move kim@people.example to" }).click();
+  await page.getByRole("menuitem", { name: "Hidden from AI · No folder" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await page.waitForURL("**/today");
   await expect.poll(async () => (await rulesFor("kim@people.example")).map((rule) => rule.actions.skip_agent)).toEqual([true]);
   expect((await rulesFor("builds@ci.example")).length).toBe(1);
 
-  // A new folder the AI reads, made on the page; Kim is put in it from her details, mail and all.
+  // Kim is put in a folder the AI reads from her details, mail and all.
   await page.goto("/mail/sort");
-  await page.getByRole("region", { name: "Read by AI", exact: true }).getByRole("button", { name: "+ New folder" }).click({ timeout: 60_000 });
-  await page.getByRole("textbox", { name: "New folder name" }).fill("Friends");
-  await page.getByRole("button", { name: "Add", exact: true }).click();
-  const friends = page.locator('[data-testid="sort-folder"][data-folder="Friends"]');
-  await expect(friends).toContainText("Drag senders here");
+  const friends = page.locator('[data-testid="sort-folder"][data-side="reads"][data-folder="Build bot"]');
+  await expect(friends).toBeVisible({ timeout: 60_000 });
   const automated = page.locator('[data-testid="sort-folder"][data-folder="Automated"]');
   open = await sendersOf(page, automated);
   const kim = open.locator('[data-testid="sort-sender"][data-sort-key="kim@people.example"]');
-  await kim.getByRole("button", { name: /kim@people.example/ }).click();
-  await kim.getByRole("combobox", { name: "Folder for people" }).click();
-  await page.getByRole("option", { name: "Read by AI · Friends" }).click();
-  await page.keyboard.press("Escape");
-  await expect(friends).toContainText("1 sender");
-  await expect(friends).toHaveAttribute("data-side", "reads");
+  await kim.getByRole("button", { name: "Move kim@people.example to" }).click();
+  await page.getByRole("menuitem", { name: "Read by AI · Build bot" }).click();
+  // Kim stays listed in the window, now read by the AI, until it closes.
+  await expect(kim).toHaveAttribute("data-side", "reads");
+  await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
+  await expect(friends).toContainText("2 senders");
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await page.waitForURL("**/today");
-  await expect.poll(async () => (await rulesFor("kim@people.example")).map((rule) => [rule.actions.category, rule.actions.skip_agent])).toEqual([["Friends", false]]);
+  await expect.poll(async () => (await rulesFor("kim@people.example")).map((rule) => [rule.actions.category, rule.actions.skip_agent])).toEqual([["Build bot", false]]);
   const rows = (await post(request, "/api/queries/threads.list", { folder: "all" })).threads as { subject: string; category: string | null }[];
   const hers = rows.filter((row) => /^About (the offsite|Friday's demo) \d+$/.test(row.subject));
   expect(hers.length).toBeGreaterThan(0);
-  expect(hers.map((row) => row.category)).toEqual(hers.map(() => "Friends"));
+  expect(hers.map((row) => row.category)).toEqual(hers.map(() => "Build bot"));
 });

@@ -29,10 +29,16 @@ export function statusLabel(status: string): string | null {
 
 /** Whether the AI reads it, and why it's where it is, in a word or two: "Hidden: Trading",
  *  "rule: Finance", "AI: Job search", "AI: waiting on you". */
-function useWhy(thread: ThreadRow): { hidden: boolean; chip: string | null } {
+function useWhy(thread: ThreadRow): { hidden: boolean; chip: string | null; full?: string } {
   const categories = useCategories();
   const folder = thread.category ? (categories.data?.categories ?? []).find((item) => item.name === thread.category) : undefined;
-  const hidden = Boolean(thread.category && (thread.category === AUTOMATED || thread.category === CALENDAR || (folder && keptFromAi(folder))));
+  const kept = Boolean(thread.category && (thread.category === AUTOMATED || thread.category === CALENDAR || (folder && keptFromAi(folder))));
+  // Kept by its folder, but a person replying named the person, so the AI reads it after all.
+  if (kept && thread.named) {
+    const [who, ...said] = thread.named.split(": ");
+    return { hidden: false, chip: t("mail.why.named"), full: t("mail.why.named.full", { folder: thread.category ?? "", who: who ?? "", quote: said.join(": ") }) };
+  }
+  const hidden = kept;
   if (hidden) return { hidden, chip: thread.category === AUTOMATED ? t("mail.why.hidden.alone") : t("mail.why.hidden", { folder: thread.category ?? "" }) };
   if (thread.category && thread.category_source === "rule") return { hidden, chip: t("mail.why.rule", { folder: thread.category }) };
   if (thread.category && thread.category_source === "agent") return { hidden, chip: t("mail.why.ai", { what: thread.category }) };
@@ -87,7 +93,7 @@ export function ThreadRowView({ thread, excerpt, href, active = false, highlight
               <Icon name={why.hidden ? "keptFromAi" : "readByAi"} className="h-3 w-3" />
             </span>
             {why.chip ? (
-              <Tooltip content={reason || thread.why || why.chip}>
+              <Tooltip content={reason || why.full || thread.why || why.chip}>
                 <span data-testid="thread-folder" className={`truncate rounded-sm px-1 ${why.hidden ? "bg-surface-sunken text-ink-muted" : "bg-accent-default/10 text-ink-secondary"}`}>{why.chip}</span>
               </Tooltip>
             ) : null}

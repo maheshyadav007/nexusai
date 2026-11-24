@@ -8,7 +8,8 @@ import { Tick } from "./Motion";
 export function Checkbox({ label, hideLabel = false, checked, disabled, onChange }: { label: string; hideLabel?: boolean; checked: boolean; disabled?: boolean; onChange: (checked: boolean) => void }) {
   const id = useId();
   return (
-    <div className="flex items-center gap-2">
+    // Relative, so a hidden label stays inside the box that scrolls instead of stretching the page.
+    <div className="relative flex items-center gap-2">
       <RadixCheckbox.Root id={id} checked={checked} {...(disabled === undefined ? {} : { disabled })} onCheckedChange={(next) => onChange(next === true)} className="focus-ring flex h-4 w-4 items-center justify-center rounded-sm border border-line-strong bg-surface-raised text-accent-on transition-colors duration-fast disabled:opacity-60 data-[state=checked]:border-accent-default data-[state=checked]:bg-accent-default">
         <RadixCheckbox.Indicator>
           <Tick>

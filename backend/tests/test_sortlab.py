@@ -236,9 +236,10 @@ def test_the_lab_shows_each_categorys_rules_from_the_same_engine(lab: Any) -> No
         "/api/rules", json={"categories": [{"name": "PLM", "senders": plm}], "automated": []}
     ).json()
     entry = next(c for c in found["categories"] if c["name"] == "PLM")
-    # One rule per address, and one for the tag both carry, so a new address is filed too.
+    # One rule for the tag both carry, so a new address is filed too; its kinds of mail need
+    # no rules of their own, since the tag files them all.
     assert any("tag [PLM]" in text for text in entry["rules"])
-    assert sum("it's from" in text for text in entry["rules"]) == 2
+    assert sum("it's from" in text for text in entry["rules"]) == 0
     assert entry["kept"] > 0
     saved = client.post(
         "/api/finish",

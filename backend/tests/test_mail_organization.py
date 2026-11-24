@@ -11,10 +11,14 @@ import pytest
 from fake_mail import make_mail
 from nexusai.api.app import MODULES
 from nexusai.contracts.mail import (
+    GetNamedYou,
     ListThreads,
+    MailMe,
     MailRule,
     MarkFolderRead,
     MoveThread,
+    NotAboutMe,
+    PreviewMe,
     RuleActions,
     RuleCondition,
     SaveCategory,
@@ -29,7 +33,7 @@ from nexusai.kernel.event_bus import MIGRATIONS, EventBus
 from nexusai.kernel.home import create_home
 from nexusai.kernel.module import CommandError, Context
 from nexusai.modules.agent import bulk_learning, mail_agent, signals
-from nexusai.modules.mail import accounts, rules, store
+from nexusai.modules.mail import accounts, mentions, rules, store
 from nexusai.modules.mail import module as mail
 from nexusai.modules.mail.parse import parse_message
 
@@ -753,3 +757,100 @@ def test_learning_and_counts_leave_out_what_a_folder_keeps_from_the_ai(ctx: Cont
     }
     assert read.thread in members and kept.thread not in members
     assert signals.hidden_threads(ctx, [read.thread, kept.thread]) == {kept.thread}
+
+
+def test_a_reply_that_names_the_person_stays_in_its_folder_and_the_ai_reads_it(
+    ctx: Context,
+) -> None:
+    plm = MailRule(
+        name="PLM",
+        conditions=[RuleCondition(field="tag", value="PLM")],
+        actions=RuleActions(category="Automated", skip_agent=True),
+    )
+    mentions.save(ctx.config.home, MailMe(names=["Mahesh"], addresses=["me@example.com"]))
+    engine = rules.Engine([plm], me=mail.who_am_i(ctx))
+    first = add(
+        ctx,
+        "[PLM] ECO-1112 assigned",
+        sender="plm-noreply@corp.example",
+        match=rules.RuleMatch(plm.name, plm.actions),
+    )
+    assert thread(ctx, first.thread)["category"] == "Automated" and first.skip_agent
+    count = ctx.bus.db.fetch_all("SELECT COUNT(*) AS n FROM messages")[0]["n"] + 1
+    raw = make_mail(
+        subject="RE: [PLM] ECO-1112 assigned",
+        sender="Rahul Menon <rahul@corp.example>",
+        body="@Mahesh please check the BOM.",
+        message_id=f"<organization-{count}@test>",
+        in_reply_to="<organization-1@test>",
+    )
+    decision = engine.decide([parse_message(raw)])[0]
+    with ctx.bus.db.transaction() as tx:
+        named = store.store_message(
+            tx, account="test", folder="INBOX", role="inbox", uid=count, raw=raw, read=False,
+            flagged=False, parsed=parse_message(raw), decision=decision, config=ctx.config.mail,
+        )  # fmt: skip
+    assert named is not None and named.thread == first.thread and not named.skip_agent
+    row = thread(ctx, first.thread)
+    # Still filed where it was, and still listed under Kept from the AI, but the AI may read it.
+    assert row["category"] == "Automated" and visible(ctx, first.thread, "kept")
+    assert row["named"] == "Rahul Menon: @Mahesh please check the BOM."
+    assert signals.hidden_threads(ctx, [first.thread]) == set()
+    assert mail.named_you(GetNamedYou(), ctx).items[0].quote == "@Mahesh please check the BOM."
+    mail_agent.enqueue(ctx, named.message, named.thread)
+    assert mail_agent.next_turn(ctx, "mail") is not None
+
+    # It wasn't about them: hidden again, and that name stops counting.
+    me = mail.not_about_me(NotAboutMe(thread=first.thread, stop="Mahesh"), ctx)
+    assert me.names == [] and thread(ctx, first.thread)["named"] is None
+    assert signals.hidden_threads(ctx, [first.thread]) == {first.thread}
+
+
+def test_a_team_name_added_after_sorting_lets_its_hidden_replies_reach_the_ai(
+    ctx: Context,
+) -> None:
+    plm = MailRule(
+        name="PLM",
+        conditions=[RuleCondition(field="tag", value="PLM")],
+        actions=RuleActions(category="Automated", skip_agent=True),
+    )
+    mentions.save(ctx.config.home, MailMe(names=["Mahesh"], addresses=["me@example.com"]))
+    engine = rules.Engine([plm], me=mail.who_am_i(ctx))
+
+    def stored(subject: str, sender: str, body: str, reply_to: str | None = None) -> int:
+        count = ctx.bus.db.fetch_all("SELECT COUNT(*) AS n FROM messages")[0]["n"] + 1
+        raw = make_mail(
+            subject=subject, sender=sender, body=body,
+            message_id=f"<organization-{count}@test>", in_reply_to=reply_to,
+        )  # fmt: skip
+        with ctx.bus.db.transaction() as tx:
+            done = store.store_message(
+                tx, account="test", folder="INBOX", role="inbox", uid=count, raw=raw, read=False,
+                flagged=False, parsed=parse_message(raw), decision=engine.decide([parse_message(raw)])[0],
+                config=ctx.config.mail,
+            )  # fmt: skip
+        assert done is not None
+        return done.thread
+
+    first = stored("[PLM] ECO-1200 assigned", "plm-noreply@corp.example", "Assigned to PLM team.")
+    reply = stored(
+        "RE: [PLM] ECO-1200 assigned",
+        "Rahul Menon <rahul@corp.example>",
+        "Can the PLM team check the BOM?",
+        "<organization-1@test>",
+    )
+    assert reply == first and signals.hidden_threads(ctx, [first]) == {first}
+
+    # Tried before saving: the person's reply counts for the team, the tool's own mail doesn't.
+    seen = mail.preview_me(PreviewMe(names=["Mahesh", "PLM team"]), ctx)
+    assert seen.counts == {"Mahesh": 0, "PLM team": 1} and seen.total == 1
+    assert [(e.sender, e.word) for e in seen.examples] == [("Rahul Menon", "PLM team")]
+    assert "PLM team" in seen.examples[0].quote
+
+    # Saved, the reply already there reaches the AI; taken away, it's hidden again.
+    mail.save_me(MailMe(names=["Mahesh", "PLM team"], addresses=["me@example.com"]), ctx)
+    assert thread(ctx, first)["named"] == "Rahul Menon: Can the PLM team check the BOM?"
+    assert signals.hidden_threads(ctx, [first]) == set()
+    mail.save_me(MailMe(names=["Mahesh"], addresses=["me@example.com"]), ctx)
+    assert thread(ctx, first)["named"] is None
+    assert signals.hidden_threads(ctx, [first]) == {first}

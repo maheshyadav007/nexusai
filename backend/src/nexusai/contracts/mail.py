@@ -285,6 +285,9 @@ class ThreadRow(BaseModel):
     why: str | None
     status: ThreadStatus
     importance: Importance
+    # Kept from the AI by its folder, but a person replying named the person, so the AI reads it:
+    # who, and the words that named them.
+    named: str | None = None
 
 
 class ThreadList(BaseModel):
@@ -451,10 +454,14 @@ class RuleCondition(BaseModel):
     field: Literal[
         "subject",
         "subject_prefix",
+        # Every one of these words, in any order, as whole words: "otp login".
+        "subject_words",
         "tag",
         "body",
         "sender",
         "sender_exact",
+        # Who it's sent to: To or Cc has this.
+        "to",
         "header",
         "has_attachment",
     ]
@@ -481,7 +488,11 @@ class MailRule(BaseModel):
 
     name: str = Field(min_length=1, max_length=120)
     enabled: bool = True
+    # Every condition must hold, or any one is enough.
+    match: Literal["all", "any"] = "all"
     conditions: list[RuleCondition] = Field(min_length=1, max_length=20)
+    # Mail that matches any of these is left alone, whatever the conditions say.
+    exceptions: list[RuleCondition] = Field(default_factory=list, max_length=20)
     actions: RuleActions
 
 
@@ -650,6 +661,99 @@ class DecideCategory(BaseModel):
 
 class GetRules(BaseModel):
     pass
+
+
+class MailMe(BaseModel):
+    """Who the person is, as people write it. A person replying on mail the AI doesn't read who
+    uses one of these has named them, and the AI reads that reply."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    names: list[str] = Field(default_factory=list, max_length=20)
+    addresses: list[str] = Field(default_factory=list, max_length=20)
+    # How tools and colleagues tag them: myadav01, m.yadav.
+    ids: list[str] = Field(default_factory=list, max_length=20)
+    # Other people whose names look like theirs: Mahesh Kumar, Maheshwari.
+    not_you: list[str] = Field(default_factory=list, max_length=50)
+
+
+class GetMailMe(BaseModel):
+    pass
+
+
+class PreviewMe(BaseModel):
+    """The names a person is trying, before saving them: theirs and their teams', in one list."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    names: list[str] = Field(default_factory=list, max_length=40)
+
+
+class MeExample(BaseModel):
+    """One reply in hidden mail that one of the names would let through, and the name it used."""
+
+    sender: str
+    folder: str | None
+    quote: str
+    word: str
+
+
+class MePreview(BaseModel):
+    # How many hidden replies each name lets through, and how many all of them do together.
+    counts: dict[str, int]
+    total: int
+    examples: list[MeExample]
+
+
+class NamedYou(BaseModel):
+    thread: int
+    subject: str
+    sender: str
+    folder: str | None
+    quote: str
+    date: str
+
+
+class NamedYouList(BaseModel):
+    items: list[NamedYou]
+
+
+class GetNamedYou(BaseModel):
+    pass
+
+
+class PreviewRule(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rule: MailRule
+
+
+class RuleExample(BaseModel):
+    thread: int
+    subject: str
+    sender: str
+    date: str
+    # A reply on it named the person, so the AI still reads it.
+    named: str | None = None
+
+
+class RulePreview(BaseModel):
+    conversations: int
+    named: int
+    examples: list[RuleExample]
+
+
+class NotAboutMe(BaseModel):
+    """A reply that named the person wasn't about them. It goes back to its folder for the AI,
+    and, when given, the name that misled is fixed so it holds from now on."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    thread: int
+    # Someone else's name, to add to Not you.
+    not_you: str | None = Field(default=None, max_length=120)
+    # One of the person's names, to stop counting.
+    stop: str | None = Field(default=None, max_length=120)
 
 
 class RuleSet(BaseModel):
@@ -1000,17 +1104,28 @@ class SortEmail(BaseModel):
     snippet: str
 
 
+class SortKind(BaseModel):
+    """One kind of mail from a sender: its tag, if any, and the words nearly all of it carries."""
+
+    tag: str = ""
+    words: list[str]
+    count: int
+    examples: list[str] = Field(default_factory=list)
+
+
 class SortSender(BaseModel):
     """One sender on the sorting page: how automated it looks, and which side it starts on."""
 
     sender: str
     label: str
     count: int
-    # The strongest of the three signs, from 0 to 1. At half or more the AI ignores it.
+    # The strongest of the four signs, from 0 to 1. At half or more the AI ignores it.
     score: float
     repeats: float
     bulk: float
     one_way: bool
+    # The address says it takes no replies: noreply, no-reply, do-not-reply.
+    no_reply: bool = False
     side: Literal["reads", "ignores"]
     # Why it stays with the AI whatever its score, if it does.
     kept: str
@@ -1021,9 +1136,12 @@ class SortSender(BaseModel):
     # The folder a rule already files this sender's mail into, when one does. Its side is
     # the rule's, so the page shows what's true now.
     folder: str = ""
-    # How its subjects start when a few ways cover most of its mail. Kept from the AI, it gets
-    # a rule for each, with the sender, rather than one for everything it sends.
-    starts: list[str] = Field(default_factory=list)
+    # The kinds of mail it sends, found from its subjects. Kept from the AI, it gets a rule for
+    # each, with the sender, rather than one for everything it sends; `odd` emails fit none,
+    # and mail like them still reaches the AI.
+    kinds: list[SortKind] = Field(default_factory=list)
+    odd: int = 0
+    odd_examples: list[str] = Field(default_factory=list)
 
 
 class MailSort(BaseModel):

@@ -9,9 +9,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from nexusai.contracts.mail import MailRule, RuleActions, RuleCondition, RuleSet
+from nexusai.contracts.mail import MailMe, MailRule, RuleActions, RuleCondition, RuleSet
 from nexusai.kernel.files import replace_file
-from nexusai.modules.mail.parse import SUBJECT_PREFIX, ParsedMessage, tags_of
+from nexusai.modules.mail import mentions
+from nexusai.modules.mail.parse import SUBJECT_PREFIX, ParsedMessage, subject_words, tags_of
 
 NO_REPLY = re.compile(
     r"(^|[._+-])(no-?reply|do-?not-?reply|mailer-daemon|postmaster|notifications?)@", re.I
@@ -141,6 +142,8 @@ def _condition_matches(condition: RuleCondition, parsed: ParsedMessage) -> bool:
         return words in subject
     if condition.field == "subject_prefix":
         return subject.startswith(words)
+    if condition.field == "subject_words":
+        return set(needle.split()) <= set(subject_words(parsed.subject))
     if condition.field == "tag":
         return needle.casefold() in {tag.casefold() for tag in tags_of(parsed.subject)}
     if condition.field == "body":
@@ -149,9 +152,21 @@ def _condition_matches(condition: RuleCondition, parsed: ParsedMessage) -> bool:
         return needle == parsed.from_addr.lower()
     if condition.field == "sender":
         return needle in f"{parsed.from_name} {parsed.from_addr}".lower()
+    if condition.field == "to":
+        return any(needle in address.lower() for address in [*parsed.to, *parsed.cc])
     if condition.field == "header":
         return needle in parsed.headers.get((condition.header or "").lower(), "").lower()
     return any(part.disposition == "attachment" for part in parsed.parts)
+
+
+def rule_matches(rule: MailRule, parsed: ParsedMessage) -> bool:
+    """All its conditions hold, or any one when it says any, and none of its exceptions."""
+    held = (all if rule.match == "all" else any)(
+        _condition_matches(condition, parsed) for condition in rule.conditions
+    )
+    # An exception left blank would match everything and switch the rule off, so it's skipped.
+    exceptions = [e for e in rule.exceptions if e.value.strip() or e.field == "has_attachment"]
+    return held and not any(_condition_matches(e, parsed) for e in exceptions)
 
 
 def own_domain_of(address: str) -> str | None:
@@ -167,12 +182,7 @@ def evaluate(
     folder_modes: Mapping[str, str] | None = None,
 ) -> RuleMatch | None:
     """The person's own rules come first, because they know their mail best."""
-    matched = [
-        rule
-        for rule in rules
-        if rule.enabled
-        and all(_condition_matches(condition, parsed) for condition in rule.conditions)
-    ]
+    matched = [rule for rule in rules if rule.enabled and rule_matches(rule, parsed)]
     if matched:
         # One folder per email: the first rule that matches files it, and the rest wait.
         first = matched[0]
@@ -195,6 +205,8 @@ class Decision:
     why: str
     # The rule that matched, if one did. It files the mail even when the AI still reads it.
     match: RuleMatch | None = None
+    # Hidden by its folder, but a person named the person: the words that did.
+    named: str | None = None
 
     @property
     def rule(self) -> str | None:
@@ -228,6 +240,8 @@ class Engine:
     own_domain: str | None = None
     folder_modes: Mapping[str, str] | None = None
     on: bool = True
+    # Who the person is, so a reply that names them on hidden mail still reaches the AI.
+    me: MailMe | None = None
 
     def match(self, parsed: ParsedMessage) -> RuleMatch | None:
         if not self.on:
@@ -244,40 +258,67 @@ class Engine:
     def _decide(self, parsed: ParsedMessage) -> Decision:
         if not self.on:
             return Decision(True, "Rules are off, so the AI reads everything")
-        return decision_for(self.match(parsed), parsed)
+        match = self.match(parsed)
+        return decision_for(match, parsed, self._named(match, parsed))
+
+    def _named(self, match: RuleMatch | None, parsed: ParsedMessage) -> str | None:
+        """Only for mail kept from the AI, and only what a person wrote in a reply, since tools
+        greet everyone by name; or a tool passing on that a person mentioned them."""
+        if self.me is None or match is None or not match.actions.skip_agent:
+            return None
+        if passed_on := mentions.told(parsed):
+            return passed_on
+        return mentions.named(parsed, self.me) if self.person_replying(parsed) else None
+
+    def person_replying(self, parsed: ParsedMessage) -> bool:
+        """A reply or forward a person wrote, the only mail whose naming them counts: not mail
+        its headers say a tool sent."""
+        return mentions.is_reply(parsed) and _builtin(parsed, self.own_domain) is None
 
 
-def decision_for(match: RuleMatch | None, parsed: ParsedMessage) -> Decision:
+def decision_for(
+    match: RuleMatch | None, parsed: ParsedMessage, named: str | None = None
+) -> Decision:
     """What a matched rule means for the AI. Mail filed where the AI doesn't read is never
-    shown to it, whatever it says: the folder is the gate, with no exceptions."""
+    shown to it, with one exception: a person replying there named the person."""
     if match is None:
         return Decision(True, "No rule matched")
     if not match.actions.skip_agent:
         return Decision(True, f"Filed by “{match.name}”, which lets the AI read it", match)
+    if named:
+        who = parsed.from_name or parsed.from_addr
+        why = f"Kept from the AI by “{match.name}”, but {who} named you"
+        return Decision(True, why, match, named)
     return Decision(False, f"Hidden from AI by “{match.name}”", match)
 
 
 FIELD_WORDS = {
     "subject": "the subject has “{}”",
     "subject_prefix": "the subject starts with “{}”",
+    "subject_words": "the subject has the words “{}”",
     "tag": "the subject carries the tag [{}]",
     "body": "the text has “{}”",
     "sender": "the sender has “{}”",
     "sender_exact": "it's from {}",
+    "to": "it's sent to {}",
 }
+
+
+def _said(condition: RuleCondition) -> str:
+    if condition.field == "header":
+        return f"the header {condition.header} has “{condition.value}”"
+    if condition.field == "has_attachment":
+        return "it has an attachment"
+    return FIELD_WORDS[condition.field].format(condition.value)
 
 
 def describe_rule(rule: MailRule) -> str:
     """A rule in plain words: "If it's from a@x and the subject carries the tag [PLM] → file in
     PLM, the AI skips it"."""
-    said = []
-    for condition in rule.conditions:
-        if condition.field == "header":
-            said.append(f"the header {condition.header} has “{condition.value}”")
-        elif condition.field == "has_attachment":
-            said.append("it has an attachment")
-        else:
-            said.append(FIELD_WORDS[condition.field].format(condition.value))
+    said = [_said(condition) for condition in rule.conditions]
+    joined = f" {'or' if rule.match == 'any' else 'and'} ".join(said)
+    if rule.exceptions:
+        joined += f", except when {' or '.join(_said(e) for e in rule.exceptions)}"
     actions = rule.actions
     then = [f"file in {actions.category}"] if actions.category else []
     if actions.skip_agent:
@@ -286,7 +327,7 @@ def describe_rule(rule: MailRule) -> str:
         then.append("mark it read")
     if actions.notify:
         then.append("tell you")
-    return f"If {' and '.join(said)} → {', '.join(then) or 'do nothing'}"
+    return f"If {joined} → {', '.join(then) or 'do nothing'}"
 
 
 def rules_path(home: Path) -> Path:

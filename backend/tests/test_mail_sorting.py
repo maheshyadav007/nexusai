@@ -144,13 +144,16 @@ def test_new_mail_follows_the_rule_even_when_it_names_the_person(
     quiet = stored(ctx, "Build 120 passed", "ci@tools.example")
     asked = stored(
         ctx,
-        "Build 121 failed",
+        "Build 121 passed",
         "ci@tools.example",
         f"Please look, {OWNER} is on call.\nLogs\nCI\nFooter",
     )
+    odd = stored(ctx, "Build 122 failed", "ci@tools.example")
     assert quiet.skip_agent
     # Naming the person changes nothing: what the folder keeps, the AI never sees.
     assert asked.skip_agent
+    # A kind of mail the folder never held is out of the ordinary, so the AI reads it.
+    assert not odd.skip_agent
 
 
 def test_a_sender_moved_to_the_ai_is_filed_nowhere(ctx: Context, mailbox: Any) -> None:  # noqa: F811

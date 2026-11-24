@@ -30,10 +30,12 @@ from nexusai.contracts.mail import (
     FindPst,
     ForwardContext,
     GetMailAccounts,
+    GetMailMe,
     GetMailPresets,
     GetMailSort,
     GetMailStatus,
     GetMoreMail,
+    GetNamedYou,
     GetPstImports,
     GetPstSearch,
     GetRules,
@@ -56,6 +58,7 @@ from nexusai.contracts.mail import (
     MailFolder,
     MailFolderCount,
     MailFolders,
+    MailMe,
     MailPreset,
     MailPresets,
     MailProfile,
@@ -66,12 +69,19 @@ from nexusai.contracts.mail import (
     MailSyncChanged,
     MailTestResult,
     MarkFolderRead,
+    MeExample,
+    MePreview,
     MergeCategories,
     MixedFolder,
     MixedFolders,
     MoveThread,
+    NamedYou,
+    NamedYouList,
+    NotAboutMe,
     PrepareMailSort,
     PreviewCategoryRule,
+    PreviewMe,
+    PreviewRule,
     ProbeServer,
     PstImport,
     PstImportAction,
@@ -87,6 +97,8 @@ from nexusai.contracts.mail import (
     ReplyDraft,
     RuleActions,
     RuleCondition,
+    RuleExample,
+    RulePreview,
     RuleSet,
     SaveCategory,
     SaveMailAccount,
@@ -125,6 +137,7 @@ from nexusai.modules.mail import (
     accounts,
     folders,
     hiding,
+    mentions,
     outgoing,
     pst,
     pst_search,
@@ -136,7 +149,7 @@ from nexusai.modules.mail import (
     store,
 )
 from nexusai.modules.mail.imap import DELETING_ROLES, Folder, distinct_total, test_imap
-from nexusai.modules.mail.parse import normalize_subject, parse_message
+from nexusai.modules.mail.parse import SUBJECT_PREFIX, normalize_subject, parse_message
 from nexusai.modules.mail.pop3 import test_pop3
 from nexusai.modules.mail.rules import own_domain_of
 from nexusai.modules.mail.sync import MailSync
@@ -1361,6 +1374,11 @@ def _likely(conditions: list[RuleCondition]) -> tuple[str, list[object]]:
         elif condition.field in {"subject", "subject_prefix", "tag"}:
             where.append("LOWER(m.subject) LIKE ?")
             params.append(f"%{value}%")
+        elif condition.field == "subject_words":
+            # Close enough for a count: each word somewhere in the subject.
+            for word in value.split():
+                where.append("LOWER(m.subject) LIKE ?")
+                params.append(f"%{word}%")
         elif condition.field == "has_attachment":
             where.append("m.has_attachments = 1")
     return "".join(f" AND {part}" for part in where), params
@@ -1373,6 +1391,53 @@ def _latest_matching(ctx: Context, conditions: list[RuleCondition]) -> list[sqli
         "SELECT m.id,m.thread_id FROM messages m WHERE m.account=? AND m.id=(SELECT id FROM"  # noqa: S608
         f" messages WHERE thread_id=m.thread_id ORDER BY date DESC,id DESC LIMIT 1){likely}",
         (accounts.current_account(ctx.config), *params),
+    )
+
+
+RULE_EXAMPLES = 3
+
+
+@mail_module.query("rules.preview")
+def preview_whole_rule(query: PreviewRule, ctx: Context) -> RulePreview:
+    """What a rule as written would catch among the mail already here: how many conversations,
+    how many of those a person's reply named the person in, and a few to show. Nothing is saved."""
+    rule = query.rule.model_copy(update={"enabled": True})
+    conditions = [c for c in rule.conditions if c.value.strip() or c.field == "has_attachment"]
+    if not conditions:
+        return RulePreview(conversations=0, named=0, examples=[])
+    rule = rule.model_copy(update={"conditions": conditions})
+    # With any, each condition alone can match, so SQL can only narrow by one when there is one.
+    rows = _latest_matching(ctx, conditions if rule.match == "all" else [])
+    caught = []
+    for row in rows:
+        raw = store.raw_of(ctx.bus.db, row["id"])
+        if raw is not None and rules.rule_matches(rule, parse_message(raw)):
+            caught.append(row["thread_id"])
+    if not caught:
+        return RulePreview(conversations=0, named=0, examples=[])
+    marks = ",".join("?" * len(caught))
+    threads = ctx.bus.db.fetch_all(
+        "SELECT t.id, t.subject, t.last_date, t.named, (SELECT COALESCE(NULLIF(from_name,''),"  # noqa: S608
+        " from_addr) FROM messages WHERE thread_id = t.id ORDER BY date DESC, id DESC LIMIT 1)"
+        f" AS sender FROM threads t WHERE t.id IN ({marks})"
+        " ORDER BY t.named IS NULL, t.last_date DESC",
+        tuple(caught),
+    )
+    named = [row for row in threads if row["named"]]
+    shown = [*[row for row in threads if not row["named"]][: RULE_EXAMPLES - 1], *named[:1]]
+    return RulePreview(
+        conversations=len(threads),
+        named=len(named),
+        examples=[
+            RuleExample(
+                thread=row["id"],
+                subject=row["subject"],
+                sender=row["sender"] or "",
+                date=row["last_date"],
+                named=row["named"],
+            )
+            for row in (shown or threads[:RULE_EXAMPLES])
+        ],
     )
 
 
@@ -1659,8 +1724,225 @@ def rule_engine(ctx: Context, own_domain: str | None) -> rules.Engine:
     """The one door every email passes before the AI. Switched off in the settings, every email
     reaches the AI and none is filed by a rule."""
     return rules.Engine(
-        ordered_rules(ctx), own_domain, folder_modes(ctx), on=ctx.config.mail.rules_on
+        ordered_rules(ctx),
+        own_domain,
+        folder_modes(ctx),
+        on=ctx.config.mail.rules_on,
+        me=who_am_i(ctx),
     )
+
+
+def who_am_i(ctx: Context) -> MailMe:
+    """Who the person is, as they last said, or as their account and sent mail say."""
+    saved = mentions.load(ctx.config.home)
+    if saved is not None:
+        return saved
+    _, profiles = accounts.read_accounts(ctx.config)
+    own = sorted(
+        {
+            address.lower()
+            for profile in profiles.values()
+            for address in (profile.address or "", profile.auth.user)
+            if "@" in address
+        }
+    )
+    marks = ",".join("?" * len(own))
+    sent = (
+        ctx.bus.db.fetch_all(
+            f"SELECT from_name FROM messages WHERE LOWER(from_addr) IN ({marks}) LIMIT 500",  # noqa: S608
+            tuple(own),
+        )
+        if own
+        else []
+    )
+    return mentions.found(mentions.name_from([row["from_name"] for row in sent]), own)
+
+
+@mail_module.query("me.get")
+def get_me(query: GetMailMe, ctx: Context) -> MailMe:
+    return who_am_i(ctx)
+
+
+@mail_module.command("me.save")
+def save_me(command: MailMe, ctx: Context) -> MailMe:
+    clean = MailMe(
+        **{
+            field: list(dict.fromkeys(item.strip() for item in values if item.strip()))
+            for field, values in command.model_dump().items()
+        }
+    )
+    mentions.save(ctx.config.home, clean)
+    with ctx.bus.unit_of_work() as work:
+        _mark_named(ctx, work, clean)
+        work.emit("rules.changed", {"count": 0}, source="mail", trace_id=ctx.trace_id)
+    return clean
+
+
+# Whether a stored email is one whose naming the person counts: a person's reply, or a tool
+# passing a mention on. It never changes, so each is read from its raw mail once.
+_counts_here: dict[tuple[str, int], bool] = {}
+EXAMPLES_SHOWN = 3
+
+
+def _hidden_mail(ctx: Context) -> list[sqlite3.Row]:
+    """Every email kept from the AI, newest first, with what it says in its own words."""
+    return ctx.bus.db.fetch_all(
+        "SELECT m.id, m.thread_id, m.subject, m.from_name, m.from_addr, m.clean_text, m.named,"
+        " t.category, (SELECT COUNT(*) FROM messages x WHERE x.thread_id = m.thread_id) AS emails"
+        " FROM messages m JOIN threads t ON t.id = m.thread_id WHERE m.account = ?"
+        f" AND COALESCE(t.category, '') IN {store.KEPT_FOLDERS} ORDER BY m.date DESC",  # noqa: S608
+        (accounts.current_account(ctx.config),),
+    )
+
+
+def _naming(ctx: Context, me: MailMe) -> list[tuple[sqlite3.Row, str, list[str]]]:
+    """Hidden mail that names the person, as the rules judge it when it arrives: each email, the
+    words that named them, and which of their names it used. A tool's "mentioned you" uses none."""
+    _, profiles = accounts.read_accounts(ctx.config)
+    profile = profiles.get(accounts.current_account(ctx.config))
+    domain = own_domain_of(profile.address or profile.auth.user) if profile else None
+    engine = rules.Engine([], domain, me=me)
+    home = str(ctx.config.home)
+    find = mentions.finder(me)
+    found = []
+    for row in _hidden_mail(ctx):
+        told = mentions.TOLD.search(row["subject"]) is not None
+        words = [] if told else find(row["clean_text"], row["from_addr"])
+        if not told and not words:
+            continue
+        # Only a reply can count, and one says so in its subject or has mail before it: tool mail
+        # that greets them by name, most of it, needs no closer look.
+        if not told and not SUBJECT_PREFIX.match(row["subject"]) and row["emails"] < 2:
+            continue
+        # Only now, for the few left, the raw mail: is it a person's reply?
+        key = (home, int(row["id"]))
+        if key not in _counts_here:
+            raw = store.raw_of(ctx.bus.db, int(row["id"]))
+            parsed = parse_message(raw) if raw else None
+            _counts_here[key] = bool(
+                parsed and (mentions.told(parsed) or engine.person_replying(parsed))
+            )
+        if not _counts_here[key]:
+            continue
+        said = (
+            row["subject"].strip()
+            if told
+            else mentions.named_in(row["clean_text"], row["from_addr"], me)
+        )
+        if said:
+            found.append((row, said, words))
+    return found
+
+
+def _mark_named(ctx: Context, work: Any, me: MailMe) -> None:
+    """Hidden mail that names the person as they now say they're named reaches the AI, and what
+    named them by a name they took away goes back behind its folder."""
+    hits = {int(row["id"]): (row, said) for row, said, _ in _naming(ctx, me)}
+    threads: dict[int, str | None] = {}
+    for row in _hidden_mail(ctx):
+        hit = hits.get(int(row["id"]))
+        value = f"{row['from_name'] or row['from_addr']}: {hit[1]}" if hit else None
+        if value != row["named"]:
+            work.tx.execute("UPDATE messages SET named = ? WHERE id = ?", (value, row["id"]))
+        # Newest first, so a conversation takes its newest email that named them.
+        thread = int(row["thread_id"])
+        if threads.get(thread) is None:
+            threads[thread] = value
+    before = {
+        int(row["id"]): row["named"]
+        for row in ctx.bus.db.fetch_all(
+            "SELECT id, named FROM threads WHERE account = ?"
+            f" AND COALESCE(category, '') IN {store.KEPT_FOLDERS}",  # noqa: S608
+            (accounts.current_account(ctx.config),),
+        )
+    }
+    for thread, value in threads.items():
+        if thread in before and before[thread] != value:
+            work.tx.execute("UPDATE threads SET named = ? WHERE id = ?", (value, thread))
+            _changed(work, ctx, thread, "named", value, before[thread])
+
+
+@mail_module.query("me.preview")
+def preview_me(query: PreviewMe, ctx: Context) -> MePreview:
+    """What a list of names would let through, before it's saved: how many hidden replies each
+    name, and all of them, would let the AI read, and the newest few, with the words that did."""
+    saved = who_am_i(ctx)
+    names = list(dict.fromkeys(item.strip() for item in query.names if item.strip()))
+    ids = {item.casefold() for item in saved.ids}
+    me = saved.model_copy(
+        update={
+            "names": [item for item in names if item.casefold() not in ids],
+            "ids": [item for item in names if item.casefold() in ids],
+        }
+    )
+    found = _naming(ctx, me)
+    folded = {item.casefold(): item for item in names}
+    counts = dict.fromkeys(names, 0)
+    for _, _, words in found:
+        for word in {folded[w.casefold()] for w in words if w.casefold() in folded}:
+            counts[word] += 1
+    return MePreview(
+        counts=counts,
+        total=len(found),
+        examples=[
+            MeExample(
+                sender=row["from_name"] or row["from_addr"],
+                folder=row["category"],
+                quote=said,
+                word=next((w for w in words if w.casefold() in folded), ""),
+            )
+            for row, said, words in found[:EXAMPLES_SHOWN]
+        ],
+    )
+
+
+NAMED_SHOWN = 20
+
+
+@mail_module.query("me.named")
+def named_you(query: GetNamedYou, ctx: Context) -> NamedYouList:
+    """Mail kept from the AI that it read anyway, because a person named the person: the newest."""
+    rows = ctx.bus.db.fetch_all(
+        "SELECT id, subject, category, named, last_date FROM threads WHERE account = ?"
+        " AND named IS NOT NULL ORDER BY last_date DESC LIMIT ?",
+        (accounts.current_account(ctx.config), NAMED_SHOWN),
+    )
+    found = []
+    for row in rows:
+        sender, _, quote = str(row["named"]).partition(": ")
+        found.append(
+            NamedYou(
+                thread=row["id"],
+                subject=row["subject"],
+                sender=sender,
+                folder=row["category"],
+                quote=quote or sender,
+                date=row["last_date"],
+            )
+        )
+    return NamedYouList(items=found)
+
+
+@mail_module.command("me.notAboutMe")
+def not_about_me(command: NotAboutMe, ctx: Context) -> MailMe:
+    """The conversation goes back behind its folder, and the name that misled is fixed."""
+    me = who_am_i(ctx)
+    if command.not_you and command.not_you.strip():
+        me = me.model_copy(update={"not_you": [*me.not_you, command.not_you.strip()]})
+    if command.stop:
+        stop = command.stop.strip().casefold()
+        me = me.model_copy(
+            update={
+                field: [item for item in getattr(me, field) if item.casefold() != stop]
+                for field in ("names", "addresses", "ids")
+            }
+        )
+    mentions.save(ctx.config.home, me)
+    with ctx.bus.unit_of_work() as work:
+        work.tx.execute("UPDATE threads SET named = NULL WHERE id = ?", (command.thread,))
+        work.tx.execute("UPDATE messages SET named = NULL WHERE thread_id = ?", (command.thread,))
+        _changed(work, ctx, command.thread, "named", None)
+    return me
 
 
 def ordered_rules(ctx: Context) -> list[MailRule]:

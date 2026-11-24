@@ -2,7 +2,7 @@
 
 import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiRequestError, command, query } from "./api";
-import type { ApiError, Importance, Draft, DraftAttachment, ListThreads, MailProfile, MoveThread, PreviewCategoryRule, RuleCondition, RuleSet, SaveCategory, SearchMail, SetThreadStatus, SplitFolders, UpdateCategory } from "./contracts.generated";
+import type { ApiError, Importance, Draft, DraftAttachment, ListThreads, MailMe, MailProfile, MailRule, NotAboutMe, MoveThread, PreviewCategoryRule, RuleCondition, RuleSet, SaveCategory, SearchMail, SetThreadStatus, SplitFolders, UpdateCategory } from "./contracts.generated";
 import { useHomeReady } from "./home";
 import { askAboutRest } from "./rest";
 
@@ -139,6 +139,56 @@ export function useSaveRules() {
   return useMutation({
     mutationFn: (rules: RuleSet) => command("rules.save", rules),
     onSuccess: (rules) => client.setQueryData(["rules"], rules),
+  });
+}
+
+/** What a whole rule, with any and its exceptions, catches among the mail here: a count and a few. */
+export function useWholeRulePreview(rule: MailRule | null) {
+  const ready = useHomeReady();
+  return useQuery({ queryKey: ["rules", "preview", rule], queryFn: () => query("rules.preview", { rule: rule as MailRule }), enabled: ready && rule !== null, placeholderData: (previous) => previous });
+}
+
+/** Who the person is, as people write it: what counts as naming them on mail the AI doesn't read. */
+export function useMe() {
+  const ready = useHomeReady();
+  return useQuery({ queryKey: ["me"], queryFn: () => query("me.get", {}), enabled: ready });
+}
+
+export function useSaveMe() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (me: MailMe) => command("me.save", me),
+    onSuccess: (me) => client.setQueryData(["me"], me),
+  });
+}
+
+/** Where sorting stands: scoring, ready, done or skipped. The Sort page keeps it current. */
+export function useMailSort(enabled = true) {
+  const ready = useHomeReady();
+  return useQuery({ queryKey: ["mail-sort"], queryFn: () => query("mail.sort.get", {}), enabled: ready && enabled });
+}
+
+/** What a list of names would let through from hidden mail, before it's saved. */
+export function useMePreview(names: readonly string[]) {
+  const ready = useHomeReady();
+  return useQuery({ queryKey: ["me", "preview", names], queryFn: () => query("me.preview", { names: [...names] }), enabled: ready, placeholderData: (previous) => previous });
+}
+
+export function useNamedYou() {
+  const ready = useHomeReady();
+  return useQuery({ queryKey: ["me", "named"], queryFn: () => query("me.named", {}), enabled: ready });
+}
+
+export function useNotAboutMe() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: NotAboutMe) => command("me.notAboutMe", input),
+    onSuccess: (me) => {
+      client.setQueryData(["me"], me);
+      void client.invalidateQueries({ queryKey: ["me", "named"] });
+      void client.invalidateQueries({ queryKey: ["threads"] });
+      void client.invalidateQueries({ queryKey: ["thread"] });
+    },
   });
 }
 

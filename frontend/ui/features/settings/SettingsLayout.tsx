@@ -19,6 +19,7 @@ import { ModelSettings } from "./ModelSettings";
 import { PreferencesSettings } from "./PreferencesSettings";
 import { QuickAskSettings } from "./QuickAskSettings";
 import { ProfileForm } from "./ProfileForm";
+import { MeSettings } from "./MeSettings";
 import { RulesSettings } from "./RulesSettings";
 import { AboutSettings, HomeSettings, NetworkSettings, ResetSettings } from "./SystemSettings";
 
@@ -38,6 +39,7 @@ const SECTIONS: readonly { id: string; group: StringKey; label: StringKey; agent
   { id: "connectors", group: "settings.group.mail", label: "nav.connectors", content: () => <ConnectorsContent /> },
   { id: "categories", group: "settings.group.mail", label: "nav.categories", content: () => <CategorySettings /> },
   { id: "rules", group: "settings.group.mail", label: "settings.section.rules", content: () => <RulesSettings /> },
+  { id: "me", group: "settings.group.mail", label: "me.title", content: () => <MeSettings /> },
   { id: "send-checks", group: "settings.group.mail", label: "checks.title", content: () => <SendCheckSettingsCard /> },
   { id: "models", group: "settings.group.agents", label: "settings.models.title", content: () => <ModelSettings /> },
   { id: "local-models", group: "settings.group.agents", label: "semantic.title", content: () => <LocalModelSettings /> },

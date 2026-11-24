@@ -261,6 +261,12 @@ CREATE TABLE mail_draft_uploads (
   data BLOB NOT NULL, created TEXT NOT NULL);
 """,
     ),
+    # A reply on hidden mail that named the person: the words that did. On the conversation, it
+    # lets the AI in while the mail stays in its folder.
+    Migration(
+        "mail_named_you_001",
+        "ALTER TABLE threads ADD COLUMN named TEXT;ALTER TABLE messages ADD COLUMN named TEXT;",
+    ),
 ]
 ATTACHMENTS_FROM_PARTS = (
     "UPDATE messages SET has_attachments = EXISTS (SELECT 1 FROM message_parts p WHERE p.message = ?"
@@ -284,9 +290,12 @@ KEPT_FOLDERS = (
 
 
 def hidden_from_ai(column: str = "category") -> str:
-    """A conversation the AI never sees: its folder is in Kept from the AI. The one test, for the
-    sidebar, the agent, learning and matters alike. Never NULL, so NOT works on mail with none."""
-    return f"COALESCE({column}, '') IN {KEPT_FOLDERS}"
+    """A conversation the AI never sees: its folder is in Kept from the AI, and no person replying
+    there named the person. The one test, for the agent, learning and matters alike. Never NULL,
+    so NOT works on mail with none."""
+    table = column.rpartition(".")[0]
+    named = f"{table}.named" if table else "named"
+    return f"(COALESCE({column}, '') IN {KEPT_FOLDERS} AND {named} IS NULL)"
 
 
 FOLDER_FILTERS = {
@@ -628,14 +637,14 @@ def store_message(
     cursor = tx.execute(
         "INSERT INTO messages (account, folder, folder_role, uid, message_id, thread_id, subject,"
         " from_name, from_addr, to_json, cc_json, date, snippet, own_text, clean_text, text, html,"
-        " read, flagged, encrypted, signed, rule, why, has_attachments)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " read, flagged, encrypted, signed, rule, why, has_attachments, named)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             account, folder, role, uid, parsed.message_id, thread, parsed.subject, parsed.from_name,
             parsed.from_addr, json.dumps(parsed.to), json.dumps(parsed.cc), parsed.date, parsed.snippet,
             parsed.own, parsed.clean, parsed.text, parsed.html, int(is_read), int(flagged),
             parsed.encrypted, int(parsed.signed), match.name if match else None,
-            match.why if match else None, int(has_attachments),
+            match.why if match else None, int(has_attachments), named_by(parsed, decision.named),
         ),
     )  # fmt: skip
     message = int(cursor.lastrowid or 0)
@@ -685,6 +694,10 @@ def store_message(
                     "UPDATE threads SET extra_categories = ? WHERE id = ?",
                     (json.dumps([n for n in extras if n != row["category"]]), thread),
                 )
+    if decision.named:
+        tx.execute(
+            "UPDATE threads SET named = ? WHERE id = ?", (named_by(parsed, decision.named), thread)
+        )
     refresh_thread(tx, thread)
     return Stored(
         message=message,
@@ -805,6 +818,13 @@ def remove_message(tx: sqlite3.Connection, message: int) -> None:
     refresh_thread(tx, row[0])
 
 
+def named_by(parsed: ParsedMessage, words: str | None) -> str | None:
+    """Who named the person and the words they used: "Rahul Menon: @Mahesh please check"."""
+    if not words:
+        return None
+    return f"{parsed.from_name or parsed.from_addr}: {words}"
+
+
 def row_of(row: sqlite3.Row) -> ThreadRow:
     return ThreadRow(
         id=row["id"],
@@ -823,6 +843,7 @@ def row_of(row: sqlite3.Row) -> ThreadRow:
         why=row["why"],
         status=row["status"],
         importance=row["importance"],
+        named=row["named"] if "named" in row.keys() else None,  # noqa: SIM118
         sender_name=row["sender_name"] if "sender_name" in row.keys() else None,  # noqa: SIM118
     )
 
