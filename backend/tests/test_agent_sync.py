@@ -187,3 +187,22 @@ def test_a_document_is_read_by_its_marker_or_its_bare_key() -> None:
     from nexusai.modules.agent.kinds import key_of
 
     assert key_of("[doc:m:12:2]") == key_of("m:12:2") == key_of("doc:m:12:2#p3") == "m:12:2"
+
+
+def test_every_agent_is_taught_the_object_model_as_the_code_has_it() -> None:
+    from typing import get_args
+
+    from nexusai.contracts.agent import MatterState
+    from nexusai.modules.agent import citations, links
+    from nexusai.modules.agent.prompts_builder import for_tools, packaged
+
+    # The shared prompt, as an agent with no tools at all gets it.
+    taught = for_tools(packaged("system.md"), []).split("## How NexusAI organizes their work")[1]
+    taught = taught.split("\n## ")[0]
+    states = re.search(r"state is one of (.+?)\. ", taught)
+    assert states is not None
+    assert set(re.findall(r"[a-z_]+", states.group(1))) - {"or"} == set(get_args(MatterState))
+    linked = next(line for line in taught.splitlines() if line.startswith("- Links"))
+    assert set(re.findall(r"\b([a-z]+) \(", linked)) == set(links.KINDS_OF_LINK)
+    assert set(re.findall(r"\[([a-z]+):", taught)) == set(citations.CITED)
+    assert len(taught.split()) < 200
