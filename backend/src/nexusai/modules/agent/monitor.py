@@ -5,6 +5,7 @@ every message, so no agent can avoid being counted. Each alert is raised once an
 person sees it on Today and on the Agents page even if it happened overnight.
 """
 
+import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -25,6 +26,15 @@ CREATE INDEX monitor_alerts_time ON monitor_alerts (seen, id);
 # Where each kind of alert takes the person.
 # About usage, not something to act on now, so they only notify when the person asks for them.
 TOKEN_ALERTS = frozenset({"spike", "cap"})
+# For whoever tunes the agents: kept on the Agents page, never a notification.
+QUIET_ALERTS = frozenset({"detour"})
+# A question about the day, which "Your day" already answers. Only for this check, never to route.
+DAY_QUESTION = re.compile(
+    r"\b(today|my day|this morning|needs? me|on my plate|overdue|catch me up"
+    r"|what'?s (?:pending|open|due|left))\b",
+    re.IGNORECASE,
+)
+MAIL_SEARCHES = frozenset({"search_mail", "semantic_search"})
 LINKS = {
     "spike": "/agent/channel?tab=team",
     "silence": "/agent/channel?tab=tasks",
@@ -45,7 +55,9 @@ def raise_alert(
     task: int | None = None,
 ) -> bool:
     """Saves the alert and tells the person, once per key. False when it was already raised."""
-    tell = kind not in TOKEN_ALERTS or channel.load_quiet(ctx.bus.db).token_alerts
+    tell = kind not in QUIET_ALERTS and (
+        kind not in TOKEN_ALERTS or channel.load_quiet(ctx.bus.db).token_alerts
+    )
     with ctx.bus.unit_of_work() as work:
         cursor = work.tx.execute(
             "INSERT OR IGNORE INTO monitor_alerts (kind, agent, task, detail, key, time)"
@@ -80,6 +92,7 @@ def check(ctx: Context, runtime: Any) -> None:
     """Runs from the trigger loop, at least once a minute."""
     _spikes(ctx)
     _silence(ctx, runtime)
+    _detours(ctx)
 
 
 def _spikes(ctx: Context) -> None:
@@ -102,6 +115,41 @@ def _spikes(ctx: Context) -> None:
             f"{name} used {used:,} tokens this hour, {times}. Check what it's doing.",
             agent=agent,
         )
+
+
+def _detours(ctx: Context) -> None:
+    """A chat about the day that searched mail before anything else. The prompt says to start
+    from "Your day", so a model that slips from it shows up here, once for each run."""
+    db = ctx.bus.db
+    since = (_now() - timedelta(hours=1)).isoformat()
+    for turn in db.fetch_all(
+        "SELECT t.id, t.session, t.text, t.created, COALESCE(t.agent, s.agent) AS agent"
+        " FROM agent_turns t JOIN agent_sessions s ON s.id = t.session"
+        " WHERE t.closed = 1 AND t.origin = 'person' AND t.created > ?",
+        (since,),
+    ):
+        if cards.engine(db, turn["agent"]) != "session" or not DAY_QUESTION.search(turn["text"]):
+            continue
+        # Its own steps: up to the next run in the same chat.
+        following = db.fetch_all(
+            "SELECT created FROM agent_turns WHERE session = ? AND id > ? ORDER BY id LIMIT 1",
+            (turn["session"], turn["id"]),
+        )
+        first = db.fetch_all(
+            "SELECT tool FROM tool_calls WHERE session = ? AND started >= ? AND started < ?"
+            " ORDER BY id LIMIT 1",
+            (turn["session"], turn["created"], following[0]["created"] if following else "9999"),
+        )
+        if first and first[0]["tool"] in MAIL_SEARCHES:
+            asked = " ".join(turn["text"].split())[:80]
+            raise_alert(
+                ctx,
+                "detour",
+                f"detour:{turn['id']}",
+                f'{cards.name(db, turn["agent"])} searched mail first for "{asked}", instead of'
+                " starting from Your day.",
+                agent=turn["agent"],
+            )
 
 
 def _silence(ctx: Context, runtime: Any) -> None:

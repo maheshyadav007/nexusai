@@ -1,6 +1,6 @@
 # Posty sees what the app shows
 
-Planned 2026-11-24, revised the same day after a review against the code. Each step below is built, tested and committed on its own, in order.
+Planned 2026-11-24, revised the same day after a review against the code, and built the same day: each step below was built, tested and committed on its own, in order. The tests are in `backend/tests/test_agent_sync.py`. Not yet tried on the real account with the real model.
 
 ## Why
 
@@ -86,7 +86,7 @@ Found by reading the code on 2026-11-24.
 
 ### 7. Staying in sync
 
-- A Cockpit trace check flags a chat run that searched mail before any other step when the question was about the day.
+- The agent monitor (`monitor._detours`) flags a chat run about the day whose first step was a mail search. It's kept on the Agents page as a "detour" alert and never notifies, since it's for tuning the agents. The day-question words are used only for this check, never to route.
 - The tests from steps 1–6 stay as the guard.
 
 ## Where to look

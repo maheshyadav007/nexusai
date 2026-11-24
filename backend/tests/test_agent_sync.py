@@ -273,3 +273,27 @@ def test_no_tool_reads_or_writes_the_work_board(client: TestClient) -> None:
 
     built = {t.name for t in tools.build_tools(ctx_of(client), "s", tools.RunControl())}
     assert not built & RETIRED
+
+
+def test_a_day_question_that_searched_mail_first_is_flagged_quietly(
+    client: TestClient, script: Script
+) -> None:
+    from nexusai.modules.agent import monitor
+
+    for question, steps in (
+        ("What needs me today?", [[ToolCall("s", "search_mail", {"query": "today"})]]),
+        ("What's on my plate?", []),
+        ("Find the HQ budget mail", [[ToolCall("s", "search_mail", {"query": "budget"})]]),
+    ):
+        script.replies = [*steps, [TextChunk("Here it is.")]]
+        session = new_session(client)
+        chat(client, session, question)
+        wait(lambda: status(client, session) == "done", question)
+    ctx = ctx_of(client)
+    monitor._detours(ctx)
+    monitor._detours(ctx)
+    alerts = ctx.bus.db.fetch_all("SELECT kind, detail FROM monitor_alerts")
+    assert [(a["kind"], "What needs me today?" in a["detail"]) for a in alerts] == [
+        ("detour", True)
+    ]
+    assert client.post("/api/queries/notifications.list", json={}).json()["items"] == []
