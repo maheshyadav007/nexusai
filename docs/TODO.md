@@ -34,12 +34,12 @@ General fix: one helper that names an object for the person by its title from th
 
 Noted 2026-11-24 and 2026-11-25. Shared behaviour first, so every list gets it:
 - **Waiting pages show they're working.** A shared loading state, a spinner and a line on what it's doing, for any page waiting on server work. Sort senders is the first. No page should look frozen.
-- **Double-click opens.** On any list row (mail, matters, tasks, documents), double-click opens it in full; a single click selects. One behaviour in the shared list row.
 - **Grouped by state, the same way everywhere.** Waiting on you, waiting on others, worth knowing and done, in that order:
   - **Week** mixes every state in one lane today; it should separate them.
   - **Tasks** should show suggested ones (waiting to be kept) apart from kept ones, and work with a due date apart from the rest, so the person sees at a glance what's dated. Reminders the same.
 
 Page by page:
+- **Open Posty by double-tapping a key.** Instead of the Control+Alt+Space chord, double-tapping Ctrl on Windows or Option on a Mac opens Posty's quick ask, as Spotlight-style tools do. Keep the chord as the fallback and as a setting. Electron's `globalShortcut` (`desktop/quick-ask.cjs`) only takes chords, so this needs a system-wide key listener (a native module such as uiohook); on a Mac that asks for Accessibility permission, which onboarding has to explain. It must ignore a double tap that's part of typing or another shortcut.
 - **Notifications:** a "Clear all" button that clears every notification at once.
 - **Documents:** it lists calendar invites (`.ics`) from mail as documents. They should be left out, or shown under the meeting they're for.
 - **Matters tab, zip-through:** the list and the matter each scroll on their own, ↑↓ moves through matters and opens each one, and a decision bar pinned at the top of the matter offers Keep (keep its suggestions) and Not for me (decline them and mark it done), then opens the next. Proposed 2026-11-25 as a sketch; needs a visual mockup and approval before building.
