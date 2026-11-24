@@ -1379,6 +1379,36 @@ PLATE_MATTERS = 15
 PLATE_LOOSE = 10
 
 
+# Finished work stays in view this long, so an email isn't read as an open ask once it's done.
+RECENTLY_DONE_DAYS = 2
+
+
+def standing(ctx: Context, thread: int, most: int = 4) -> str:
+    """Where a conversation stands, in a line, by address: its matter and state, its open work
+    and what was finished in it lately."""
+    db = ctx.bus.db
+    matter = matter_of(db, thread)
+    found = db.fetch_all("SELECT * FROM matters WHERE id = ?", (matter,)) if matter else []
+    if not found:
+        rows = db.fetch_all("SELECT status FROM threads WHERE id = ?", (thread,))
+        return f"Where it stands: not part of a matter · {rows[0]['status'] if rows else 'gone'}"
+    shown = row(ctx, found[0])
+    since = (datetime.now(UTC) - timedelta(days=RECENTLY_DONE_DAYS)).isoformat()
+    ids = [t["id"] for t in _threads_of(db, shown.id)]
+    parts = [f"{address('matter', shown.id)} {shown.state}"]
+    parts += [
+        f"{'suggested' if w.proposed else 'open'} {address(w.kind, w.id)} {_short(w.title, 60)}"
+        + (f" due {w.when}" if w.when else "")
+        for w in shown.work[:most]
+    ]
+    parts += [
+        f"done {address(w.kind, w.id)} {_short(w.title, 60)} {_local(w.when)}"
+        for w in _done_work(db, shown.id, ids)
+        if (w.when or "")[:16] >= since[:16]
+    ][:most]
+    return "Where it stands: " + " · ".join(parts)
+
+
 def plate(ctx: Context) -> str:
     """What's going on, one matter at a time, then what isn't part of one and what finished since
     yesterday. Each list is cut short with a count, so a full mailbox never floods the brief, and

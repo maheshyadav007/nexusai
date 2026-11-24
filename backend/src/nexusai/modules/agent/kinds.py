@@ -47,6 +47,12 @@ def address(kind: str, identifier: object) -> str:
     return f"[{'mail' if kind == 'thread' else kind}:{identifier}]"
 
 
+def key_of(value: str) -> str:
+    """A document's key, whether it's written bare (m:12:2) or as its address ([doc:m:12:2])."""
+    value = value.strip().removeprefix("[").removesuffix("]")
+    return value.removeprefix("doc:").partition("#")[0]
+
+
 def parse(value: object) -> tuple[str, int] | None:
     """A name like "task:88", or None for anything else, so what a model writes can't reach SQL."""
     kind, _, number = str(value or "").strip().partition(":")

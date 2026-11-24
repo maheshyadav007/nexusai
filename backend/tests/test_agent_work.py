@@ -1154,10 +1154,11 @@ def test_agent_can_discover_and_read_an_email_attachment(
     session, output = run_tool(
         client, script, ToolCall("attachment-list", "read_thread", {"thread_ids": [thread["id"]]})
     )
-    assert "brief.txt" in output and "read_document key m:" in output
+    assert "brief.txt" in output and "[doc:m:" in output
     import re
 
-    key = re.search(r"read_document key (m:\d+:\d+)", output)
+    # Read by the marker, as the model copies it.
+    key = re.search(r"(\[doc:m:\d+:\d+\])", output)
     assert key is not None
     _, text = run_tool(
         client,

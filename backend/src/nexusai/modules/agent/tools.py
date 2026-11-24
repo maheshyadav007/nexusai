@@ -42,6 +42,7 @@ from nexusai.modules.agent import (
     cards,
     channel,
     citations,
+    kinds,
     mail_agent,
     matters,
     memory,
@@ -781,8 +782,8 @@ class _DraftReply(BaseModel):
     body: str = Field(description="The reply, as plain text.")
     attachments: list[str] = Field(
         default_factory=list,
-        description="Files to attach, by key: an email's attachment as read_thread lists it, "
-        "such as m:123:2, or a document's key from search_documents.",
+        description="Files to attach, by their marker as read_thread or search_documents shows"
+        " it, such as [doc:m:123:2].",
     )
     tool_call_id: Annotated[str, InjectedToolCallId]
 
@@ -845,7 +846,7 @@ class _SearchDocuments(BaseModel):
 
 
 class _ReadDocument(BaseModel):
-    key: str = Field(description="The document's key, from search results.")
+    key: str = Field(description="The document's marker, as shown, such as [doc:m:123:2].")
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
@@ -1544,6 +1545,7 @@ def build_tools(
                 f"{' | ' + h.thread.category if h.thread.category else ''}"
                 f"{' | ' + signals.HIDDEN_NOTE if h.thread.id in hidden else ''}"
                 f"{' | related in meaning, not these words' if h.matched_by == 'meaning' else ''}"
+                f" | {matters.standing(ctx, h.thread.id, most=2)}"
                 f" | {h.excerpt}"
                 for h in hits
             ]
@@ -1618,20 +1620,23 @@ def build_tools(
             before = view.messages[: max(len(view.messages) - skip_newest, 0)]
             recent = before[-ctx.config.agent.max_recent_thread_messages :]
             attachments = [
-                f"- {a.filename}: read_document key m:{m.id}:{a.index}"
+                f"- {a.filename}: {citations.mark(citations.DOCUMENT, f'm:{m.id}:{a.index}')}"
                 for m in recent
                 for a in m.attachments
                 if a.kind in {"attachment", "calendar"}
             ]
             manifest = (
-                "Attachments (read_document reads them; draft_reply and draft_forward attach them by key):\n"
+                "Attachments (read_document reads them; draft_reply and draft_forward attach them by marker):\n"
                 + "\n".join(attachments)
                 + "\n\n"
                 if attachments
                 else ""
             )
             shown = f" ({signals.HIDDEN_NOTE})" if thread_id in hidden else ""
-            head = f"Conversation {citations.mark(citations.MAIL, thread_id)}{shown}\nSubject: {view.thread.subject}\n{manifest}"
+            head = (
+                f"Conversation {citations.mark(citations.MAIL, thread_id)}{shown}\nSubject: {view.thread.subject}\n"
+                f"{matters.standing(ctx, thread_id)}\n{manifest}"
+            )
             # The newest messages matter most, so when space runs out the oldest go first.
             kept: list[str] = []
             room = budget - len(head)
@@ -2026,7 +2031,7 @@ def build_tools(
             work.emit("drafts.changed", {}, source="agent", trace_id=ctx.trace_id)
 
     def _attached(keys: list[str]) -> tuple[list[DraftAttachment], str]:
-        found, missing = outgoing.attachments_from_keys(ctx, keys)
+        found, missing = outgoing.attachments_from_keys(ctx, [kinds.key_of(key) for key in keys])
         note = (
             f" These couldn't be attached, so check the keys: {', '.join(missing)}."
             if missing
@@ -2185,6 +2190,8 @@ def build_tools(
         )
 
     def read_document(key: str, tool_call_id: str) -> str:
+        key = kinds.key_of(key)
+
         def work() -> str:
             try:
                 preview = get_document(GetDocument(key=key), ctx)

@@ -3,6 +3,7 @@ no internal key reaches the screen (docs/AGENT_SYNC_PLAN.md)."""
 
 # ruff: noqa: F811
 
+import re
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -10,7 +11,7 @@ from fastapi.testclient import TestClient
 from fake_mail import FakeMail
 from nexusai.modules.agent import mail_agent, matters
 from nexusai.modules.agent.citations import Citations
-from nexusai.modules.agent.providers import TextChunk
+from nexusai.modules.agent.providers import TextChunk, ToolCall
 from nexusai.modules.agent.ui_stream import UiTranslator
 from test_agent_work import (  # noqa: F401  (fixtures)
     Script,
@@ -146,3 +147,43 @@ def test_decisions_name_work_by_its_address(client: TestClient) -> None:
     waiting = mail_agent.decisions(ctx)
     assert "Suggested tasks: 1 pending" in waiting
     assert "- [task:1] Book the venue" in waiting
+
+
+def tool_said(client: TestClient, script: Script, call: str, args: dict[str, Any]) -> str:
+    """What a tool showed Posty, called once in a chat."""
+    script.replies = [[ToolCall("c1", call, args)], [TextChunk("ok")]]
+    session = new_session(client)
+    chat(client, session, "Look")
+    wait(lambda: status(client, session) == "done", call)
+    said: str = script.requests[-1].messages[-1].text
+    return said
+
+
+def test_tasks_are_listed_by_address_with_the_ones_just_ticked(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    _, task = ticked_one(client, script, fake)
+    other = next(t for t in open_tasks(client) if t["title"] == "Sign the 88213 cost sheet")
+    said = tool_said(client, script, "list_tasks", {})
+    assert f"[task:{task['id']}] Get CL 88213 merged (done " in said
+    assert f"[task:{other['id']}] Sign the 88213 cost sheet (todo" in said
+    assert not re.search(r"(?m)^\d+:", said)
+
+
+def test_a_conversation_says_where_its_matter_stands(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    matter, task = ticked_one(client, script, fake)
+    thread = query(client, "matters.get", id=matter["id"])["threads"][0]["id"]
+    said = tool_said(client, script, "read_thread", {"thread_ids": [thread]})
+    stands = next(line for line in said.splitlines() if line.startswith("Where it stands:"))
+    assert stands.startswith(f"Where it stands: [matter:{matter['id']}] waiting_on_you")
+    assert f"done [task:{task['id']}] Get CL 88213 merged" in stands
+    found = tool_said(client, script, "search_mail", {"query": "88213"})
+    assert f"[matter:{matter['id']}] waiting_on_you" in found
+
+
+def test_a_document_is_read_by_its_marker_or_its_bare_key() -> None:
+    from nexusai.modules.agent.kinds import key_of
+
+    assert key_of("[doc:m:12:2]") == key_of("m:12:2") == key_of("doc:m:12:2#p3") == "m:12:2"
