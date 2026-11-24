@@ -180,26 +180,57 @@ def adopt_all(ctx: Context) -> None:
             "UPDATE reminders SET matter = (SELECT matter FROM matter_threads WHERE thread = reminders.thread)"
             " WHERE matter IS NULL AND task IS NULL AND thread IN (SELECT thread FROM matter_threads)"
         )
-        # A deadline beside a to-do for the same thing showed twice. It becomes the to-do's date
-        # when the to-do has none, and is put away; nothing is deleted.
-        for deadline in tx.execute(
-            "SELECT id, due, thread FROM work_board WHERE kind = 'deadline' AND done = 0 AND thread IS NOT NULL"
+        # The work board is retired, so tasks are the one record of the work. What's still open
+        # on it becomes its task's date, or a suggested task the person can keep, and is put
+        # away. A deadline for work already finished just goes. Nothing is deleted.
+        for item in tx.execute(
+            "SELECT id, kind, title, due, thread FROM work_board WHERE done = 0"
         ).fetchall():
-            task = tx.execute(
-                "SELECT id, due FROM tasks WHERE status != 'done' AND (thread = ? OR matter ="
-                " (SELECT matter FROM matter_threads WHERE thread = ?)) ORDER BY thread = ? DESC, id LIMIT 1",
-                (deadline["thread"], deadline["thread"], deadline["thread"]),
-            ).fetchone()
-            if task:
-                if not task["due"] and deadline["due"]:
-                    tx.execute(
-                        "UPDATE tasks SET due = ? WHERE id = ?", (deadline["due"][:10], task["id"])
-                    )
-                tx.execute(
-                    "UPDATE work_board SET done = 1, updated = ? WHERE id = ?",
-                    (_now(), deadline["id"]),
-                )
+            _retire(tx, item)
     links.tidy(ctx.bus.db)
+
+
+def _retire(tx: Any, item: Any) -> None:
+    """One open item of the old work board, moved onto the tasks."""
+    if item["kind"] in ("deadline", "task"):
+        thread = item["thread"]
+        due = (item["due"] or "")[:10] or None
+        same = (
+            "(thread = ? OR matter = (SELECT matter FROM matter_threads WHERE thread = ?))"
+            " ORDER BY thread = ? DESC, id LIMIT 1"
+        )
+        task = (
+            tx.execute(
+                f"SELECT id, due FROM tasks WHERE status != 'done' AND {same}", (thread,) * 3
+            ).fetchone()  # noqa: S608
+            if thread
+            else None
+        )
+        finished = (
+            tx.execute(
+                f"SELECT id FROM tasks WHERE status = 'done' AND {same}", (thread,) * 3
+            ).fetchone()  # noqa: S608
+            if thread
+            else None
+        )
+        today = datetime.now().astimezone().strftime("%Y-%m-%d")
+        if task:
+            if not task["due"] and due:
+                tx.execute("UPDATE tasks SET due = ? WHERE id = ?", (due, task["id"]))
+        elif not finished and (due is None or due >= today):
+            matter = (
+                tx.execute(
+                    "SELECT matter FROM matter_threads WHERE thread = ?", (thread,)
+                ).fetchone()
+                if thread
+                else None
+            )
+            tx.execute(
+                "INSERT INTO tasks (title, notes, status, due, thread, source, proposed, created, updated, matter)"
+                " VALUES (?, '', 'todo', ?, ?, 'agent', 1, ?, ?, ?)",
+                (item["title"], due, thread, _now(), _now(), matter["matter"] if matter else None),
+            )
+    tx.execute("UPDATE work_board SET done = 1, updated = ? WHERE id = ?", (_now(), item["id"]))
 
 
 def _facts(db: Database, threads: list[int], own: set[str]) -> dict[str, Any]:
@@ -476,10 +507,6 @@ def _work(db: Database, matter: int, threads: list[int]) -> list[MatterWork]:
             f" OR task IN ({under})) ORDER BY due_at",
             (matter, *threads, *task_ids),
         )
-    ]  # fmt: skip
-    found += [
-        MatterWork(kind="deadline", id=r["id"], title=r["title"], when=r["due"], thread=r["thread"])
-        for r in db.fetch_all(f"SELECT * FROM work_board WHERE done = 0 AND kind = 'deadline' AND thread IN ({marks})", tuple(threads))  # noqa: S608
     ]  # fmt: skip
     return found
 
@@ -884,7 +911,7 @@ def detail(ctx: Context, matter: int) -> MatterDetail:
 
 
 def done(ctx: Context, matter: int) -> int:
-    """Every conversation in it done, and with them their tasks, reminders and deadlines."""
+    """Every conversation in it done, and with them their tasks and reminders."""
     db = ctx.bus.db
     threads = _threads_of(db, matter)
     before = {str(t["id"]): t["status"] for t in threads if t["status"] != "resolved"}
@@ -1000,10 +1027,6 @@ def home(db: Database, kind: str, identifier: int) -> tuple[int | None, int | No
             None,
             r["thread"],
         )
-    if kind == "deadline":
-        rows = db.fetch_all("SELECT thread FROM work_board WHERE id = ?", (identifier,))
-        thread = rows[0]["thread"] if rows else None
-        return (matter_of(db, thread) if thread else None), None, thread
     return None, None, None
 
 
@@ -1091,12 +1114,6 @@ def _close_one(ctx: Context, kind: str, identifier: int) -> None:
         planner.change_task(ctx, identifier, {"status": "done"})
     elif kind == "reminder":
         planner.change_reminder(ctx, identifier, {"fired": 1})
-    elif kind == "deadline":
-        with ctx.bus.unit_of_work() as work:
-            work.tx.execute(
-                "UPDATE work_board SET done = 1, updated = ? WHERE id = ?", (_now(), identifier)
-            )
-            work.emit("board.changed", {}, source="agent", trace_id=ctx.trace_id)
     elif kind == "thread":
         rows = ctx.bus.db.fetch_all("SELECT status FROM threads WHERE id = ?", (identifier,))
         if (
@@ -1161,12 +1178,6 @@ def reopen_items(ctx: Context, items: list[str]) -> int:
             planner.change_task(ctx, identifier, {"status": "todo"})
         elif kind == "reminder":
             planner.change_reminder(ctx, identifier, {"fired": 0})
-        elif kind == "deadline":
-            with ctx.bus.unit_of_work() as work:
-                work.tx.execute(
-                    "UPDATE work_board SET done = 0, updated = ? WHERE id = ?", (_now(), identifier)
-                )
-                work.emit("board.changed", {}, source="agent", trace_id=ctx.trace_id)
         elif kind == "thread":
             if conversations._set_status(ctx, identifier, "waiting_on_you", "resolved"):
                 conversations.reopen_work(ctx, identifier)

@@ -646,14 +646,6 @@ class _Brief(BaseModel):
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
-class _BoardWrite(BaseModel):
-    kind: str = Field(description="deadline, task, status or note.")
-    title: str = Field(description="Short description.")
-    thread_id: int | None = Field(default=None, description="The related conversation, if any.")
-    due: str | None = Field(default=None, description="YYYY-MM-DD, if it has a date.")
-    tool_call_id: Annotated[str, InjectedToolCallId]
-
-
 class _Nothing(BaseModel):
     tool_call_id: Annotated[str, InjectedToolCallId]
 
@@ -966,8 +958,6 @@ MAIL_AGENT_TOOLS = frozenset(
         "search_documents",
         "read_document",
         "list_documents",
-        "read_work_board",
-        "write_work_board",
         "team_roster",
         "team_inbox",
         "team_message",
@@ -999,7 +989,6 @@ TRIAGE_TOOLS = frozenset(
         "read_thread",
         "read_recipients",
         "semantic_search",
-        "read_work_board",
         "read_document",
     }
 )
@@ -1030,7 +1019,6 @@ BRIEF_TOOLS = frozenset(
         "list_mail",
         "list_tasks",
         "list_reminders",
-        "read_work_board",
         "draft_reply",
         "read_feedback",
         "remember",
@@ -1058,7 +1046,6 @@ ORGANIZER_TOOLS = frozenset(
         "delete_reminders",
         "search_mail",
         "read_thread",
-        "read_work_board",
         "remember",
         "list_memory",
         "team_inbox",
@@ -1088,7 +1075,6 @@ INTERVIEW_TOOLS = frozenset(
         "apply_mail_learning_answers",
         "remember",
         "list_memory",
-        "read_work_board",
         "read_thread",
         "read_recipients",
         "search_mail",
@@ -1103,9 +1089,9 @@ INTERVIEW_TOOLS = frozenset(
 # ones it uses most and finds the rest with find_tools. Memory is always at hand for every agent.
 ALWAYS_SHOWN = frozenset({"ask_user", "remember", "list_memory", "load_skill"})
 # What session.md has it reach for first is shown, so a smaller model needn't search for its steps:
-# the work board, documents, and every list it checks before making something.
+# matters, documents, and every list it checks before making something.
 LEAD_SHOWN = ALWAYS_SHOWN | {
-    "read_work_board", "open_item", "find_matters", "search_mail", "semantic_search", "search_documents", "read_thread",
+    "open_item", "find_matters", "search_mail", "semantic_search", "search_documents", "read_thread",
     "list_mail", "update_mail", "draft_reply", "draft_forward", "list_drafts",
     "list_tasks", "list_reminders", "list_categories",
     "list_rules", "list_schedules", "list_panels", "propose_preference",
@@ -1113,7 +1099,7 @@ LEAD_SHOWN = ALWAYS_SHOWN | {
 }  # fmt: skip
 MAIL_SHOWN = ALWAYS_SHOWN | {
     "search_mail", "semantic_search", "read_thread", "read_recipients", "list_mail",
-    "read_work_board", "update_mail", "draft_reply", "draft_forward", "propose_task",
+    "update_mail", "draft_reply", "draft_forward", "propose_task",
     "propose_reminder",
     "team_inbox", "team_message", "team_close", "tell",
 }  # fmt: skip
@@ -1779,27 +1765,6 @@ def build_tools(
     def find_matters(tool_call_id: str, words: str = "", state: str = "open") -> str:
         return _untrusted(matters.find(ctx, words, state))
 
-    def read_work_board(tool_call_id: str) -> str:
-        items = channel.board(ctx.bus.db).items
-        return (
-            "\n".join(
-                f"{i.kind}: {i.title} ({citations.mark(citations.MAIL, i.thread) + ', ' if i.thread else ''}"
-                f"due {i.due}, by {i.by})"
-                for i in items
-            )
-            or "The board is empty."
-        )
-
-    def write_work_board(
-        kind: str,
-        title: str,
-        tool_call_id: str,
-        thread_id: int | None = None,
-        due: str | None = None,
-    ) -> str:
-        channel.board_add(ctx, kind, title, thread_id, due, "Session")
-        return "Added."
-
     def _speaker() -> str:
         """Who is talking in this run: the turn's own agent, or the chat's."""
         rows = ctx.bus.db.fetch_all(
@@ -2301,7 +2266,7 @@ def build_tools(
         (
             read_plate,
             _Nothing,
-            "Everything on their plate now: unfinished mail, tasks, reminders, deadlines and "
+            "Everything on their plate now: matters, unfinished mail, tasks, reminders and "
             "decisions waiting, with earlier briefs and how they took them. A morning run already "
             "has this in its message.",
         ),
@@ -2329,18 +2294,6 @@ def build_tools(
             _FindMatters,
             "List matters, the real things going on, by words or state, each by its address. Use "
             "it when you don't have a matter's address yet.",
-        ),
-        (
-            read_work_board,
-            _Nothing,
-            "See what agents already know: deadlines, open tasks and where conversations stand. "
-            "Check this first, so you don't redo another agent's work.",
-        ),
-        (
-            write_work_board,
-            _BoardWrite,
-            "Record a deadline, task or status for other agents to use later. The person doesn't "
-            "see this directly, so use create_tasks for something they should do.",
         ),
         (
             load_skill,

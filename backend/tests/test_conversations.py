@@ -109,7 +109,7 @@ def test_a_deadline_becomes_the_task_date_and_markers_leave_titles(
     triaged(client, "verify your device")
     task = wait(lambda: tasks(client), "task")[0]
     assert (task["title"], task["due"]) == ("Review the sign-in attempt", "2099-02-01")
-    assert client.post("/api/queries/board.list").json()["items"] == []
+    assert len(tasks(client)) == 1
 
 
 def test_done_closes_the_conversations_work_and_undo_brings_it_back(

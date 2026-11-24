@@ -514,8 +514,6 @@ def test_every_powerful_tool_has_a_row_in_settings(client: TestClient) -> None:
         "suggest",
         "tell",
         "notify_person",
-        "read_work_board",
-        "write_work_board",
         "team_roster",
         "team_inbox",
         "team_assign",

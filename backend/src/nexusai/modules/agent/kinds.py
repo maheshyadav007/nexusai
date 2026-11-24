@@ -26,15 +26,13 @@ KINDS: dict[str, Kind] = {
     "task": Kind("tasks", "title", "due", "status != 'done'",
                  "status = 'done', completed = ?2", "status = 'todo', completed = NULL", "tasks.changed"),
     "reminder": Kind("reminders", "title", "due_at", "fired = 0", "fired = 1", "fired = 0", "reminders.changed"),
-    "deadline": Kind("work_board", "title", "due", "done = 0 AND kind = 'deadline'", "done = 1", "done = 0",
-                     "board.changed"),
     "thread": Kind("threads", "subject", "last_date"),
     "doc": Kind("documents", "name", "added"),
     "matter": Kind("matters", "title", "updated"),
 }  # fmt: skip
 
 # What can be finished, in the order a matter lists its work.
-WORK = ("task", "reminder", "deadline")
+WORK = ("task", "reminder")
 
 
 def ref(kind: str, identifier: int) -> str:

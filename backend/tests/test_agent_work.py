@@ -313,7 +313,7 @@ def test_proposals_wait_for_the_person(client: TestClient, script: Script, fake:
     assert task["proposed"] is True and task["source"] == "agent" and task["thread"] == thread["id"]
     # With a task, the deadline is the task's date rather than a second line beside it.
     assert task["due"] == "2099-01-10"
-    assert client.post("/api/queries/board.list").json()["items"] == []
+    assert len(client.post("/api/queries/tasks.list", json={}).json()["tasks"]) == 1
     reminder = client.post("/api/queries/reminders.list").json()["reminders"][0]
     assert reminder["proposed"] is True
     draft = client.post("/api/queries/drafts.list").json()["drafts"][0]
@@ -969,7 +969,7 @@ def test_a_scheduled_run_stops_at_its_token_limit_and_keeps_its_work(
     ).json()["schedules"]
     schedule = next(row for row in saved if row["title"] == "Small prep")
     script.replies = [
-        [Usage(input_tokens=10, output_tokens=5), ToolCall("c1", "read_work_board", {})],
+        [Usage(input_tokens=10, output_tokens=5), ToolCall("c1", "list_tasks", {})],
         ["This call must not happen"],
     ]
     client.post("/api/commands/schedules.runNow", json={"id": schedule["id"]})
@@ -999,7 +999,7 @@ def test_with_run_limits_off_a_run_goes_past_its_token_limit(
     ).json()["schedules"]
     schedule = next(row for row in saved if row["title"] == "Unlimited prep")
     script.replies = [
-        [Usage(input_tokens=10, output_tokens=5), ToolCall("c1", "read_work_board", {})],
+        [Usage(input_tokens=10, output_tokens=5), ToolCall("c1", "list_tasks", {})],
         ["Done."],
     ]
     client.post("/api/commands/schedules.runNow", json={"id": schedule["id"]})
@@ -1054,11 +1054,19 @@ def test_daily_prep_shows_on_today(client: TestClient, script: Script, fake: Fak
     assert "one thing needs you" in prepared
 
 
-def test_overdue_deadlines_notify_once_without_a_model(client: TestClient, script: Script) -> None:
+def test_overdue_tasks_notify_once_for_each_date_without_a_model(
+    client: TestClient, script: Script
+) -> None:
     ctx_bus = client.app.state.bus  # type: ignore[attr-defined]
     with ctx_bus.db.transaction() as tx:
         tx.execute(
-            "INSERT INTO work_board (kind, title, due, by, updated) VALUES ('deadline', 'Audit report', '2020-01-01', 'x', 'x')"
+            "INSERT INTO tasks (title, notes, status, due, source, proposed, created)"
+            " VALUES ('Audit report', '', 'todo', '2020-01-01', 'person', 0, 'x')"
+        )
+        # A suggestion isn't theirs yet, so it isn't overdue for them.
+        tx.execute(
+            "INSERT INTO tasks (title, notes, status, due, source, proposed, created)"
+            " VALUES ('Maybe this', '', 'todo', '2020-01-01', 'agent', 1, 'x')"
         )
     client.post(
         "/api/commands/reminders.save", json={"title": "Wake it", "when": "2099-01-01T09:00"}
@@ -1069,10 +1077,8 @@ def test_overdue_deadlines_notify_once_without_a_model(client: TestClient, scrip
         ],
         "overdue notice",
     )
-    assert notices[0]["title"] == "Overdue: Audit report"
+    assert [n["title"] for n in notices] == ["Overdue: Audit report"]
     assert script.requests == []
-    items = client.post("/api/queries/board.list").json()["items"]
-    assert len(items) == 1 and items[0]["title"] == "Audit report"
 
 
 def test_activity_records_commands_as_not_undoable(client: TestClient, script: Script) -> None:

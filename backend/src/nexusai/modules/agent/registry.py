@@ -10,7 +10,7 @@ INTERVIEW_AGENT = "interview"
 WEEKDAYS = ("Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays", "Sundays")
 WHAT_THEY_DO = {
     "mail-brief": "Writes your morning brief from what needs you, and learns from your reactions.",
-    "daily-prep": "Prepares your morning from the work board.",
+    "daily-prep": "Prepares your morning from what's on your plate.",
     "prompt": "Runs the instructions you gave it.",
 }
 EVENT_WORDS = {

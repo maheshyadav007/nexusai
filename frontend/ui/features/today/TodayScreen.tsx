@@ -564,7 +564,7 @@ function MorningBrief() {
   );
 }
 
-/** What's overdue and what's due today, across tasks, reminders and deadlines from mail. */
+/** What's overdue and what's due today, across tasks and reminders. */
 function DueToday({ items }: { items: readonly DueItem[] }) {
   const formatDay = useDateOnly();
   const formatWhen = useDateTime();

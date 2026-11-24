@@ -1,7 +1,7 @@
-"""A conversation is the thing going on, and its tasks, reminders and deadlines go with it.
+"""A conversation is the thing going on, and its tasks and reminders go with it.
 
 Closing it closes them, opening it again brings back what that closed, and finishing its last
-task finishes it. Before this, marking mail done left its task, reminder and deadline open.
+task finishes it. Before this, marking mail done left its task and reminder open.
 """
 
 from datetime import UTC, datetime
@@ -91,8 +91,8 @@ def reopen_work(ctx: Context, thread: int) -> int:
 
 
 def follow_folders(ctx: Context) -> int:
-    """What a folder keeps from the AI leaves the AI's work: its open tasks, reminders and
-    deadlines close. Moved back to where the AI reads, they open again. Returns how many
+    """What a folder keeps from the AI leaves the AI's work: its open tasks and reminders
+    close. Moved back to where the AI reads, they open again. Returns how many
     conversations changed."""
     db = ctx.bus.db
     still_open = " UNION ".join(

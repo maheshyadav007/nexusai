@@ -57,8 +57,6 @@ const TOOL_SHOWN: Readonly<Record<string, { label: StringKey; icon: IconName; ch
   list_panels: { label: "tool.list_panels", icon: "panels" },
   save_panel: { label: "tool.save_panel", icon: "panels", chip: "title" },
   remove_panels: { label: "tool.remove_panels", icon: "panels", chip: "panel_ids" },
-  read_work_board: { label: "tool.read_work_board", icon: "tasks" },
-  write_work_board: { label: "tool.write_work_board", icon: "tasks", chip: "title" },
   post_to_agents: { label: "tool.post_to_agents", icon: "channel", chip: "topic" },
   read_agent_messages: { label: "tool.read_agent_messages", icon: "channel" },
   team_roster: { label: "tool.team_roster", icon: "agent" },

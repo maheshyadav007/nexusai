@@ -225,7 +225,7 @@ def test_a_matter_and_its_work_open_by_address_and_name_what_to_open_next(
     assert "isn't an address" in tool_said(client, script, "open_item", {"address": "matter 12"})
 
 
-RETIRED = {"read_matter"}
+RETIRED = {"read_matter", "read_work_board", "write_work_board", "work board"}
 
 
 def test_no_prompt_names_a_retired_tool() -> None:
@@ -236,3 +236,40 @@ def test_no_prompt_names_a_retired_tool() -> None:
         if prompt.name.endswith(".md"):
             text = prompt.read_text("utf-8")
             assert not [name for name in RETIRED if name in text], prompt.name
+
+
+def test_the_work_board_moves_onto_tasks_and_a_finished_deadline_just_goes(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    matter, ticked = ticked_one(client, script, fake)
+    ctx = ctx_of(client)
+    db = ctx.bus.db
+    with db.transaction() as tx:
+        for title, due, thread in (
+            # The RCA: its task was ticked, so the deadline is stale, not overdue.
+            ("RCA due", "2020-01-01", ticked["thread"]),
+            ("Book flights", "2099-03-01", None),
+            ("Old thing", "2020-01-01", None),
+            ("Status: waiting on legal", None, None),
+        ):
+            tx.execute(
+                "INSERT INTO work_board (kind, title, thread, due, by, updated)"
+                " VALUES (?, ?, ?, ?, 'x', 'x')",
+                ("status" if title.startswith("Status") else "deadline", title, thread, due),
+            )
+    last = db.fetch_all("SELECT MAX(id) AS n FROM tasks")[0]["n"]
+    matters.adopt_all(ctx)
+    assert db.fetch_all("SELECT 1 FROM work_board WHERE done = 0") == []
+    added = db.fetch_all("SELECT title, due, proposed FROM tasks WHERE id > ?", (last,))
+    assert [(r["title"], r["due"], r["proposed"]) for r in added] == [
+        ("Book flights", "2099-03-01", 1)
+    ]
+    assert "RCA due" not in matters.plate(ctx)
+    assert query(client, "matters.get", id=matter["id"])["matter"]["due"] is None
+
+
+def test_no_tool_reads_or_writes_the_work_board(client: TestClient) -> None:
+    from nexusai.modules.agent import tools
+
+    built = {t.name for t in tools.build_tools(ctx_of(client), "s", tools.RunControl())}
+    assert not built & RETIRED

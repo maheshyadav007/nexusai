@@ -1,4 +1,5 @@
-"""How agents talk to the person (user channel), and to each other (agent channel and work board)."""
+"""How agents talk to the person (user channel), and to each other (agent channel). The work
+board table stays for its history; its open items moved onto tasks (matters.adopt_all)."""
 
 import json
 from datetime import UTC, datetime, time
@@ -7,8 +8,6 @@ from typing import Any
 from nexusai.contracts.agent import (
     AgentChannelList,
     AgentChannelMessage,
-    BoardItem,
-    BoardList,
     ChannelList,
     ChannelMessage,
     QuietHours,
@@ -210,48 +209,6 @@ def close(ctx: Context, identifier: int, status: str, answer: str | None) -> Non
             (status, answer, identifier),
         )
         work.emit("channel.posted", {"id": identifier}, source="agent", trace_id=ctx.trace_id)
-
-
-def board_add(
-    ctx: Context, kind: str, title: str, thread: int | None, due: str | None, by: str
-) -> int:
-    with ctx.bus.unit_of_work() as work:
-        same = work.tx.execute(
-            "SELECT id FROM work_board WHERE kind = ? AND title = ? AND COALESCE(thread, 0) = COALESCE(?, 0) AND done = 0",
-            (kind, title, thread),
-        ).fetchone()
-        if same:
-            return int(same[0])
-        cursor = work.tx.execute(
-            "INSERT INTO work_board (kind, title, thread, due, by, updated) VALUES (?, ?, ?, ?, ?, ?)",
-            (kind, title, thread, due, by, _now()),
-        )
-        work.emit("board.changed", {}, source="agent", trace_id=ctx.trace_id)
-    return int(cursor.lastrowid or 0)
-
-
-def board(db: Database, thread: int | None = None) -> BoardList:
-    where, params = (
-        ("WHERE done = 0 AND thread = ?", (thread,)) if thread else ("WHERE done = 0", ())
-    )
-    rows = db.fetch_all(
-        f"SELECT * FROM work_board {where} ORDER BY due IS NULL, due, id DESC LIMIT 200", params
-    )  # noqa: S608
-    return BoardList(
-        items=[
-            BoardItem(
-                id=r["id"],
-                kind=r["kind"],
-                title=r["title"],
-                thread=r["thread"],
-                due=r["due"],
-                by=r["by"],
-                updated=r["updated"],
-                done=bool(r["done"]),
-            )
-            for r in rows
-        ]
-    )
 
 
 def agent_post(

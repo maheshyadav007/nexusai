@@ -69,7 +69,6 @@ READABLE_TABLES = frozenset(
         "tasks",
         "reminders",
         "schedules",
-        "work_board",
         "agent_sessions",
         "notifications",
     }
@@ -290,7 +289,7 @@ class _Query(_Call):
     sql: str = Field(
         description=(
             "One read-only SELECT. Tables: messages, threads, message_parts, mail_categories,"
-            " tasks, reminders, schedules, work_board, agent_sessions, notifications."
+            " tasks, reminders, schedules, agent_sessions, notifications."
         )
     )
 

@@ -16,7 +16,7 @@ Feature set for review, grouped by how the pieces depend on each other. Context:
 1. **Shell:** app, Home folder, landing and onboarding, themes, settings, logs, encrypted store
 2. **Mail:** Mail and PST connectors, sync, threads, rules, attachments, search, documents, panels
 3. **Agent:** setup interview, prompts, memory, data guard, permissions, tools, sessions, Live mail agent, user channel, agent channel, approvals
-4. **Daily work:** work board, Daily prep, Time check, schedules, tasks, reminders, notifications
+4. **Daily work:** matters, Daily prep, Time check, schedules, tasks, reminders, notifications
 5. **Electron:** desktop app wrapping the same UI and backend, Windows installer
 
 | Part | Sections |
@@ -272,7 +272,7 @@ Rules run first and cost nothing; mail they mark "skip agent" never reaches the 
 
 | ID | Feature | Pri |
 |---|---|---|
-| AGN-3 | Mail agent: triggered live by every new email that escapes the fixed rules, reading it with recent thread messages (THR-6) and giving category, importance, summary, key facts and suggested action; can propose tasks, reminders, drafts and memory; records deadlines and thread status on the work board; has no Command or send tool | MVP |
+| AGN-3 | Mail agent: triggered live by every new email that escapes the fixed rules, reading it with recent thread messages (THR-6) and giving category, importance, summary, key facts and suggested action; can propose tasks, reminders, drafts and memory; turns deadlines into dated tasks in the conversation's matter; has no Command or send tool | MVP |
 | AGN-3a | Each judgement goes by, strongest first: what the person said, what they corrected, their memory, what the app counted (To or Cc, who they reply to, what they open), notes learned from mail, then the email itself | MVP |
 | AGN-3b | Sets who has the next move, what they'd do (reply, do, decide, read), when to chase, and whether to interrupt, each with a reason. Interrupting is decided apart from importance, and at most three questions stay open | MVP |
 | AGN-3c | Sending takes a conversation off the person's plate and works out what comes next. A follow-up date that passes tells them once, on Today with a draft button. A reply moves it back. None of this needs a model except the date | MVP |
@@ -406,7 +406,7 @@ Shown     Please contact kim.j@samsung.com and open http://wiki.samsung.net/proj
 
 ## C8. Shared context & agent channel
 
-Agents and sessions work as one team instead of each starting from nothing. A **work board** holds what is known, and an **agent channel** lets them tell each other things. This is separate from the user channel (E1), which is between agents and the user.
+Agents and sessions work as one team instead of each starting from nothing. **Matters** hold what is known, every agent reads them by the same addresses, and an **agent channel** lets them tell each other things. (The work board did this until 2026-11-24; its open items moved onto tasks.) This is separate from the user channel (E1), which is between agents and the user.
 
 ```text
 Mail agent ──writes──▶ Work board ◀──reads── Morning brief, sessions, Time check
@@ -430,7 +430,7 @@ What runs by itself, and what starts it, is in [`AGENTS_AND_CATEGORIES.md`](AGEN
 
 | Default | When | What it does |
 |---|---|---|
-| **Mail agent** | Each conversation with new mail that the fixed rules didn't send to its folder | Judges it, and records deadlines and status on the work board |
+| **Mail agent** | Each conversation with new mail that the fixed rules didn't send to its folder | Judges it, and gives deadlines to its tasks |
 | **Morning brief** | Every day at 08:30 | Writes the brief on Today from what's on the person's plate |
 | **Time check** (uses no model) | At the next due time, using one timer rather than polling | Fires reminders and follow-up notices |
 

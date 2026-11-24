@@ -517,7 +517,7 @@ def _rule_line(ctx: Context, thread: int) -> str:
 
 
 def open_work_lines(db: Database, thread: int) -> str:
-    """The conversation's open tasks, reminders and deadlines, one line each."""
+    """The conversation's open tasks and reminders, one line each."""
     rows = [
         *db.fetch_all(
             "SELECT 'task' AS kind, id, title, due FROM tasks WHERE thread = ? AND status != 'done' ORDER BY id",
@@ -527,14 +527,10 @@ def open_work_lines(db: Database, thread: int) -> str:
             "SELECT 'reminder' AS kind, id, title, due_at AS due FROM reminders WHERE thread = ? AND fired = 0 ORDER BY id",
             (thread,),
         ),
-        *db.fetch_all(
-            "SELECT kind, NULL AS id, title, due FROM work_board WHERE thread = ? AND done = 0 ORDER BY id",
-            (thread,),
-        ),
     ]
     # Tasks and reminders by id, so the agent can say which one a later email finished.
     return "\n".join(
-        (f"- [{r['kind']}:{r['id']}] {r['title']}" if r["id"] else f"- {r['kind']}: {r['title']}")
+        f"- {kinds.address(r['kind'], r['id'])} {r['title']}"
         + (f" (due {r['due']})" if r["due"] else "")
         for r in rows
     )
@@ -737,7 +733,7 @@ def decisions(ctx: Context) -> str:
 def brief_task(ctx: Context) -> str:
     from nexusai.modules.agent import briefs
 
-    # One matter at a time, so the same thing isn't listed as a task, a deadline and an email.
+    # One matter at a time, so the same thing isn't listed as a task and an email.
     task = briefs.coverage(ctx) + "\n\n" + untrusted(matters.plate(ctx) or "Nothing open.")
     waiting = decisions(ctx)
     if waiting:

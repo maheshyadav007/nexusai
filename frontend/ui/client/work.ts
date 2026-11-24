@@ -27,7 +27,7 @@ function useCommand<I, R>(keys: readonly string[], run: (input: I) => Promise<R>
 
 export const useToday = () => useReady(["today"], () => query("today.view", {}));
 // Matters: one record for each real thing going on. Every change to its work changes these too.
-const MATTER_KEYS = ["matters", "tasks", "reminders", "today", "threads", "thread", "board"];
+const MATTER_KEYS = ["matters", "tasks", "reminders", "today", "threads", "thread"];
 export const useMattersBrief = () => useReady(["matters", "brief"], () => query("matters.brief", {}));
 /** The matters from a day for so many days. While more days load, the ones shown stay. */
 export function useMattersWeek(start: string, days: number) {
@@ -53,7 +53,6 @@ export const useUnmergeMatter = () => useCommand(MATTER_KEYS, (id: number) => co
 export const useChannel = () => useReady(["channel"], () => query("channel.list", {}));
 export const useRespondChannel = () => useCommand(["channel"], (input: { id: number; answer: string }) => command("channel.respond", input));
 export const useDismissChannel = () => useCommand(["channel"], (id: number) => command("channel.dismiss", { id }));
-export const useBoard = () => useReady(["board"], () => query("board.list", {}));
 export const useAgentChannel = () => useReady(["agent-channel"], () => query("agentChannel.list", {}));
 export const useMuteTopic = () => useCommand(["agent-channel"], (input: { topic: string; muted: boolean }) => command("agentChannel.setMuted", input));
 

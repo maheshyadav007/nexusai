@@ -55,7 +55,6 @@ import type {
   ToolCatalog,
   ActivityList,
   AgentChannelList,
-  BoardList,
   ChannelList,
   CheckDraft,
   DecideMemoryProposal,
@@ -72,7 +71,6 @@ import type {
   JobList,
   ListActivity,
   ListAgentChannel,
-  ListBoard,
   ListChannel,
   ListJobs,
   ListMemory,
@@ -500,7 +498,6 @@ interface Queries {
   "matters.events": [GetMatterEvents, MatterEvents];
   "matters.related": [GetMatterRelated, MatterRelated];
   "channel.list": [ListChannel, ChannelList];
-  "board.list": [ListBoard, BoardList];
   "agentChannel.list": [ListAgentChannel, AgentChannelList];
   "agents.registry": [ListAgents, AgentRegistry];
   "agents.cards": [ListCards, CardList];

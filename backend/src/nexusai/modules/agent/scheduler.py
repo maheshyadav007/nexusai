@@ -64,6 +64,13 @@ RELIABILITY_MIGRATION = Migration(
     "ALTER TABLE trigger_runs ADD COLUMN completed_through TEXT;"
     "ALTER TABLE schedules ADD COLUMN timezone TEXT NOT NULL DEFAULT '';",
 )
+# Overdue notices follow tasks, not the retired work board. What's already overdue counts as told.
+TASK_OVERDUE_MIGRATION = Migration(
+    "agent_task_overdue_001",
+    "ALTER TABLE tasks ADD COLUMN overdue_notified_for TEXT;"
+    "UPDATE tasks SET overdue_notified_for = due"
+    " WHERE due IS NOT NULL AND due < date('now', 'localtime');",
+)
 CADENCE_MIGRATION = Migration(
     "agent_schedule_cadence_001",
     "ALTER TABLE schedules ADD COLUMN month_day INTEGER NOT NULL DEFAULT 1;"
@@ -369,25 +376,30 @@ class Scheduler:
                 log.exception("scheduler_job_failed", job=name)
 
     def _overdue(self, now: datetime) -> None:
-        """Work board deadlines that have passed. Uses no model, and tells the person once."""
+        """Kept tasks whose date has passed. Uses no model, and tells the person once for each
+        date, so a task moved to a new date and missed again is told about again."""
         if channel.in_quiet_hours(channel.load_quiet(self.ctx.bus.db), now):
             return
         today = now.strftime("%Y-%m-%d")
         rows = self.ctx.bus.db.fetch_all(
-            "SELECT id, title, thread FROM work_board WHERE done = 0 AND due IS NOT NULL AND due < ? AND kind = 'deadline' AND overdue_notified_at IS NULL",
+            "SELECT id, title, due, matter FROM tasks WHERE status != 'done' AND proposed = 0"
+            " AND due IS NOT NULL AND due < ? AND overdue_notified_for IS NOT due",
             (today,),
         )
         for row in rows:
             with self.ctx.bus.unit_of_work() as work:
                 work.tx.execute(
-                    "UPDATE work_board SET overdue_notified_at = ? WHERE id = ?", (today, row["id"])
+                    "UPDATE tasks SET overdue_notified_for = ? WHERE id = ?",
+                    (row["due"], row["id"]),
                 )
                 channel.notify(
                     self.ctx,
                     work,
                     f"Overdue: {row['title']}",
                     "",
-                    f"/mail/thread/{row['thread']}" if row["thread"] else "/today",
+                    f"/today?view=matters&matter={row['matter']}"
+                    if row["matter"]
+                    else "/planner/tasks",
                     OVERDUE_NOTICE_KIND,
                     False,
                 )
