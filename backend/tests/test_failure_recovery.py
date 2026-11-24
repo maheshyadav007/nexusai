@@ -520,7 +520,7 @@ def test_a_first_meeting_the_person_started_is_not_started_again(
         engine.close()
 
 
-def test_after_group_learning_the_first_review_and_brief_run_once(
+def test_after_group_learning_the_first_brief_runs_once(
     ctx: Context, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Regression: a learning review row stopped these, so a new account waited a day."""
@@ -549,7 +549,6 @@ def test_after_group_learning_the_first_review_and_brief_run_once(
             tx.execute("UPDATE mail_learning_reviews SET state='done'")
         for _ in range(3):  # every tick calls it
             dispatcher._catch_up_once()
-        assert [event.split("-2")[0] for event in queued(scheduler.REVIEW_KIND)] == ["first-review"]
         assert [event.split("-2")[0] for event in queued(scheduler.BRIEF_KIND)] == ["first-brief"]
     finally:
         engine.close()

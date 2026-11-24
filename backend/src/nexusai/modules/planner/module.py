@@ -90,6 +90,14 @@ UPDATE tasks SET status = CASE
   WHERE status NOT IN ('todo', 'in_progress', 'done');
 """,
         ),
+        Migration(
+            "planner_looks_done_001",
+            # A later email showed it done. Why, kept until the person closes it or keeps it.
+            """
+ALTER TABLE tasks ADD COLUMN looks_done TEXT;
+ALTER TABLE reminders ADD COLUMN looks_done TEXT;
+""",
+        ),
     ],
 )
 REPEATS = {"day": timedelta(days=1), "week": timedelta(weeks=1)}
@@ -215,6 +223,7 @@ def _reminder(db: Database, row: object) -> Reminder:
         source=data["source"],
         proposed=bool(data["proposed"]),
         fired=bool(data["fired"]),
+        looks_done=data["looks_done"],
         created=data["created"],
         updated=data["updated"] or data["created"],
     )
@@ -224,8 +233,8 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-TASK_FIELDS = {"title", "notes", "status", "due", "proposed"}
-REMINDER_FIELDS = {"title", "due_at", "repeat", "repeat_day", "proposed", "fired"}
+TASK_FIELDS = {"title", "notes", "status", "due", "proposed", "looks_done"}
+REMINDER_FIELDS = {"title", "due_at", "repeat", "repeat_day", "proposed", "fired", "looks_done"}
 
 
 def _change(ctx: Context, table: str, identifier: int, values: dict[str, Any], kind: str) -> None:

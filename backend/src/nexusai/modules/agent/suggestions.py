@@ -20,9 +20,6 @@ CREATE TABLE mail_suggestions (
   quiet INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'open', time TEXT NOT NULL, by TEXT NOT NULL DEFAULT 'agent');
 """,
 )
-# So a run can't bury the page, and what's turned down isn't suggested again.
-MOST_OPEN = 8
-MOST_SENDERS = 25
 # A cleanup only touches mail they've read, once it's old enough not to be in use.
 ARCHIVE_AFTER_DAYS = 30
 MOST_ARCHIVED = 500
@@ -79,34 +76,6 @@ def _to_archive(ctx: Context, senders: list[str]) -> list[int]:
         (account, since, *senders, MOST_ARCHIVED),
     )
     return [row["id"] for row in rows]
-
-
-def add(
-    ctx: Context, category: str, senders: list[str], reason: str, quiet: bool, by: str = "agent"
-) -> str:
-    """Only for senders really in the mailbox, and the counts shown are always the app's own."""
-    db = ctx.bus.db
-    name = category.strip()[:64]
-    wanted = sorted({sender.strip().lower() for sender in senders if "@" in sender})
-    found = [sender for sender in wanted if _counted(ctx, [sender])][:MOST_SENDERS]
-    if not name or not found:
-        return "None of those senders are in the mailbox, so nothing was suggested."
-    earlier = db.fetch_all("SELECT status, category, senders FROM mail_suggestions")
-    for row in earlier:
-        overlaps = set(json.loads(row["senders"])) & set(found)
-        # Whatever it's called, the same mail shouldn't be offered twice or come back once refused.
-        if overlaps and (row["category"] == name or row["status"] != "accepted"):
-            return "That's been suggested already."
-    opened = sum(1 for row in earlier if row["status"] == "open")
-    if opened >= MOST_OPEN:
-        return "Enough suggestions are waiting on the person already."
-    with ctx.bus.unit_of_work() as work:
-        work.tx.execute(
-            "INSERT INTO mail_suggestions (category, senders, reason, quiet, time, by) VALUES (?, ?, ?, ?, ?, ?)",
-            (name, json.dumps(found), reason[:500], int(quiet), datetime.now(UTC).isoformat(), by),
-        )
-        work.emit("suggestions.changed", {}, source="agent", trace_id=ctx.trace_id)
-    return f"Suggested. It will show {_counted(ctx, found)} emails from {len(found)} senders."
 
 
 def _row(ctx: Context, row: Any) -> MailSuggestion:

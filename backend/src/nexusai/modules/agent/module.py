@@ -313,6 +313,19 @@ agent_module = Module(
             "UPDATE agent_sessions SET title='Your brief' WHERE agent='daily-prep' AND title='Morning brief';"
             "UPDATE agent_sessions SET title='First meeting' WHERE agent='interview' AND title='Know you better';",
         ),
+        Migration(
+            "agent_no_mail_suggestions_001",
+            # Posty no longer suggests folders, Priority folders or filing whole groups of mail,
+            # so the weekly review that made those suggestions goes, and what's waiting is cleared.
+            "UPDATE trigger_runs SET status='skipped' WHERE status IN ('pending','running')"
+            " AND schedule IN (SELECT id FROM schedules WHERE kind='mail-review');"
+            "DELETE FROM schedules WHERE kind='mail-review';"
+            "UPDATE mail_suggestions SET status='declined' WHERE status='open';"
+            "UPDATE mail_categories SET priority_suggested=0 WHERE priority_suggested=1;"
+            "DELETE FROM mail_category_votes WHERE name IN"
+            " (SELECT name FROM mail_categories WHERE proposed=1);"
+            "DELETE FROM mail_categories WHERE proposed=1;",
+        ),
     ],
 )
 _runtime: runtime.SessionRuntime | None = None
@@ -346,6 +359,7 @@ def _startup(ctx: Context) -> None:
         # What was open before matters existed becomes matters, once, and work takes its matter.
         matters.backfill(ctx)
         matters.adopt_all(ctx)
+        memory.settle_proposals(ctx.bus.db, ctx.config.home)
         # Mail may have finished coming down while this wasn't running, or before it existed.
         synced = cast(MailStatus, mail.get_status(GetMailStatus(), ctx))
         _triggers.consider_learning(history_finished=synced.history_finished)
@@ -652,7 +666,7 @@ def learn_from_corrections(event: AppEvent, ctx: Context) -> None:
         new={"field": field, "value": event.payload.get("value")},
         event_id=event.id,
     )
-    habit = feedback.note(
+    feedback.note(
         ctx.bus.db,
         int(event.payload["thread_id"]),
         str(event.payload["field"]),
@@ -684,16 +698,6 @@ def learn_from_corrections(event: AppEvent, ctx: Context) -> None:
                     state[0]["account"],
                     [f"correction:{r['id']}" for r in recent],
                 )
-    if habit:
-        sender, category = habit
-        suggestions.add(
-            ctx,
-            category,
-            [sender],
-            f"You've filed {sender} under {category} {feedback.HABIT} times, so this would do it for you.",
-            False,
-            by="habit",
-        )
 
 
 @agent_module.on("mail.changed", "agent.learn_when_enough_mail")
@@ -1213,7 +1217,8 @@ def draft_thread_reply(command: DraftThreadReply, ctx: Context) -> DraftedReply:
 
 def _schedule_list(ctx: Context) -> ScheduleList:
     rows = ctx.bus.db.fetch_all(
-        "SELECT * FROM schedules WHERE kind NOT IN (?, ?, ?) ORDER BY id", scheduler.BUILT_IN_KINDS
+        f"SELECT * FROM schedules WHERE kind NOT IN ({','.join('?' * len(scheduler.BUILT_IN_KINDS))}) ORDER BY id",  # noqa: S608
+        scheduler.BUILT_IN_KINDS,
     )
     return ScheduleList(
         schedules=[scheduler.row_to_schedule(row) for row in rows],
@@ -1325,7 +1330,6 @@ def get_mail_agent(query: GetMailAgentSettings, ctx: Context) -> MailAgentSettin
         learning_total=total,
         tokens_per_email=mail_agent.APPROX_TOKENS_PER_MESSAGE,
         morning_brief=scheduler.built_in_on(ctx, scheduler.BRIEF_KIND),
-        inbox_review=scheduler.built_in_on(ctx, scheduler.REVIEW_KIND),
     )
 
 
@@ -1337,8 +1341,6 @@ def save_mail_agent(command: MailAgentSettings, ctx: Context) -> MailAgentSettin
         mail_agent.set_learn_count(ctx, command.learn_emails)
     if command.morning_brief is not None:
         scheduler.set_built_in(ctx, scheduler.BRIEF_KIND, command.morning_brief)
-    if command.inbox_review is not None:
-        scheduler.set_built_in(ctx, scheduler.REVIEW_KIND, command.inbox_review)
     with ctx.bus.unit_of_work() as work:
         work.emit("mailAgent.changed", {}, source="agent", trace_id=ctx.trace_id)
     if _scheduler:

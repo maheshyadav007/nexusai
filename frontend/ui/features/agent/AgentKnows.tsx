@@ -108,14 +108,11 @@ function OnItsOwn() {
   const settings = useMailAgent();
   const save = useSaveMailAgent();
   if (!settings.data) return null;
-  const change = (part: { morning_brief?: boolean; inbox_review?: boolean }) => save.mutate({ mode: settings.data.mode, ...part });
+  const change = (part: { morning_brief?: boolean }) => save.mutate({ mode: settings.data.mode, ...part });
   return (
     <Card title={t("knows.own.title")} description={t("knows.own.description")}>
       <SettingRow label={t("knows.own.brief")} description={t("knows.own.brief.description")}>
         <Switch hideLabel label={t("knows.own.brief")} checked={settings.data.morning_brief ?? false} onChange={(checked) => change({ morning_brief: checked })} />
-      </SettingRow>
-      <SettingRow label={t("knows.own.review")} description={t("knows.own.review.description")}>
-        <Switch hideLabel label={t("knows.own.review")} checked={settings.data.inbox_review ?? false} onChange={(checked) => change({ inbox_review: checked })} />
       </SettingRow>
     </Card>
   );

@@ -21,6 +21,8 @@ class Task(BaseModel):
     completed: str | None = None
     # The email it came from, named from the database.
     source_ref: SourceRef | None = None
+    # Why a later email shows it done, until the person closes it or keeps it.
+    looks_done: str | None = None
 
 
 class ListTasks(BaseModel):
@@ -67,6 +69,7 @@ class Reminder(BaseModel):
     created: str | None = None
     source_ref: SourceRef | None = None
     updated: str | None = None
+    looks_done: str | None = None
 
 
 class ListReminders(BaseModel):

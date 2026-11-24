@@ -2182,13 +2182,12 @@ export type LearningDone = number | null;
 export type LearningTotal = number | null;
 export type TokensPerEmail = number | null;
 export type MorningBrief = boolean | null;
-export type InboxReview = boolean | null;
 export type Outcome1 = "started" | "nothing";
 export type Timezone = string | null;
 export type Id55 = number | null;
 export type Title13 = string;
 export type Prompt2 = string;
-export type Kind12 = "prompt" | "daily-prep" | "mail-hourly" | "mail-brief" | "mail-review";
+export type Kind12 = "prompt" | "daily-prep" | "mail-hourly" | "mail-brief";
 export type Every = "once" | "hour" | "day" | "weekdays" | "week" | "month" | "year";
 export type Time9 = string;
 export type Weekday = number;
@@ -2204,7 +2203,7 @@ export type Timezone1 = string | null;
 export type Id56 = number | null;
 export type Title14 = string;
 export type Prompt3 = string;
-export type Kind13 = "prompt" | "daily-prep" | "mail-hourly" | "mail-brief" | "mail-review";
+export type Kind13 = "prompt" | "daily-prep" | "mail-hourly" | "mail-brief";
 export type Every1 = "once" | "hour" | "day" | "weekdays" | "week" | "month" | "year";
 export type Time10 = string;
 export type Weekday1 = number;
@@ -2618,6 +2617,7 @@ export type Kind22 =
   | "merged"
   | "linked"
   | "kept"
+  | "looks_done"
   | "suggested"
   | "accepted"
   | "declined";
@@ -2633,6 +2633,7 @@ export type Changes = MatterChange[];
 export type NeedsYou1 = MatterRow[];
 export type Waiting2 = MatterRow[];
 export type Fyi = MatterRow[];
+export type Suggested1 = MatterRow[];
 export type Next1 = MatterDue[];
 export type Time18 = string;
 export type Kind24 = "in" | "sent" | "due" | "reminder" | "closed" | "reopened" | "step";
@@ -2667,7 +2668,7 @@ export type Ref3 = string;
 export type Kind25 = "task" | "reminder" | "deadline" | "thread";
 export type Title23 = string;
 export type When7 = string | null;
-export type Suggested1 = boolean;
+export type Suggested2 = boolean;
 export type Proposed3 = boolean;
 export type Why7 = string;
 export type Ref4 = string;
@@ -2711,6 +2712,7 @@ export type Proposed4 = boolean;
 export type Created6 = string;
 export type Updated8 = string | null;
 export type Completed = string | null;
+export type LooksDone = string | null;
 export type IncludeDone1 = boolean;
 export type Tasks1 = Task[];
 export type Id96 = number | null;
@@ -2732,6 +2734,7 @@ export type Proposed6 = boolean;
 export type Fired = boolean;
 export type Created7 = string | null;
 export type Updated9 = string | null;
+export type LooksDone1 = string | null;
 export type Reminders = Reminder[];
 export type Id99 = number | null;
 export type Title28 = string;
@@ -6321,7 +6324,6 @@ export interface MailAgentSettings {
   learning_total?: LearningTotal;
   tokens_per_email?: TokensPerEmail;
   morning_brief?: MorningBrief;
-  inbox_review?: InboxReview;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -7452,6 +7454,7 @@ export interface MattersBrief {
   needs_you: NeedsYou1;
   waiting: Waiting2;
   fyi: Fyi;
+  suggested?: Suggested1;
   next: Next1;
   [k: string]: unknown;
 }
@@ -7562,7 +7565,7 @@ export interface MatterItem {
   kind: Kind25;
   title: Title23;
   when?: When7;
-  suggested?: Suggested1;
+  suggested?: Suggested2;
   proposed?: Proposed3;
   why?: Why7;
   [k: string]: unknown;
@@ -7691,6 +7694,7 @@ export interface Task {
   updated?: Updated8;
   completed?: Completed;
   source_ref?: SourceRef | null;
+  looks_done?: LooksDone;
   [k: string]: unknown;
 }
 /**
@@ -7745,6 +7749,7 @@ export interface Reminder {
   created?: Created7;
   source_ref?: SourceRef | null;
   updated?: Updated9;
+  looks_done?: LooksDone1;
   [k: string]: unknown;
 }
 /**

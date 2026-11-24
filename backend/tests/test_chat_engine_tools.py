@@ -604,3 +604,28 @@ def test_category_tool_sets_and_reads_personalized_settings(
     assert saved["mode"] == "smart" and not saved["in_priority"]
     listed = use_tool(client, script, ToolCall("read-folders", "list_categories", {}))
     assert "Only wireless network research" in listed and "mode: smart" in listed
+
+
+def test_a_long_conversation_can_be_read_back_to_its_start(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    from test_mail_intelligence import plan_thread
+
+    connect(client, fake)
+    plan_thread(fake, 12)
+    from test_mail_intelligence import mail_context
+
+    thread = triaged(client, "Plan")["id"]
+    wait(
+        lambda: not agent_module.mail_agent.waiting_count(mail_context(client)) or None, "all read"
+    )
+    session = new_session(client)
+    script.replies = [
+        [ToolCall("r", "read_thread", {"thread_ids": [thread], "skip_newest": 10})],
+        [TextChunk("Read the start.")],
+    ]
+    done = chat_in_background(client, session, "How did it start?")
+    wait(lambda: done, "finish")
+    result = next(m.text for m in script.requests[-1].messages if m.role == "tool")
+    assert "Step 1 " in result and "Step 2 " in result and "Step 3 " not in result
+    assert "[10 newer messages left out]" in result

@@ -120,7 +120,6 @@ def test_upcoming_runs_are_listed_and_the_hour_timer_shows_when_on(
         "Weekly",
         "Mail agent, hourly",
         "Your brief",
-        "Inbox review",
     }
 
 

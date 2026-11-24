@@ -7,9 +7,10 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from nexusai.contracts.agent import ContactRow
+from nexusai.contracts.mail import MailMe
 from nexusai.kernel.module import Context
 from nexusai.modules.agent import feedback
-from nexusai.modules.mail import accounts
+from nexusai.modules.mail import accounts, mentions
 from nexusai.modules.mail.store import hidden_from_ai
 
 CONTACT_WINDOW_DAYS = 180
@@ -56,7 +57,26 @@ def own_addresses(ctx: Context) -> set[str]:
     found: set[str] = set()
     for profile in profiles.values():
         found |= {(profile.address or "").lower(), profile.auth.user.lower()}
+    # And the others they said are theirs when they set up: an alias, an old work address.
+    me = mentions.load(ctx.config.home)
+    found |= {address.lower() for address in (me.addresses if me else [])}
     return {address for address in found if "@" in address}
+
+
+def who_they_are(me: MailMe | None) -> str:
+    """What they told the app names them, so the model reads a name the way they meant it."""
+    if not me or not (me.names or me.ids):
+        return ""
+    lines = ["Who the person is, as they told you:"]
+    if me.names:
+        lines.append(f"- Names that mean them or their teams: {', '.join(me.names)}")
+    if me.ids:
+        lines.append(f"- How tools and colleagues tag them: {', '.join(me.ids)}")
+    if me.not_you:
+        lines.append(
+            f"- Other people, not them, though the names look alike: {', '.join(me.not_you)}"
+        )
+    return "\n".join(lines)
 
 
 def addresses(column: str) -> list[str]:
@@ -209,14 +229,19 @@ def first_name(ctx: Context, own: set[str]) -> str | None:
     return words[0] if words else None
 
 
-def _addressed(row: Any, own: set[str], name: str | None) -> list[str]:
+def _addressed(row: Any, own: set[str], name: str | None, me: MailMe | None) -> list[str]:
     """Mail for them personally, rather than for a list they're on."""
     to, cc = addresses(row["to_json"]), addresses(row["cc_json"])
     others = len({*to, *cc} - own)
     lines = []
     if own & set(to) and others == 0:
         lines.append("- The latest incoming message is addressed to the person alone")
-    if name and re.search(rf"(?<![\w]){re.escape(name)}(?![\w])", row["clean_text"] or "", re.I):
+    # Their own list of names when they gave one: not the quoted mail, not someone named alike.
+    if me and (me.names or me.ids):
+        quote = mentions.named_in(row["clean_text"] or "", row["from_addr"], me)
+        if quote:
+            lines.append(f"- The latest incoming message names the person or their team: “{quote}”")
+    elif name and re.search(rf"(?<![\w]){re.escape(name)}(?![\w])", row["clean_text"] or "", re.I):
         lines.append(f"- The latest incoming message names the person (“{name}”) in its text")
     return lines
 
@@ -242,7 +267,8 @@ def about_thread(ctx: Context, thread: int) -> str:
     if theirs:
         last_in = theirs[-1]
         lines.insert(0, f"- The person is {_position(last_in, own)} on the latest incoming message")
-        lines[1:1] = _addressed(last_in, own, first_name(ctx, own))
+        me = mentions.load(ctx.config.home)
+        lines[1:1] = _addressed(last_in, own, None if me else first_name(ctx, own), me)
         account = db.fetch_all("SELECT account FROM threads WHERE id=?", (thread,))[0]["account"]
         lines.append(_sender_line(ctx, last_in["from_addr"].lower(), own, account))
         corrected = feedback.for_sender(db, last_in["from_addr"].lower(), account)

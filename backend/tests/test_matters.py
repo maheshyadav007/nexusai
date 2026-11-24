@@ -71,7 +71,9 @@ def test_one_change_from_different_senders_is_one_matter(
     )
     assert len(found) == 1
     matter = found[0]
-    assert matter["state"] == "waiting_on_you" and matter["next"] == "Get CL 88213 merged"
+    # The task is only suggested, so it's the work listed, not yet their next step.
+    assert matter["state"] == "waiting_on_you" and matter["next"] != "Get CL 88213 merged"
+    assert [(w["title"], w["proposed"]) for w in matter["work"]] == [("Get CL 88213 merged", True)]
     detail = query(client, "matters.get", id=matter["id"])
     assert not any(t["subject"].startswith("Swarm") for t in detail["threads"])
     kinds = [event["kind"] for event in detail["events"]]
@@ -145,7 +147,8 @@ def test_the_brief_lists_what_changed_and_what_is_coming(
     )
     assert brief["needs_you"][0]["title"] == "Field call drops on carrier X"
     assert [c["kind"] for c in brief["changes"]][-1] == "started"
-    assert brief["next"][0]["what"] == "Send the RCA"
+    # A suggested task isn't coming up until it's kept; it waits in For your decision.
+    assert brief["next"] == []
 
 
 def test_done_closes_every_conversation_and_undo_brings_it_back(
@@ -240,3 +243,121 @@ def test_a_task_the_person_keeps_makes_a_matter_of_mail_that_needed_nothing(
     command(client, "tasks.save", title="Book a slot in the new lab", thread=thread["id"])
     found = wait(lambda: matters(client), "matter")
     assert [m["title"] for m in found] == ["Lab move next month"]
+
+
+def test_mail_read_late_goes_on_the_timeline_on_its_own_day_not_today(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    connect(client, fake)
+    script.replies = [triage_reply(tasks=[{"title": "Send the RCA", "due": None}])]
+    fake.state.deliver(
+        make_mail(
+            subject="[ESCALATION] Old drops",
+            sender=KARTHIK,
+            date="Mon, 01 Jun 2026 09:00:00 +0000",
+        )
+    )
+    triaged(client, "Old drops")
+    matter = wait(lambda: matters(client), "matter")[0]
+    story = query(client, "matters.get", id=matter["id"])["events"]
+    suggested = [e for e in story if e["kind"] == "suggested"]
+    assert suggested and suggested[0]["time"].startswith("2026-06-01")
+    assert not query(client, "matters.brief")["changes"]
+
+
+def tasks(client: TestClient) -> list[dict[str, Any]]:
+    return query(client, "tasks.list")["tasks"]
+
+
+def test_a_later_email_drops_a_suggestion_it_shows_done_and_marks_a_kept_task(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    connect(client, fake)
+    script.replies = [
+        triage_reply(tasks=[{"title": "Send the RCA", "due": None}]),
+        triage_reply(tasks=[{"title": "Book the lab", "due": None}]),
+    ]
+    fake.state.deliver(make_mail(subject="RCA please", sender=KARTHIK, message_id="<r1@x>"))
+    triaged(client, "RCA please")
+    fake.state.deliver(make_mail(subject="Lab booking", sender=KARTHIK, message_id="<l1@x>"))
+    triaged(client, "Lab booking")
+    found = wait(lambda: (lambda t: t if len(t) == 2 else None)(tasks(client)), "both suggested")
+    rca = next(t for t in found if t["title"] == "Send the RCA")
+    lab = next(t for t in found if t["title"] == "Book the lab")
+    command(
+        client,
+        "tasks.save",
+        **{
+            **{k: rca[k] for k in ("id", "title", "notes", "status", "due", "thread")},
+            "proposed": False,
+        },
+    )
+    script.replies = [
+        triage_reply(
+            status="resolved",
+            reason="Karthik confirms the RCA arrived.",
+            finished=[f"task:{rca['id']}"],
+        ),
+        triage_reply(
+            status="resolved", reason="The lab is booked.", finished=[f"task:{lab['id']}"]
+        ),
+    ]
+    fake.state.deliver(
+        make_mail(
+            subject="Re: RCA please",
+            sender=KARTHIK,
+            in_reply_to="<r1@x>",
+            references="<r1@x>",
+            body="Got the RCA, thanks.",
+        )
+    )
+    fake.state.deliver(
+        make_mail(
+            subject="Re: Lab booking",
+            sender=KARTHIK,
+            in_reply_to="<l1@x>",
+            references="<l1@x>",
+            body="Booked it myself.",
+        )
+    )
+    kept = wait(
+        lambda: next((t for t in tasks(client) if t["id"] == rca["id"] and t["looks_done"]), None),
+        "marked",
+    )
+    assert kept["status"] != "done" and "RCA arrived" in kept["looks_done"]
+    wait(lambda: all(t["id"] != lab["id"] for t in tasks(client)) or None, "suggestion dropped")
+
+
+def test_only_a_kept_task_puts_a_matter_on_waiting_on_you(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    connect(client, fake)
+    script.replies = [
+        triage_reply(
+            status="fyi",
+            importance="high",
+            tasks=[{"title": "Book the venue", "due": "2000-01-01"}],
+        )
+    ]
+    fake.state.deliver(make_mail(subject="Offsite plans", sender=KARTHIK))
+    triaged(client, "Offsite plans")
+    brief = wait(
+        lambda: (lambda b: b if b["suggested"] else None)(query(client, "matters.brief")),
+        "suggested",
+    )
+    # A suggestion alone doesn't make it theirs: not waiting on them, no next step, no date.
+    assert brief["needs_you"] == [] and brief["next"] == []
+    shown = brief["suggested"][0]
+    assert shown["next"] is None and shown["due"] is None
+    task = tasks(client)[0]
+    command(
+        client,
+        "tasks.save",
+        **{k: task[k] for k in ("id", "title", "notes", "status", "due", "thread")},
+        proposed=False,
+    )
+    brief = wait(
+        lambda: (lambda b: b if b["needs_you"] else None)(query(client, "matters.brief")),
+        "kept",
+    )
+    assert brief["needs_you"][0]["next"] == "Book the venue" and brief["suggested"] == []

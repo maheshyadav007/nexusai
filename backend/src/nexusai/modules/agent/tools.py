@@ -49,7 +49,6 @@ from nexusai.modules.agent import (
     prompts_builder,
     signals,
     skills,
-    suggestions,
     team,
     work_tools,
 )
@@ -58,7 +57,7 @@ from nexusai.modules.agent.prompt_data import untrusted
 from nexusai.modules.connectors import module as connectors
 from nexusai.modules.documents.module import get_document as _get_document
 from nexusai.modules.documents.module import list_documents as _list_documents
-from nexusai.modules.mail import accounts, outgoing, sorting, store
+from nexusai.modules.mail import accounts, outgoing, store
 from nexusai.modules.mail.module import run_search
 from nexusai.modules.planner import module as planner
 from nexusai.modules.semantic import module as semantic
@@ -562,6 +561,8 @@ class _Search(BaseModel):
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
+# How many times one run may call remember before it's told to stop.
+MOST_REMEMBERS_PER_RUN = 3
 # How many conversations one read_thread call takes. They share one tool output, so each gets less.
 MAX_THREADS_PER_READ = 10
 
@@ -579,6 +580,11 @@ class _ReadThread(BaseModel):
         min_length=1,
         max_length=MAX_THREADS_PER_READ,
         description=f"The conversations' IDs, from a search or list. Up to {MAX_THREADS_PER_READ}.",
+    )
+    skip_newest: int = Field(
+        default=0,
+        ge=0,
+        description="Leave out this many of the newest emails, to read further back.",
     )
     tool_call_id: Annotated[str, InjectedToolCallId]
 
@@ -834,28 +840,6 @@ class _ReadDocument(BaseModel):
 MAX_DETAIL_CHARS = 4000
 
 
-class _RecommendMail(BaseModel):
-    category: str = Field(description="Where this mail should go, a short name.")
-    senders: list[str] = Field(description="The exact sender addresses, from the list you have.")
-    reason: str = Field(description="One plain sentence for the person. Don't add up totals.")
-    quiet: bool = Field(
-        default=False, description="True only for mail they plainly never read or reply to."
-    )
-    tool_call_id: Annotated[str, InjectedToolCallId]
-
-
-class _RecommendPriority(BaseModel):
-    category: str = Field(description="The category, as it's written in your list.")
-    reason: str = Field(description="One plain sentence for the person. Don't add up totals.")
-    tool_call_id: Annotated[str, InjectedToolCallId]
-
-
-class _FoldSuggestions(BaseModel):
-    keep: str = Field(description="The suggested category to keep, as it's written.")
-    names: list[str] = Field(description="Suggested categories that mean the same, to fold in.")
-    tool_call_id: Annotated[str, InjectedToolCallId]
-
-
 class _LearningAnswers(BaseModel):
     answers: list[dict[str, str]] = Field(
         max_length=100,
@@ -916,15 +900,15 @@ class _RecordTriage(BaseModel):
     reminders: list[dict[str, Any]] = Field(
         default_factory=list, description='As {"title": ..., "when": "YYYY-MM-DDTHH:MM"}.'
     )
+    finished: list[str] = Field(
+        default_factory=list,
+        description='Open work listed with this email that it shows is now done, like "task:88"'
+        ' or "reminder:12". Only what the mail says is done.',
+    )
     draft: str | None = Field(default=None, description="A suggested reply as plain text.")
-    memory: str | None = Field(default=None, description="A lasting fact about their work.")
     learned: list[str] = Field(
         default_factory=list,
         description="Short notes on anything lasting this shows about the person. Usually empty.",
-    )
-    suggest_category: dict[str, Any] | None = Field(
-        default=None,
-        description='For repeated mail from one place, {"name": ..., "sender": ..., "reason": ...}.',
     )
     question: str | None = Field(default=None, description="Something only the person can answer.")
     tool_call_id: Annotated[str, InjectedToolCallId]
@@ -996,7 +980,6 @@ TRIAGE_TOOLS = frozenset(
 )
 # As many as the agent can use at once. It narrows the search for more.
 SEARCH_SHOWN = 20
-REVIEW_ORIGIN = "mail-review"
 # It ends a run, so judging simple mail takes one model call.
 ENDS_THE_RUN = frozenset({"record_triage"})
 LEARNING_ORIGIN = "mail-learn"
@@ -1004,9 +987,6 @@ MAIL_AGENT_ONLY = frozenset(
     {
         "record_triage",
         "save_what_i_learned",
-        "recommend_mail_change",
-        "fold_suggested_categories",
-        "recommend_priority",
     }
 )
 
@@ -1215,8 +1195,6 @@ def allowed_for(agent: str, origin: str, has_email: bool) -> frozenset[str] | No
     # Only the run that wraps up reading past mail can rewrite what it learned.
     if origin == LEARNING_ORIGIN:
         allowed |= {"save_what_i_learned"}
-    if origin in {REVIEW_ORIGIN, "person"}:
-        allowed |= {"recommend_mail_change", "fold_suggested_categories", "recommend_priority"}
     return allowed - {"record_triage"}
 
 
@@ -1340,35 +1318,6 @@ def build_tools(
             "done",
             None,
             0,
-        )
-        return result
-
-    def recommend_mail_change(
-        category: str, senders: list[str], reason: str, tool_call_id: str, quiet: bool = False
-    ) -> str:
-        # The person settled which mail goes where when they sorted it; the rules do the filing.
-        result = (
-            "Not suggested: the person already sorted their mail, and their sorting decides the"
-            " folders. Mention it in your summary instead if it really matters."
-            if sorting.decided(ctx) == "done"
-            else suggestions.add(ctx, category, senders, reason, quiet)
-        )
-        _log_call(
-            ctx, session, tool_call_id, "recommend_mail_change", category, result, "done", None, 0
-        )
-        return result
-
-    def recommend_priority(category: str, reason: str, tool_call_id: str) -> str:
-        result = mail_agent.suggest_priority(ctx, category, reason)
-        _log_call(
-            ctx, session, tool_call_id, "recommend_priority", category, result, "done", None, 0
-        )
-        return result
-
-    def fold_suggested_categories(keep: str, names: list[str], tool_call_id: str) -> str:
-        result = mail_agent.fold_suggestions(ctx, keep, names)
-        _log_call(
-            ctx, session, tool_call_id, "fold_suggested_categories", keep, result, "done", None, 0
         )
         return result
 
@@ -1631,7 +1580,7 @@ def build_tools(
             marks_untrusted=True,
         )
 
-    def read_thread(thread_ids: list[int], tool_call_id: str) -> str:
+    def read_thread(thread_ids: list[int], tool_call_id: str, skip_newest: int = 0) -> str:
         ids = list(dict.fromkeys(thread_ids))[:MAX_THREADS_PER_READ]
 
         def work() -> str:
@@ -1653,7 +1602,9 @@ def build_tools(
             if view is None:
                 return f"Conversation {thread_id} no longer exists."
             citations.note(ctx.bus.db, session, citations.MAIL, str(thread_id), opened=True)
-            recent = view.messages[-ctx.config.agent.max_recent_thread_messages :]
+            # Paging back from the newest, so a long conversation can be read to its start.
+            before = view.messages[: max(len(view.messages) - skip_newest, 0)]
+            recent = before[-ctx.config.agent.max_recent_thread_messages :]
             attachments = [
                 f"- {a.filename}: read_document key m:{m.id}:{a.index}"
                 for m in recent
@@ -1680,9 +1631,15 @@ def build_tools(
                     break
                 kept.insert(0, text[: max(room, 0)])
                 room -= len(text) + 2
-            skipped = len(view.messages) - len(kept)
-            note = f"[{skipped} older messages not shown]\n\n" if skipped else ""
-            return f"{head}{note}" + "\n\n".join(kept)
+            skipped = len(before) - len(kept)
+            reached = skip_newest + len(kept)
+            note = (
+                f"[{skipped} older messages not shown. skip_newest={reached} reads them.]\n\n"
+                if skipped
+                else ""
+            )
+            newer = f"\n\n[{skip_newest} newer messages left out]" if skip_newest else ""
+            return f"{head}{note}" + "\n\n".join(kept) + newer
 
         summary = (
             f"Read conversation {ids[0]}"
@@ -1989,10 +1946,21 @@ def build_tools(
                 evidence=evidence,
             )
         )
-        item = personalization.save(ctx, proposal, proposed=True)
-        return f"Proposed preference {item.id}. It will affect prompts only after the person approves it."
+        # The evidence is the person's own words or actions, so it's theirs to remove, not approve.
+        item = personalization.save(ctx, proposal)
+        return f"Saved preference {item.id}. It applies from now on, and they can change or remove it in Prompts and memory. Nothing more to do."
+
+    # A small model can call remember again and again on the same few facts. Past a few calls in
+    # one run, it's told plainly that everything is kept and to answer.
+    remembered = [0]
 
     def remember(facts: list[str], tool_call_id: str) -> str:
+        remembered[0] += 1
+        if remembered[0] > MOST_REMEMBERS_PER_RUN:
+            return (
+                "Not run: remember was already called in this run and everything is kept. Don't"
+                " call it again; carry on with the task or answer the person."
+            )
         untrusted = _is_untrusted(ctx, session)
         new, known = memory.remember_facts(
             ctx.config.home, ctx.bus.db, _speaker_name(), facts, untrusted,
@@ -2003,14 +1971,14 @@ def build_tools(
         # Exactly what was kept, so the agent can tell the person in their own words.
         said = f"\nAlready known: {'; '.join(known)}." if known else ""
         if not new:
-            return f"Nothing new: already known: {'; '.join(known)}."
+            return f"Nothing new to save, it's all known already: {'; '.join(known)}. Nothing more to do."
         listed = "; ".join(new)
         if untrusted:
             return (
-                f"Proposed, waiting for the person to approve in Prompts and memory, because this "
-                f"conversation read mail or other outside text: {listed}.{said}"
+                f"Saved as notes learned from mail: {listed}.{said} They can see or remove them in"
+                " Prompts and memory. Nothing more to do."
             )
-        return f"Saved to memory: {listed}.{said}"
+        return f"Saved to memory: {listed}.{said} Nothing more to do."
 
     def propose_task(
         title: str, tool_call_id: str, due: str | None = None, thread_id: int | None = None
@@ -2264,21 +2232,6 @@ def build_tools(
             "you've decided. It finishes the run, so write nothing before it.",
         ),
         (
-            recommend_mail_change,
-            _RecommendMail,
-            "Recommend filing all mail from these senders under a category. The person decides.",
-        ),
-        (
-            recommend_priority,
-            _RecommendPriority,
-            "Recommend showing a whole category in the Priority inbox. The person decides.",
-        ),
-        (
-            fold_suggested_categories,
-            _FoldSuggestions,
-            "Fold suggested categories that mean the same into one. The person still decides on it.",
-        ),
-        (
             save_what_i_learned,
             _SaveLearned,
             "Replace your notes about the person with this tidy version. It stays marked as "
@@ -2393,7 +2346,7 @@ def build_tools(
         (
             propose_preference,
             _PreferenceProposal,
-            "Propose a scoped instruction from genuine feedback. The person edits and approves before any prompt changes.",
+            "Save a scoped instruction from genuine feedback. It applies at once; the person can edit or remove it.",
         ),
         (
             remember,
@@ -2480,7 +2433,7 @@ def build_tools(
             _ReadThread,
             "Read whole mail conversations by the IDs from a search or list. When you need "
             f"several, read them together, up to {MAX_THREADS_PER_READ} in one call. When space is "
-            "short, the oldest messages are left out first.",
+            "short, the oldest messages are left out first; skip_newest reads further back.",
         ),
         (
             read_recipients,

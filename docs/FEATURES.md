@@ -278,7 +278,7 @@ Rules run first and cost nothing; mail they mark "skip agent" never reaches the 
 | AGN-3c | Sending takes a conversation off the person's plate and works out what comes next. A follow-up date that passes tells them once, on Today with a draft button. A reply moves it back. None of this needs a model except the date | MVP |
 | AGN-3d | Automated mail skips the model unless what it says could cost the person something, or it's in a conversation they wrote in | MVP |
 | AGN-3e | A broadcast reaches the model as a count, and it can search the list if who else got it matters | MVP |
-| AGN-3f | Weekly inbox review, and after reading past mail: recommends where whole groups of mail should go and which categories belong in the Priority inbox, with the app's own counts, and folds suggestions that mean the same. Nothing moves until the person agrees. The same correction three times offers to make it automatic | MVP |
+| AGN-3f | Removed 2026-11-24: Posty no longer suggests folders, Priority folders or filing whole groups of mail. The person sorts mail; the same correction three times becomes a preference, applied at once and removable | MVP |
 | AGN-3g | A morning brief on Today, from what's already judged | MVP |
 | AGN-3h | "What it knows" shows everything the agent is told, in order and how far it's trusted; each learned note with its source, to confirm or remove; corrections and who they write to. "What it sees" shows the exact text for any conversation, without calling a model | MVP |
 | AGN-3i | `make eval-mail` runs made-up emails through the real model to check the prompts | MVP |
@@ -337,7 +337,7 @@ Mail, documents and notes are not memory. Agents reach them through search.
 |---|---|---|
 | MEM-1 | Session, agent and user memory as above; only memories relevant to the task are loaded, within a size limit | MVP |
 | MEM-3 | Memory browser: view, edit, delete and search, grouped by level, with the source of each entry; edits made outside the app are picked up | MVP |
-| MEM-4 | Runs that read mail or other untrusted content can only **propose** memory; proposals wait in a review list (TOL-5) | MVP |
+| MEM-4 | Runs that read mail or other untrusted content keep facts only as **notes learned from mail**, saved at once with their source and removable; prompts read them as guesses, never instructions (changed 2026-11-24 from a review list) | MVP |
 | MEM-5 | Runs show which memories they used; "Forget this" from there | Next |
 | MEM-6 | Agent suggests merging duplicate and outdated memories; user approves | Next |
 
@@ -432,7 +432,6 @@ What runs by itself, and what starts it, is in [`AGENTS_AND_CATEGORIES.md`](AGEN
 |---|---|---|
 | **Mail agent** | Each conversation with new mail that the fixed rules didn't send to its folder | Judges it, and records deadlines and status on the work board |
 | **Morning brief** | Every day at 08:30 | Writes the brief on Today from what's on the person's plate |
-| **Inbox review** | Mondays at 09:00, and after reading past mail | Suggests where groups of mail should go, and what belongs in Priority |
 | **Time check** (uses no model) | At the next due time, using one timer rather than polling | Fires reminders and follow-up notices |
 
 | ID | Feature | Pri |

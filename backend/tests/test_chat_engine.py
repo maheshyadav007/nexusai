@@ -22,7 +22,6 @@ from nexusai.modules.agent.providers import (
     ToolCall,
 )
 from nexusai.modules.agent.ui_stream import UiTranslator, followups_part
-from nexusai.modules.mail import module as mail_module
 from test_agent_work import (  # noqa: F401
     Script,
     app_config,
@@ -688,47 +687,6 @@ def enough_votes(client: TestClient, name: str) -> None:
             )
 
 
-def test_a_suggested_category_waits_and_a_no_is_remembered(
-    client: TestClient,
-    script: Script,
-    fake: FakeMail,
-) -> None:
-    connect(client, fake)
-    suggestion = {"name": "Receipts", "sender": "shop.example", "reason": "They come every week."}
-    script.replies = [
-        triage_reply(suggest_category=suggestion),
-        triage_reply(suggest_category=suggestion),
-    ]
-    fake.state.deliver(make_mail(subject="Receipt 1"))
-    triaged(client, "Receipt 1")
-    enough_votes(client, "Receipts")
-    listed = client.post("/api/queries/categories.list").json()["categories"]
-    assert next(c for c in listed if c["name"] == "Receipts")["proposed"] is True
-    client.post("/api/commands/categories.decide", json={"name": "Receipts", "accept": False})
-    fake.state.deliver(make_mail(subject="Receipt 2"))
-    triaged(client, "Receipt 2")
-    listed = client.post("/api/queries/categories.list").json()["categories"]
-    assert not [c for c in listed if c["name"] == "Receipts"]
-
-
-def test_accepting_a_suggested_category_makes_it_real(
-    client: TestClient,
-    script: Script,
-    fake: FakeMail,
-) -> None:
-    connect(client, fake)
-    script.replies = [
-        triage_reply(
-            suggest_category={"name": "Receipts", "sender": "shop.example", "reason": "Weekly."}
-        )
-    ]
-    fake.state.deliver(make_mail(subject="Receipt 1", sender="news@shop.example"))
-    thread = triaged(client, "Receipt 1")
-    client.post("/api/commands/categories.decide", json={"name": "Receipts", "accept": True})
-    assert thread_named(client, "Receipt 1")["id"] == thread["id"]
-    assert subjects(client, folder="all", category="Receipts") == ["Receipt 1"]
-
-
 def test_connecting_a_model_starts_waiting_triage_straight_away(
     app_config: Config, script: Script, fake: FakeMail, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -780,30 +738,6 @@ def test_thinking_streams_as_thinking_and_is_never_sent_back(
     chat(client, session, "And?")
     replayed = [m.text for m in script.requests[-1].messages if m.role == "assistant"]
     assert replayed == ["Done."]
-
-
-def test_overlapping_suggestions_become_one_and_show_once_there_is_enough_mail(
-    client: TestClient,
-    script: Script,
-    fake: FakeMail,
-) -> None:
-    connect(client, fake)
-    names = ["HR", "HR feedback", "HR communication", "hr", "HR updates"]
-    script.replies = [
-        triage_reply(suggest_category={"name": name, "sender": "hr@x.example", "reason": "Often."})
-        for name in names
-    ]
-    for number in range(len(names)):
-        fake.state.deliver(make_mail(subject=f"People {number}", message_id=f"<hr{number}@x>"))
-        triaged(client, f"People {number}")
-        listed = client.post("/api/queries/categories.list").json()["categories"]
-        shown = [c["name"] for c in listed if c["proposed"]]
-        assert shown == ([] if number < len(names) - 1 else ["HR"])
-    calls = len(script.requests)
-    client.post("/api/commands/categories.decide", json={"name": "HR", "accept": True})
-    # All five go there on a yes, without reading any of them again.
-    assert len(subjects(client, folder="all", category="HR")) == len(names)
-    assert len(script.requests) == calls
 
 
 def test_old_overlaps_are_tidied_without_a_model(
@@ -892,33 +826,6 @@ def test_automated_starter_mail_stays_filed_and_replies_reach_the_agent(
             c["name"]: c for c in live.post("/api/queries/categories.list").json()["categories"]
         }
         assert rows["PLM"]["in_priority"] is False
-
-
-def test_a_category_can_be_suggested_for_priority_and_a_no_is_remembered(
-    client: TestClient,
-    script: Script,
-) -> None:
-    client.post("/api/commands/categories.save", json={"name": "Customers", "in_priority": False})
-    assert agent_module._triggers is not None
-    ctx = agent_module._triggers.ctx
-    assert "Suggested" in mail_module.suggest_priority(ctx, "Customers", "Most of it needs you.")
-    listed = client.post("/api/queries/categories.list").json()["categories"]
-    row = next(c for c in listed if c["name"] == "Customers")
-    assert row["priority_suggested"] is True and row["in_priority"] is False
-    client.post(
-        "/api/commands/categories.decidePriority", json={"name": "Customers", "accept": False}
-    )
-    listed = client.post("/api/queries/categories.list").json()["categories"]
-    assert next(c for c in listed if c["name"] == "Customers")["priority_suggested"] is False
-    assert "said no" in mail_module.suggest_priority(ctx, "Customers", "Again.")
-    client.post("/api/commands/categories.save", json={"name": "Partners"})
-    mail_module.suggest_priority(ctx, "Partners", "Often urgent.")
-    client.post(
-        "/api/commands/categories.decidePriority", json={"name": "Partners", "accept": True}
-    )
-    listed = client.post("/api/queries/categories.list").json()["categories"]
-    row = next(c for c in listed if c["name"] == "Partners")
-    assert row["in_priority"] is True and row["priority_suggested"] is False
 
 
 def test_the_chat_can_put_a_category_in_priority(

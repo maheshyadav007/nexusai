@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from nexusai.modules.agent import mail_agent, registry
+from nexusai.modules.agent import mail_agent
 from nexusai.modules.agent.module import current
 from nexusai.modules.agent.providers import TextChunk, ToolCall
 from nexusai.modules.agent.runtime import TurnRequest
@@ -95,29 +95,6 @@ def test_brief_includes_pending_decisions_as_untrusted_data(client: TestClient) 
         "Invoices",
     ):
         assert text in decisions
-
-
-def test_review_registry_uses_its_own_turn_in_shared_chat(client: TestClient) -> None:
-    ctx = current().ctx
-    with ctx.bus.db.transaction() as tx:
-        tx.execute(
-            "INSERT INTO agent_turns (session, text, origin, created, closed) VALUES ('mail-agent', 'Review', 'mail-review', '2026-10-01', 1)"
-        )
-        tx.execute(
-            "INSERT INTO agent_turns (session, text, origin, created, closed) VALUES ('mail-agent', 'Mail', 'mail', '2026-11-03', 0)"
-        )
-    entries = registry.entries(ctx, lambda _: True)
-    review = next(item for item in entries if item.name == "Inbox review")
-    assert review.session == "mail-agent" and review.last_run == "2026-10-01"
-    assert review.state == "active"
-    with ctx.bus.db.transaction() as tx:
-        tx.execute("UPDATE agent_turns SET closed = 0 WHERE origin = 'mail-review'")
-    assert (
-        next(
-            item for item in registry.entries(ctx, lambda _: True) if item.name == "Inbox review"
-        ).state
-        == "running"
-    )
 
 
 def test_new_home_has_no_hourly_mail_check_until_one_is_chosen(client: TestClient) -> None:

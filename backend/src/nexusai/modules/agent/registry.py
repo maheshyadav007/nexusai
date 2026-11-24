@@ -10,7 +10,6 @@ INTERVIEW_AGENT = "interview"
 WEEKDAYS = ("Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays", "Sundays")
 WHAT_THEY_DO = {
     "mail-brief": "Writes your morning brief from what needs you, and learns from your reactions.",
-    "mail-review": "Looks for whole groups of mail to file, and only suggests.",
     "daily-prep": "Prepares your morning from the work board.",
     "prompt": "Runs the instructions you gave it.",
 }
@@ -76,17 +75,6 @@ def _schedule_entry(ctx: Context, row: Any, is_running: Any) -> AgentEntry:
     session = row["last_session"]
     last, tokens = _session_facts(ctx, session)
     running = bool(session and is_running(session))
-    # Inbox review shares the Mail agent's chat. Its own turn, not an unrelated mail
-    # run or the session's update time, tells us whether this agent has run.
-    if row["kind"] == "mail-review":
-        turns = ctx.bus.db.fetch_all(
-            "SELECT session, created, closed FROM agent_turns WHERE origin = 'mail-review'"
-            " ORDER BY id DESC LIMIT 1"
-        )
-        session = turns[0]["session"] if turns else None
-        last = turns[0]["created"] if turns else None
-        running = bool(turns and not turns[0]["closed"] and is_running(session))
-        tokens = 0  # A shared session's total is not the review's usage.
     once_done = row["every"] == "once" and not row["next_run"]
     state = (
         "running" if running else "finished" if once_done else "active" if row["enabled"] else "off"
@@ -98,7 +86,7 @@ def _schedule_entry(ctx: Context, row: Any, is_running: Any) -> AgentEntry:
         state=state,
         when=_when(row),
         next_run=row["next_run"] if state == "active" else None,
-        last_run=(last if row["kind"] == "mail-review" else row["last_run"] or last),
+        last_run=row["last_run"] or last,
         session=session,
         tokens=tokens,
     )

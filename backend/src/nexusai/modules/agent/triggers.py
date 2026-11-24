@@ -57,15 +57,10 @@ MOST_THREADS_PER_RUN = 3
 TASK_CHECK_SECONDS = 60
 SCHEDULE_TRIGGER = "schedule"
 HOURLY_KIND = "mail-hourly"
-REVIEW_KIND = scheduler.REVIEW_KIND
 BRIEF_KIND = scheduler.BRIEF_KIND
-REVIEWED = "mail_reviewed"
 LOOPS_CHECKED = "mail_loops_checked"
-FIRST_REVIEW = "mail_first_review_queued"
 FIRST_BRIEF = "mail_first_brief_queued"
 CATEGORIES_TIDIED = "mail_categories_tidied"
-PRIORITY_ASKED = "mail_priority_asked"
-SUGGESTIONS_WORTH_A_REVIEW = 3
 SCHEDULE_AGENTS = {"daily-prep": "daily-prep", BRIEF_KIND: "daily-prep", "prompt": "scheduled"}
 SCHEDULE_ORIGIN = "schedule"
 LAST_DIGEST = "last_digest"
@@ -98,7 +93,6 @@ class Triggers:
         self.runtime.on_hold = self.hold_for_model
         self._requeue_unfinished()
         self._tidy_categories_once()
-        self._ask_about_priority_once()
         self._catch_up_once()
         self.thread.start()
         self.wake.set()
@@ -111,7 +105,7 @@ class Triggers:
         self.runtime.on_hold = None
 
     def _catch_up_once(self) -> None:
-        """Once past mail is learned: open loops, the first review and a first brief.
+        """Once past mail is learned: open loops and a first brief.
 
         Grouped learning always leaves a review row, and this used to stop at any row, so new
         accounts never got these and waited until the next morning for a brief."""
@@ -123,10 +117,7 @@ class Triggers:
         if not mail_agent._setting(ctx, LOOPS_CHECKED):
             mail_agent._set(ctx, LOOPS_CHECKED, mail_agent._now())
             mail_agent.look_for_open_loops(ctx)
-        # Called on every tick, so each is queued once and not again while it waits to run.
-        if not mail_agent._setting(ctx, REVIEWED) and not mail_agent._setting(ctx, FIRST_REVIEW):
-            mail_agent._set(ctx, FIRST_REVIEW, mail_agent._now())
-            self.review_now(f"first-review-{mail_agent._now()}")
+        # Called on every tick, so it's queued once and not again while it waits to run.
         if not mail_agent._setting(ctx, FIRST_BRIEF):
             mail_agent._set(ctx, FIRST_BRIEF, mail_agent._now())
             brief = ctx.bus.db.fetch_all(
@@ -145,26 +136,7 @@ class Triggers:
         if mail_agent._setting(ctx, CATEGORIES_TIDIED):
             return
         mail_agent._set(ctx, CATEGORIES_TIDIED, mail_agent._now())
-        left = mail_agent.tidy_categories(ctx)
-        # What's left may still mean the same thing in different words, which takes a model.
-        if left >= SUGGESTIONS_WORTH_A_REVIEW and mail_agent._setting(ctx, REVIEWED):
-            self.review_now(f"tidy-review-{mail_agent._now()}")
-
-    def _ask_about_priority_once(self) -> None:
-        """A Home already past its first review would otherwise wait a week to hear about this."""
-        ctx = self.ctx
-        if mail_agent._setting(ctx, PRIORITY_ASKED) or not mail_agent._setting(ctx, REVIEWED):
-            return
-        mail_agent._set(ctx, PRIORITY_ASKED, mail_agent._now())
-        self.review_now(f"priority-review-{mail_agent._now()}")
-
-    def review_now(self, event: str) -> None:
-        """Whichever time it comes up, it runs like the weekly one."""
-        rows = self.ctx.bus.db.fetch_all(
-            "SELECT id FROM schedules WHERE kind = ? LIMIT 1", (REVIEW_KIND,)
-        )
-        if rows:
-            self.fire_schedule(event, rows[0]["id"])
+        mail_agent.tidy_categories(ctx)
 
     def _requeue_unfinished(self) -> None:
         """Runs that were started but whose turn never got going go back in line."""
@@ -537,7 +509,10 @@ class Triggers:
         origin = "mail-hourly" if chosen == "hourly" else "mail"
         # next_turn says when it's past mail instead, so its message reads the right way.
         own = self._mail_trigger()
-        settings = {"mode": own["context_mode"], "keep_messages": own["keep_messages"]}
+        # Each email is judged on its own, from a clean context: every fact it needs is in its
+        # task. The chat still shows every run, since that's read from the turns, not the model.
+        keep = own["keep_messages"] if own["keep_messages"] is not None else 0
+        settings = {"mode": own["context_mode"], "keep_messages": keep}
         prepared = mail_agent.next_turn(self.ctx, origin, settings)
         if prepared is None:
             self.release_mail = False
@@ -860,8 +835,6 @@ class Triggers:
                 mail_agent.settle(self.ctx, [run["id"]], "skipped")
             elif found[0]["kind"] == HOURLY_KIND:
                 self._hourly(run["id"])
-            elif found[0]["kind"] == REVIEW_KIND:
-                self._review(run["id"])
             elif found[0]["kind"] == BRIEF_KIND and not self._mail_settled():
                 # The brief waits, pending, for the mail to be in and judged, and starts on the
                 # wake that follows the last of it. Written earlier it would only say it's partial.
@@ -894,19 +867,6 @@ class Triggers:
         if self.runtime.active_turn(mail_agent.SESSION_ID) is not None or not self._model_ready():
             return
         self._digest_run(run)
-
-    def _review(self, run: int) -> None:
-        ctx = self.ctx
-        if not mail_agent.enabled(ctx):
-            mail_agent.settle(ctx, [run], "skipped")
-            return
-        if self.runtime.active_turn(mail_agent.SESSION_ID) is not None or not self._model_ready():
-            return
-        request = mail_agent.review_turn(ctx)
-        if request is None:
-            mail_agent.settle(ctx, [run], "skipped")
-            return
-        self._dispatch(request, [run], self.config.triage_token_limit)
 
     def _digest_key(self) -> str:
         from nexusai.modules.mail import accounts
@@ -1069,7 +1029,6 @@ class Triggers:
             mail_agent.set_learning_state(self.ctx, "failed" if error else "done")
             if not error:
                 self._catch_up_once()
-                self.review_now(f"after-reading-{turn}")
         if not error:
             from nexusai.modules.agent import ui_stream
 
@@ -1082,13 +1041,7 @@ class Triggers:
             assembled = ui_stream.assemble_messages([{"id": turn, "text": "", "parts": events}])
             parts = assembled[-1]["parts"] if assembled else []
             output = any(p.get("type") == "text" and str(p.get("text", "")).strip() for p in parts)
-            outcome_tools = {
-                "recommend_mail_change",
-                "recommend_priority",
-                "fold_suggested_categories",
-                "propose_preference",
-                "tell",
-            }
+            outcome_tools = {"propose_preference", "tell"}
             output = output or any(
                 p.get("type", "").removeprefix("tool-") in outcome_tools
                 and p.get("state") == "output-available"
@@ -1103,11 +1056,7 @@ class Triggers:
                 and origins[0]["agent"] == "daily-prep"
                 and origins[0]["origin"] == SCHEDULE_ORIGIN
             )
-            needs_output = (
-                any(r["completed_through"] for r in runs)
-                or scheduled_brief
-                or bool(origins and origins[0]["origin"] == "mail-review")
-            )
+            needs_output = any(r["completed_through"] for r in runs) or scheduled_brief
             # A morning run's result is the brief on Today, and nothing else counts.
             if scheduled_brief:
                 output = briefs.saved_in(self.ctx, turn)
@@ -1124,9 +1073,6 @@ class Triggers:
                         scheduler.set_default(self.ctx, completed["key"], str(completed["id"]))
                     else:
                         scheduler.set_default(self.ctx, self._digest_key(), str(completed))
-            origins = db.fetch_all("SELECT origin FROM agent_turns WHERE id = ?", (turn,))
-            if origins and origins[0]["origin"] == "mail-review":
-                mail_agent._set(self.ctx, REVIEWED, mail_agent._now())
         others = [run["id"] for run in runs if run["trigger"] != mail_agent.MAIL_TRIGGER]
         mail_agent.settle(self.ctx, others, "failed" if error else "done", error)
         if not error and any(run["completed_through"] for run in runs):
