@@ -231,7 +231,7 @@ The thread is the main unit of work. People read threads, and the agent judges t
 | THR-3 | Thread summary on demand: nothing is generated until the user clicks **Summarize**; the result is stored and reused. It covers what happened, where it stands and what's being asked of the user. When newer messages exist, it shows "3 new messages since this summary" with an Update button that reads only those | MVP |
 | THR-4 | Category and importance belong to the thread, and a new message can raise or lower them; the change and its reason are shown | MVP |
 | THR-5 | Thread status: waiting on you, waiting on others, resolved or FYI, updated by the agent and changeable by the user | MVP |
-| THR-6 | Long threads: the agent receives recent messages within a size limit, plus the stored summary if one exists, and can look up older ones when needed | MVP |
+| THR-6 | Long threads: the agent receives the 10 newest messages, newest first, within a size limit, and is told how many older ones it can page through with read_thread (2026-11-24) | MVP |
 | THR-7 | Only each message's own new text is indexed, so search returns one hit per thread instead of repeats from quoted text | MVP |
 | THR-9 | Drafts use the whole thread, and the user chooses who gets the reply; warns if someone was dropped | MVP |
 | THR-8 | Missing history: fetch unsynced older messages on demand and mark the summary as partial until then | Next |
@@ -475,6 +475,8 @@ The main focus space on Today is a two-way channel between the agents and the us
 |---|---|---|
 | NTF-3 | Today: greeting and one-line brief, a line of counts that link to what they count, the morning brief, then cards for Needs you, Due, From your agents, Important mail and Waiting on others, each with its actions in view, plus Since you last looked and one status line linking to the Cockpit | MVP |
 | NTF-3b | The brief has fixed parts (2026-11-24): one lead line, New and Still open (one line per matter, each cited), and Done since yesterday, worked out by the app and closed until asked for. Done looks the same on matters, tasks and reminders: a check, struck through, at the bottom. Waiting on you holds only kept work and replies owed, with a switch to include Posty's suggestions; each suggestion names its matter | MVP |
+| NTF-3c | The brief keeps in step with its matters during the day with no model call: a changed matter's line is rewritten from a template, a finished one moves to Done since yesterday, and one waiting on the person and due within two days is added. The next brief is told which lines the app filled in (2026-11-24) | MVP |
+| AGN-3g | A later email can show open work done: a suggestion is withdrawn, a kept task or reminder is marked "looks done" in For your decision (2026-11-24) | MVP |
 | NTF-7 | Cockpit: what's running, health of each part, what's coming up, and a filterable feed of what happened | MVP |
 | NTF-7a | Work on a timer with no agent is listed once (`modules/agent/pipelines.py`), and shows on the Schedules page and in the Cockpit with Stop and Run now. Mail sync is the only one today | MVP |
 | AGN-L1 | Once enough mail is here, or no more is coming, the Mail agent reads the newest K emails rules didn't catch (`agent.learn_emails`, 400), oldest first. Each is judged, but can't notify, ask or add work. It keeps notes in `memory/agents/mail/learned.md`, which only it reads, always as untrusted data, and the person can edit. It then tells the person what it learned and goes live on new mail and the hourly check | MVP |

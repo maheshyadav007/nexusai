@@ -89,7 +89,9 @@ test("a new folder stays in its home, empty or not, after navigation", async ({ 
     await expect(page).toHaveURL(new RegExp(encodeURIComponent(name) + "$"));
   }
   await page.getByRole("link", { name: "Today", exact: true }).click();
-  await nav.getByTestId("nav-home-reads").getByRole("button", { name: /Show all/ }).click().catch(() => undefined);
+  // Show all is there only when the home has more folders than it shows at first.
+  const more = nav.getByTestId("nav-home-reads").getByRole("button", { name: /Show all/ });
+  if (await more.count()) await more.click();
   for (const name of names) await expect(nav.getByRole("link", { name, exact: true })).toHaveCount(1);
 });
 

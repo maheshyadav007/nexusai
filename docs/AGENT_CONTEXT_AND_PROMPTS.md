@@ -22,6 +22,16 @@ All runtime agents receive the system rules, their job prompt, the person's prof
 
 Category tools expose and update mode, personalized description, sender rule and literal subject prefix. Starter PLM/Swarm folders use Exact subject prefixes with Priority off. User-authored personal prompts are preserved rather than overwritten with new defaults.
 
+## Individual Mail judgement, since 2026-11-24
+
+- **The conversation, newest first.** The 10 newest emails (`agent.max_recent_thread_messages`) within `max_thread_chars`, newest first. When some are left out, the task says how many and that `read_thread` with `skip_newest` reads further back.
+- **A clean context per email.** The mail trigger sends no earlier runs to the model (`keep_messages` 0 unless the trigger sets one). Every run is still saved as turns, so the Mail agent's chat shows them all.
+- **One smaller try when the context fills.** A run that hits the model's context limit goes back in the queue once, with half the thread and an instruction not to read more. A second overflow marks the email not triaged, with the reason.
+- **Who the person is.** The names, IDs, team names and look-alike names from setup (`system/me.json`) come with each email, and "names the person or their team" is judged from that list. Its extra addresses count as the person's own.
+- **Finished work.** Open tasks and reminders are listed by id. `finished` names those a later email shows done: a suggestion is withdrawn, a kept one is marked "looks done" for the person to close or keep.
+- **Timeline times.** Lines triage adds to a matter's timeline carry the email's own date, not the time it was read.
+- **What it no longer does.** It doesn't suggest folders, Priority folders or filing (removed with the weekly inbox review). Lasting facts go in `learned`, saved at once as notes learned from mail; there is no `memory` field.
+
 ## Gaps corrected
 
 - Replaced conflicting interview and historical-learning instructions with the new targeted interview and filing-only behavior. Removed instructions to infer importance from ignored mail and to delete empty categories automatically.
