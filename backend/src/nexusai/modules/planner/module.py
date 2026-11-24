@@ -396,7 +396,13 @@ def add_task(
                 source_message,
             ),
         )
-        work.emit("tasks.changed", {}, source="planner", trace_id=ctx.trace_id)
+        # Which conversation it's for, so whatever follows that conversation can follow this.
+        work.emit(
+            "tasks.changed",
+            {"id": cursor.lastrowid, "thread": thread, "proposed": proposed},
+            source="planner",
+            trace_id=ctx.trace_id,
+        )
     return int(cursor.lastrowid or 0)
 
 

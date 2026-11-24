@@ -313,8 +313,8 @@ def test_a_brief_without_markers_is_saved_with_a_note_naming_them(
     # Laid out in its parts, with the same numbers.
     assert today["prep_sections"]["lead"] == lead
     assert (
-        today["prep_sections"]["new"][0].startswith(bare)
-        and "[1](#cite-1)" in today["prep_sections"]["new"][0]
+        today["prep_sections"]["new"][0]["text"].startswith(bare)
+        and "[1](#cite-1)" in today["prep_sections"]["new"][0]["text"]
     )
     assert [(s["n"], s["title"]) for s in today["prep_sources"]] == [
         (1, "Quarterly budget numbers")

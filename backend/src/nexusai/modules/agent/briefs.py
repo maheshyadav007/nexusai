@@ -3,12 +3,13 @@
 import json
 import re
 from contextlib import suppress
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from nexusai.kernel.database import Migration
 from nexusai.kernel.module import Context
 from nexusai.modules.agent import citations
+from nexusai.modules.agent import sources as source_names
 from nexusai.modules.agent.prompt_data import untrusted
 from nexusai.modules.mail import accounts
 from nexusai.modules.mail.store import hidden_from_ai
@@ -36,6 +37,19 @@ SECTIONS_MIGRATION = Migration(
     "agent_brief_sections_001",
     "ALTER TABLE brief_artifacts ADD COLUMN sections TEXT;",
 )
+# When code last changed a line during the day, so Today can say how far the brief reaches.
+LIVE_MIGRATION = Migration(
+    "agent_brief_live_001",
+    "ALTER TABLE brief_artifacts ADD COLUMN updated TEXT;",
+)
+# A matter gets a new line during the day only when it can't wait for tomorrow's brief: it's
+# waiting on the person and due within this many days.
+ADD_WITHIN_DAYS = 2
+STATE_WORDS = {
+    "waiting_on_you": "waiting on you",
+    "waiting_on_others": "waiting on others",
+    "fyi": "worth knowing",
+}
 BULLET = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
 REPLY_PREFIX = re.compile(r"^(?:(?:re|fwd?|aw|sv)\s*:\s*)+", re.IGNORECASE)
 # Shorter subjects, like "Hi", would match bullets that aren't about them.
@@ -157,13 +171,16 @@ def save(ctx: Context, session: str, lead: str, new: list[str], still_open: list
     text = as_text(lead, new, still_open)
     missing = uncited(ctx, text)
     cited = citations.Citations(ctx, turn)
-    # One numbering across the parts, so [2] is the same email wherever it's cited.
+    # One numbering across the parts, so [2] is the same email wherever it's cited. Each line
+    # keeps the matter its email belongs to, so the line can follow that matter during the day.
     sections = {
         "lead": cited.rewrite(lead),
-        "new": [cited.rewrite(line) for line in new],
-        "open": [cited.rewrite(line) for line in still_open],
+        "new": [{"text": cited.rewrite(line), "matter": _matter_in(ctx, line)} for line in new],
+        "open": [
+            {"text": cited.rewrite(line), "matter": _matter_in(ctx, line)} for line in still_open
+        ],
     }
-    shown = as_text(sections["lead"], sections["new"], sections["open"])
+    shown = _text_of(sections)
     part = cited.part()
     sources = part[0]["data"]["sources"] if part else []
     inputs = ctx.bus.db.fetch_all("SELECT * FROM brief_inputs WHERE turn=?", (turn,))
@@ -239,6 +256,143 @@ def done_since(ctx: Context, since: str) -> list[dict[str, str]]:
     return sorted(found, key=lambda item: item["when"] or "", reverse=True)
 
 
+def _matter_in(ctx: Context, line: str) -> int | None:
+    """The matter of the first email a line cites, if it has one."""
+    from nexusai.modules.agent import matters
+
+    for found in citations.MARKER.finditer(line):
+        if found.group(1) == citations.MAIL and found.group(2).isdigit():
+            matter = matters.matter_of(ctx.bus.db, int(found.group(2)))
+            if matter is not None:
+                return matter
+    return None
+
+
+def lines_of(raw: Any) -> list[dict[str, Any]]:
+    """A section's lines, whether saved as plain text or with their matter."""
+    return [item if isinstance(item, dict) else {"text": str(item)} for item in raw or []]
+
+
+def _text_of(sections: dict[str, Any]) -> str:
+    return as_text(
+        sections["lead"],
+        [line["text"] for line in lines_of(sections["new"])],
+        [line["text"] for line in lines_of(sections["open"])],
+    )
+
+
+def _cite(ctx: Context, sources: list[dict[str, Any]], thread: int) -> str:
+    """The citation for an email, numbered as the brief already numbers it, or the next number."""
+    for source in sources:
+        if (
+            source.get("kind") == citations.MAIL
+            and source.get("ref") == str(thread)
+            and source.get("n")
+        ):
+            return f"[{source['n']}](#cite-{source['n']})"
+    found = source_names.describe(ctx, citations.MAIL, str(thread))
+    if found is None:
+        return ""
+    number = max((int(source.get("n") or 0) for source in sources), default=0) + 1
+    sources.append({**found.model_dump(), "n": number})
+    return f"[{number}](#cite-{number})"
+
+
+def _line_for(ctx: Context, matter: Any, sources: list[dict[str, Any]]) -> str:
+    """A matter's line, filled in by code from what's known: its title, who moves next, its date,
+    and what Posty said of its newest email. Tomorrow's brief writes it in its own words."""
+    parts = [f"**{_plain(matter.title)}**", STATE_WORDS.get(matter.state, "")]
+    if matter.due:
+        with suppress(ValueError):
+            parts.append(f"due {datetime.fromisoformat(matter.due[:10]):%a %-d %b}")
+    thread = int(matter.latest.ref) if matter.latest else None
+    if thread is not None:
+        said = ctx.bus.db.fetch_all(
+            "SELECT summary FROM triage_runs WHERE thread = ? AND status = 'done' AND summary != ''"
+            " ORDER BY id DESC LIMIT 1",
+            (thread,),
+        )
+        if said:
+            parts.append(_plain(said[0]["summary"]).rstrip("."))
+    text = " · ".join(part for part in parts if part) + "."
+    cite = _cite(ctx, sources, thread) if thread is not None else ""
+    return f"{text} {cite}".strip()
+
+
+def _plain(text: str) -> str:
+    """Mail-derived words as plain text, so they can't make a link or a citation of their own."""
+    return " ".join(re.sub(r"[\[\]*_`<>]", "", text).split())
+
+
+def follow(ctx: Context, matter: int) -> bool:
+    """Keeps the brief on Today in step with one matter, with no model call. A line it has is
+    rewritten when the matter changes, and goes when the matter is done. A matter it doesn't
+    have gets a line only when it's waiting on the person and due soon. The morning run
+    rewrites every line and sets the order again."""
+    from nexusai.modules.agent import matters
+
+    brief = latest(ctx)
+    if not brief or not brief["sections"]:
+        return False
+    sections = json.loads(brief["sections"])
+    for key in ("new", "open"):
+        sections[key] = lines_of(sections.get(key))
+    found = ctx.bus.db.fetch_all(
+        f"SELECT m.* FROM matters m WHERE m.id = ? AND EXISTS (SELECT 1 FROM matter_threads t"  # noqa: S608
+        f" JOIN threads h ON h.id = t.thread WHERE t.matter = m.id AND NOT {hidden_from_ai('h.category')})",
+        (matter,),
+    )
+    now = datetime.now(UTC).isoformat()
+    sources = json.loads(brief["sources"] or "[]")
+    held = [
+        (key, line)
+        for key in ("new", "open")
+        for line in sections[key]
+        if line.get("matter") == matter
+    ]
+    state = matters.row(ctx, found[0]) if found else None
+    if state is None or state.state == "done":
+        if not held:
+            return False
+        for key in ("new", "open"):
+            sections[key] = [line for line in sections[key] if line.get("matter") != matter]
+        # Gone from the brief because it's finished: it shows under Done since yesterday.
+        if state is not None:
+            with ctx.bus.db.transaction() as tx:
+                matters.finished(tx, matter)
+    elif held:
+        text = _line_for(ctx, state, sources)
+        if held[0][1]["text"] == text:
+            return False
+        first = held[0][1]
+        for key in ("new", "open"):
+            sections[key] = [
+                {"text": text, "matter": matter, "mark": "updated", "at": now}
+                if line is first
+                else line
+                for line in sections[key]
+                if line.get("matter") != matter or line is first
+            ]
+    else:
+        soon = (datetime.now().astimezone() + timedelta(days=ADD_WITHIN_DAYS)).strftime("%Y-%m-%d")
+        if state.state != "waiting_on_you" or not state.due or state.due[:10] > soon:
+            return False
+        line = {
+            "text": _line_for(ctx, state, sources),
+            "matter": matter,
+            "mark": "added",
+            "at": now,
+        }
+        sections["new"] = [line, *sections["new"]]
+    with ctx.bus.unit_of_work() as work:
+        work.tx.execute(
+            "UPDATE brief_artifacts SET sections = ?, sources = ?, text = ?, updated = ? WHERE id = ?",
+            (json.dumps(sections), json.dumps(sources), _text_of(sections), now, brief["id"]),
+        )
+        work.emit("brief.ready", {"turn": brief["turn"]}, source="agent", trace_id=ctx.trace_id)
+    return True
+
+
 def uncited(ctx: Context, text: str) -> list[str]:
     """Bullets that name a thread on the plate by its subject and cite nothing, each with the
     marker it needs, so a small model only has to copy it."""
@@ -274,7 +428,39 @@ def current_layer(ctx: Context) -> str:
         lines.append(f"They {'liked' if brief['rating'] == 'up' else 'disliked'} it.")
     if brief["comment"]:
         lines.append(f"They said: {brief['comment']}")
-    return " ".join(lines) + "\n" + untrusted(brief["text"])
+    if not brief["updated"] or not brief["sections"]:
+        return " ".join(lines) + "\n" + untrusted(brief["text"])
+    # The app kept it in step with the mail after it was written. Each line it touched says so,
+    # so the next brief doesn't mistake them for its own words or its own order.
+    lines.append(
+        f"The app kept it in step with new mail after that, last at {brief['updated']}, with no"
+        " model: lines marked so were filled in by the app."
+    )
+    return " ".join(lines) + "\n" + untrusted(_annotated(ctx, brief))
+
+
+def _annotated(ctx: Context, brief: Any) -> str:
+    """The brief as it stands, each line the app changed marked with what it did and when, and
+    what was finished since it was written."""
+    sections = json.loads(brief["sections"])
+    said = {
+        "added": "added by the app at {at}: it's waiting on them and due soon",
+        "updated": "updated by the app at {at} from new mail",
+    }
+
+    def shown(line: dict[str, Any]) -> str:
+        mark = said.get(line.get("mark") or "")
+        return f"{line['text']} ({mark.format(at=line.get('at') or '')})" if mark else line["text"]
+
+    parts = [sections["lead"]]
+    for heading, key in (("New", "new"), ("Still open", "open")):
+        items = lines_of(sections.get(key))
+        if items:
+            parts.append(f"**{heading}**\n" + "\n".join(f"- {shown(line)}" for line in items))
+    finished = [item["title"] for item in done_since(ctx, brief["created"])]
+    if finished:
+        parts.append("Finished since it was written, so no longer in it: " + "; ".join(finished))
+    return "\n\n".join(parts)
 
 
 def latest(ctx: Context) -> Any:

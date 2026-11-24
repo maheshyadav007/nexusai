@@ -558,6 +558,8 @@ Each phase ships alone, keeps all tests green, and is checked on real mail (with
 
 ### Phase 5: The live brief
 
+**Built 2026-11-24, simpler than drawn below:** no `brief_lines` table. The brief's parts keep each line's matter (`brief_artifacts.sections`), and `briefs.follow` runs on `matters.changed`, `mail.triaged`, `thread.updated` and `tasks.changed`. A line is rewritten from a template (title · state · due · Posty's summary of the newest email), a done matter leaves for Done since yesterday, and a matter waiting on the person and due within two days gets a new line. No model call during the day; the morning run rewrites and re-ranks.
+
 - **Build:** `brief_lines`; template lines; one-line model updates; "since you last looked"; brief agent tools and prompt change (section 8).
 - **Done when:** an important email updates its brief line within 2 minutes, without a full rewrite.
 

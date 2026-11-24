@@ -4,7 +4,7 @@ import { SortMailCard } from "./SortMailCard";
 import Link from "next/link";
 import appConfig from "@/app.config.json";
 import { useEffect, useState, type ReactNode } from "react";
-import type { BriefSections as Sections, ChannelMessage, DueItem, SourceRef, TodayThread, ToolApproval } from "@/ui/client/contracts.generated";
+import type { BriefLine, BriefSections as Sections, ChannelMessage, DueItem, SourceRef, TodayThread, ToolApproval } from "@/ui/client/contracts.generated";
 import { useDateOnly, useDateTime, useShortDate, useTimeOnly } from "@/ui/client/format";
 import { useMailStatus, useSetImportance, useSetStatus } from "@/ui/client/mail";
 import { groupApprovals, useApprovals, useDecideApprovals, useSessions } from "@/ui/client/sessions";
@@ -447,15 +447,20 @@ export function WaitingOnYou({ inPopover = false }: { inPopover?: boolean } = {}
 /** The brief laid out the same way every day: what matters most, then what's new and what's
  *  still open, one line per matter. */
 function BriefSections({ sections, sources }: { sections: Sections; sources: SourceRef[] }) {
-  const part = (key: "new" | "open", lines: string[]) =>
+  const time = useTimeOnly();
+  const part = (key: "new" | "open", lines: BriefLine[]) =>
     lines.length ? (
       <section aria-label={t(`today.brief.${key}`)} data-testid={`brief-${key}`} className="flex flex-col gap-2">
         <h3 className="text-sm font-medium text-ink-muted">{t(`today.brief.${key}`)}</h3>
         <ul className="flex flex-col gap-2">
           {lines.map((line, index) => (
-            <li key={index} className="flex gap-3">
+            <li key={`${line.matter ?? "x"}-${index}`} data-testid="brief-line" className="flex gap-3">
               <span aria-hidden="true" className={`mt-2 h-2 w-2 shrink-0 rounded-full ${key === "new" ? "bg-accent-default" : "border border-line-strong"}`} />
-              <div className="min-w-0 flex-1"><Markdown text={line} sources={sources} /></div>
+              <div className="min-w-0 flex-1">
+                <Markdown text={line.text} sources={sources} />
+                {/* Kept in step during the day by the app; the morning run writes it afresh. */}
+                {line.mark && line.at ? <span data-testid="brief-line-mark" className="text-sm font-medium text-accent-default">{t(`today.brief.${line.mark}`, { when: time(line.at) })}</span> : null}
+              </div>
             </li>
           ))}
         </ul>
@@ -517,7 +522,12 @@ function MorningBrief() {
       {attended ? <legend className="px-2 text-sm font-medium text-ink-secondary">{t("today.prep")}</legend> : null}
       <header className="flex items-center justify-between gap-3">
         {!attended ? <h2 className="flex items-center gap-2 text-lg font-medium text-ink-primary"><Icon name="thinking" className="h-4 w-4 text-accent-default" />{t("today.prep")}</h2> : null}
-        {data.prep_at ? <span className="text-sm tabular-nums text-ink-muted">{t("today.brief.when", { when: format(data.prep_at) })}</span> : null}
+        {data.prep_at ? (
+          <span className="text-sm tabular-nums text-ink-muted">
+            {t("today.brief.when", { when: format(data.prep_at) })}
+            {data.prep_updated ? <span data-testid="brief-updated" className="font-medium text-accent-default"> · {t("today.brief.updatedAt", { when: time(data.prep_updated) })}</span> : null}
+          </span>
+        ) : null}
       </header>
       {data.prep_freshness && data.prep_freshness !== "fresh" && data.prep_freshness !== "none" ? <p role="status" className="text-sm text-ink-secondary">{t(`today.brief.freshness.${data.prep_freshness}`)}</p> : null}
       <div data-testid="today-prep" className="text-md text-ink-primary">
@@ -533,7 +543,7 @@ function MorningBrief() {
         <Button variant="quiet" aria-expanded={telling} data-testid="brief-tell" onClick={() => setTelling(!telling)}>{t("today.brief.tell")}</Button>
         <span className="flex-1" />
         {/* How fresh it is, quietly: what it was written from. */}
-        {data.prep_at ? <span data-testid="brief-covers" className="text-sm tabular-nums text-ink-muted">{t("today.brief.covers", { when: time(data.prep_at) })}</span> : null}
+        {data.prep_at ? <span data-testid="brief-covers" className="text-sm tabular-nums text-ink-muted">{t("today.brief.covers", { when: time(data.prep_updated ?? data.prep_at) })}</span> : null}
         <Pressable onClick={() => assistant.openSession(session)} className="focus-ring rounded-sm text-sm text-ink-secondary underline underline-offset-2 hover:text-ink-primary">{t("channel.openSession")}</Pressable>
       </div>
       {telling ? (
