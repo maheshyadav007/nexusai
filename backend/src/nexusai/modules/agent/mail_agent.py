@@ -39,9 +39,8 @@ from nexusai.modules.agent import (
 from nexusai.modules.agent.context import TurnRequest
 from nexusai.modules.agent.gateway import Layer
 from nexusai.modules.agent.prompt_data import untrusted
-from nexusai.modules.agent.providers import Message
-from nexusai.modules.mail import accounts, sorting
-from nexusai.modules.mail import module as mail
+from nexusai.modules.agent.providers import CONTEXT_HELP, Message
+from nexusai.modules.mail import accounts, mentions
 from nexusai.modules.mail import rules as mail_rules
 from nexusai.modules.mail import store as mail_store
 from nexusai.modules.mail.rules import FILED_BY_RULE, NO_REPLY
@@ -321,7 +320,7 @@ def _header(ctx: Context, row: Any, own: set[str]) -> str:
 def _thread_text(
     ctx: Context, thread: int, limit_messages: int, limit_chars: int
 ) -> tuple[str, str, str]:
-    """Recent messages within a size limit, plus the stored summary if there is one."""
+    """Recent messages within a size limit, newest first, plus the stored summary if there is one."""
     rows = ctx.bus.db.fetch_all(
         "SELECT id, from_name, from_addr, to_json, cc_json, date, subject, clean_text, encrypted"
         " FROM messages WHERE thread_id = ? GROUP BY message_id ORDER BY date DESC LIMIT ?",
@@ -351,7 +350,18 @@ def _thread_text(
     sender = (first["from_name"] or first["from_addr"]) if first else ""
     summary = ctx.bus.db.fetch_all("SELECT text FROM thread_summaries WHERE thread = ?", (thread,))
     note = f"Summary of the earlier conversation:\n{summary[0]['text']}\n\n" if summary else ""
-    return subject, sender, f"{note}" + "\n\n".join(reversed(blocks))
+    total = ctx.bus.db.fetch_all(
+        "SELECT COUNT(DISTINCT message_id) AS n FROM messages WHERE thread_id = ?", (thread,)
+    )[0]["n"]
+    # The newest is what's being judged, so it comes first. The rest can be read when it matters.
+    older = total - len(blocks)
+    tail = (
+        f"\n\n[{older} older emails not shown. read_thread with skip_newest={len(blocks)} reads them.]"
+        if older > 0
+        else ""
+    )
+    shown = "Emails, newest first:\n\n" if blocks else ""
+    return subject, sender, f"{note}{shown}" + "\n\n".join(blocks) + tail
 
 
 def _strings(value: Any) -> list[str]:
@@ -372,13 +382,21 @@ def live_instruction() -> str:
 
 
 def task_for(
-    ctx: Context, thread: int, answers: list[str] | None = None, live: bool = True
+    ctx: Context,
+    thread: int,
+    answers: list[str] | None = None,
+    live: bool = True,
+    tight: bool = False,
 ) -> tuple[str, str, str]:
-    """What the model is given about one conversation: the mail, and the facts around it."""
+    """What the model is given about one conversation: the mail, and the facts around it.
+
+    `tight` is the second try after a run ran out of room: half the mail, and told to stay small.
+    """
     db = ctx.bus.db
     config = ctx.config.agent
+    share = 2 if tight else 1
     subject, sender, text = _thread_text(
-        ctx, thread, config.max_recent_thread_messages, config.max_thread_chars
+        ctx, thread, config.max_recent_thread_messages // share, config.max_thread_chars // share
     )
     if not text:
         return subject, sender, ""
@@ -409,6 +427,9 @@ def task_for(
     facts = signals.about_thread(ctx, thread)
     if facts:
         task += f"\n\n{facts}"
+    who = signals.who_they_are(mentions.load(ctx.config.home))
+    if who:
+        task += f"\n\n{who}"
     # How the rules handled its newest email, in their own words, so the AI knows what code
     # already decided and doesn't undo it.
     task += "\n\nHow the person's rules handled it: " + untrusted(_rule_line(ctx, thread))
@@ -465,15 +486,15 @@ def task_for(
             "\n\nExact folders (rules file mail here; never assign these as Smart folders or"
             " override them):\n" + untrusted("\n".join(described))
         )
-    waiting = db.fetch_all("SELECT name FROM mail_categories WHERE proposed = 1 ORDER BY 1")
-    if waiting:
-        task += "\n\nCategories already suggested:\n" + untrusted(
-            ", ".join(row[0] for row in waiting)
-        )
     if live:
         task += _style_samples(ctx, thread)
     if answers:
         task += "\n\nThe person answered your earlier question: " + " ".join(answers)
+    if tight:
+        task += (
+            "\n\nThe last try at this email ran out of room. Judge it from what's here, without"
+            " reading other mail or documents."
+        )
     return subject, sender, task
 
 
@@ -499,20 +520,23 @@ def open_work_lines(db: Database, thread: int) -> str:
     """The conversation's open tasks, reminders and deadlines, one line each."""
     rows = [
         *db.fetch_all(
-            "SELECT 'task' AS kind, title, due FROM tasks WHERE thread = ? AND status != 'done' ORDER BY id",
+            "SELECT 'task' AS kind, id, title, due FROM tasks WHERE thread = ? AND status != 'done' ORDER BY id",
             (thread,),
         ),
         *db.fetch_all(
-            "SELECT 'reminder' AS kind, title, due_at AS due FROM reminders WHERE thread = ? AND fired = 0 ORDER BY id",
+            "SELECT 'reminder' AS kind, id, title, due_at AS due FROM reminders WHERE thread = ? AND fired = 0 ORDER BY id",
             (thread,),
         ),
         *db.fetch_all(
-            "SELECT kind, title, due FROM work_board WHERE thread = ? AND done = 0 ORDER BY id",
+            "SELECT kind, NULL AS id, title, due FROM work_board WHERE thread = ? AND done = 0 ORDER BY id",
             (thread,),
         ),
     ]
+    # Tasks and reminders by id, so the agent can say which one a later email finished.
     return "\n".join(
-        f"- {r['kind']}: {r['title']}" + (f" (due {r['due']})" if r["due"] else "") for r in rows
+        (f"- [{r['kind']}:{r['id']}] {r['title']}" if r["id"] else f"- {r['kind']}: {r['title']}")
+        + (f" (due {r['due']})" if r["due"] else "")
+        for r in rows
     )
 
 
@@ -552,7 +576,7 @@ def next_turn(
             return bulk_learning.batch_request(ctx, first[0], own)
         thread = first[0]["thread"]
         rows = db.fetch_all(
-            "SELECT id, message, answer, event FROM trigger_runs WHERE trigger = ? AND status = 'pending' AND thread = ?"
+            "SELECT id, message, answer, event, error FROM trigger_runs WHERE trigger = ? AND status = 'pending' AND thread = ?"
             " ORDER BY id LIMIT ?",
             (MAIL_TRIGGER, thread, config.triage_batch),
         )
@@ -577,7 +601,8 @@ def next_turn(
             if version
             else None
         )
-        subject, sender, task = task_for(ctx, thread, answers, live=not learning)
+        tight = any(row["error"] == OUT_OF_ROOM for row in rows)
+        subject, sender, task = task_for(ctx, thread, answers, live=not learning, tight=tight)
         if task:
             break
         # The conversation has gone, so there's nothing left to judge.
@@ -699,31 +724,6 @@ def brief_task(ctx: Context) -> str:
     return task
 
 
-def review_turn(ctx: Context) -> TurnRequest | None:
-    """Where whole groups of mail should go. Nothing to say about means no run at all."""
-    table = signals.sender_table(ctx)
-    waiting = [
-        str(row["name"])
-        for row in ctx.bus.db.fetch_all(
-            "SELECT name FROM mail_categories WHERE proposed = 1 ORDER BY name"
-        )
-    ]
-    categories = signals.category_table(ctx)
-    if not table and not waiting and not categories:
-        return None
-    # These names came from reading mail, so they stay marked as untrusted too.
-    named = f"\n\nCategories already suggested: {', '.join(waiting)}" if waiting else ""
-    if categories:
-        named += f"\n\nCategories not in the Priority inbox:\n{categories}"
-    return TurnRequest(
-        SESSION_ID,
-        _template("mail-review"),
-        "mail-review",
-        _template("mail-review-model"),
-        untrusted(f"{table}{named}"),
-    )
-
-
 def person_replied(ctx: Context, thread: int) -> None:
     """They've answered, so it's off their plate at once. The agent then works out what's next."""
     with ctx.bus.unit_of_work() as work:
@@ -799,31 +799,6 @@ def tidy_categories(ctx: Context) -> int:
     return len(left)
 
 
-def suggest_priority(ctx: Context, name: str, reason: str) -> str:
-    return mail.suggest_priority(ctx, name, reason)
-
-
-def fold_suggestions(ctx: Context, keep: str, names: list[str]) -> str:
-    """Only suggestions, none of them in use, so the person still decides on the one that's left."""
-    db = ctx.bus.db
-    waiting = {
-        str(row["name"])
-        for row in db.fetch_all("SELECT name FROM mail_categories WHERE proposed = 1")
-    }
-    if keep not in waiting:
-        return f"{keep} isn't waiting as a suggestion."
-    folded = [name for name in names if name in waiting and name != keep]
-    with db.transaction() as tx:
-        for name in folded:
-            tx.execute(
-                "UPDATE OR IGNORE mail_category_votes SET name = ? WHERE name = ?", (keep, name)
-            )
-            tx.execute("UPDATE mail_categories SET proposed = 2 WHERE name = ?", (name,))
-    with ctx.bus.unit_of_work() as work:
-        work.emit("categories.changed", {}, source="agent", trace_id=ctx.trace_id)
-    return f"Folded {len(folded)} into {keep}."
-
-
 def look_for_open_loops(ctx: Context) -> int:
     """Once, for mail sent before this ran: conversations they wrote last, still with no answer."""
     own = signals.own_addresses(ctx)
@@ -872,6 +847,10 @@ def digest_turn(ctx: Context, after: int) -> tuple[TurnRequest, int] | None:
     ), int(rows[-1]["id"])
 
 
+# Marks a run whose first try ran out of room, so its second try is smaller and its last.
+OUT_OF_ROOM = "out-of-room"
+
+
 def settle(ctx: Context, runs: list[int], status: str, error: str | None = None) -> None:
     with ctx.bus.db.transaction() as tx:
         for run in runs:
@@ -881,13 +860,25 @@ def settle(ctx: Context, runs: list[int], status: str, error: str | None = None)
 
 
 def after_turn(ctx: Context, turn: int, runs: list[Any], error: str | None) -> None:
-    """A run that ended without a judgement leaves that mail uncategorized, and says why."""
+    """A run that ended without a judgement leaves that mail uncategorized, and says why.
+
+    One that ran out of room is tried once more, smaller, before it counts as failed.
+    """
     if runs and str(runs[0]["event"]).startswith(bulk_learning.PREFIX):
         bulk_learning.after_turn(ctx, runs[0], turn, error)
         return
     judged = ctx.bus.db.fetch_all("SELECT 1 FROM triage_runs WHERE turn = ? LIMIT 1", (turn,))
     if judged or not runs:
         settle(ctx, [run["id"] for run in runs], "done")
+        return
+    if error == CONTEXT_HELP and not any(run["error"] == OUT_OF_ROOM for run in runs):
+        with ctx.bus.db.transaction() as tx:
+            for run in runs:
+                tx.execute(
+                    "UPDATE trigger_runs SET status = 'pending', turn = NULL, session = NULL,"
+                    " error = ? WHERE id = ?",
+                    (OUT_OF_ROOM, run["id"]),
+                )
         return
     reason = error or UNREADABLE
     Triage(ctx)._failed(runs[0]["thread"], runs, reason)
@@ -1099,7 +1090,7 @@ class Triage:
             provisional = False
             notify = False
             why = reason
-            parsed = {**parsed, "draft": None, "memory": None, "suggest_category": None}
+            parsed = {**parsed, "draft": None, "memory": None}
             if status not in {"waiting_on_others", "resolved"}:
                 status = "waiting_on_others"
             if status != "waiting_on_others":
@@ -1217,8 +1208,7 @@ class Triage:
                     "mail.urgent", {"thread_id": thread}, source="agent", trace_id=ctx.trace_id
                 )
         if filing_only:
-            parsed = {**parsed, "suggest_category": None, "learned": []}
-        self._suggest_category(parsed.get("suggest_category"), thread)
+            parsed = {**parsed, "learned": []}
         memory.add_learned(ctx.config.home, _strings(parsed.get("learned")), thread)
         if learning:
             return
@@ -1242,14 +1232,6 @@ class Triage:
                 triage_message=latest,
             )
 
-    def _vote(self, name: str, thread: int) -> None:
-        with self.ctx.bus.unit_of_work() as work:
-            work.tx.execute(
-                "INSERT OR IGNORE INTO mail_category_votes (name, thread) VALUES (?, ?)",
-                (name, thread),
-            )
-            work.emit("categories.changed", {}, source="agent", trace_id=self.ctx.trace_id)
-
     def _open_asks(self) -> int:
         return int(
             self.ctx.bus.db.fetch_all(
@@ -1259,41 +1241,6 @@ class Triage:
             )[0]["n"]
         )
 
-    def _suggest_category(self, suggestion: Any, thread: int) -> None:
-        """Mail that keeps coming from one place. Once enough does, the person decides, on Today."""
-        if not isinstance(suggestion, dict) or not suggestion.get("name"):
-            return
-        # After the person has sorted their mail, its folders are theirs: the AI doesn't add any.
-        if sorting.decided(self.ctx) == "done":
-            return
-        name = str(suggestion["name"]).strip()[:64]
-        db = self.ctx.bus.db
-        rows = db.fetch_all("SELECT name, proposed FROM mail_categories")
-        taken = [str(row["name"]) for row in rows] + [
-            str(row["category"])
-            for row in db.fetch_all(
-                "SELECT DISTINCT category FROM threads WHERE category IS NOT NULL"
-            )
-        ]
-        area = category_names.area_of(name, taken)
-        waiting = {str(row["name"]) for row in rows if row["proposed"] == 1}
-        if area and area not in waiting:
-            return
-        if not area:
-            with db.transaction() as tx:
-                tx.execute(
-                    "INSERT OR IGNORE INTO mail_categories"
-                    " (name, source, proposed, needs_votes, why, sender, created)"
-                    " VALUES (?, 'agent', 1, 1, ?, ?, ?)",
-                    (
-                        name,
-                        str(suggestion.get("reason") or "")[:500],
-                        str(suggestion.get("sender") or "")[:320] or None,
-                        _now(),
-                    ),
-                )
-        self._vote(area or name, thread)
-
     def _proposals(self, thread: int, parsed: dict[str, Any], subject: str) -> None:
         """The agent proposes. The person accepts tasks and reminders, and sends drafts."""
         ctx = self.ctx
@@ -1301,10 +1248,12 @@ class Triage:
         db = ctx.bus.db
         matter = matters.matter_of(db, thread)
         asked = db.fetch_all(
-            "SELECT id FROM messages WHERE thread_id = ? ORDER BY date DESC, id DESC LIMIT 1",
+            "SELECT id, date FROM messages WHERE thread_id = ? ORDER BY date DESC, id DESC LIMIT 1",
             (thread,),
         )
         source = asked[0]["id"] if asked else None
+        # On the timeline when the email was sent, not when it was read: past mail stays past.
+        sent_at = asked[0]["date"] if asked else None
         for item in parsed.get("tasks") or []:
             if not isinstance(item, dict) or not _title(item.get("title")):
                 continue
@@ -1316,14 +1265,16 @@ class Triage:
             if current:
                 if due and due != current["due"] and current["source"] == "agent":
                     planner.change_task(ctx, current["id"], {"due": due})
-                    matters.note(ctx, thread, "due", f'"{current["title"]}" now due {due}', why)
+                    matters.note(
+                        ctx, thread, "due", f'"{current["title"]}" now due {due}', why, time=sent_at
+                    )
                 continue
             if planner.has_task(db, title, thread) or planner.has_reminder(db, title, thread):
                 continue
             planner.add_task(
                 ctx, title, due, thread, "agent", True, matter=matter, source_message=source
             )
-            matters.note(ctx, thread, "suggested", f'To-do: "{title}"', why)
+            matters.note(ctx, thread, "suggested", f'To-do: "{title}"', why, time=sent_at)
         for item in parsed.get("reminders") or []:
             if (
                 not isinstance(item, dict)
@@ -1339,14 +1290,14 @@ class Triage:
             if current:
                 if when != current[0]["due_at"] and current[0]["source"] == "agent":
                     planner.change_reminder(ctx, current[0]["id"], {"due_at": when})
-                    matters.note(ctx, thread, "due", f"Reminder moved to {when}", why)
+                    matters.note(ctx, thread, "due", f"Reminder moved to {when}", why, time=sent_at)
                 continue
             if planner.has_reminder(db, title, thread) or planner.has_task(db, title, thread):
                 continue
             planner.add_reminder(
                 ctx, title, when, "none", thread, None, "agent", True, matter=matter
             )
-            matters.note(ctx, thread, "suggested", f'Reminder: "{title}"', why)
+            matters.note(ctx, thread, "suggested", f'Reminder: "{title}"', why, time=sent_at)
         for item in parsed.get("deadlines") or []:
             if not isinstance(item, dict) or not _title(item.get("what")):
                 continue
@@ -1359,7 +1310,7 @@ class Triage:
             if task:
                 if due and not task[0]["due"] and task[0]["source"] == "agent":
                     planner.change_task(ctx, task[0]["id"], {"due": due})
-                    matters.note(ctx, thread, "due", f"Due date now {due}", why)
+                    matters.note(ctx, thread, "due", f"Due date now {due}", why, time=sent_at)
                 continue
             # A deadline is a to-do with a date, not a second kind of item beside it.
             what = _title(item["what"])[:300]
@@ -1367,17 +1318,51 @@ class Triage:
                 planner.add_task(
                     ctx, what, due, thread, "agent", True, matter=matter, source_message=source
                 )
-                matters.note(ctx, thread, "suggested", f'To-do: "{what}"', why)
+                matters.note(ctx, thread, "suggested", f'To-do: "{what}"', why, time=sent_at)
+        for ref in parsed.get("finished") or []:
+            self._finished(thread, matter, str(ref), why, sent_at)
         if parsed.get("draft"):
             self._draft(thread, str(parsed["draft"]), subject)
+        # An older model may still send memory: it's a note learned from mail, like learned.
         if parsed.get("memory"):
-            memory.propose(
-                ctx.bus.db,
-                cards.name(ctx.bus.db, AGENT),
-                str(parsed["memory"])[:2000],
-                f"/mail/thread/{thread}",
-                ctx.config.home,
+            memory.add_learned(ctx.config.home, [str(parsed["memory"])], thread)
+
+    def _finished(
+        self, thread: int, matter: int | None, ref: str, why: str, sent_at: str | None
+    ) -> None:
+        """A later email shows open work done. What it only suggested goes; what the person kept
+        is marked, with why, for them to close."""
+        ctx = self.ctx
+        kind, _, number = ref.strip().strip("[]").partition(":")
+        if kind not in {"task", "reminder"} or not number.isdigit():
+            return
+        # Only work it was shown: this conversation's, or its matter's.
+        table, still_open = (
+            ("tasks", "status != 'done'") if kind == "task" else ("reminders", "fired = 0")
+        )
+        rows = ctx.bus.db.fetch_all(
+            f"SELECT id, title, proposed FROM {table} WHERE id = ? AND {still_open}"  # noqa: S608
+            " AND (thread = ? OR (matter IS NOT NULL AND matter = ?))",
+            (int(number), thread, matter),
+        )
+        if not rows:
+            return
+        item = rows[0]
+        if item["proposed"]:
+            remove = planner.remove_tasks if kind == "task" else planner.remove_reminders
+            remove(ctx, [item["id"]])
+            matters.note(
+                ctx,
+                thread,
+                "closed",
+                f'Suggestion "{item["title"]}" dropped: already done',
+                why,
+                time=sent_at,
             )
+            return
+        change = planner.change_task if kind == "task" else planner.change_reminder
+        change(ctx, item["id"], {"looks_done": why or "A later email shows it done"})
+        matters.note(ctx, thread, "looks_done", f'"{item["title"]}" looks done', why, time=sent_at)
 
     def _draft(self, thread: int, body: str, subject: str) -> None:
         ctx = self.ctx

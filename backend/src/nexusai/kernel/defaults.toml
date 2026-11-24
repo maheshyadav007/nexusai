@@ -109,7 +109,7 @@ model_calls_per_minute = 0
 rate_limit_retries = 3
 rate_limit_wait_seconds = 10
 rate_limit_longest_wait = 60
-max_recent_thread_messages = 8
+max_recent_thread_messages = 10
 max_thread_chars = 20000
 memory_max_chars = 8000
 # Per-run token limits: Mail agent runs, learning batches, schedules and team tasks. Off for now,

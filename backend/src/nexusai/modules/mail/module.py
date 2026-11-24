@@ -2718,27 +2718,6 @@ def decide_priority(command: DecidePriority, ctx: Context) -> CategoryList:
     return CategoryList(categories=category_rows(ctx))
 
 
-def suggest_priority(ctx: Context, name: str, reason: str) -> str:
-    """Only for a category with mail in it, that's not there yet and hasn't been turned down."""
-    rows = ctx.bus.db.fetch_all("SELECT * FROM mail_categories WHERE name = ?", (name,))
-    if not rows or rows[0]["proposed"]:
-        return f"There's no category called {name}."
-    if rows[0]["in_priority"]:
-        return f"{name} is in the Priority inbox already."
-    if rows[0]["priority_suggested"]:
-        return f"{name} has been suggested already, or they said no."
-    with ctx.bus.db.transaction() as tx:
-        tx.execute(
-            "UPDATE mail_categories SET priority_suggested = ?, priority_why = ? WHERE name = ?",
-            (PRIORITY_SUGGESTED, reason[:500], name),
-        )
-    _categories_changed(ctx)
-    return f"Suggested {name} for the Priority inbox. The person decides."
-
-
-# Writing
-
-
 def _load_drafts(ctx: Context) -> list[Draft]:
     rows = ctx.bus.db.fetch_all("SELECT id, body FROM mail_drafts ORDER BY updated DESC")
     return [Draft.model_validate({**json.loads(row["body"]), "id": row["id"]}) for row in rows]

@@ -388,16 +388,25 @@ def link(
 
 
 def note(
-    ctx: Context, thread: int | None, kind: str, text: str, why: str = "", by: str = "engine"
+    ctx: Context,
+    thread: int | None,
+    kind: str,
+    text: str,
+    why: str = "",
+    by: str = "engine",
+    time: str | None = None,
 ) -> None:
-    """A change to a conversation's work, on its matter's timeline. Nothing when there's none."""
+    """A change to a conversation's work, on its matter's timeline. Nothing when there's none.
+
+    `time` is when the email behind it was sent, so mail read late isn't today's news.
+    """
     if not thread:
         return
     matter = matter_of(ctx.bus.db, thread)
     if matter is None:
         return
     with ctx.bus.unit_of_work() as work:
-        _event(work.tx, matter, kind, text, why=why, thread=thread, by=by)
+        _event(work.tx, matter, kind, text, why=why, thread=thread, by=by, time=time)
         work.emit("matters.changed", {"matter": matter}, source="agent", trace_id=ctx.trace_id)
 
 
@@ -505,17 +514,20 @@ def row(ctx: Context, matter: Any) -> MatterRow:
     ids = [t["id"] for t in threads]
     statuses = {t["status"] for t in threads}
     work = _work(db, matter["id"], ids)
+    # Only what the person kept is theirs to do. Posty's suggestions wait in For your decision,
+    # and don't move the matter, its next step or its date until they're accepted.
+    kept = [w for w in work if not w.proposed]
     state = (
         "waiting_on_you"
-        if "waiting_on_you" in statuses or any(w.kind == "task" for w in work)
+        if "waiting_on_you" in statuses or any(w.kind == "task" for w in kept)
         else "waiting_on_others"
         if "waiting_on_others" in statuses
         else "fyi"
         if any(t["importance"] == "high" and t["status"] in {"none", "fyi"} for t in threads)
         else "done"
     )
-    dates = sorted(w.when for w in work if w.when)
-    task = next((w for w in work if w.kind == "task"), None)
+    dates = sorted(w.when for w in kept if w.when)
+    task = next((w for w in kept if w.kind == "task"), None)
     action = next((t["next_action"] for t in reversed(threads) if t["next_action"]), None)
     last = max((t["last_date"] for t in threads), default=matter["created"])
     return MatterRow(
@@ -574,6 +586,7 @@ def _change(db: Database, event: Any, titles: dict[int, str]) -> MatterChange:
 def brief(ctx: Context, seen: str | None) -> MattersBrief:
     db = ctx.bus.db
     rows = _matters(ctx)
+    everything = _matters(ctx, include_done=True)
     titles = {m["id"]: m["title"] for m in db.fetch_all("SELECT id, title FROM matters")}
     # The day's changes stay listed; the page marks the ones that came after the person looked.
     since = (datetime.now(UTC) - timedelta(days=1)).isoformat()
@@ -588,7 +601,7 @@ def brief(ctx: Context, seen: str | None) -> MattersBrief:
             MatterDue(matter=r.id, title=r.title, what=w.title, when=w.when, kind=w.kind)
             for r in rows
             for w in r.work
-            if w.when and w.when <= soon
+            if w.when and w.when <= soon and not w.proposed
         ),
         key=lambda item: item.when,
     )
@@ -598,6 +611,10 @@ def brief(ctx: Context, seen: str | None) -> MattersBrief:
         needs_you=[r for r in rows if r.state == "waiting_on_you"],
         waiting=[r for r in rows if r.state == "waiting_on_others"],
         fyi=[r for r in rows if r.state == "fyi"],
+        # Not waiting on them yet, but Posty has suggested something: shown when they ask to.
+        suggested=[
+            r for r in everything if r.state != "waiting_on_you" and any(w.proposed for w in r.work)
+        ],
         next=upcoming,
     )
 
@@ -1257,7 +1274,7 @@ EVENT_WORDS = {
     "started": "started", "joined": "linked", "mail": "email in", "sent": "you wrote",
     "task": "added", "due": "date changed", "closed": "closed", "done": "done",
     "reopened": "opened again", "moved": "moved out", "merged": "merged", "linked": "file linked",
-    "kept": "left open",
+    "kept": "left open", "looks_done": "looks done",
     "suggested": "suggested",
     "accepted": "accepted",
     "declined": "declined",

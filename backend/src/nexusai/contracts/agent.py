@@ -899,7 +899,6 @@ class MailAgentSettings(BaseModel):
     tokens_per_email: int | None = None
     # What it does on its own besides judging each email.
     morning_brief: bool | None = None
-    inbox_review: bool | None = None
 
 
 class GetMailAgentSettings(BaseModel):
@@ -936,7 +935,7 @@ class Schedule(BaseModel):
     id: int | None = None
     title: str = Field(min_length=1, max_length=200)
     prompt: str = Field(default="", max_length=20000)
-    kind: Literal["prompt", "daily-prep", "mail-hourly", "mail-brief", "mail-review"] = "prompt"
+    kind: Literal["prompt", "daily-prep", "mail-hourly", "mail-brief"] = "prompt"
     # Weekdays are Monday to Friday. A month day past the month's end runs on its last day.
     every: Literal["once", "hour", "day", "weekdays", "week", "month", "year"] = "day"
     time: str = Field(default="08:00", pattern=r"^\d{2}:\d{2}$")
@@ -1722,6 +1721,7 @@ MatterEventKind = Literal[
     "merged",
     "linked",
     "kept",
+    "looks_done",
     "suggested",
     "accepted",
     "declined",
@@ -1784,6 +1784,8 @@ class MattersBrief(BaseModel):
     needs_you: list[MatterRow]
     waiting: list[MatterRow]
     fyi: list[MatterRow]
+    # Matters with only Posty's suggestions open, for the "show suggested too" switch.
+    suggested: list[MatterRow] = Field(default_factory=list)
     next: list[MatterDue]
 
 

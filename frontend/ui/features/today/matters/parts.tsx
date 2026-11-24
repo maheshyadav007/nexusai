@@ -44,6 +44,7 @@ export const KIND_MARK: Record<MatterEventKind, { shape: MarkShape; tone: MarkTo
   merged: { shape: "ring", tone: "ink" },
   linked: { shape: "ring", tone: "ink" },
   kept: { shape: "ring", tone: "warning" },
+  looks_done: { shape: "ring", tone: "success" },
   // A suggestion is dashed until it's accepted; a declined one is left grey.
   suggested: { shape: "diamondDashed", tone: "muted" },
   accepted: { shape: "diamond", tone: "warning" },

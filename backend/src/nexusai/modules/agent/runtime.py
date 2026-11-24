@@ -127,7 +127,6 @@ ORIGIN_NOTES = {
     PERSON: "The person sent this message, and they're there to reply.",
     "mail": "New mail arrived, and this run started by itself. Nobody is waiting in the chat.",
     "mail-hourly": "The hourly check started this run by itself. Nobody is waiting in the chat. Summarize the judgements already made; don't judge any email again.",
-    "mail-review": "The inbox review came due, and this run started by itself. Nobody is waiting in the chat. Propose changes to how mail is organized, for the person to accept; don't make them yourself.",
     "mail-learn": "You're reading past mail to learn about the person. Nobody is waiting in the chat.",
     "schedule": "A schedule came due, and this run started by itself. Nobody is waiting in the chat.",
     "event": "Something happened that the person asked to hear about, and this run started by itself. Nobody is waiting in the chat.",

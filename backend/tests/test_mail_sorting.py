@@ -265,21 +265,6 @@ def test_only_the_biggest_tools_get_a_folder_and_the_rest_go_into_automated(ctx:
     assert not names & {"Updates", "Promotions", "Forums", "Social", "Broadcast"}
 
 
-def test_after_sorting_the_ai_suggests_no_folders(ctx: Context) -> None:  # noqa: F811
-    from nexusai.modules.agent.mail_agent import Triage
-
-    suggestion = {"name": "Vendor quotes", "reason": "They keep coming", "sender": "q@v.example"}
-    sorting.skip(ctx)
-    Triage(ctx)._suggest_category(suggestion, 1)
-    # Skipped, the person never settled folders, so the AI may still suggest one.
-    assert ctx.bus.db.fetch_all("SELECT 1 FROM mail_categories WHERE name = 'Vendor quotes'")
-    with ctx.bus.db.transaction() as tx:
-        tx.execute("DELETE FROM mail_categories")
-        tx.execute("UPDATE mail_sorting SET state = 'done'")
-    Triage(ctx)._suggest_category(suggestion, 1)
-    assert not ctx.bus.db.fetch_all("SELECT 1 FROM mail_categories")
-
-
 def test_move_to_inbox_brings_a_sorted_conversation_back_to_the_ai(
     ctx: Context,  # noqa: F811
     mailbox: Any,

@@ -267,23 +267,26 @@ def remember(
 def remember_facts(
     home: Path, db: Database, agent: str, facts: list[str], untrusted: bool, source: str | None
 ) -> tuple[list[str], list[str]]:
-    """As remember, returning which facts were new and which were already known."""
-    known = {
-        _plain(line.lstrip("- "))
+    """As remember, returning which facts were new and which were already known.
+
+    After untrusted input a fact goes in the notes learned from mail, which prompts treat as a
+    guess, never an instruction. The person sees and removes it like any other note.
+    """
+    # One test of "already known", in any wording, so the agent isn't told something is new
+    # and then that it wasn't kept.
+    known = [
+        SOURCE.sub("", line).lstrip("-* ").strip()
         for file in list_files(home)
         for line in file.content.splitlines()
         if line.strip()
-    } | {_plain(row["text"]) for row in db.fetch_all(
-        "SELECT text FROM memory_proposals WHERE status = 'pending'"
-    )}  # fmt: skip
+    ]
     new = []
     for fact in (fact.strip() for fact in facts):
-        if fact and _plain(fact) and _plain(fact) not in known:
-            known.add(_plain(fact))
+        if fact and _plain(fact) and not any(textmatch.same(fact, line) for line in known):
+            known.append(fact)
             new.append(fact)
-    if untrusted:
-        for fact in new:
-            propose(db, agent, fact, source)
+    if untrusted and new:
+        add_learned_sources(home, [(fact, None) for fact in new])
     elif new:
         target = _safe(home, NOTES_PATH)
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -294,6 +297,20 @@ def remember_facts(
         )
     given = [fact.strip() for fact in facts if fact.strip()]
     return new, [fact for fact in given if fact not in new]
+
+
+def settle_proposals(db: Database, home: Path) -> int:
+    """Suggestions from before memory saved by itself are kept, the way it now keeps them."""
+    rows = db.fetch_all("SELECT id, text FROM memory_proposals WHERE status = 'pending'")
+    if not rows:
+        return 0
+    add_learned_sources(home, [(row["text"], None) for row in rows])
+    with db.transaction() as tx:
+        tx.executemany(
+            "UPDATE memory_proposals SET status = 'accepted' WHERE id = ?",
+            [(row["id"],) for row in rows],
+        )
+    return len(rows)
 
 
 def propose(

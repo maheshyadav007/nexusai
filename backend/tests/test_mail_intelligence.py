@@ -10,9 +10,19 @@ import pytest
 from fastapi.testclient import TestClient
 
 from fake_mail import USER, FakeMail, make_mail
+from nexusai.contracts.mail import MailMe
 from nexusai.kernel.config import Config
-from nexusai.modules.agent import bulk_learning, mail_agent, memory, scheduler, signals, tools
+from nexusai.modules.agent import (
+    bulk_learning,
+    mail_agent,
+    memory,
+    providers,
+    scheduler,
+    signals,
+    tools,
+)
 from nexusai.modules.agent.providers import TextChunk, ToolCall
+from nexusai.modules.mail import mentions
 from test_agent_work import (  # noqa: F401
     Script,
     app_config,
@@ -93,10 +103,6 @@ def test_what_the_person_wrote_in_their_profile_reaches_every_agent(
 def test_judging_one_email_only_offers_what_it_needs(client: TestClient) -> None:
     assert tools.allowed_for("mail", "mail", True) == tools.TRIAGE_TOOLS
     assert "draft_reply" not in tools.TRIAGE_TOOLS
-    assert "recommend_mail_change" not in tools.allowed_for("mail", "mail-hourly", False)  # type: ignore[operator]
-    assert "recommend_mail_change" in tools.allowed_for("mail", "mail-review", False)  # type: ignore[operator]
-    assert "recommend_priority" in tools.allowed_for("mail", "mail-review", False)  # type: ignore[operator]
-    assert "recommend_priority" not in tools.allowed_for("mail", "mail-hourly", False)  # type: ignore[operator]
 
 
 def test_a_correction_is_used_from_then_on_but_an_agents_own_change_isnt(
@@ -115,7 +121,7 @@ def test_a_correction_is_used_from_then_on_but_an_agents_own_change_isnt(
     assert "corrections for this sender" in sent
 
 
-def test_the_same_correction_three_times_offers_to_make_it_automatic(
+def test_the_same_correction_three_times_becomes_a_preference_at_once(
     client: TestClient, fake: FakeMail, script: Script
 ) -> None:
     connect(client, fake)
@@ -123,8 +129,11 @@ def test_the_same_correction_three_times_offers_to_make_it_automatic(
         fake.state.deliver(make_mail(subject=f"Habit {number}", message_id=f"<h{number}@x>"))
         thread = judged(client, f"Habit {number}")
         post(client, "thread.setCategory", "commands", id=thread["id"], category="Legal")
-    found = wait(lambda: post(client, "suggestions.list")["suggestions"], "the suggestion")
-    assert found[0]["category"] == "Legal" and found[0]["senders"] == ["priya@example.com"]
+    found = wait(lambda: post(client, "preferences.list")["preferences"], "the preference")
+    assert found[0]["status"] == "active" and found[0]["sender"] == "priya@example.com"
+    assert "category = Legal" in found[0]["instruction"]
+    # Filing the sender's mail is the person's to set up; nothing is offered for it.
+    assert post(client, "suggestions.list")["suggestions"] == []
 
 
 def test_sending_takes_it_off_their_plate_at_once_then_the_agent_says_when_to_chase(
@@ -362,68 +371,6 @@ def suggest(client: TestClient, **values: Any) -> str:
     return suggestions.add(mail_context(client), **values)
 
 
-def test_a_recommendation_needs_real_senders_and_shows_the_apps_own_counts(
-    client: TestClient, fake: FakeMail, script: Script
-) -> None:
-    connect(client, fake)
-    fake.state.deliver(make_mail(subject="Statement", sender="a@bank.com", message_id="<u1@x>"))
-    judged(client, "Statement")
-    made_up = suggest(
-        client, category="Finance", senders=["x@nowhere.com"], reason="r", quiet=False
-    )
-    assert "None of those" in made_up
-    suggest(client, category="Finance", senders=["a@bank.com"], reason="Your bank", quiet=False)
-    assert suggest(client, category="Finance", senders=["a@bank.com"], reason="r", quiet=False) == (
-        "That's been suggested already."
-    )
-    found = post(client, "suggestions.list")["suggestions"]
-    assert [(s["category"], s["emails"]) for s in found] == [("Finance", 1)]
-
-
-def test_accepting_files_whats_here_and_whats_coming_and_declining_is_remembered(
-    client: TestClient, fake: FakeMail, script: Script
-) -> None:
-    connect(client, fake)
-    fake.state.deliver(make_mail(subject="Statement", sender="a@bank.com", message_id="<v1@x>"))
-    thread = judged(client, "Statement")
-    suggest(client, category="Finance", senders=["a@bank.com"], reason="Your bank", quiet=False)
-    found = post(client, "suggestions.list")["suggestions"][0]
-    post(client, "suggestions.decide", "commands", id=found["id"], accept=True)
-    assert row(client, thread["id"])["category"] == "Finance"
-    fake.state.deliver(make_mail(subject="Next one", sender="a@bank.com", message_id="<v2@x>"))
-    assert thread_named(client, "Next one")["category"] == "Finance"
-    suggest(client, category="Junk", senders=["a@bank.com"], reason="No", quiet=False)
-    other = post(client, "suggestions.list")["suggestions"][0]
-    post(client, "suggestions.decide", "commands", id=other["id"], accept=False)
-    again = suggest(client, category="Junk", senders=["a@bank.com"], reason="No", quiet=False)
-    assert again == "That's been suggested already."
-
-
-def test_quiet_only_archives_what_was_read_long_ago_and_never_deletes(
-    client: TestClient, fake: FakeMail, script: Script
-) -> None:
-    connect(client, fake)
-    script.default = triage_reply(status="fyi")
-    fake.state.deliver(
-        make_mail(
-            subject="Old read",
-            sender="a@news.com",
-            message_id="<w1@x>",
-            date="Mon, 01 Jan 2024 10:00:00 +0000",
-        ),
-        flags={"\\Seen"},
-    )
-    fake.state.deliver(make_mail(subject="New unread", sender="a@news.com", message_id="<w2@x>"))
-    old = thread_named(client, "Old read")
-    new = thread_named(client, "New unread")
-    suggest(client, category="News", senders=["a@news.com"], reason="Never read", quiet=True)
-    found = post(client, "suggestions.list")["suggestions"][0]
-    assert found["to_archive"] == 1
-    post(client, "suggestions.decide", "commands", id=found["id"], accept=True)
-    assert row(client, old["id"])["in_inbox"] == 0
-    assert row(client, new["id"])["in_inbox"] == 1
-
-
 def test_what_it_knows_is_what_a_real_run_is_sent(
     client: TestClient, fake: FakeMail, script: Script, app_config: Config
 ) -> None:
@@ -455,42 +402,6 @@ def test_what_it_knows_is_what_a_real_run_is_sent(
     for layer in shown["layers"][1:]:
         assert layer["text"] in sent, layer["name"]
     assert "Atlas plan" in shown["given"] and shown["approx_tokens"] > 0
-
-
-def test_a_review_recommends_and_runs_again_only_when_due(
-    client: TestClient, fake: FakeMail, script: Script
-) -> None:
-    connect(client, fake)
-    for number in range(5):
-        fake.state.deliver(
-            make_mail(
-                subject=f"Deal {number}",
-                sender="deals@shop.com",
-                message_id=f"<x{number}@x>",
-                headers={"List-Unsubscribe": "<mailto:u@shop.com>"},
-            )
-        )
-    wait(lambda: len(post(client, "threads.list")["threads"]) == 5, "the mail", 15)
-    script.replies.append(
-        [
-            ToolCall(
-                "call-1",
-                "recommend_mail_change",
-                {
-                    "category": "Shopping",
-                    "senders": ["deals@shop.com"],
-                    "reason": "You opened 0 of 5",
-                    "quiet": True,
-                },
-            )
-        ]
-    )
-    script.replies.append([TextChunk("Recommended one group.")])
-    triggers = _triggers()
-    triggers.review_now("test-review")
-    triggers.wake.set()
-    found = wait(lambda: post(client, "suggestions.list")["suggestions"], "the recommendation")
-    assert found[0]["category"] == "Shopping" and found[0]["emails"] == 5
 
 
 def _triggers() -> Any:
@@ -527,12 +438,17 @@ def test_the_brief_can_explain_a_quiet_day_without_history_learning(
     assert post(client, "today.view")["prep_text"].startswith("There are no open obligations")
 
 
-def test_the_built_ins_can_be_turned_off(client: TestClient) -> None:
+def test_the_brief_can_be_turned_off_and_there_is_no_inbox_review(client: TestClient) -> None:
     current = post(client, "mailAgent.get")
-    assert current["morning_brief"] and current["inbox_review"]
+    assert current["morning_brief"] and "inbox_review" not in current
     post(client, "mailAgent.save", "commands", mode="both", morning_brief=False)
-    current = post(client, "mailAgent.get")
-    assert not current["morning_brief"] and current["inbox_review"]
+    assert not post(client, "mailAgent.get")["morning_brief"]
+    # Posty doesn't suggest folders or filing, so the weekly run that did is gone.
+    kinds = {
+        row["kind"]
+        for row in client.app.state.bus.db.fetch_all("SELECT kind FROM schedules")  # type: ignore[attr-defined]
+    }
+    assert "mail-review" not in kinds
 
 
 def test_the_model_can_only_use_existing_smart_folders(
@@ -642,20 +558,6 @@ def test_their_own_mass_mail_doesnt_make_everyone_a_contact(
     assert [c.address for c in signals.contacts(mail_context(client))] == ["friend@x.example"]
 
 
-def test_the_same_mail_isnt_offered_twice_under_another_name(
-    client: TestClient, fake: FakeMail, script: Script
-) -> None:
-    connect(client, fake)
-    fake.state.deliver(make_mail(subject="Deal", sender="a@shop.com", message_id="<aa1@x>"))
-    judged(client, "Deal")
-    suggest(client, category="Shopping", senders=["a@shop.com"], reason="r", quiet=False)
-    again = suggest(
-        client, category="Shopping & Food", senders=["a@shop.com"], reason="r", quiet=False
-    )
-    assert again == "That's been suggested already."
-    assert len(post(client, "suggestions.list")["suggestions"]) == 1
-
-
 def test_a_conversation_kept_from_the_ai_stays_kept_when_people_write_in_it(
     client: TestClient, fake: FakeMail, script: Script
 ) -> None:
@@ -748,3 +650,96 @@ def test_read_more_groups_incoming_and_sent_conversations(
         "both conversations",
     )
     assert mail_agent.queue_learning(mail_context(client), 5) == 2
+
+
+def plan_thread(fake: FakeMail, emails: int) -> None:
+    """One conversation, a day per email, so its order is plain."""
+    for day in range(1, emails + 1):
+        fake.state.deliver(
+            make_mail(
+                subject="Plan",
+                body=f"Step {day} of the plan.",
+                message_id=f"<plan{day}@x>",
+                in_reply_to=f"<plan{day - 1}@x>" if day > 1 else None,
+                references="<plan1@x>" if day > 1 else None,
+                date=f"Mon, {day:02d} Jun 2026 09:00:00 +0000",
+            )
+        )
+
+
+def test_a_long_conversation_is_read_newest_first_and_says_what_it_left_out(
+    client: TestClient, fake: FakeMail, script: Script
+) -> None:
+    connect(client, fake)
+    plan_thread(fake, 12)
+    sent = wait(
+        lambda: next((told(r) for r in script.requests if "Step 12 " in told(r)), None),
+        "newest read",
+    )
+    assert "Emails, newest first" in sent
+    assert sent.index("Step 12 ") < sent.index("Step 11 ")
+    assert "Step 2 " not in sent
+    assert "2 older emails not shown. read_thread with skip_newest=10 reads them." in sent
+
+
+def test_each_email_is_judged_from_a_clean_context(
+    client: TestClient, fake: FakeMail, script: Script
+) -> None:
+    connect(client, fake)
+    fake.state.deliver(make_mail(subject="First one", body="Alpha words.", message_id="<c1@x>"))
+    judged(client, "First one")
+    fake.state.deliver(
+        make_mail(subject="Second one", sender="Ravi <ravi@other.com>", message_id="<c2@x>")
+    )
+    judged(client, "Second one")
+    sent = told(script.requests[-1])
+    # Nothing of the earlier run: not its email, not what the model said or did with it.
+    assert "Second one" in sent and "Alpha words" not in sent
+    assert not [m for m in script.requests[-1].messages if m.role in {"assistant", "tool"}]
+    # The chat still shows both.
+    view = post(client, "session.get", id=mail_agent.SESSION_ID)
+    shown = json.dumps(view["messages"])
+    assert "First one" in shown and "Second one" in shown
+
+
+def test_a_run_that_runs_out_of_room_is_tried_once_more_smaller(
+    client: TestClient, fake: FakeMail, script: Script
+) -> None:
+    connect(client, fake)
+    script.replies = [[providers.ModelContextExceeded(providers.CONTEXT_HELP)]]
+    fake.state.deliver(make_mail(subject="Huge", message_id="<h1@x>"))
+    judged(client, "Huge")
+    assert "ran out of room" in told(script.requests[-1])
+    assert "ran out of room" not in told(script.requests[0])
+
+
+def test_a_run_out_of_room_twice_is_left_unjudged_and_says_why(
+    client: TestClient, fake: FakeMail, script: Script
+) -> None:
+    connect(client, fake)
+    script.replies = [[providers.ModelContextExceeded(providers.CONTEXT_HELP)]] * 2
+    fake.state.deliver(make_mail(subject="Huge", message_id="<h2@x>"))
+    thread = thread_named(client, "Huge")
+    wait(lambda: "Not triaged" in str(row(client, thread["id"])["why"] or "") or None, "failed")
+    assert len(script.requests) == 2
+
+
+def test_the_names_they_gave_tell_the_agent_who_they_are(
+    client: TestClient, fake: FakeMail, script: Script, app_config: Config
+) -> None:
+    connect(client, fake)
+    mentions.save(
+        app_config.home,
+        MailMe(names=["Mahi", "PLM Team"], ids=["myadav01"], not_you=["Mahesh Kumar"]),
+    )
+    fake.state.deliver(
+        make_mail(
+            subject="BOM", body="Hi all,\n\nMahi, can you check the BOM today?", to="list@x.com"
+        )
+    )
+    judged(client, "BOM")
+    sent = told(script.requests[-1])
+    assert "names the person or their team: “Mahi, can you check the BOM today?”" in sent
+    assert "Names that mean them or their teams: Mahi, PLM Team" in sent
+    assert "How tools and colleagues tag them: myadav01" in sent
+    assert "not them, though the names look alike: Mahesh Kumar" in sent

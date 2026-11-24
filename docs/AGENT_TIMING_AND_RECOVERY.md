@@ -11,7 +11,6 @@ Audited against the implementation on 2026-11-06. These are application defaults
 | Mail agent modes | `each`: process eligible mail as it arrives; `hourly`: hold ordinary mail until the hourly release; `both` (default): individual judgement plus an hourly summary of completed judgements. Bulk learning does not wait for the hourly release. |
 | Interview | Learning finishes with new uncertainty. An existing interview is reused; an initial attempt held for a model outage reuses its empty session. Applying learning choices is refused while account learning batches remain unfinished. |
 | Morning brief | Default 08:30 daily in the schedule's saved timezone. |
-| Inbox review | Default Monday 09:00 in the saved timezone, plus applicable upgrade/catch-up reviews. |
 | Custom schedules | Saved once/daily/weekly schedule, or Run now. A manual run does not require the recurring schedule to be enabled. |
 | Custom event agents | Enabled matching event trigger. Event identities prevent replaying the same event as a second queue entry. |
 | Reminders, overdue deadlines, follow-ups | Due checks while time checks are enabled. Overdue/follow-up notices stay unconsumed during quiet hours and are attempted afterward. |

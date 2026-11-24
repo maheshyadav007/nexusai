@@ -13,7 +13,6 @@ All runtime agents receive the system rules, their job prompt, the person's prof
 | Historical filing | Dedicated filing instruction and existing folder settings. Cannot overwrite importance/status, create work, learn facts or suggest categories through its recorded result. |
 | Interview | Current account's unresolved learning, existing personal instructions, source sender identities and at most three targeted questions. Narrow tools permit reading evidence and applying approved learning answers; files, commands, sending, tasks, folders and agent creation are unavailable. All interviews require review for personal prompt changes, including manually started interviews. |
 | Hourly digest | Completed judgements, account/source threads and current work board. Does not rejudge mail. Existing work prevents repeated proposals. |
-| Inbox review | Current review evidence, personalized settings and work board. Uses the same guarded runtime and evidence boundaries. |
 | Morning brief | Obligations snapshot, applicable source thread preferences, brief wishes and coverage limits. Proposed work is distinguished from accepted commitments. |
 | Custom event runs | Event evidence is bounded as external data; source threads/account are saved with the run. Different mailbox accounts are not combined in one source batch. |
 | Scheduled runs | Saved schedule instructions, context profile and timezone; runtime clock identifies the timezone. Relevant obligation source threads accompany built-in scheduled work. |

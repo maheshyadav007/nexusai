@@ -72,9 +72,8 @@ CADENCE_MIGRATION = Migration(
 )
 FOLLOW_UP_NOTICE_KIND = "follow-up"
 BRIEF_KIND = "mail-brief"
-REVIEW_KIND = "mail-review"
 # What the Mail agent runs for itself, which the person turns on and off through its settings.
-BUILT_IN_KINDS = ("mail-hourly", BRIEF_KIND, REVIEW_KIND)
+BUILT_IN_KINDS = ("mail-hourly", BRIEF_KIND)
 
 
 def system_timezone() -> str:
@@ -238,8 +237,8 @@ def start_built_ins(ctx: Context) -> None:
     """The ones that come with the app have no time set until they first run."""
     initialize_timezones(ctx)
     rows = ctx.bus.db.fetch_all(
-        "SELECT * FROM schedules WHERE enabled = 1 AND next_run IS NULL AND kind IN (?, ?)",
-        (BRIEF_KIND, REVIEW_KIND),
+        "SELECT * FROM schedules WHERE enabled = 1 AND next_run IS NULL AND kind = ?",
+        (BRIEF_KIND,),
     )
     for row in rows:
         following = next_scheduled_run(row_to_schedule(row), datetime.now(UTC))

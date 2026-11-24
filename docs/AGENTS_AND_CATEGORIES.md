@@ -23,7 +23,7 @@ There are **5 agents**, plus 3 helpers that make a single model call. All of the
 | Draft reply | Writes a reply for the person to check. Nothing is saved or sent | Draft reply on a thread or on Today |
 | Compact | Shortens a long chat for the model | Compact, or a chat getting too long |
 
-The Agents list also shows **Reading past mail** and **Inbox review** as their own rows. Both are runs of the Mail agent, in its one chat.
+The Agents list also shows **Reading past mail** as its own row. It's a run of the Mail agent, in its one chat.
 
 ## What starts each one
 
@@ -38,7 +38,6 @@ A typed message, an event and the clock all start a run the same way. One thread
 | After the person sends | Mail agent | `mail.sent` | Works out what comes next. Their plate updates first, with no model |
 | After a question is answered | Mail agent | The person's answer | Judges that conversation again with the answer |
 | Hourly check | Mail agent | The `mail-hourly` schedule | Each hour with mail handled since the last check, and no run if there's nothing new. Off until the Mail agent settings are saved with Hourly or Both |
-| Inbox review | Mail agent | The `mail-review` schedule | Mondays at 09:00, and after reading past mail |
 | Getting to know the person | First meeting | Reading past mail finishing | Once |
 | Your brief | Your brief | The `mail-brief` schedule | Every day at 08:30 |
 | Prompt schedule | Scheduled | A schedule the person made | When they set |
@@ -103,14 +102,10 @@ These folders are never suggested for Priority, though the person can add one. M
 
 ### Keeping duplicates out
 
-No mail is read twice for any of this.
+The agent files mail only into folders that exist; it doesn't suggest new ones (removed 2026-11-24).
 
 1. **Overlapping names become one.** HR, HR feedback and HR communication share the word HR (`modules/agent/category_names.py`). Words that only describe the kind of mail don't count, so Product updates doesn't join Updates. The shortest name is kept.
-2. **The agent is told what exists.** Each email it judges comes with the existing and suggested categories.
-3. **A suggestion needs evidence.** Each conversation that would go in it is recorded, and the card appears at `agent.category_suggestion_min_threads` (5). Accepting files all of them, with no model call.
-4. **A no is remembered.** That name and anything overlapping it isn't suggested again.
-5. **Different words for the same thing,** like HR and People team, are folded by the Inbox review, which sees only the names and can only fold suggestions.
-6. **A one-time tidy** runs at startup for what was named before this. Overlapping suggestions become one, and folders the agent made merge into the shortest name, keeping their mail. Folders the person made aren't touched.
+2. **A one-time tidy** runs at startup for what was named before this. Folders the agent made merge into the shortest name, keeping their mail. Folders the person made aren't touched.
 
 ### Empty folders
 
@@ -125,15 +120,14 @@ A conversation in the Inbox shows in Priority if any of these is true:
 - Its category is in Priority.
 - It's from the last 7 days, not low importance, with no category yet, so new mail isn't hidden before it's judged.
 
-A category joins Priority in one of three ways:
+A category joins Priority in one of two ways:
 
 | Way | How |
 |---|---|
 | By hand | Right-click it in the sidebar, or use Settings |
 | Chat | "Put Customers in my priority inbox" |
-| Suggestion | The Inbox review sees how much of each category needed the person, and suggests up to three. A card on Today shows the app's own counts, and a no is remembered |
 
-Promotions, Updates, Forums and Social are never suggested. Server folders can't join Priority yet.
+Server folders can't join Priority yet.
 
 
 ## Coordination and feedback

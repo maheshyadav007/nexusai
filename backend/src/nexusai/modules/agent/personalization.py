@@ -209,7 +209,6 @@ def propose_from_correction(
             instruction=instruction,
             evidence=evidence,
         ),
-        proposed=True,
     )
 
 
