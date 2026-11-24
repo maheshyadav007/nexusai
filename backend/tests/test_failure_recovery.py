@@ -270,22 +270,19 @@ def test_quiet_hours_defer_obligation_notices_without_marking_them_sent(
 ) -> None:
     with ctx.bus.db.transaction() as tx:
         tx.execute(
-            "INSERT INTO work_board(kind,title,due,by,updated) VALUES('deadline','Do this','2020-01-01','Test',?)",
+            "INSERT INTO tasks(title,notes,status,due,source,proposed,created)"
+            " VALUES('Do this','','todo','2020-01-01','person',0,?)",
             (mail_agent._now(),),
         )
     timer = scheduler.Scheduler(ctx)
     monkeypatch.setattr(scheduler.channel, "in_quiet_hours", lambda *_: True)
     timer._overdue(datetime.now(UTC))
-    assert (
-        ctx.bus.db.fetch_all("SELECT overdue_notified_at FROM work_board")[0]["overdue_notified_at"]
-        is None
-    )
+    told = "SELECT overdue_notified_for FROM tasks"
+    assert ctx.bus.db.fetch_all(told)[0]["overdue_notified_for"] is None
     monkeypatch.setattr(scheduler.channel, "in_quiet_hours", lambda *_: False)
     timer._overdue(datetime.now(UTC))
     timer._overdue(datetime.now(UTC))
-    assert ctx.bus.db.fetch_all("SELECT overdue_notified_at FROM work_board")[0][
-        "overdue_notified_at"
-    ]
+    assert ctx.bus.db.fetch_all(told)[0]["overdue_notified_for"] == "2020-01-01"
     assert (
         len(ctx.bus.db.fetch_all("SELECT 1 FROM events WHERE type='notification.requested'")) == 1
     )

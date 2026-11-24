@@ -38,4 +38,4 @@ Noted 2026-11-24. The notifications panel needs a "Clear all" button that clears
 
 ## Posty sees what the app shows
 
-Planned 2026-11-24 in `docs/AGENT_SYNC_PLAN.md`: one shared day view for Today and Posty, the object model in Posty's prompt, one address per object used to open, cite and act, citations for every kind, and where to start set by the prompt, not by code.
+Built 2026-11-24, as planned in `docs/AGENT_SYNC_PLAN.md`: one shared day view for Today and Posty, the object model in the shared prompt, one address per object used to open, cite and act, citations for every kind, where to start set by the prompt, and the work board retired. Left: try it on the real account with the real model (asked first, since it spends the ChatGPT allowance).

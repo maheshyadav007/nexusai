@@ -28,7 +28,7 @@ def test_the_lead_starts_small_and_a_found_tool_stays_offered(
     assert "find_tools" in first and "remember" in first and "list_memory" in first
     assert "save_rule" not in first and "run_command" not in first
     # What its prompt reaches for first, out of the 80 or so it may use.
-    assert "read_work_board" in first and "list_rules" in first
+    assert "open_item" in first and "find_matters" in first and "list_rules" in first
     assert len(first) < 35
     assert "save_rule" in second and "list_rules" in second
     assert "save_rule" in third

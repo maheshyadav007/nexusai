@@ -34,7 +34,7 @@ from nexusai.kernel import textmatch
 from nexusai.kernel.database import Database, Migration
 from nexusai.kernel.module import CommandError, Context
 from nexusai.modules.agent import conversations, links, signals
-from nexusai.modules.agent.kinds import parse, ref
+from nexusai.modules.agent.kinds import address, parse, ref
 from nexusai.modules.mail import accounts
 from nexusai.modules.mail.parse import normalize_subject
 from nexusai.modules.mail.source import thread_source
@@ -180,26 +180,57 @@ def adopt_all(ctx: Context) -> None:
             "UPDATE reminders SET matter = (SELECT matter FROM matter_threads WHERE thread = reminders.thread)"
             " WHERE matter IS NULL AND task IS NULL AND thread IN (SELECT thread FROM matter_threads)"
         )
-        # A deadline beside a to-do for the same thing showed twice. It becomes the to-do's date
-        # when the to-do has none, and is put away; nothing is deleted.
-        for deadline in tx.execute(
-            "SELECT id, due, thread FROM work_board WHERE kind = 'deadline' AND done = 0 AND thread IS NOT NULL"
+        # The work board is retired, so tasks are the one record of the work. What's still open
+        # on it becomes its task's date, or a suggested task the person can keep, and is put
+        # away. A deadline for work already finished just goes. Nothing is deleted.
+        for item in tx.execute(
+            "SELECT id, kind, title, due, thread FROM work_board WHERE done = 0"
         ).fetchall():
-            task = tx.execute(
-                "SELECT id, due FROM tasks WHERE status != 'done' AND (thread = ? OR matter ="
-                " (SELECT matter FROM matter_threads WHERE thread = ?)) ORDER BY thread = ? DESC, id LIMIT 1",
-                (deadline["thread"], deadline["thread"], deadline["thread"]),
-            ).fetchone()
-            if task:
-                if not task["due"] and deadline["due"]:
-                    tx.execute(
-                        "UPDATE tasks SET due = ? WHERE id = ?", (deadline["due"][:10], task["id"])
-                    )
-                tx.execute(
-                    "UPDATE work_board SET done = 1, updated = ? WHERE id = ?",
-                    (_now(), deadline["id"]),
-                )
+            _retire(tx, item)
     links.tidy(ctx.bus.db)
+
+
+def _retire(tx: Any, item: Any) -> None:
+    """One open item of the old work board, moved onto the tasks."""
+    if item["kind"] in ("deadline", "task"):
+        thread = item["thread"]
+        due = (item["due"] or "")[:10] or None
+        same = (
+            "(thread = ? OR matter = (SELECT matter FROM matter_threads WHERE thread = ?))"
+            " ORDER BY thread = ? DESC, id LIMIT 1"
+        )
+        task = (
+            tx.execute(
+                f"SELECT id, due FROM tasks WHERE status != 'done' AND {same}", (thread,) * 3
+            ).fetchone()  # noqa: S608
+            if thread
+            else None
+        )
+        finished = (
+            tx.execute(
+                f"SELECT id FROM tasks WHERE status = 'done' AND {same}", (thread,) * 3
+            ).fetchone()  # noqa: S608
+            if thread
+            else None
+        )
+        today = datetime.now().astimezone().strftime("%Y-%m-%d")
+        if task:
+            if not task["due"] and due:
+                tx.execute("UPDATE tasks SET due = ? WHERE id = ?", (due, task["id"]))
+        elif not finished and (due is None or due >= today):
+            matter = (
+                tx.execute(
+                    "SELECT matter FROM matter_threads WHERE thread = ?", (thread,)
+                ).fetchone()
+                if thread
+                else None
+            )
+            tx.execute(
+                "INSERT INTO tasks (title, notes, status, due, thread, source, proposed, created, updated, matter)"
+                " VALUES (?, '', 'todo', ?, ?, 'agent', 1, ?, ?, ?)",
+                (item["title"], due, thread, _now(), _now(), matter["matter"] if matter else None),
+            )
+    tx.execute("UPDATE work_board SET done = 1, updated = ? WHERE id = ?", (_now(), item["id"]))
 
 
 def _facts(db: Database, threads: list[int], own: set[str]) -> dict[str, Any]:
@@ -476,10 +507,6 @@ def _work(db: Database, matter: int, threads: list[int]) -> list[MatterWork]:
             f" OR task IN ({under})) ORDER BY due_at",
             (matter, *threads, *task_ids),
         )
-    ]  # fmt: skip
-    found += [
-        MatterWork(kind="deadline", id=r["id"], title=r["title"], when=r["due"], thread=r["thread"])
-        for r in db.fetch_all(f"SELECT * FROM work_board WHERE done = 0 AND kind = 'deadline' AND thread IN ({marks})", tuple(threads))  # noqa: S608
     ]  # fmt: skip
     return found
 
@@ -884,7 +911,7 @@ def detail(ctx: Context, matter: int) -> MatterDetail:
 
 
 def done(ctx: Context, matter: int) -> int:
-    """Every conversation in it done, and with them their tasks, reminders and deadlines."""
+    """Every conversation in it done, and with them their tasks and reminders."""
     db = ctx.bus.db
     threads = _threads_of(db, matter)
     before = {str(t["id"]): t["status"] for t in threads if t["status"] != "resolved"}
@@ -970,7 +997,7 @@ def unlink(ctx: Context, thread: int) -> int:
 # The rest of the matter -------------------------------------------------------------------------
 
 
-def _home(db: Database, kind: str, identifier: int) -> tuple[int | None, int | None, int | None]:
+def home(db: Database, kind: str, identifier: int) -> tuple[int | None, int | None, int | None]:
     """The matter something belongs to, the email that asked for it, and its conversation."""
     if kind == "thread":
         return matter_of(db, identifier), None, identifier
@@ -994,16 +1021,12 @@ def _home(db: Database, kind: str, identifier: int) -> tuple[int | None, int | N
             return None, None, None
         r = rows[0]
         if r["task"]:
-            return _home(db, "task", r["task"])
+            return home(db, "task", r["task"])
         return (
             r["matter"] or (matter_of(db, r["thread"]) if r["thread"] else None),
             None,
             r["thread"],
         )
-    if kind == "deadline":
-        rows = db.fetch_all("SELECT thread FROM work_board WHERE id = ?", (identifier,))
-        thread = rows[0]["thread"] if rows else None
-        return (matter_of(db, thread) if thread else None), None, thread
     return None, None, None
 
 
@@ -1019,7 +1042,7 @@ def related_open(ctx: Context, trigger: str) -> MatterRelated:
         return MatterRelated()
     db = ctx.bus.db
     kind, identifier = found
-    matter, source, thread = _home(db, kind, identifier)
+    matter, source, thread = home(db, kind, identifier)
     titled = db.fetch_all("SELECT title FROM matters WHERE id = ?", (matter,)) if matter else []
     if matter is None or not titled:
         return MatterRelated()
@@ -1091,12 +1114,6 @@ def _close_one(ctx: Context, kind: str, identifier: int) -> None:
         planner.change_task(ctx, identifier, {"status": "done"})
     elif kind == "reminder":
         planner.change_reminder(ctx, identifier, {"fired": 1})
-    elif kind == "deadline":
-        with ctx.bus.unit_of_work() as work:
-            work.tx.execute(
-                "UPDATE work_board SET done = 1, updated = ? WHERE id = ?", (_now(), identifier)
-            )
-            work.emit("board.changed", {}, source="agent", trace_id=ctx.trace_id)
     elif kind == "thread":
         rows = ctx.bus.db.fetch_all("SELECT status FROM threads WHERE id = ?", (identifier,))
         if (
@@ -1161,12 +1178,6 @@ def reopen_items(ctx: Context, items: list[str]) -> int:
             planner.change_task(ctx, identifier, {"status": "todo"})
         elif kind == "reminder":
             planner.change_reminder(ctx, identifier, {"fired": 0})
-        elif kind == "deadline":
-            with ctx.bus.unit_of_work() as work:
-                work.tx.execute(
-                    "UPDATE work_board SET done = 0, updated = ? WHERE id = ?", (_now(), identifier)
-                )
-                work.emit("board.changed", {}, source="agent", trace_id=ctx.trace_id)
         elif kind == "thread":
             if conversations._set_status(ctx, identifier, "waiting_on_you", "resolved"):
                 conversations.reopen_work(ctx, identifier)
@@ -1376,15 +1387,184 @@ def context_for(ctx: Context, thread: int) -> str:
 # What the brief is given -------------------------------------------------------------------------
 
 PLATE_MATTERS = 15
+# As many matters as find_matters lists before asking for more words.
+FOUND_MATTERS = 30
 PLATE_LOOSE = 10
 
 
+# Opening one thing by its address --------------------------------------------------------------
+
+
+def _file_address(file: MatterFile) -> str:
+    """A matter's file as the document it is: an email's attachment, or a document linked to it."""
+    kind, _, rest = file.ref.partition(":")
+    return address("doc", f"m:{rest}" if kind == "attachment" else f"u:{rest}")
+
+
+def open_text(ctx: Context, kind: str, identifier: int) -> str:
+    """A matter, task or reminder in full, with everything it points to written by address, so
+    the next thing to open is right there."""
+    if kind == "matter":
+        return _open_matter(ctx, identifier)
+    db = ctx.bus.db
+    table, when = ("tasks", "due") if kind == "task" else ("reminders", "due_at")
+    rows = db.fetch_all(f"SELECT * FROM {table} WHERE id = ?", (identifier,))  # noqa: S608
+    if not rows:
+        return f"{address(kind, identifier)} no longer exists."
+    r = rows[0]
+    if kind == "task":
+        state = f"done {_local(r['completed'])}" if r["status"] == "done" else r["status"]
+    else:
+        state = (
+            f"went off {r['due_at']}" if r["fired"] else f"at {r['due_at']}, repeats {r['repeat']}"
+        )
+    lines = [
+        f'{address(kind, identifier)} "{r["title"]}" · {state}'
+        + (" · suggested, not kept yet" if r["proposed"] else "")
+        + (f" · due {r[when]}" if kind == "task" and r[when] else "")
+    ]
+    if kind == "task" and r["notes"]:
+        lines.append(f"Notes: {_short(r['notes'], 300)}")
+    if r["looks_done"]:
+        lines.append(f"Looks done: {_short(r['looks_done'], 200)}")
+    owner, _, thread = home(db, kind, identifier)
+    if owner:
+        found = db.fetch_all("SELECT * FROM matters WHERE id = ?", (owner,))
+        if found:
+            shown = row(ctx, found[0])
+            lines.append(f'In {address("matter", owner)} "{shown.title}" · {shown.state}')
+    else:
+        lines.append("Not part of a matter.")
+    if kind == "reminder" and r["task"]:
+        lines.append(f"For {address('task', r['task'])}")
+    if thread:
+        lines.append(f"Asked in {address('thread', thread)}")
+    if kind == "task":
+        lines += [
+            f"- reminder {address('reminder', w['id'])} at {w['due_at']}"
+            for w in db.fetch_all(
+                "SELECT id, due_at FROM reminders WHERE task = ? AND fired = 0", (identifier,)
+            )
+        ]
+    return "\n".join(lines)
+
+
+def _open_matter(ctx: Context, matter: int) -> str:
+    db = ctx.bus.db
+    into = links.live(db, ref("matter", matter), "merged")
+    if into:
+        other = parse(into[0]["other"])
+        return f"{address('matter', matter)} was merged into {address(*other) if other else 'another'}. Open that one."
+    try:
+        whole = detail(ctx, matter)
+    except CommandError as error:
+        return error.message
+    m = whole.matter
+    looks = {
+        (kind, r["id"]): r["looks_done"]
+        for kind, table in (("task", "tasks"), ("reminder", "reminders"))
+        for r in db.fetch_all(f"SELECT id, looks_done FROM {table} WHERE looks_done IS NOT NULL")  # noqa: S608
+    }
+    lines = [f'{address("matter", m.id)} "{m.title}" · {m.state} · due {m.due or "none"}']
+    lines.append("Conversations:")
+    lines += [f"- {address('thread', t.id)} {t.subject} ({t.status})" for t in whole.threads]
+    if m.work or whole.done:
+        lines.append("Work:")
+    for w in m.work:
+        label = (
+            "suggested, not kept yet"
+            if w.proposed
+            else "looks done"
+            if (w.kind, w.id) in looks
+            else "open"
+        )
+        lines.append(
+            f"- {label} {address(w.kind, w.id)} {w.title}"
+            + (f" due {w.when}" if w.when else "")
+            + (f": {_short(looks[(w.kind, w.id)], 120)}" if (w.kind, w.id) in looks else "")
+        )
+    lines += [f"- done {address(w.kind, w.id)} {w.title} {_local(w.when)}" for w in whole.done[:10]]
+    if whole.related:
+        lines.append("Related:")
+        lines += [
+            f"- {address('matter', r.matter)} {r.title} ({r.state}): {r.why}" for r in whole.related
+        ]
+    if whole.files:
+        lines.append("Files:")
+        lines += [f"- {_file_address(f)} {f.title}" for f in whole.files]
+    lines.append("What happened, oldest first:")
+    lines += [f"  {e.time[:10]} {e.kind}: {e.text}" for e in whole.events[-20:]]
+    return "\n".join(lines)
+
+
+def find(ctx: Context, words: str, state: str) -> str:
+    """Matters by words in their title or people, and by state, newest first."""
+    rows = _matters(ctx, include_done=state == "done")
+    if state != "open":
+        rows = [r for r in rows if r.state == state]
+    wanted = words.casefold().split()
+    rows = [
+        r for r in rows if all(w in f"{r.title} {' '.join(r.people)}".casefold() for w in wanted)
+    ]
+    rows.sort(key=lambda r: r.last_date, reverse=True)
+    lines = [
+        f'{address("matter", r.id)} "{_short(r.title, 90)}" · {r.state}'
+        + (f" · due {r.due}" if r.due else "")
+        + f" · {r.emails} emails · last {r.last_date[:10]}"
+        for r in rows[:FOUND_MATTERS]
+    ]
+    if len(rows) > FOUND_MATTERS:
+        lines.append(f"and {len(rows) - FOUND_MATTERS} more: add words to narrow it.")
+    return "\n".join(lines) or "No matter matches. Try fewer words, or search_mail."
+
+
+# Finished work stays in view this long, so an email isn't read as an open ask once it's done.
+RECENTLY_DONE_DAYS = 2
+
+
+def standing(ctx: Context, thread: int, most: int = 4) -> str:
+    """Where a conversation stands, in a line, by address: its matter and state, its open work
+    and what was finished in it lately."""
+    db = ctx.bus.db
+    matter = matter_of(db, thread)
+    found = db.fetch_all("SELECT * FROM matters WHERE id = ?", (matter,)) if matter else []
+    if not found:
+        rows = db.fetch_all("SELECT status FROM threads WHERE id = ?", (thread,))
+        return f"Where it stands: not part of a matter · {rows[0]['status'] if rows else 'gone'}"
+    shown = row(ctx, found[0])
+    since = (datetime.now(UTC) - timedelta(days=RECENTLY_DONE_DAYS)).isoformat()
+    ids = [t["id"] for t in _threads_of(db, shown.id)]
+    parts = [f"{address('matter', shown.id)} {shown.state}"]
+    parts += [
+        f"{'suggested' if w.proposed else 'open'} {address(w.kind, w.id)} {_short(w.title, 60)}"
+        + (f" due {w.when}" if w.when else "")
+        for w in shown.work[:most]
+    ]
+    parts += [
+        f"done {address(w.kind, w.id)} {_short(w.title, 60)} {_local(w.when)}"
+        for w in _done_work(db, shown.id, ids)
+        if (w.when or "")[:16] >= since[:16]
+    ][:most]
+    return "Where it stands: " + " · ".join(parts)
+
+
 def plate(ctx: Context) -> str:
-    """What's going on, one matter at a time, then what isn't part of one. Each list is cut short
-    with a count, so a full mailbox never floods the brief, and nothing appears twice."""
+    """What's going on, one matter at a time, then what isn't part of one and what finished since
+    yesterday. Each list is cut short with a count, so a full mailbox never floods the brief, and
+    nothing appears twice. Every object is written by its address, to open and to cite."""
     db = ctx.bus.db
     rows = _matters(ctx)
     parts: list[str] = []
+    counts = Counter(r.state for r in rows)
+    parts.append(
+        f"Matters waiting on them: {counts['waiting_on_you']} · waiting on others:"
+        f" {counts['waiting_on_others']} · worth knowing: {counts['fyi']}"
+    )
+    looks = {
+        (kind, r["id"]): r["looks_done"]
+        for kind, table in (("task", "tasks"), ("reminder", "reminders"))
+        for r in db.fetch_all(f"SELECT id, looks_done FROM {table} WHERE looks_done IS NOT NULL")  # noqa: S608
+    }
     lines: list[str] = []
     for shown in rows[:PLATE_MATTERS]:
         when = f" · due {shown.due}" if shown.due else ""
@@ -1394,24 +1574,36 @@ def plate(ctx: Context) -> str:
             else ""
         )
         lines.append(
-            f'[{shown.id}] "{_short(shown.title, 90)}" · {shown.state}{when}{quiet} · {shown.emails} emails'
+            f'{address("matter", shown.id)} "{_short(shown.title, 90)}" · {shown.state}{when}{quiet} · {shown.emails} emails'
         )
         if shown.next:
             lines.append(f"   next: {_short(shown.next, 100)}")
         work = [w for w in shown.work if not (w.kind == "reminder" and w.parent is not None)]
-        if work:
+        for label, chosen in (
+            ("open", [w for w in work if not w.proposed and (w.kind, w.id) not in looks]),
+            ("suggested, not kept yet", [w for w in work if w.proposed]),
+        ):
             listed = [
-                f"[{w.kind}:{w.id}] {_short(w.title, 70)}" + (f" due {w.when}" if w.when else "")
-                for w in work[:CONTEXT_ITEMS]
+                f"{address(w.kind, w.id)} {_short(w.title, 70)}"
+                + (f" due {w.when}" if w.when else "")
+                for w in chosen[:CONTEXT_ITEMS]
             ]
-            left = len(work) - len(listed)
-            lines.append(
-                "   open: " + " · ".join(listed) + (f" · and {left} more" if left > 0 else "")
-            )
+            left = len(chosen) - len(listed)
+            if listed:
+                lines.append(
+                    f"   {label}: "
+                    + " · ".join(listed)
+                    + (f" · and {left} more" if left > 0 else "")
+                )
+        for w in work:
+            if (w.kind, w.id) in looks and not w.proposed:
+                lines.append(
+                    f"   looks done: {address(w.kind, w.id)} {_short(w.title, 70)}: {_short(looks[(w.kind, w.id)], 100)}"
+                )
         if shown.latest:
             why = db.fetch_all("SELECT why FROM threads WHERE id = ?", (shown.latest.ref,))
             lines.append(
-                f"   latest: [mail:{shown.latest.ref}] {_short(shown.latest.detail or '', 40)}, "
+                f"   latest: {address('mail', shown.latest.ref)} {_short(shown.latest.detail or '', 40)}, "
                 f"{(shown.latest.date or '')[:10]}: {_short((why[0]['why'] if why else '') or shown.latest.title, 140)}"
             )
     if lines:
@@ -1454,4 +1646,30 @@ def plate(ctx: Context) -> str:
             + "\n".join(f"- {line}" for line in listed)
             + (f"\n- and {more} more" if more > 0 else "")
         )
+    from nexusai.modules.agent import briefs
+
+    # The same list Today shows under the brief.
+    finished = briefs.done_since(ctx, briefs.since_yesterday())
+    if finished:
+        listed = [
+            f"- {item['address']} {_short(item['title'], 80)}, done {_local(item['when'])}"
+            + (f": {_short(item['why'], 80)}" if item["why"] else "")
+            for item in finished[:PLATE_LOOSE]
+        ]
+        more = len(finished) - len(listed)
+        parts.append(
+            "Done since yesterday:\n"
+            + "\n".join(listed)
+            + (f"\n- and {more} more" if more > 0 else "")
+        )
     return "\n\n".join(parts)
+
+
+def _local(moment: str | None) -> str:
+    """A stored UTC time as the person's local day and time."""
+    if not moment:
+        return ""
+    try:
+        return datetime.fromisoformat(moment).astimezone().strftime("%Y-%m-%d %H:%M")
+    except ValueError:
+        return moment[:16]

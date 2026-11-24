@@ -48,6 +48,8 @@ from nexusai.contracts.panels import GetPanelBoard, Panel, PanelBoard, PanelFilt
 from nexusai.kernel.database import connect_raw
 from nexusai.kernel.module import CommandError, Context
 from nexusai.modules.agent import cards, citations, memory, scheduler, signals
+from nexusai.modules.agent.kinds import address
+from nexusai.modules.agent.matters import RECENTLY_DONE_DAYS
 from nexusai.modules.documents import module as documents_module
 from nexusai.modules.mail import module as mail
 from nexusai.modules.mail import rules as mail_rules
@@ -67,7 +69,6 @@ READABLE_TABLES = frozenset(
         "tasks",
         "reminders",
         "schedules",
-        "work_board",
         "agent_sessions",
         "notifications",
     }
@@ -107,7 +108,7 @@ class _NewTasks(_Call):
 
 
 class _TaskChange(BaseModel):
-    task_id: int = Field(description="From list_tasks.")
+    task_id: int = Field(description="The number in its [task:N].")
     title: str | None = None
     due: str | None = Field(default=None, description="YYYY-MM-DD.")
     clear_due: bool = Field(default=False, description="Remove the due date.")
@@ -121,11 +122,13 @@ class _ChangeTasks(_Call):
 
 
 class _TaskIds(_Call):
-    task_ids: list[int] = Field(description="From list_tasks. One or many.")
+    task_ids: list[int] = Field(description="The number in each [task:N]. One or many.")
 
 
 class _ListTasks(_Call):
-    include_done: bool = Field(default=False, description="Include finished tasks too.")
+    include_done: bool = Field(
+        default=False, description="Include all finished tasks, not just the last two days'."
+    )
 
 
 class _ReminderItem(BaseModel):
@@ -140,7 +143,7 @@ class _NewReminders(_Call):
 
 
 class _ReminderChange(BaseModel):
-    reminder_id: int = Field(description="From list_reminders.")
+    reminder_id: int = Field(description="The number in its [reminder:N].")
     title: str | None = None
     when: str | None = Field(default=None, description="YYYY-MM-DDTHH:MM.")
     repeat: str | None = Field(default=None, description="none, day, week, month or year.")
@@ -153,7 +156,7 @@ class _ChangeReminders(_Call):
 
 
 class _ReminderIds(_Call):
-    reminder_ids: list[int] = Field(description="From list_reminders. One or many.")
+    reminder_ids: list[int] = Field(description="The number in each [reminder:N]. One or many.")
 
 
 class _Nothing(_Call):
@@ -286,7 +289,7 @@ class _Query(_Call):
     sql: str = Field(
         description=(
             "One read-only SELECT. Tables: messages, threads, message_parts, mail_categories,"
-            " tasks, reminders, schedules, work_board, agent_sessions, notifications."
+            " tasks, reminders, schedules, agent_sessions, notifications."
         )
     )
 
@@ -504,7 +507,7 @@ def specs(
 
         def work() -> str:
             made = [
-                f"{planner.add_task(ctx, t.title, t.due, t.thread_id, 'agent', False, t.notes)}: {t.title}"
+                f"{address('task', planner.add_task(ctx, t.title, t.due, t.thread_id, 'agent', False, t.notes))} {t.title}"
                 for t in tasks
             ]
             return "Created tasks:\n" + "\n".join(made)
@@ -552,12 +555,22 @@ def specs(
 
     def list_tasks(tool_call_id: str, include_done: bool = False) -> str:
         def work() -> str:
-            where = "" if include_done else "WHERE status != 'done'"
-            rows = db.fetch_all(f"SELECT * FROM tasks {where} ORDER BY id DESC LIMIT 200")  # noqa: S608
+            # What finished lately stays listed, marked done, so it isn't taken as still open.
+            since = (datetime.now(UTC) - timedelta(days=RECENTLY_DONE_DAYS)).isoformat()
+            where = "" if include_done else "WHERE status != 'done' OR completed > ?"
+            rows = db.fetch_all(
+                f"SELECT * FROM tasks {where} ORDER BY status = 'done', id DESC LIMIT 200",  # noqa: S608
+                () if include_done else (since,),
+            )
             return wrap_untrusted(
                 "\n".join(
-                    f"{r['id']}: {r['title']} ({r['status']}, due {r['due']},"
-                    f" added {r['created'][:10]}, changed {(r['updated'] or r['created'])[:10]})"
+                    f"{address('task', r['id'])} {r['title']} ("
+                    + (
+                        f"done {(r['completed'] or r['updated'] or '')[:16]}"
+                        if r["status"] == "done"
+                        else f"{r['status']}{', suggested, not kept yet' if r['proposed'] else ''}"
+                    )
+                    + f", due {r['due']}, added {r['created'][:10]})"
                     f"{' from ' + citations.mark(citations.MAIL, r['thread']) if r['thread'] else ''}"
                     for r in rows
                 )
@@ -653,10 +666,16 @@ def specs(
 
     def list_reminders(tool_call_id: str) -> str:
         def work() -> str:
-            rows = db.fetch_all("SELECT * FROM reminders WHERE fired = 0 ORDER BY due_at LIMIT 200")
+            since = (datetime.now() - timedelta(days=RECENTLY_DONE_DAYS)).strftime("%Y-%m-%dT%H:%M")
+            rows = db.fetch_all(
+                "SELECT * FROM reminders WHERE fired = 0 OR due_at > ? ORDER BY fired, due_at LIMIT 200",
+                (since,),
+            )
             return wrap_untrusted(
                 "\n".join(
-                    f"{r['id']}: {r['title']} at {r['due_at']}, repeats {r['repeat']}"
+                    f"{address('reminder', r['id'])} {r['title']} at {r['due_at']}, repeats {r['repeat']}"
+                    f"{', went off' if r['fired'] else ''}"
+                    f"{', suggested, not kept yet' if r['proposed'] else ''}"
                     f"{' from ' + citations.mark(citations.MAIL, r['thread']) if r['thread'] else ''}"
                     for r in rows
                 )

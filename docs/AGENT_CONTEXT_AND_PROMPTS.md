@@ -8,11 +8,11 @@ All runtime agents receive the system rules, their job prompt, the person's prof
 
 | Execution path | Additional context and constraints |
 | --- | --- |
-| Individual Mail judgement | Current conversation evidence, work board, corrections, Smart descriptions and Exact rules/descriptions. Actual message sender identities select sender preferences. Exact matches and explicit user decisions remain authoritative. Importance, Priority inclusion and Starred are separate concepts. |
+| Individual Mail judgement | Current conversation evidence, the conversation's matter and open work, corrections, Smart descriptions and Exact rules/descriptions. Actual message sender identities select sender preferences. Exact matches and explicit user decisions remain authoritative. Importance, Priority inclusion and Starred are separate concepts. |
 | Grouped learning after bulk arrival | Account, supplied group IDs, sender identities, representative samples, counted sender signals, existing category settings and account-scoped learned notes. Only supplied groups can be recorded, with complete coverage. Proposed folders await confirmation. Known groups are reused. |
 | Historical filing | Dedicated filing instruction and existing folder settings. Cannot overwrite importance/status, create work, learn facts or suggest categories through its recorded result. |
 | Interview | Current account's unresolved learning, existing personal instructions, source sender identities and at most three targeted questions. Narrow tools permit reading evidence and applying approved learning answers; files, commands, sending, tasks, folders and agent creation are unavailable. All interviews require review for personal prompt changes, including manually started interviews. |
-| Hourly digest | Completed judgements, account/source threads and current work board. Does not rejudge mail. Existing work prevents repeated proposals. |
+| Hourly digest | Completed judgements, account/source threads and current tasks and reminders. Does not rejudge mail. Existing work prevents repeated proposals. |
 | Morning brief | Obligations snapshot, applicable source thread preferences, brief wishes and coverage limits. Proposed work is distinguished from accepted commitments. |
 | Custom event runs | Event evidence is bounded as external data; source threads/account are saved with the run. Different mailbox accounts are not combined in one source batch. |
 | Scheduled runs | Saved schedule instructions, context profile and timezone; runtime clock identifies the timezone. Relevant obligation source threads accompany built-in scheduled work. |

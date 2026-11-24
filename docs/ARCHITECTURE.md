@@ -113,7 +113,7 @@ mail.received          Mail connector saves the message
   ├─ search            indexes it
   ├─ rules             checks fixed rules → mail.ruleMatched, or mail.needsTriage
   │    └─ agent host   Mail agent runs, in a group if there's a burst → mail.triaged
-  │         ├─ work board      records deadlines and status
+  │         ├─ matters         what's going on, and the work each owns
   │         ├─ notifications   pop-up if urgent
   │         └─ UI              inbox updates live
   └─ UI                inbox shows the new mail immediately
@@ -279,7 +279,7 @@ backend/
   src/nexusai/
     contracts/        commands, queries, events and interfaces
     kernel/           event bus, database, scheduler, logging, config
-    modules/          mail store, threads, rules, search, tasks, reminders, panels, work board ...
+    modules/          mail store, threads, rules, search, tasks, reminders, panels, matters ...
     connectors/       mail, PST, later calendar, files, MCP client
     agent/            LangChain/LangGraph runtime, prompt builder, model gateway, data guard, tools, policy
     jobs/             heavy job handlers

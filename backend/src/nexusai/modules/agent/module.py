@@ -21,7 +21,6 @@ from nexusai.contracts.agent import (
     AnswerSession,
     ApprovalList,
     AttachToMatter,
-    BoardList,
     BriefLine,
     BriefReacted,
     BriefSections,
@@ -83,7 +82,6 @@ from nexusai.contracts.agent import (
     ListAgentChannel,
     ListAgents,
     ListApprovals,
-    ListBoard,
     ListCards,
     ListChannel,
     ListJobs,
@@ -331,6 +329,7 @@ agent_module = Module(
             " (SELECT name FROM mail_categories WHERE proposed=1);"
             "DELETE FROM mail_categories WHERE proposed=1;",
         ),
+        scheduler.TASK_OVERDUE_MIGRATION,
     ],
 )
 _runtime: runtime.SessionRuntime | None = None
@@ -1140,7 +1139,7 @@ def _memory_changed(ctx: Context) -> None:
         work.emit("memory.changed", {}, source="agent", trace_id=ctx.trace_id)
 
 
-# Channels and the work board
+# Channels
 
 
 @agent_module.query("channel.list")
@@ -1169,11 +1168,6 @@ def dismiss_channel(command: DismissChannel, ctx: Context) -> AgentDone:
     if row["session"] and row["session"] != mail_agent.SESSION_ID and row["kind"] == "ask":
         current().answered(row["session"])
     return AgentDone()
-
-
-@agent_module.query("board.list")
-def list_board(query: ListBoard, ctx: Context) -> BoardList:
-    return channel.board(ctx.bus.db)
 
 
 @agent_module.query("agentChannel.list")
@@ -1880,12 +1874,9 @@ def today_view(query: GetToday, ctx: Context) -> TodayView:
             new=[BriefLine(**line) for line in briefs.lines_of(saved.get("new"))],
             open=[BriefLine(**line) for line in briefs.lines_of(saved.get("open"))],
         )
-    # Since the start of yesterday, local time: what "done since yesterday" means to a person.
-    yesterday = (datetime.now().astimezone() - timedelta(days=1)).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
     prep_done = [
-        DoneItem(**item) for item in briefs.done_since(ctx, yesterday.astimezone(UTC).isoformat())
+        DoneItem(title=item["title"], when=item["when"], why=item["why"])
+        for item in briefs.done_since(ctx, briefs.since_yesterday())
     ]
     rating, comment = (artifact["rating"], artifact["comment"] or "") if artifact else (None, "")
     freshness = "none"
@@ -2012,20 +2003,6 @@ def _due_items(ctx: Context) -> list[DueItem]:
                 when=row["due_at"],
                 overdue=row["due_at"][:10] < today,
                 link="/planner/reminders",
-                source_ref=thread_source(db, row["thread"]),
-            )
-        )
-    for row in db.fetch_all(
-        "SELECT title, due, thread FROM work_board WHERE done = 0 AND kind = 'deadline' AND due IS NOT NULL AND due <= ? ORDER BY due",
-        (today,),
-    ):
-        items.append(
-            DueItem(
-                kind="deadline",
-                title=row["title"],
-                when=row["due"],
-                overdue=row["due"] < today,
-                link="/today",
                 source_ref=thread_source(db, row["thread"]),
             )
         )

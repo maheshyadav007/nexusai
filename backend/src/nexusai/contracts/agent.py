@@ -446,12 +446,12 @@ class SavePrompt(BaseModel):
     content: str = Field(max_length=100000)
 
 
-SourceKind = Literal["mail", "doc"]
+SourceKind = Literal["mail", "doc", "matter", "task", "reminder"]
 
 
 class SourceRef(BaseModel):
-    """Where something came from: an email thread or a document. Its title, detail and date are
-    read from the database, never written by a model."""
+    """Where something came from: an email thread, a document, a matter or a task or reminder.
+    Its title, detail and date are read from the database, never written by a model."""
 
     kind: SourceKind
     # The thread id, or the document key.
@@ -465,6 +465,8 @@ class SourceRef(BaseModel):
     date: str | None = None
     # Its number in the text that cites it. None when it was read but not cited.
     n: int | None = None
+    # The matter a matter, task or reminder opens on, when it has one.
+    matter: int | None = None
 
 
 class ChannelMessage(BaseModel):
@@ -503,25 +505,6 @@ class DismissChannel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: int
-
-
-class BoardItem(BaseModel):
-    id: int
-    kind: str
-    title: str
-    thread: int | None
-    due: str | None
-    by: str
-    updated: str
-    done: bool
-
-
-class ListBoard(BaseModel):
-    pass
-
-
-class BoardList(BaseModel):
-    items: list[BoardItem]
 
 
 class AgentChannelMessage(BaseModel):
@@ -1005,11 +988,11 @@ class TodayThread(BaseModel):
 
 
 class DueItem(BaseModel):
-    kind: Literal["task", "reminder", "deadline"]
+    kind: Literal["task", "reminder"]
     title: str
     when: str
     overdue: bool
-    # Where it lives: the planner, or Today for a deadline.
+    # Where it lives in the planner.
     link: str
     task_id: int | None = None
     source_ref: SourceRef | None = None
@@ -1759,7 +1742,7 @@ MatterMarkKind = Literal["in", "sent", "due", "reminder", "closed", "reopened", 
 
 
 class MatterWork(BaseModel):
-    kind: Literal["task", "reminder", "deadline"]
+    kind: Literal["task", "reminder"]
     id: int
     title: str
     when: str | None = None
@@ -1804,7 +1787,7 @@ class MatterDue(BaseModel):
     title: str
     what: str
     when: str
-    kind: Literal["task", "reminder", "deadline"]
+    kind: Literal["task", "reminder"]
 
 
 class MattersBrief(BaseModel):
@@ -1890,7 +1873,7 @@ class MatterItem(BaseModel):
     """Something else open in the matter, offered when one thing in it is finished."""
 
     ref: str
-    kind: Literal["task", "reminder", "deadline", "thread"]
+    kind: Literal["task", "reminder", "thread"]
     title: str
     when: str | None = None
     # Ticked to start with: the same email asked for it, so it's most likely finished too.

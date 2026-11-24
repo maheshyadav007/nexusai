@@ -10,6 +10,7 @@ from nexusai.kernel.database import Migration
 from nexusai.kernel.module import Context
 from nexusai.modules.agent import citations
 from nexusai.modules.agent import sources as source_names
+from nexusai.modules.agent.kinds import address
 from nexusai.modules.agent.prompt_data import untrusted
 from nexusai.modules.mail import accounts
 from nexusai.modules.mail.store import hidden_from_ai
@@ -54,65 +55,6 @@ BULLET = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
 REPLY_PREFIX = re.compile(r"^(?:(?:re|fwd?|aw|sv)\s*:\s*)+", re.IGNORECASE)
 # Shorter subjects, like "Hi", would match bullets that aren't about them.
 SUBJECT_MATCH_FROM = 8
-
-
-def snapshot(ctx: Context) -> str:
-    account = accounts.current_account(ctx.config)
-    sections: list[str] = []
-    truncated = False
-    queries = (
-        (
-            "Open tasks (including proposals)",
-            "SELECT t.id,t.title,t.due,t.status,t.proposed,t.thread FROM tasks t LEFT JOIN threads m ON m.id=t.thread WHERE t.status != 'done' AND (t.thread IS NULL OR m.account=?) ORDER BY t.due IS NULL,t.due,t.id",
-        ),
-        (
-            "Reminders (including proposals)",
-            "SELECT r.id,r.title,r.due_at,r.proposed,r.thread FROM reminders r LEFT JOIN threads m ON m.id=r.thread WHERE r.fired=0 AND (r.thread IS NULL OR m.account=?) ORDER BY r.due_at,r.id",
-        ),
-        (
-            "Open shared obligations",
-            "SELECT w.id,w.kind,w.title,w.due,w.thread FROM work_board w LEFT JOIN threads m ON m.id=w.thread WHERE w.done=0 AND (w.thread IS NULL OR m.account=?) ORDER BY w.due IS NULL,w.due,w.id",
-        ),
-        (
-            "Unfinished mail, including archived conversations",
-            # What a folder keeps from the AI stays out of the brief, whatever it was judged before.
-            "SELECT id,subject,status,importance,next_action,follow_up_on,decision_version FROM threads WHERE account=? AND in_trash=0"
-            f" AND NOT {hidden_from_ai()} AND status IN ('waiting_on_you','waiting_on_others') ORDER BY importance='high' DESC,last_date DESC",
-        ),
-    )
-    for label, query in queries:
-        rows = ctx.bus.db.fetch_all(query, (account,))
-        truncated = truncated or len(rows) > 100
-        # All obligations are represented in counts; bounded detail is explicit, never silent.
-        detail = "\n".join(json.dumps(dict(row), ensure_ascii=False) for row in rows[:100])
-        sections.append(
-            f"{label}: {len(rows)} total; {min(len(rows), 100)} shown.\n{detail or 'None.'}"
-        )
-    learning = ctx.bus.db.fetch_all("SELECT value FROM agent_defaults WHERE key='mail_learning'")
-    pending = ctx.bus.db.fetch_all(
-        "SELECT COUNT(*) n FROM trigger_runs WHERE trigger='mail-received' AND status IN ('pending','running')"
-    )[0]["n"]
-    from typing import cast
-
-    from nexusai.contracts.mail import GetMailStatus, MailStatus
-    from nexusai.modules.mail import module as mail
-
-    sync = cast(MailStatus, mail.get_status(GetMailStatus(), ctx))
-    incomplete_sync = bool(sync.account and (sync.state != "live" or sync.backfill_remaining))
-    coverage = json.dumps(
-        {
-            "partial": bool(pending or truncated or incomplete_sync),
-            "sync": sync.state,
-            "omitted_detail": truncated,
-        }
-    )
-    return (
-        f"Coverage: {coverage}\n"
-        f"Snapshot at {datetime.now(UTC).isoformat()}; account {account}; {pending} mail events not yet judged. "
-        "This snapshot may be incomplete while mail is syncing or being judged. Counts include omitted detail; use list_tasks/list_reminders/read_work_board when needed. "
-        f"Historical learning state: {learning[0]['value'] if learning else 'not started or skipped'}.\n"
-        + untrusted("\n\n".join(sections))
-    )
 
 
 def coverage(ctx: Context) -> str:
@@ -185,15 +127,12 @@ def save(ctx: Context, session: str, lead: str, new: list[str], still_open: list
     sources = part[0]["data"]["sources"] if part else []
     inputs = ctx.bus.db.fetch_all("SELECT * FROM brief_inputs WHERE turn=?", (turn,))
     account = inputs[0]["account"] if inputs else accounts.current_account(ctx.config)
-    # Chat and team runs have no snapshot of their own, so take one now for coverage.
-    data = inputs[0]["snapshot"] if inputs else snapshot(ctx)
+    # Chat and team runs have no plate of their own, so say now whether the picture is whole.
+    data = inputs[0]["snapshot"] if inputs else coverage(ctx)
     pending = ctx.bus.db.fetch_all(
         "SELECT COUNT(*) n FROM trigger_runs WHERE trigger='mail-received' AND status IN ('pending','running')"
     )[0]["n"]
-    coverage = {}
-    if data.startswith("Coverage: "):
-        with suppress(ValueError, IndexError):
-            coverage = json.loads(data.splitlines()[0].removeprefix("Coverage: "))
+    partial = bool(pending) or data.startswith("Coverage: partial")
     with ctx.bus.unit_of_work() as work:
         work.tx.execute(
             "INSERT INTO brief_artifacts(turn,session,account,text,created,partial,snapshot,sources,sections)"
@@ -206,7 +145,7 @@ def save(ctx: Context, session: str, lead: str, new: list[str], still_open: list
                 account,
                 shown,
                 datetime.now(UTC).isoformat(),
-                int(bool(pending or coverage.get("partial"))),
+                int(partial),
                 data,
                 json.dumps(sources),
                 json.dumps(sections),
@@ -224,31 +163,54 @@ def save(ctx: Context, session: str, lead: str, new: list[str], still_open: list
     )
 
 
+def since_yesterday() -> str:
+    """The start of yesterday, local time, in UTC: what "done since yesterday" means to a person."""
+    start = (datetime.now().astimezone() - timedelta(days=1)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    return start.astimezone(UTC).isoformat()
+
+
 def done_since(ctx: Context, since: str) -> list[dict[str, str]]:
     """What got finished since `since`, worked out by the app, so the brief never has to say it:
-    tasks ticked, reminders that went off and matters closed. Newest first."""
+    tasks ticked, reminders that went off and matters closed. Newest first, each with its address."""
     db = ctx.bus.db
     found = [
-        {"title": row["title"], "when": row["completed"], "why": row["looks_done"] or ""}
+        {
+            "title": row["title"],
+            "when": row["completed"],
+            "why": row["looks_done"] or "",
+            "address": address("task", row["id"]),
+        }
         for row in db.fetch_all(
-            "SELECT title, completed, looks_done FROM tasks WHERE status = 'done'"
+            "SELECT id, title, completed, looks_done FROM tasks WHERE status = 'done'"
             " AND proposed = 0 AND completed >= ?",
             (since,),
         )
     ]
     now = datetime.now(UTC).isoformat()
     found += [
-        {"title": row["title"], "when": row["due_at"], "why": "Reminder went off"}
+        {
+            "title": row["title"],
+            "when": row["due_at"],
+            "why": "Reminder went off",
+            "address": address("reminder", row["id"]),
+        }
         for row in db.fetch_all(
-            "SELECT title, due_at FROM reminders WHERE fired = 1 AND proposed = 0"
+            "SELECT id, title, due_at FROM reminders WHERE fired = 1 AND proposed = 0"
             " AND due_at >= ? AND due_at <= ?",
             (since[:16], now[:16]),
         )
     ]
     found += [
-        {"title": row["title"], "when": row["time"], "why": "Matter done"}
+        {
+            "title": row["title"],
+            "when": row["time"],
+            "why": "Matter done",
+            "address": address("matter", row["matter"]),
+        }
         for row in db.fetch_all(
-            "SELECT m.title, e.time FROM matter_events e JOIN matters m ON m.id = e.matter"
+            "SELECT e.matter, m.title, e.time FROM matter_events e JOIN matters m ON m.id = e.matter"
             " WHERE e.kind = 'done' AND e.time >= ? AND m.account = ?",
             (since, accounts.current_account(ctx.config)),
         )
@@ -257,12 +219,19 @@ def done_since(ctx: Context, since: str) -> list[dict[str, str]]:
 
 
 def _matter_in(ctx: Context, line: str) -> int | None:
-    """The matter of the first email a line cites, if it has one."""
+    """The matter of the first thing a line cites, if it has one."""
     from nexusai.modules.agent import matters
 
     for found in citations.MARKER.finditer(line):
-        if found.group(1) == citations.MAIL and found.group(2).isdigit():
-            matter = matters.matter_of(ctx.bus.db, int(found.group(2)))
+        kind, ref = found.group(1), found.group(2)
+        if not ref.isdigit():
+            continue
+        if kind == citations.MATTER:
+            return int(ref)
+        if kind in (citations.MAIL, citations.TASK, citations.REMINDER):
+            matter = matters.home(
+                ctx.bus.db, "thread" if kind == citations.MAIL else kind, int(ref)
+            )[0]
             if matter is not None:
                 return matter
     return None

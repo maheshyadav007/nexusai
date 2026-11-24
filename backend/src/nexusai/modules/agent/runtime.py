@@ -754,6 +754,16 @@ class SessionRuntime:
             # Stable for this agent and kind of run, so it sits with the cached layers.
             layers.append(Layer("Your other tools", others))
         stable = list(layers)
+        if engine == "session":
+            from nexusai.modules.agent import mail_agent
+
+            # What Today shows, fresh for every run, after the cached layers. What it names can
+            # be cited, like what a tool showed.
+            day = mail_agent.your_day(self.ctx)
+            layers.append(Layer("Your day", day))
+            if turn is not None:
+                with self.db.transaction() as tx:
+                    citations.shown(tx, turn["id"], day)
         # Last, because it changes: open tasks, then the time.
         live = team.live_block(self.db, agent)
         layers.append(

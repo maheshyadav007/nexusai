@@ -517,7 +517,7 @@ def _rule_line(ctx: Context, thread: int) -> str:
 
 
 def open_work_lines(db: Database, thread: int) -> str:
-    """The conversation's open tasks, reminders and deadlines, one line each."""
+    """The conversation's open tasks and reminders, one line each."""
     rows = [
         *db.fetch_all(
             "SELECT 'task' AS kind, id, title, due FROM tasks WHERE thread = ? AND status != 'done' ORDER BY id",
@@ -527,14 +527,10 @@ def open_work_lines(db: Database, thread: int) -> str:
             "SELECT 'reminder' AS kind, id, title, due_at AS due FROM reminders WHERE thread = ? AND fired = 0 ORDER BY id",
             (thread,),
         ),
-        *db.fetch_all(
-            "SELECT kind, NULL AS id, title, due FROM work_board WHERE thread = ? AND done = 0 ORDER BY id",
-            (thread,),
-        ),
     ]
     # Tasks and reminders by id, so the agent can say which one a later email finished.
     return "\n".join(
-        (f"- [{r['kind']}:{r['id']}] {r['title']}" if r["id"] else f"- {r['kind']}: {r['title']}")
+        f"- {kinds.address(r['kind'], r['id'])} {r['title']}"
         + (f" (due {r['due']})" if r["due"] else "")
         for r in rows
     )
@@ -691,34 +687,74 @@ def on_the_plate(ctx: Context) -> str:
     return "\n\n".join(parts)
 
 
-def brief_task(ctx: Context) -> str:
-    from nexusai.modules.agent import briefs
-
-    # One matter at a time, so the same thing isn't listed as a task, a deadline and an email.
-    task = briefs.coverage(ctx) + "\n\n" + untrusted(matters.plate(ctx) or "Nothing open.")
-    decisions: list[str] = []
-    for label, query in (
-        ("Approvals", "SELECT id, summary AS text FROM tool_approvals WHERE status = 'pending'"),
+def decisions(ctx: Context) -> str:
+    """What waits for the person's own decision, as on Today: approvals, questions, suggestions
+    and work that looks done."""
+    found: list[str] = []
+    for label, kind, query in (
+        (
+            "Approvals",
+            None,
+            "SELECT id, summary AS text FROM tool_approvals WHERE status = 'pending'",
+        ),
         (
             "Questions",
+            None,
             "SELECT id, text FROM channel_messages WHERE kind = 'ask' AND status = 'open'",
         ),
         (
+            "Suggested tasks",
+            "task",
+            "SELECT id, title AS text FROM tasks WHERE proposed = 1 AND status != 'done'",
+        ),
+        (
+            "Suggested reminders",
+            "reminder",
+            "SELECT id, title AS text FROM reminders WHERE proposed = 1 AND fired = 0",
+        ),
+        (
             "Work that looks done",
+            "task",
             "SELECT id, title || ': ' || looks_done AS text FROM tasks"
             " WHERE looks_done IS NOT NULL AND status != 'done'",
         ),
     ):
         rows = ctx.bus.db.fetch_all(query)
         if rows:
-            lines = "\n".join(f"- [{label} {row['id']}] {row['text']}" for row in rows[:20])
-            decisions.append(f"{label}: {len(rows)} pending\n{lines}")
-    if decisions:
-        task += "\n\nDecisions waiting for them:\n" + untrusted("\n\n".join(decisions))
+            # Work is written by its address; an approval or a question has none of its own.
+            lines = "\n".join(
+                f"- {kinds.address(kind, row['id']) if kind else f'[{label} {row[0]}]'} {row['text']}"
+                for row in rows[:20]
+            )
+            found.append(f"{label}: {len(rows)} pending\n{lines}")
+    return "\n\n".join(found)
+
+
+def brief_task(ctx: Context) -> str:
+    from nexusai.modules.agent import briefs
+
+    # One matter at a time, so the same thing isn't listed as a task and an email.
+    task = briefs.coverage(ctx) + "\n\n" + untrusted(matters.plate(ctx) or "Nothing open.")
+    waiting = decisions(ctx)
+    if waiting:
+        task += "\n\nDecisions waiting for them:\n" + untrusted(waiting)
     past = feedback.briefs_with_reactions(ctx.bus.db)
     if past:
         task += "\n\nEarlier briefs and how they took them:\n" + untrusted(past)
     return task
+
+
+def your_day(ctx: Context) -> str:
+    """What Today shows, as text, built from the same matters, for the lead agent's every chat
+    message. Titles and one-line whys only, never an email's words, so it's shown as data without
+    making the chat untrusted."""
+    from nexusai.modules.agent import briefs
+
+    text = briefs.coverage(ctx) + "\n\n" + untrusted(matters.plate(ctx) or "Nothing open.")
+    waiting = decisions(ctx)
+    if waiting:
+        text += "\n\nDecisions waiting for them:\n" + untrusted(waiting)
+    return text
 
 
 def person_replied(ctx: Context, thread: int) -> None:

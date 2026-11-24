@@ -37,6 +37,7 @@ TRUST = {
     "What you corrected": "yours",
     "How they want the brief": "yours",
     "The brief on Today now": "mixed",
+    "Your day": "mixed",
     "What the mailbox shows": "counted",
     "Memory": "mixed",
     "Approved preferences": "yours",

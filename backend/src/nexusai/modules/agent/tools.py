@@ -42,6 +42,7 @@ from nexusai.modules.agent import (
     cards,
     channel,
     citations,
+    kinds,
     mail_agent,
     matters,
     memory,
@@ -49,6 +50,7 @@ from nexusai.modules.agent import (
     prompts_builder,
     signals,
     skills,
+    sources,
     team,
     work_tools,
 )
@@ -567,10 +569,20 @@ MOST_REMEMBERS_PER_RUN = 3
 MAX_THREADS_PER_READ = 10
 
 
-class _ReadMatter(BaseModel):
-    matter_id: int | None = Field(default=None, description="The matter's number, if known.")
-    thread_id: int | None = Field(
-        default=None, description="Or a conversation's ID: its matter is read."
+class _OpenItem(BaseModel):
+    address: str = Field(
+        description="What to open, by its address as shown: [matter:12], [task:88], "
+        "[reminder:5], [mail:123] or [doc:KEY]."
+    )
+    tool_call_id: Annotated[str, InjectedToolCallId]
+
+
+class _FindMatters(BaseModel):
+    words: str = Field(
+        default="", description="Words from its title or the people in it. Empty lists them all."
+    )
+    state: Literal["open", "waiting_on_you", "waiting_on_others", "fyi", "done"] = Field(
+        default="open", description="open is every matter not done."
     )
     tool_call_id: Annotated[str, InjectedToolCallId]
 
@@ -631,14 +643,6 @@ class _Brief(BaseModel):
         description="What was already known and is now urgent or overdue, one line per matter,"
         " each ending with its marker.",
     )
-    tool_call_id: Annotated[str, InjectedToolCallId]
-
-
-class _BoardWrite(BaseModel):
-    kind: str = Field(description="deadline, task, status or note.")
-    title: str = Field(description="Short description.")
-    thread_id: int | None = Field(default=None, description="The related conversation, if any.")
-    due: str | None = Field(default=None, description="YYYY-MM-DD, if it has a date.")
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
@@ -781,8 +785,8 @@ class _DraftReply(BaseModel):
     body: str = Field(description="The reply, as plain text.")
     attachments: list[str] = Field(
         default_factory=list,
-        description="Files to attach, by key: an email's attachment as read_thread lists it, "
-        "such as m:123:2, or a document's key from search_documents.",
+        description="Files to attach, by their marker as read_thread or search_documents shows"
+        " it, such as [doc:m:123:2].",
     )
     tool_call_id: Annotated[str, InjectedToolCallId]
 
@@ -845,7 +849,7 @@ class _SearchDocuments(BaseModel):
 
 
 class _ReadDocument(BaseModel):
-    key: str = Field(description="The document's key, from search results.")
+    key: str = Field(description="The document's marker, as shown, such as [doc:m:123:2].")
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
@@ -946,15 +950,14 @@ MAIL_AGENT_TOOLS = frozenset(
         "record_triage",
         "search_mail",
         "read_thread",
-        "read_matter",
+        "open_item",
+        "find_matters",
         "read_recipients",
         "list_mail",
         "semantic_search",
         "search_documents",
         "read_document",
         "list_documents",
-        "read_work_board",
-        "write_work_board",
         "team_roster",
         "team_inbox",
         "team_message",
@@ -986,7 +989,6 @@ TRIAGE_TOOLS = frozenset(
         "read_thread",
         "read_recipients",
         "semantic_search",
-        "read_work_board",
         "read_document",
     }
 )
@@ -1009,14 +1011,14 @@ BRIEF_TOOLS = frozenset(
         "read_plate",
         "update_brief",
         "read_thread",
-        "read_matter",
+        "open_item",
+        "find_matters",
         "read_recipients",
         "search_mail",
         "semantic_search",
         "list_mail",
         "list_tasks",
         "list_reminders",
-        "read_work_board",
         "draft_reply",
         "read_feedback",
         "remember",
@@ -1033,7 +1035,8 @@ BRIEF_AGENT_ONLY = frozenset({"read_plate", "update_brief"})
 ORGANIZER_TOOLS = frozenset(
     {
         "list_tasks",
-        "read_matter",
+        "open_item",
+        "find_matters",
         "create_tasks",
         "update_tasks",
         "delete_tasks",
@@ -1043,7 +1046,6 @@ ORGANIZER_TOOLS = frozenset(
         "delete_reminders",
         "search_mail",
         "read_thread",
-        "read_work_board",
         "remember",
         "list_memory",
         "team_inbox",
@@ -1073,7 +1075,6 @@ INTERVIEW_TOOLS = frozenset(
         "apply_mail_learning_answers",
         "remember",
         "list_memory",
-        "read_work_board",
         "read_thread",
         "read_recipients",
         "search_mail",
@@ -1088,9 +1089,9 @@ INTERVIEW_TOOLS = frozenset(
 # ones it uses most and finds the rest with find_tools. Memory is always at hand for every agent.
 ALWAYS_SHOWN = frozenset({"ask_user", "remember", "list_memory", "load_skill"})
 # What session.md has it reach for first is shown, so a smaller model needn't search for its steps:
-# the work board, documents, and every list it checks before making something.
+# matters, documents, and every list it checks before making something.
 LEAD_SHOWN = ALWAYS_SHOWN | {
-    "read_work_board", "read_matter", "search_mail", "semantic_search", "search_documents", "read_thread",
+    "open_item", "find_matters", "search_mail", "semantic_search", "search_documents", "read_thread",
     "list_mail", "update_mail", "draft_reply", "draft_forward", "list_drafts",
     "list_tasks", "list_reminders", "list_categories",
     "list_rules", "list_schedules", "list_panels", "propose_preference",
@@ -1098,7 +1099,7 @@ LEAD_SHOWN = ALWAYS_SHOWN | {
 }  # fmt: skip
 MAIL_SHOWN = ALWAYS_SHOWN | {
     "search_mail", "semantic_search", "read_thread", "read_recipients", "list_mail",
-    "read_work_board", "update_mail", "draft_reply", "draft_forward", "propose_task",
+    "update_mail", "draft_reply", "draft_forward", "propose_task",
     "propose_reminder",
     "team_inbox", "team_message", "team_close", "tell",
 }  # fmt: skip
@@ -1544,6 +1545,7 @@ def build_tools(
                 f"{' | ' + h.thread.category if h.thread.category else ''}"
                 f"{' | ' + signals.HIDDEN_NOTE if h.thread.id in hidden else ''}"
                 f"{' | related in meaning, not these words' if h.matched_by == 'meaning' else ''}"
+                f" | {matters.standing(ctx, h.thread.id, most=2)}"
                 f" | {h.excerpt}"
                 for h in hits
             ]
@@ -1618,20 +1620,23 @@ def build_tools(
             before = view.messages[: max(len(view.messages) - skip_newest, 0)]
             recent = before[-ctx.config.agent.max_recent_thread_messages :]
             attachments = [
-                f"- {a.filename}: read_document key m:{m.id}:{a.index}"
+                f"- {a.filename}: {citations.mark(citations.DOCUMENT, f'm:{m.id}:{a.index}')}"
                 for m in recent
                 for a in m.attachments
                 if a.kind in {"attachment", "calendar"}
             ]
             manifest = (
-                "Attachments (read_document reads them; draft_reply and draft_forward attach them by key):\n"
+                "Attachments (read_document reads them; draft_reply and draft_forward attach them by marker):\n"
                 + "\n".join(attachments)
                 + "\n\n"
                 if attachments
                 else ""
             )
             shown = f" ({signals.HIDDEN_NOTE})" if thread_id in hidden else ""
-            head = f"Conversation {citations.mark(citations.MAIL, thread_id)}{shown}\nSubject: {view.thread.subject}\n{manifest}"
+            head = (
+                f"Conversation {citations.mark(citations.MAIL, thread_id)}{shown}\nSubject: {view.thread.subject}\n"
+                f"{matters.standing(ctx, thread_id)}\n{manifest}"
+            )
             # The newest messages matter most, so when space runs out the oldest go first.
             kept: list[str] = []
             room = budget - len(head)
@@ -1729,52 +1734,36 @@ def build_tools(
             channel.notify(ctx, work, text, "", f"/agent/sessions/{session}", "agent", False)
         return "Sent."
 
-    def read_matter(
-        tool_call_id: str, matter_id: int | None = None, thread_id: int | None = None
-    ) -> str:
-        found = matter_id or (matters.matter_of(ctx.bus.db, thread_id) if thread_id else None)
-        if not found:
-            return "That conversation isn't part of a matter. Read it with read_thread."
-        try:
-            whole = matters.detail(ctx, found)
-        except CommandError as error:
-            return error.message
-        m = whole.matter
-        lines = [f'Matter {m.id}: "{m.title}" · {m.state} · due {m.due or "none"}']
-        lines += [
-            f"- conversation {citations.mark(citations.MAIL, t.id)}: {t.subject} ({t.status})"
-            for t in whole.threads
-        ]
-        lines += [
-            f'- open {w.kind}:{w.id} "{w.title}"' + (f" due {w.when}" if w.when else "")
-            for w in m.work
-        ]
-        lines += [f"- related matter {r.matter}: {r.title} ({r.why})" for r in whole.related]
-        lines += [f"- file: {f.title}" for f in whole.files]
-        lines.append("What happened, oldest first:")
-        lines += [f"  {e.time[:10]} {e.kind}: {e.text}" for e in whole.events[-20:]]
-        return "\n".join(lines)
-
-    def read_work_board(tool_call_id: str) -> str:
-        items = channel.board(ctx.bus.db).items
-        return (
-            "\n".join(
-                f"{i.kind}: {i.title} ({citations.mark(citations.MAIL, i.thread) + ', ' if i.thread else ''}"
-                f"due {i.due}, by {i.by})"
-                for i in items
+    def open_item(address: str, tool_call_id: str) -> str:
+        kind, _, rest = address.strip().strip("[]").partition(":")
+        if kind in ("matter", "task", "reminder") and rest.isdigit():
+            return _untrusted(matters.open_text(ctx, kind, int(rest)))
+        if kind in ("mail", "thread") and rest.partition("#")[0].isdigit():
+            thread = int(rest.partition("#")[0])
+            hidden = signals.hidden_threads(ctx, [thread])
+            if hidden and not signals.asked_by_person(ctx, session):
+                return f"Conversation {thread} is hidden from the AI by its folder."
+            view = store.thread_view(ctx.bus.db, thread)
+            if view is None:
+                return f"Conversation {thread} no longer exists."
+            citations.note(ctx.bus.db, session, citations.MAIL, str(thread))
+            return _untrusted(
+                f"{citations.mark(citations.MAIL, thread)} {view.thread.subject}\n"
+                f"{matters.standing(ctx, thread)}\nread_thread reads its messages."
             )
-            or "The board is empty."
-        )
+        if kind == "doc" and rest:
+            key = kinds.key_of(rest)
+            found = sources.describe(ctx, citations.DOCUMENT, key)
+            if found is None:
+                return "That document no longer exists."
+            citations.note(ctx.bus.db, session, citations.DOCUMENT, key)
+            return _untrusted(
+                f"{citations.mark(citations.DOCUMENT, key)} {found.title}\nread_document reads it."
+            )
+        return "That isn't an address. Copy one as it was shown, such as [matter:12] or [task:88]."
 
-    def write_work_board(
-        kind: str,
-        title: str,
-        tool_call_id: str,
-        thread_id: int | None = None,
-        due: str | None = None,
-    ) -> str:
-        channel.board_add(ctx, kind, title, thread_id, due, "Session")
-        return "Added."
+    def find_matters(tool_call_id: str, words: str = "", state: str = "open") -> str:
+        return _untrusted(matters.find(ctx, words, state))
 
     def _speaker() -> str:
         """Who is talking in this run: the turn's own agent, or the chat's."""
@@ -2026,7 +2015,7 @@ def build_tools(
             work.emit("drafts.changed", {}, source="agent", trace_id=ctx.trace_id)
 
     def _attached(keys: list[str]) -> tuple[list[DraftAttachment], str]:
-        found, missing = outgoing.attachments_from_keys(ctx, keys)
+        found, missing = outgoing.attachments_from_keys(ctx, [kinds.key_of(key) for key in keys])
         note = (
             f" These couldn't be attached, so check the keys: {', '.join(missing)}."
             if missing
@@ -2185,6 +2174,8 @@ def build_tools(
         )
 
     def read_document(key: str, tool_call_id: str) -> str:
+        key = kinds.key_of(key)
+
         def work() -> str:
             try:
                 preview = get_document(GetDocument(key=key), ctx)
@@ -2275,7 +2266,7 @@ def build_tools(
         (
             read_plate,
             _Nothing,
-            "Everything on their plate now: unfinished mail, tasks, reminders, deadlines and "
+            "Everything on their plate now: matters, unfinished mail, tasks, reminders and "
             "decisions waiting, with earlier briefs and how they took them. A morning run already "
             "has this in its message.",
         ),
@@ -2292,23 +2283,17 @@ def build_tools(
             "next look.",
         ),
         (
-            read_matter,
-            _ReadMatter,
-            "Read a matter: one real thing going on, with its conversations, open tasks and "
-            "reminders, related matters, files and what happened, oldest first. Use it when a "
-            "question is about the whole thing, not one email.",
+            open_item,
+            _OpenItem,
+            "Open anything by its address: a matter with its conversations, work, links and what "
+            "happened; a task or reminder with its matter; a conversation with where it stands. "
+            "Everything it names is an address you can open next.",
         ),
         (
-            read_work_board,
-            _Nothing,
-            "See what agents already know: deadlines, open tasks and where conversations stand. "
-            "Check this first, so you don't redo another agent's work.",
-        ),
-        (
-            write_work_board,
-            _BoardWrite,
-            "Record a deadline, task or status for other agents to use later. The person doesn't "
-            "see this directly, so use create_tasks for something they should do.",
+            find_matters,
+            _FindMatters,
+            "List matters, the real things going on, by words or state, each by its address. Use "
+            "it when you don't have a matter's address yet.",
         ),
         (
             load_skill,

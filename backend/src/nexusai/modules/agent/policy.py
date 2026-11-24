@@ -112,8 +112,13 @@ TOOL_ENTRIES = (
     ToolEntry("search_mail", MAIL, "Search mail", "Find mail and attachments.", "read"),
     ToolEntry("read_thread", MAIL, "Read mail", "Open a conversation.", "read"),
     ToolEntry(
-        "read_matter", MAIL, "Read matters", "See everything about one thing going on.", "read"
+        "open_item",
+        MAIL,
+        "Open matters and work",
+        "See a matter, task or reminder and what it links to.",
+        "read",
     ),
+    ToolEntry("find_matters", MAIL, "Find matters", "List the things going on.", "read"),
     ToolEntry(
         "read_recipients",
         MAIL,

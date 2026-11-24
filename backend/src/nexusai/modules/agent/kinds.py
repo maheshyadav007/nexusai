@@ -26,19 +26,29 @@ KINDS: dict[str, Kind] = {
     "task": Kind("tasks", "title", "due", "status != 'done'",
                  "status = 'done', completed = ?2", "status = 'todo', completed = NULL", "tasks.changed"),
     "reminder": Kind("reminders", "title", "due_at", "fired = 0", "fired = 1", "fired = 0", "reminders.changed"),
-    "deadline": Kind("work_board", "title", "due", "done = 0 AND kind = 'deadline'", "done = 1", "done = 0",
-                     "board.changed"),
     "thread": Kind("threads", "subject", "last_date"),
     "doc": Kind("documents", "name", "added"),
     "matter": Kind("matters", "title", "updated"),
 }  # fmt: skip
 
 # What can be finished, in the order a matter lists its work.
-WORK = ("task", "reminder", "deadline")
+WORK = ("task", "reminder")
 
 
 def ref(kind: str, identifier: int) -> str:
     return f"{kind}:{identifier}"
+
+
+def address(kind: str, identifier: object) -> str:
+    """How a thing is written for a model, in brackets, to open and to cite it. A conversation is
+    written as mail, as citations have always named it."""
+    return f"[{'mail' if kind == 'thread' else kind}:{identifier}]"
+
+
+def key_of(value: str) -> str:
+    """A document's key, whether it's written bare (m:12:2) or as its address ([doc:m:12:2])."""
+    value = value.strip().removeprefix("[").removesuffix("]")
+    return value.removeprefix("doc:").partition("#")[0]
 
 
 def parse(value: object) -> tuple[str, int] | None:

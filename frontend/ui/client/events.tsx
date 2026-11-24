@@ -42,7 +42,6 @@ const INVALIDATES: Record<string, readonly string[]> = {
   "schedule.due": ["schedules", "agent-queue"],
   "queue.changed": ["agent-queue", "cockpit"],
   "channel.posted": ["channel", "today"],
-  "board.changed": ["board", "today", "matters"],
   "tasks.changed": ["tasks", "today", "matters"],
   "reminders.changed": ["reminders", "today", "matters"],
   "schedule.changed": ["schedules"],

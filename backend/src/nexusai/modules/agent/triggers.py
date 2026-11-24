@@ -951,7 +951,7 @@ class Triggers:
         prompt = schedule["prompt"] or (
             "Write my morning brief from what's on my plate."
             if is_brief
-            else "Prepare my morning from the work board."
+            else "Prepare my morning from what's on my plate."
         )
         task = ""
         if is_brief:
@@ -959,14 +959,14 @@ class Triggers:
             with self.ctx.bus.db.transaction() as tx:
                 tx.execute("UPDATE agent_sessions SET untrusted = 1 WHERE id = ?", (session,))
         if not task and schedule["kind"] == "daily-prep":
-            task = briefs.snapshot(self.ctx)
+            task = mail_agent.brief_task(self.ctx)
         account = accounts.current_account(self.ctx.config)
         own["account"] = account
         if is_brief or schedule["kind"] == "daily-prep":
             own["threads"] = [
                 row["id"]
                 for row in self.ctx.bus.db.fetch_all(
-                    "SELECT id FROM threads WHERE account=? AND in_trash=0 AND (status IN ('waiting_on_you','waiting_on_others') OR EXISTS(SELECT 1 FROM tasks WHERE thread=threads.id AND status!='done') OR EXISTS(SELECT 1 FROM reminders WHERE thread=threads.id AND fired=0) OR EXISTS(SELECT 1 FROM work_board WHERE thread=threads.id AND done=0))",
+                    "SELECT id FROM threads WHERE account=? AND in_trash=0 AND (status IN ('waiting_on_you','waiting_on_others') OR EXISTS(SELECT 1 FROM tasks WHERE thread=threads.id AND status!='done') OR EXISTS(SELECT 1 FROM reminders WHERE thread=threads.id AND fired=0))",
                     (account,),
                 )
             ]
