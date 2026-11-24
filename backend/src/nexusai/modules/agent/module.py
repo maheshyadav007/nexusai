@@ -22,6 +22,7 @@ from nexusai.contracts.agent import (
     ApprovalList,
     AttachToMatter,
     BoardList,
+    BriefLine,
     BriefReacted,
     BriefSections,
     CancelTeamTask,
@@ -302,6 +303,7 @@ agent_module = Module(
         briefs.MIGRATION,
         briefs.SOURCES_MIGRATION,
         briefs.SECTIONS_MIGRATION,
+        briefs.LIVE_MIGRATION,
         facts.MIGRATION,
         summaries.MIGRATION,
         cards.MIGRATION,
@@ -380,6 +382,31 @@ def _shutdown() -> None:
         if _runtime:
             _runtime.close()
             _runtime = None
+
+
+@agent_module.on("matters.changed", "agent.brief_follows_matter")
+def brief_follows_matter(event: AppEvent, ctx: Context) -> None:
+    if event.payload.get("matter"):
+        briefs.follow(ctx, int(event.payload["matter"]))
+
+
+@agent_module.on("mail.triaged", "agent.brief_follows_triage")
+@agent_module.on("thread.updated", "agent.brief_follows_thread")
+def brief_follows_thread(event: AppEvent, ctx: Context) -> None:
+    """A conversation's status or importance moved its matter: the brief follows."""
+    thread = event.payload.get("thread_id") or event.payload.get("id")
+    matter = matters.matter_of(ctx.bus.db, int(thread)) if thread else None
+    if matter is not None:
+        briefs.follow(ctx, matter)
+
+
+@agent_module.on("tasks.changed", "agent.brief_follows_task")
+def brief_follows_task(event: AppEvent, ctx: Context) -> None:
+    """A task kept or ticked changes whether its matter waits on the person."""
+    thread = event.payload.get("thread")
+    matter = matters.matter_of(ctx.bus.db, int(thread)) if thread else None
+    if matter is not None:
+        briefs.follow(ctx, matter)
 
 
 @agent_module.on("team.changed", "agent.team_changed")
@@ -1837,11 +1864,15 @@ def today_view(query: GetToday, ctx: Context) -> TodayView:
         else []
     )
     prep_at = artifact["created"] if artifact else None
-    prep_sections = (
-        BriefSections.model_validate(json.loads(artifact["sections"]))
-        if artifact and artifact["sections"]
-        else None
-    )
+    prep_updated = artifact["updated"] if artifact else None
+    prep_sections = None
+    if artifact and artifact["sections"]:
+        saved = json.loads(artifact["sections"])
+        prep_sections = BriefSections(
+            lead=saved["lead"],
+            new=[BriefLine(**line) for line in briefs.lines_of(saved.get("new"))],
+            open=[BriefLine(**line) for line in briefs.lines_of(saved.get("open"))],
+        )
     # Since the start of yesterday, local time: what "done since yesterday" means to a person.
     yesterday = (datetime.now().astimezone() - timedelta(days=1)).replace(
         hour=0, minute=0, second=0, microsecond=0
@@ -1875,6 +1906,7 @@ def today_view(query: GetToday, ctx: Context) -> TodayView:
         prep_session=prep_session,
         prep_text=prep_text,
         prep_sections=prep_sections,
+        prep_updated=prep_updated,
         prep_done=prep_done,
         prep_sources=prep_sources,
         prep_at=prep_at,

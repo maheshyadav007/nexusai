@@ -397,3 +397,76 @@ def test_a_matter_lists_its_finished_work_apart_from_its_open_work(
     detail = query(client, "matters.get", id=matter["id"])
     assert [w["title"] for w in detail["matter"]["work"]] == ["Tell the team"]
     assert [w["title"] for w in detail["done"]] == ["Book a slot"] and detail["done"][0]["when"]
+
+
+def test_the_brief_follows_its_matters_through_the_day_without_a_model(
+    client: TestClient, script: Script, fake: FakeMail
+) -> None:
+    from datetime import datetime, timedelta
+
+    from nexusai.modules.agent.module import current
+    from nexusai.modules.agent.providers import TextChunk, ToolCall
+    from nexusai.modules.agent.runtime import TurnRequest
+
+    connect(client, fake)
+    script.replies = [triage_reply(summary="Karthik wants the RCA.")]
+    fake.state.deliver(make_mail(subject="RCA please", sender=KARTHIK, message_id="<rca@x>"))
+    rca = triaged(client, "RCA please")["id"]
+    matter = wait(lambda: matters(client), "matter")[0]["id"]
+    session = str(current().create("Your brief", [], "daily-prep").id)
+    script.replies = [
+        [ToolCall("p", "read_plate", {})],
+        [
+            ToolCall(
+                "b",
+                "update_brief",
+                {"lead": "The RCA comes first.", "new": [f"Karthik wants the RCA. [mail:{rca}]"]},
+            )
+        ],
+        [TextChunk("Updated.")],
+    ]
+    current().dispatch(TurnRequest(session, "Brief me", "schedule"))
+
+    def lines() -> list[dict[str, Any]]:
+        sections = query(client, "today.view")["prep_sections"]
+        return sections["new"] if sections else []
+
+    assert wait(lambda: lines(), "brief")[0]["matter"] == matter
+    asked = len(script.requests)
+
+    # A reply in the matter: code rewrites its one line, and no model is asked.
+    script.replies = [triage_reply(summary="Karthik sent the drive-test logs.")]
+    fake.state.deliver(
+        make_mail(
+            subject="Re: RCA please", sender=KARTHIK, in_reply_to="<rca@x>", references="<rca@x>"
+        )
+    )
+    updated = wait(
+        lambda: (lambda l: l if l and l[0].get("mark") == "updated" else None)(lines()), "updated"
+    )
+    assert updated[0]["text"].startswith("**RCA please** · waiting on you")
+    assert "drive-test logs" in updated[0]["text"] and "(#cite-" in updated[0]["text"]
+    assert query(client, "today.view")["prep_updated"]
+    assert len(script.requests) == asked + 1  # only the reply's own triage
+
+    # Something new that's theirs and due tomorrow gets a line at the top.
+    script.replies = [triage_reply(summary="HR asks you to sign the form.")]
+    fake.state.deliver(make_mail(subject="Badge renewal", sender="HR <hr@corp.example>"))
+    badge = triaged(client, "Badge renewal")["id"]
+    tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+    command(client, "tasks.save", title="Sign the badge form", thread=badge, due=tomorrow)
+    added = wait(lambda: (lambda l: l if len(l) == 2 else None)(lines()), "added")
+    assert added[0]["mark"] == "added" and added[0]["text"].startswith("**Badge renewal**")
+
+    # Finished, it leaves the brief and shows with what got done.
+    command(client, "thread.setStatus", id=rca, status="resolved")
+    wait(lambda: all(line["matter"] != matter for line in lines()) or None, "gone")
+    assert "RCA please" in [item["title"] for item in query(client, "today.view")["prep_done"]]
+
+    # The next brief is told which lines the app filled in, and what finished, not left to guess.
+    from nexusai.modules.agent import briefs
+
+    told = briefs.current_layer(current().ctx)
+    assert "lines marked so were filled in by the app" in told
+    assert "(added by the app at " in told and "Badge renewal" in told
+    assert "Finished since it was written, so no longer in it: " in told and "RCA please" in told

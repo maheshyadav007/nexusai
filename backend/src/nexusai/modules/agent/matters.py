@@ -899,6 +899,18 @@ def done(ctx: Context, matter: int) -> int:
     return closed
 
 
+def finished(tx: Any, matter: int) -> None:
+    """A matter that finished by itself, with every conversation answered, gets its done step
+    once, so it shows with what got done. Marked by the person, it has one already."""
+    last = tx.execute(
+        "SELECT kind FROM matter_events WHERE matter = ? AND kind IN ('done', 'reopened')"
+        " ORDER BY time DESC, id DESC LIMIT 1",
+        (matter,),
+    ).fetchone()
+    if last is None or last["kind"] != "done":
+        _event(tx, matter, "done", "Nothing left to do", by="engine")
+
+
 def reopen(ctx: Context, matter: int) -> None:
     """Undo for Done: each conversation back as it was, with what closing it closed."""
     db = ctx.bus.db

@@ -1256,13 +1256,22 @@ class RetryTeamTask(BaseModel):
     id: int
 
 
+class BriefLine(BaseModel):
+    text: str
+    # The matter it's about, so the line can follow it during the day.
+    matter: int | None = None
+    # Code changed it since the morning: added for a matter that came up, or updated.
+    mark: Literal["added", "updated"] | None = None
+    at: str | None = None
+
+
 class BriefSections(BaseModel):
     """The brief in the parts Today lays out: one line on what matters most, then what's new and
     what's still open, one line per matter."""
 
     lead: str
-    new: list[str] = Field(default_factory=list)
-    open: list[str] = Field(default_factory=list)
+    new: list[BriefLine] = Field(default_factory=list)
+    open: list[BriefLine] = Field(default_factory=list)
 
 
 class DoneItem(BaseModel):
@@ -1281,6 +1290,8 @@ class TodayView(BaseModel):
     prep_session: str | None
     prep_text: str | None
     prep_sections: BriefSections | None = None
+    # When code last kept the brief in step with a matter, after the run wrote it.
+    prep_updated: str | None = None
     # What got done since yesterday began, worked out by the app rather than the brief.
     prep_done: list[DoneItem] = Field(default_factory=list)
     # What the brief's citation numbers point to.

@@ -11,6 +11,7 @@ Your reply is not shown on Today. Call update_brief once, with the whole brief, 
 - Put an item they already know about in still_open only if it's now urgent or overdue. Don't repeat the rest.
 - Don't list what got done: the app shows that itself, under the brief.
 - If nothing changed, say so in lead and leave the lists empty.
+- Lines marked as filled in by the app were changed after the last brief was written, from new mail, not by you. Take them as what's true now, write them in your own words, and rank everything again. Leave out what it lists as finished.
 
 ## How to write it
 

@@ -2348,9 +2348,13 @@ export type Id68 = number;
 export type Text11 = string;
 export type Id69 = number;
 export type Id70 = number;
+export type Text12 = string;
+export type Matter = number | null;
+export type Mark = ("added" | "updated") | null;
+export type At = string | null;
 export type Lead = string;
-export type New = string[];
-export type Open = string[];
+export type New = BriefLine[];
+export type Open = BriefLine[];
 export type Title16 = string;
 export type When5 = string | null;
 export type Why4 = string;
@@ -2361,6 +2365,7 @@ export type Waiting = TodayThread[];
 export type AutomatedCount = number;
 export type PrepSession = string | null;
 export type PrepText = string | null;
+export type PrepUpdated = string | null;
 export type PrepDone = DoneItem[];
 export type PrepSources = SourceRef[];
 export type PrepAt = string | null;
@@ -2395,12 +2400,12 @@ export type SeenAt = string | null;
 export type ExpiresAt = string | null;
 export type Revision = number;
 export type Line = string;
-export type Text12 = string;
+export type Text13 = string;
 export type Section = string;
 export type Thread10 = number | null;
 export type Confirmed = boolean;
 export type Name38 = string;
-export type Text13 = string;
+export type Text14 = string;
 export type Trust = string;
 export type BriefReactions = BriefReaction[];
 export type Layers2 = KnowledgeLayer[];
@@ -2414,7 +2419,7 @@ export type LearningTotal1 = number;
 export type ConversationsUnread = number;
 export type Thread11 = number;
 export type Agent8 = "daily-prep" | "session";
-export type Text14 = string;
+export type Text15 = string;
 export type Layers3 = KnowledgeLayer[];
 export type Given = string;
 export type Instruction = string;
@@ -2525,7 +2530,7 @@ export type After = string;
 export type Reason6 = string;
 export type Decisions = PreferenceDecision[];
 export type Path11 = string;
-export type Text15 = string;
+export type Text16 = string;
 export type Name41 = string;
 export type Description4 = string;
 export type Origin = "built_in" | "yours";
@@ -2551,7 +2556,7 @@ export type Created5 = string;
 export type Skills = Skill[];
 export type Proposals1 = SkillProposal[];
 export type Url1 = string | null;
-export type Text16 = string | null;
+export type Text17 = string | null;
 export type Id84 = number;
 export type Approve = boolean;
 export type Name43 = string;
@@ -2607,7 +2612,7 @@ export type LastDate2 = string;
 export type QuietDays1 = number;
 export type Started1 = string | null;
 export type Id89 = number;
-export type Matter = number;
+export type Matter1 = number;
 export type Title20 = string;
 export type Time17 = string;
 export type Kind22 =
@@ -2628,9 +2633,9 @@ export type Kind22 =
   | "suggested"
   | "accepted"
   | "declined";
-export type Text17 = string;
+export type Text18 = string;
 export type Why5 = string;
-export type Matter1 = number;
+export type Matter2 = number;
 export type Title21 = string;
 export type What = string;
 export type When7 = string;
@@ -2655,7 +2660,7 @@ export type Emails7 = number;
 export type LastDate3 = string;
 export type How1 = string;
 export type Why6 = string;
-export type Matter2 = number;
+export type Matter3 = number;
 export type Title22 = string;
 export type State13 = "waiting_on_you" | "waiting_on_others" | "fyi" | "done";
 export type Why7 = string;
@@ -2680,7 +2685,7 @@ export type Suggested2 = boolean;
 export type Proposed3 = boolean;
 export type Why8 = string;
 export type Ref4 = string;
-export type Matter3 = number | null;
+export type Matter4 = number | null;
 export type Title25 = string;
 export type Items5 = MatterItem[];
 export type Trigger1 = string;
@@ -2698,7 +2703,7 @@ export type Keep = string[];
 export type Refs = string[];
 export type Id92 = number;
 export type Into2 = number;
-export type Matter4 = number;
+export type Matter5 = number;
 export type Ref5 = string;
 export type Why9 = string;
 export type Start2 = string | null;
@@ -2883,7 +2888,7 @@ export type UserCode = string | null;
 export type VerificationUrl = string | null;
 export type Error9 = string | null;
 export type Model6 = string;
-export type Text18 = string;
+export type Text19 = string;
 export type Change = "login_started" | "login_failed" | "login_cancelled" | "connected" | "disconnected" | "selected";
 export type Connected = boolean;
 export type AccountEmail = string | null;
@@ -2984,7 +2989,7 @@ export type Ok8 = boolean;
 export type Detail10 = string;
 export type Checks = NetworkCheck[];
 export type Level4 = string | null;
-export type Text19 = string | null;
+export type Text20 = string | null;
 export type Events5 = {
   [k: string]: unknown;
 }[];
@@ -3310,6 +3315,7 @@ export interface Contracts {
   NoteOnTeamTask?: NoteOnTeamTask;
   CancelTeamTask?: CancelTeamTask;
   RetryTeamTask?: RetryTeamTask;
+  BriefLine?: BriefLine;
   BriefSections?: BriefSections;
   DoneItem?: DoneItem;
   TodayView?: TodayView;
@@ -6771,6 +6777,17 @@ export interface RetryTeamTask {
   id: Id70;
 }
 /**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "BriefLine".
+ */
+export interface BriefLine {
+  text: Text12;
+  matter?: Matter;
+  mark?: Mark;
+  at?: At;
+  [k: string]: unknown;
+}
+/**
  * The brief in the parts Today lays out: one line on what matters most, then what's new and
  * what's still open, one line per matter.
  *
@@ -6806,6 +6823,7 @@ export interface TodayView {
   prep_session: PrepSession;
   prep_text: PrepText;
   prep_sections?: BriefSections | null;
+  prep_updated?: PrepUpdated;
   prep_done?: PrepDone;
   prep_sources?: PrepSources;
   prep_at?: PrepAt;
@@ -6896,7 +6914,7 @@ export interface LearnedNote {
   expires_at?: ExpiresAt;
   revision?: Revision;
   line: Line;
-  text: Text12;
+  text: Text13;
   section: Section;
   thread: Thread10;
   confirmed?: Confirmed;
@@ -6908,7 +6926,7 @@ export interface LearnedNote {
  */
 export interface KnowledgeLayer {
   name: Name38;
-  text: Text13;
+  text: Text14;
   trust: Trust;
   [k: string]: unknown;
 }
@@ -6951,7 +6969,7 @@ export interface PreviewMail {
  */
 export interface PreviewAgent {
   agent: Agent8;
-  text?: Text14;
+  text?: Text15;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -7242,7 +7260,7 @@ export interface PreferenceSimulation {
  */
 export interface SkillFile {
   path: Path11;
-  text: Text15;
+  text: Text16;
   [k: string]: unknown;
 }
 /**
@@ -7305,7 +7323,7 @@ export interface SkillList {
  */
 export interface AddSkill {
   url?: Url1;
-  text?: Text16;
+  text?: Text17;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -7459,11 +7477,11 @@ export interface MatterRow {
  */
 export interface MatterChange {
   id: Id89;
-  matter: Matter;
+  matter: Matter1;
   title: Title20;
   time: Time17;
   kind: Kind22;
-  text: Text17;
+  text: Text18;
   why?: Why5;
   source?: SourceRef | null;
   [k: string]: unknown;
@@ -7473,7 +7491,7 @@ export interface MatterChange {
  * via the `definition` "MatterDue".
  */
 export interface MatterDue {
-  matter: Matter1;
+  matter: Matter2;
   title: Title21;
   what: What;
   when: When7;
@@ -7543,7 +7561,7 @@ export interface MatterThread {
  * via the `definition` "MatterLinkRow".
  */
 export interface MatterLinkRow {
-  matter: Matter2;
+  matter: Matter3;
   title: Title22;
   state: State13;
   why: Why7;
@@ -7619,7 +7637,7 @@ export interface GetMatterRelated {
  * via the `definition` "MatterRelated".
  */
 export interface MatterRelated {
-  matter?: Matter3;
+  matter?: Matter4;
   title?: Title25;
   items?: Items5;
   [k: string]: unknown;
@@ -7653,7 +7671,7 @@ export interface MergeMatters {
  * via the `definition` "AttachToMatter".
  */
 export interface AttachToMatter {
-  matter: Matter4;
+  matter: Matter5;
   ref: Ref5;
   why?: Why9;
 }
@@ -8280,7 +8298,7 @@ export interface ModelLogin {
  */
 export interface ModelReply {
   model: Model6;
-  text: Text18;
+  text: Text19;
   [k: string]: unknown;
 }
 /**
@@ -8690,7 +8708,7 @@ export interface NetworkChecks {
  */
 export interface SearchLogs {
   level?: Level4;
-  text?: Text19;
+  text?: Text20;
 }
 /**
  * Everything that happened under one trace ID, oldest first.
