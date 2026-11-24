@@ -31,6 +31,11 @@ SOURCES_MIGRATION = Migration(
     "agent_brief_sources_001",
     "ALTER TABLE brief_artifacts ADD COLUMN sources TEXT NOT NULL DEFAULT '[]';",
 )
+# The brief in its parts, so Today lays it out the same way every day. An older brief has none.
+SECTIONS_MIGRATION = Migration(
+    "agent_brief_sections_001",
+    "ALTER TABLE brief_artifacts ADD COLUMN sections TEXT;",
+)
 BULLET = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
 REPLY_PREFIX = re.compile(r"^(?:(?:re|fwd?|aw|sv)\s*:\s*)+", re.IGNORECASE)
 # Shorter subjects, like "Hi", would match bullets that aren't about them.
@@ -123,7 +128,21 @@ def coverage(ctx: Context) -> str:
     )
 
 
-def save(ctx: Context, session: str, text: str) -> str:
+def _line(text: str) -> str:
+    """One item, without the bullet a model may still put in front of it."""
+    return BULLET.sub("", " ".join(text.split()))
+
+
+def as_text(lead: str, new: list[str], still_open: list[str]) -> str:
+    """The same brief as Markdown: for the next brief to read, and for the person's history."""
+    parts = [lead]
+    for heading, items in (("New", new), ("Still open", still_open)):
+        if items:
+            parts.append(f"**{heading}**\n" + "\n".join(f"- {item}" for item in items))
+    return "\n\n".join(parts)
+
+
+def save(ctx: Context, session: str, lead: str, new: list[str], still_open: list[str]) -> str:
     """The brief agent's update_brief. One brief per run: saving again in the same run replaces it."""
     turns = ctx.bus.db.fetch_all(
         "SELECT id FROM agent_turns WHERE session=? AND closed=0 ORDER BY id DESC LIMIT 1",
@@ -132,9 +151,19 @@ def save(ctx: Context, session: str, text: str) -> str:
     if not turns:
         return "There's no run to save this brief from."
     turn = turns[0]["id"]
+    lead = " ".join(lead.split())
+    new = [line for line in map(_line, new) if line]
+    still_open = [line for line in map(_line, still_open) if line]
+    text = as_text(lead, new, still_open)
     missing = uncited(ctx, text)
     cited = citations.Citations(ctx, turn)
-    shown = cited.rewrite(text.strip())
+    # One numbering across the parts, so [2] is the same email wherever it's cited.
+    sections = {
+        "lead": cited.rewrite(lead),
+        "new": [cited.rewrite(line) for line in new],
+        "open": [cited.rewrite(line) for line in still_open],
+    }
+    shown = as_text(sections["lead"], sections["new"], sections["open"])
     part = cited.part()
     sources = part[0]["data"]["sources"] if part else []
     inputs = ctx.bus.db.fetch_all("SELECT * FROM brief_inputs WHERE turn=?", (turn,))
@@ -150,9 +179,10 @@ def save(ctx: Context, session: str, text: str) -> str:
             coverage = json.loads(data.splitlines()[0].removeprefix("Coverage: "))
     with ctx.bus.unit_of_work() as work:
         work.tx.execute(
-            "INSERT INTO brief_artifacts(turn,session,account,text,created,partial,snapshot,sources)"
-            " VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(turn) DO UPDATE SET text=excluded.text,"
-            "created=excluded.created,partial=excluded.partial,sources=excluded.sources",
+            "INSERT INTO brief_artifacts(turn,session,account,text,created,partial,snapshot,sources,sections)"
+            " VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(turn) DO UPDATE SET text=excluded.text,"
+            "created=excluded.created,partial=excluded.partial,sources=excluded.sources,"
+            "sections=excluded.sections",
             (
                 turn,
                 session,
@@ -162,6 +192,7 @@ def save(ctx: Context, session: str, text: str) -> str:
                 int(bool(pending or coverage.get("partial"))),
                 data,
                 json.dumps(sources),
+                json.dumps(sections),
             ),
         )
         work.emit("brief.ready", {"turn": turn}, source="agent", trace_id=ctx.trace_id)
@@ -170,10 +201,42 @@ def save(ctx: Context, session: str, text: str) -> str:
         return saved
     # Saved anyway, so a brief is never lost to a missing marker. One more call fixes it.
     return (
-        f"{saved}\n\nNote: these bullets are about mail on the plate but have no marker. Add each "
+        f"{saved}\n\nNote: these lines are about mail on the plate but have no marker. Add each "
         "marker straight after what it supports, then call update_brief again with the whole brief:\n"
         + "\n".join(missing)
     )
+
+
+def done_since(ctx: Context, since: str) -> list[dict[str, str]]:
+    """What got finished since `since`, worked out by the app, so the brief never has to say it:
+    tasks ticked, reminders that went off and matters closed. Newest first."""
+    db = ctx.bus.db
+    found = [
+        {"title": row["title"], "when": row["completed"], "why": row["looks_done"] or ""}
+        for row in db.fetch_all(
+            "SELECT title, completed, looks_done FROM tasks WHERE status = 'done'"
+            " AND proposed = 0 AND completed >= ?",
+            (since,),
+        )
+    ]
+    now = datetime.now(UTC).isoformat()
+    found += [
+        {"title": row["title"], "when": row["due_at"], "why": "Reminder went off"}
+        for row in db.fetch_all(
+            "SELECT title, due_at FROM reminders WHERE fired = 1 AND proposed = 0"
+            " AND due_at >= ? AND due_at <= ?",
+            (since[:16], now[:16]),
+        )
+    ]
+    found += [
+        {"title": row["title"], "when": row["time"], "why": "Matter done"}
+        for row in db.fetch_all(
+            "SELECT m.title, e.time FROM matter_events e JOIN matters m ON m.id = e.matter"
+            " WHERE e.kind = 'done' AND e.time >= ? AND m.account = ?",
+            (since, accounts.current_account(ctx.config)),
+        )
+    ]
+    return sorted(found, key=lambda item: item["when"] or "", reverse=True)
 
 
 def uncited(ctx: Context, text: str) -> list[str]:

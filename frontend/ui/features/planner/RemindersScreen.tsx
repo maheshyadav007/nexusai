@@ -8,6 +8,7 @@ import { AddBar, dayAt, localMoment, QUICK_TIMES, REPEATS, WhenPicker } from "./
 import { useReminders, useRemoveReminder, useSaveReminder, useSnooze } from "@/ui/client/work";
 import { Icon } from "@/ui/icons";
 import { Button } from "@/ui/primitives/Button";
+import { DoneGroup, DoneRow } from "@/ui/primitives/DoneGroup";
 import { EmptyState } from "@/ui/primitives/EmptyState";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { ExpandRow } from "@/ui/primitives/ExpandRow";
@@ -109,13 +110,17 @@ function ReminderRow({ reminder }: { reminder: Reminder }) {
 }
 
 export function RemindersScreen() {
-  const reminders = useReminders();
+  const reminders = useReminders(true);
   const save = useSaveReminder();
+  const remove = useRemoveReminder();
   const clock = useTimeOnly();
+  const day = useShortDate();
   const [title, setTitle] = useState("");
   const [when, setWhen] = useState(() => localMoment(QUICK_TIMES[2]!.when()));
   const [repeat, setRepeat] = useState<Repeat>("none");
-  const rows = [...(reminders.data?.reminders ?? [])].sort((a, b) => a.when.localeCompare(b.when));
+  const all = reminders.data?.reminders ?? [];
+  const rows = all.filter((row) => !row.fired).sort((a, b) => a.when.localeCompare(b.when));
+  const done = all.filter((row) => row.fired).sort((a, b) => b.when.localeCompare(a.when));
   const groups = ORDER.map((key) => ({ key, rows: rows.filter((row) => bucket(row.when) === key) })).filter((group) => group.rows.length);
   const next = rows.find((row) => new Date(row.when).getTime() >= Date.now());
   const add = () => save.mutate({ title: title.trim(), when, repeat }, { onSuccess: () => { setTitle(""); setRepeat("none"); } });
@@ -140,6 +145,9 @@ export function RemindersScreen() {
           </Rise>
         ))}
       </Presence>
+      <DoneGroup label={t("done.label")} count={done.length} testid="reminders-done">
+        {done.map((reminder) => <DoneRow key={reminder.id} testid="reminder-done" title={reminder.title} meta={t("reminders.wentOff", { when: day(reminder.when) })} action={<IconButton icon="trash" label={t("tasks.remove", { title: reminder.title })} onClick={() => remove.mutate(reminder.id)} />} />)}
+      </DoneGroup>
     </div>
   );
 }

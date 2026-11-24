@@ -614,10 +614,22 @@ class _Say(BaseModel):
 
 
 class _Brief(BaseModel):
-    text: str = Field(
+    lead: str = Field(
         min_length=1,
-        max_length=6000,
-        description="The whole brief in Markdown bullets. It replaces the one on Today.",
+        max_length=600,
+        description="One sentence: the single most important thing today, and why.",
+    )
+    new: list[str] = Field(
+        default_factory=list,
+        max_length=12,
+        description="What's new or changed since the last brief, one line per matter, each"
+        " ending with its marker like [mail:123].",
+    )
+    still_open: list[str] = Field(
+        default_factory=list,
+        max_length=12,
+        description="What was already known and is now urgent or overdue, one line per matter,"
+        " each ending with its marker.",
     )
     tool_call_id: Annotated[str, InjectedToolCallId]
 
@@ -1704,8 +1716,13 @@ def build_tools(
     def read_plate(tool_call_id: str) -> str:
         return mail_agent.brief_task(ctx)
 
-    def update_brief(text: str, tool_call_id: str) -> str:
-        return briefs.save(ctx, session, text)
+    def update_brief(
+        lead: str,
+        tool_call_id: str,
+        new: list[str] | None = None,
+        still_open: list[str] | None = None,
+    ) -> str:
+        return briefs.save(ctx, session, lead, new or [], still_open or [])
 
     def notify_person(text: str, tool_call_id: str) -> str:
         with ctx.bus.unit_of_work() as work:

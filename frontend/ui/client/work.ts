@@ -7,7 +7,6 @@ import { command, query } from "./api";
 import type { RenameAgent, SetMascot, ContextSettings, SaveTrigger, GetCockpitEvents, MailAgentSettings, QuietHours, Schedule, SaveMemory, SavePrompt, SaveReminder, SaveTask, SendCheckSettings, SetSessionContext, GuardRules, SaveModelProvider, ListProviderModels } from "./contracts.generated";
 import { useHomeReady } from "./home";
 import { useGenerationCommand } from "./generation";
-import { useCategories } from "./mail";
 import { askAboutRest } from "./rest";
 import { useApprovals } from "./sessions";
 
@@ -85,7 +84,7 @@ export function useSaveTask() {
   });
 }
 export const useRemoveTask = () => useCommand(["tasks"], (id: number) => command("tasks.remove", { id }));
-export const useReminders = () => useReady(["reminders"], () => query("reminders.list", {}));
+export const useReminders = (includeDone = false) => useReady(["reminders", includeDone], () => query("reminders.list", { include_done: includeDone }));
 export const useSaveReminder = () => useCommand(["reminders"], (input: SaveReminder) => command("reminders.save", input));
 export const useSnooze = () => useCommand(["reminders"], (input: { id: number; minutes: number }) => command("reminders.snooze", input));
 export const useRemoveReminder = () => useCommand(["reminders"], (id: number) => command("reminders.remove", { id }));
@@ -103,8 +102,6 @@ export const useMailPreview = (thread: number | null) => useQuery({ queryKey: ["
 export const useReadMore = () => useCommand(["knowledge", "mail-agent", "cockpit"], (count: number) => command("mailAgent.readMore", { count }));
 export const useConfirmNote = () => useCommand(["knowledge", "memory"], (line: string) => command("memory.confirmNote", { line }));
 export const useRemoveNote = () => useCommand(["knowledge", "memory"], (line: string) => command("memory.removeNote", { line }));
-export const useSuggestions = () => useReady(["suggestions"], () => query("suggestions.list", {}));
-export const useDecideSuggestion = () => useCommand(["suggestions", "today", "threads", "categories"], (input: { id: number; accept: boolean }) => command("suggestions.decide", input));
 export const useReactToBrief = () => useCommand(["today", "knowledge"], (input: { session: string; artifact?: number; rating: "up" | "down" | null; comment: string }) => command("brief.react", input));
 export const useAgents = () => useReady(["agents"], () => query("agents.registry", {}));
 
@@ -237,17 +234,12 @@ export function useWaitingCount(): number {
   const approvals = useApprovals();
   const tasks = useTasks(false);
   const reminders = useReminders();
-  const memory = useMemory("");
-  const categories = useCategories();
-  const suggestions = useSuggestions();
+  // Suggested work, and work a later email shows done: both wait on the person's word.
   return (
     (channel.data?.messages ?? []).filter((message) => message.kind === "ask").length +
     (approvals.data?.approvals.length ?? 0) +
-    (tasks.data?.tasks ?? []).filter((task) => task.proposed).length +
-    (reminders.data?.reminders ?? []).filter((reminder) => reminder.proposed).length +
-    (memory.data?.proposals.length ?? 0) +
-    (categories.data?.categories ?? []).filter((item) => item.proposed || item.priority_suggested).length +
-    (suggestions.data?.suggestions.length ?? 0)
+    (tasks.data?.tasks ?? []).filter((task) => task.proposed || task.looks_done).length +
+    (reminders.data?.reminders ?? []).filter((reminder) => reminder.proposed || reminder.looks_done).length
   );
 }
 

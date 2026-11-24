@@ -16,7 +16,14 @@ Check = Callable[[dict[str, Any], str], str | None]
 
 
 def _brief_cites(args: dict[str, Any], result: str) -> str | None:
-    if not result.startswith("Saved") or MARKER.search(str(args.get("text") or "")):
+    said = " ".join(
+        [
+            str(args.get("lead") or ""),
+            *map(str, args.get("new") or []),
+            *map(str, args.get("still_open") or []),
+        ]
+    )
+    if not result.startswith("Saved") or MARKER.search(said):
         return None
     return (
         "Note: this brief cites nothing. Every point that comes from an email needs its marker "

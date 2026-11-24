@@ -101,6 +101,8 @@ ALTER TABLE reminders ADD COLUMN looks_done TEXT;
     ],
 )
 REPEATS = {"day": timedelta(days=1), "week": timedelta(weeks=1)}
+# How far back reminders that went off are still listed, as done.
+DONE_SHOWN_DAYS = 30
 KNOWN_REPEATS: tuple[str, ...] = get_args(Repeat)
 # What models and people often write instead.
 REPEAT_WORDS = {
@@ -450,9 +452,10 @@ def save_task(command: SaveTask, ctx: Context) -> PlannerDone:
     with ctx.bus.unit_of_work() as work:
         before = work.tx.execute("SELECT * FROM tasks WHERE id = ?", (command.id,)).fetchone()
         work.tx.execute(
+            # Saved by the person, so a "looks done" mark has had its answer either way.
             "UPDATE tasks SET title = ?, notes = ?, status = ?, due = ?, thread = ?, proposed = ?,"
-            " updated = ?, completed = CASE WHEN ? = 'done' THEN COALESCE(completed, ?) END"
-            " WHERE id = ?",
+            " updated = ?, completed = CASE WHEN ? = 'done' THEN COALESCE(completed, ?) END,"
+            " looks_done = NULL WHERE id = ?",
             (
                 command.title,
                 command.notes,
@@ -508,8 +511,11 @@ def remove_task(command: TaskAction, ctx: Context) -> PlannerDone:
 
 @planner_module.query("reminders.list")
 def list_reminders(query: ListReminders, ctx: Context) -> ReminderList:
+    since = (datetime.now(UTC) - timedelta(days=DONE_SHOWN_DAYS)).isoformat()[:16]
     rows = ctx.bus.db.fetch_all(
-        "SELECT * FROM reminders WHERE fired = 0 ORDER BY proposed DESC, due_at"
+        "SELECT * FROM reminders WHERE fired = 0 OR (? AND proposed = 0 AND due_at >= ?)"
+        " ORDER BY fired, proposed DESC, due_at",
+        (int(query.include_done), since),
     )
     return ReminderList(reminders=[_reminder(ctx.bus.db, row) for row in rows])
 
@@ -533,7 +539,7 @@ def save_reminder(command: SaveReminder, ctx: Context) -> PlannerDone:
     with ctx.bus.unit_of_work() as work:
         work.tx.execute(
             "UPDATE reminders SET title = ?, due_at = ?, repeat = ?, repeat_day = ?, thread = ?,"
-            " task = ?, proposed = ?, fired = 0, updated = ? WHERE id = ?",
+            " task = ?, proposed = ?, fired = 0, updated = ?, looks_done = NULL WHERE id = ?",
             (
                 command.title,
                 when,

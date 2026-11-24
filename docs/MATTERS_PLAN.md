@@ -59,7 +59,8 @@ IMAP / PST ──► store_message ──► rule engine (rules.Engine.decide)
                                                               model calls record_triage
                                                               Triage._apply writes status, importance,
                                                               tasks, reminders, draft, folders
-Brief: daily-prep schedule ──► brief_task() ──► update_brief (whole text, once a morning)
+Brief: daily-prep schedule ──► brief_task() ──► update_brief (lead, new, still_open; once a morning)
+      app ──► done since yesterday (tasks ticked, reminders gone off, matters closed)
 ```
 
 ### Why duplicates happen (verified in code, 2026-11-21)

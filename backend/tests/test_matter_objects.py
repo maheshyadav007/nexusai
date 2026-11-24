@@ -282,7 +282,7 @@ def test_the_morning_brief_waits_until_the_mail_is_judged_then_runs(
             " VALUES ('schedule', 'morning', '2026-01-01', 'pending', ?)",
             (brief,),
         )
-    script.replies = [[ToolCall("b", "update_brief", {"text": "Your morning: all judged."})]]
+    script.replies = [[ToolCall("b", "update_brief", {"lead": "Your morning: all judged."})]]
     status = "SELECT status FROM trigger_runs WHERE event = 'morning'"
     # Mail still being judged: the brief stays pending, however often the loop looks.
     monkeypatch.setattr(triggers, "_mail_settled", lambda: False)

@@ -118,7 +118,9 @@ test("Today shows one matter per thing, as a brief, a week and a timeline", asyn
   const row = page.getByTestId("matter-row").filter({ hasText: first });
   await expect(row).toBeVisible({ timeout: 30_000 });
   await expect(row).toContainText("2 emails", { timeout: 30_000 });
-  await expect(page.getByTestId("matter-change").filter({ hasText: first }).first()).toBeVisible();
+  // New since the person last looked: counted at the top and marked on the matter itself.
+  await expect(row.getByTestId("matter-changed")).toBeVisible();
+  await expect(page.getByTestId("since-changed")).toBeVisible();
   // A Brief row has no Done button: it's in the row's menu.
   await expect(row.getByRole("button", { name: "Done" })).toHaveCount(0);
   await row.click({ button: "right" });
@@ -230,11 +232,16 @@ test("a proposed task is accepted, finished, and removed", async ({ page }) => {
 
   await mine.getByRole("checkbox").click();
   await expect(mine).toHaveCount(0);
-  await page.getByRole("radio", { name: /^Done/ }).click();
+  // Done sits closed at the bottom, struck through, and can be opened again from there.
+  const done = page.getByTestId("tasks-done");
+  await done.getByRole("button", { name: /^Done/ }).click();
+  const finished = done.getByTestId("task-done").filter({ hasText: title });
+  await expect(finished).toBeVisible();
+  await noViolations(page);
+  await finished.getByRole("button", { name: "Mark not done" }).click();
   await expect(mine).toBeVisible();
   await mine.getByRole("button", { name: `Open ${title}` }).click();
   await expect(mine.getByTestId("task-times")).toContainText("Added");
-  await expect(mine.getByTestId("task-times")).toContainText("finished");
   await mine.getByRole("button", { name: `Remove ${title}` }).click();
   await expect(mine).toHaveCount(0);
 

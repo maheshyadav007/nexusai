@@ -4,13 +4,13 @@ import { SortMailCard } from "./SortMailCard";
 import Link from "next/link";
 import appConfig from "@/app.config.json";
 import { useEffect, useState, type ReactNode } from "react";
-import type { ChannelMessage, DueItem, MailCategory, TodayThread, ToolApproval } from "@/ui/client/contracts.generated";
+import type { BriefSections as Sections, ChannelMessage, DueItem, SourceRef, TodayThread, ToolApproval } from "@/ui/client/contracts.generated";
 import { useDateOnly, useDateTime, useShortDate, useTimeOnly } from "@/ui/client/format";
-import { useCategories, useDecideCategory, useDecidePriority, useMailStatus, useSetImportance, useSetStatus } from "@/ui/client/mail";
+import { useMailStatus, useSetImportance, useSetStatus } from "@/ui/client/mail";
 import { groupApprovals, useApprovals, useDecideApprovals, useSessions } from "@/ui/client/sessions";
 import { useLeadName } from "@/ui/client/home";
 import { useProfile } from "@/ui/client/onboarding";
-import { useChannel, useCockpit, useMattersBrief, useDecideMemory, useDecideSuggestion, useSuggestions, useDismissChannel, useMarkTodaySeen, useMemory, useReactToBrief, useReminders, useRemoveReminder, useRemoveTask, useRespondChannel, useSaveReminder, useSaveTask, useTasks, useToday, useWaitingCount, useAgentName } from "@/ui/client/work";
+import { useChannel, useCockpit, useMattersBrief, useMatterList, useDismissChannel, useMarkTodaySeen, useReactToBrief, useReminders, useRemoveReminder, useRemoveTask, useRespondChannel, useSaveReminder, useSaveTask, useTasks, useToday, useWaitingCount, useAgentName } from "@/ui/client/work";
 import { AskAgent } from "@/ui/features/agent/AskAgent";
 import { useAssistant } from "@/ui/features/assistant/AssistantProvider";
 import { ApprovalGroupCard, QuestionCard } from "@/ui/features/assistant/Cards";
@@ -22,6 +22,7 @@ import { SourceChip } from "@/ui/features/sources/SourceChip";
 import { Icon, type IconName } from "@/ui/icons";
 import { AttentionCount } from "@/ui/primitives/AttentionCount";
 import { Badge } from "@/ui/primitives/Badge";
+import { DoneGroup, DoneRow } from "@/ui/primitives/DoneGroup";
 import { Button } from "@/ui/primitives/Button";
 import { Checkbox } from "@/ui/primitives/Checkbox";
 import { EmptyState } from "@/ui/primitives/EmptyState";
@@ -37,7 +38,7 @@ import { TextLink } from "@/ui/primitives/TextLink";
 import { useToast } from "@/ui/primitives/Toast";
 import { t, tn, type StringKey } from "@/ui/strings";
 import { FinishSetup } from "./FinishSetup";
-import { MatterGroups, RunningBrief } from "./matters/BriefTab";
+import { MatterGroups, useChangedMatters } from "./matters/BriefTab";
 import { MattersTab } from "./matters/MattersTab";
 import { useTodayView, type TodayView } from "./matters/parts";
 import { WeekTab } from "./matters/WeekTab";
@@ -206,9 +207,10 @@ function useRowAction(item: Pick<WaitingItem, "doIt" | "decline">) {
   return { acting, done, failed, run };
 }
 
-function ProposalRow({ icon, title, meta, why, source, item, accept = t("tasks.accept"), selecting, selected, onToggle }: { icon: IconName; title: string; meta: string; why?: string | null | undefined; source?: PreviewSource | null | undefined; item: WaitingItem; accept?: string; selecting: boolean; selected: boolean; onToggle: () => void }) {
+function ProposalRow({ icon, title, meta, why, source, item, accept = t("tasks.accept"), decline = t("memory.decline"), kicker, matter, selecting, selected, onToggle }: { icon: IconName; title: string; meta: string; why?: string | null | undefined; source?: PreviewSource | null | undefined; item: WaitingItem; accept?: string; decline?: string; kicker?: string; matter?: MatterOf | undefined; selecting: boolean; selected: boolean; onToggle: () => void }) {
   const { acting, done, failed, run } = useRowAction(item);
   const lead = useLeadName();
+  const { go } = useTodayView();
   const busy = acting !== null || done;
   return (
     <Rise as="li" settle data-testid="proposal" data-state={done ? "done" : failed ? "failed" : acting ? "running" : "idle"} className="ai-edge flex flex-col gap-2 rounded-lg p-4">
@@ -218,11 +220,13 @@ function ProposalRow({ icon, title, meta, why, source, item, accept = t("tasks.a
           <Icon name={icon} />
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <p className="text-sm text-ink-secondary">{t("tasks.proposed", { name: lead })}</p>
+          <p className="text-sm text-ink-secondary">{kicker ?? t("tasks.proposed", { name: lead })}</p>
           <p className="break-words text-md font-medium text-ink-primary">{title}</p>
           <p className="text-sm tabular-nums text-ink-muted">{meta}</p>
           {why ? <p className="text-sm text-ink-secondary">{why}</p> : null}
           {source ? <div><SourceChip source={source} /></div> : null}
+          {/* Which matter it's for, so a suggestion is never an orphan line. */}
+          {matter ? <Pressable data-testid="proposal-matter" onClick={() => go("matters", matter.id)} className="focus-ring self-start rounded-sm text-sm text-accent-default underline underline-offset-2 hover:text-accent-hover">{t("today.proposal.for", { title: matter.title })}</Pressable> : null}
         </div>
         {selecting ? null : (
           <div className="flex shrink-0 items-center gap-2">
@@ -230,7 +234,7 @@ function ProposalRow({ icon, title, meta, why, source, item, accept = t("tasks.a
               <span role="status" className="flex items-center gap-1 text-sm text-status-success"><Icon name="check" className="h-4 w-4" />{t("today.action.doneLabel")}</span>
             ) : (
               <>
-                <Button variant="quiet" thinking loading={acting === "decline"} disabled={busy} onClick={() => void run("decline")}>{t("memory.decline")}</Button>
+                <Button variant="quiet" thinking loading={acting === "decline"} disabled={busy} onClick={() => void run("decline")}>{decline}</Button>
                 <Button variant="primary" thinking loading={acting === "accept"} disabled={busy} onClick={() => void run("accept")}>{accept}</Button>
               </>
             )}
@@ -290,21 +294,30 @@ function BulkBar({ items, picked, onPick, onClear, onCancel }: { items: readonly
 
 /** Everything agents are waiting on the person for, in one place, answered right here. The
  *  same panel opens from the shield in the top bar, so both always agree. */
+type MatterOf = { id: number; title: string };
+
+/** Which matter each task or reminder belongs to, from the matters' own lists of their work. */
+function useMatterOf(): (key: string) => MatterOf | undefined {
+  const open = useMatterList(false);
+  const brief = useMattersBrief();
+  const found = new Map<string, MatterOf>();
+  for (const matter of [...(open.data?.matters ?? []), ...(brief.data?.suggested ?? [])]) {
+    for (const work of matter.work ?? []) found.set(`${work.kind}:${work.id}`, { id: matter.id, title: matter.title });
+  }
+  return (key) => found.get(key);
+}
+
 export function WaitingOnYou({ inPopover = false }: { inPopover?: boolean } = {}) {
   const lead = useLeadName();
   const channel = useChannel();
   const approvals = useApprovals();
   const tasks = useTasks(false);
   const reminders = useReminders();
-  const memory = useMemory("");
-  const categories = useCategories();
+  const matterOf = useMatterOf();
   const saveTask = useSaveTask();
   const removeTask = useRemoveTask();
   const saveReminder = useSaveReminder();
   const removeReminder = useRemoveReminder();
-  const decideMemory = useDecideMemory();
-  const decideCategory = useDecideCategory();
-  const decidePriority = useDecidePriority();
   const decideApprovals = useDecideApprovals();
   const dismiss = useDismissChannel();
   const formatWhen = useDateTime();
@@ -313,11 +326,9 @@ export function WaitingOnYou({ inPopover = false }: { inPopover?: boolean } = {}
   const pending = approvals.data?.approvals ?? [];
   const proposedTasks = (tasks.data?.tasks ?? []).filter((task) => task.proposed);
   const proposedReminders = (reminders.data?.reminders ?? []).filter((reminder) => reminder.proposed);
-  const proposedMemories = memory.data?.proposals ?? [];
-  const suggestions = useSuggestions();
-  const decideSuggestion = useDecideSuggestion();
-  const proposedCategories: readonly MailCategory[] = (categories.data?.categories ?? []).filter((item) => item.proposed);
-  const priorityPicks: readonly MailCategory[] = (categories.data?.categories ?? []).filter((item) => item.priority_suggested);
+  // A later email shows these done. The person closes them, or keeps them open.
+  const doneTasks = (tasks.data?.tasks ?? []).filter((task) => task.looks_done && !task.proposed);
+  const doneReminders = (reminders.data?.reminders ?? []).filter((reminder) => reminder.looks_done && !reminder.proposed);
   const count = useWaitingCount();
   const [selecting, setSelecting] = useState(false);
   // What only an agent can't settle (approvals, questions) shows first. Suggestions can wait, so
@@ -328,10 +339,8 @@ export function WaitingOnYou({ inPopover = false }: { inPopover?: boolean } = {}
   const groupKey = (group: readonly ToolApproval[]) => `approval-${group[0]?.session}-${group[0]?.tool}`;
   const taskItem = (task: (typeof proposedTasks)[number]): WaitingItem => ({ key: `task-${task.id}`, title: task.title, doIt: () => saveTask.mutateAsync({ id: task.id, title: task.title, notes: task.notes, status: task.status, due: task.due ?? null, thread: task.thread ?? null, proposed: false }), decline: () => removeTask.mutateAsync(task.id) });
   const reminderItem = (reminder: (typeof proposedReminders)[number]): WaitingItem => ({ key: `reminder-${reminder.id}`, title: reminder.title, doIt: () => saveReminder.mutateAsync({ id: reminder.id, title: reminder.title, when: reminder.when, repeat: reminder.repeat, thread: reminder.thread ?? null, task: reminder.task ?? null, proposed: false }), decline: () => removeReminder.mutateAsync(reminder.id) });
-  const categoryItem = (item: MailCategory): WaitingItem => ({ key: `category-${item.name}`, title: item.name, doIt: () => decideCategory.mutateAsync({ name: item.name, accept: true }), decline: () => decideCategory.mutateAsync({ name: item.name, accept: false }) });
-  const priorityItem = (item: MailCategory): WaitingItem => ({ key: `priority-${item.name}`, title: t("today.priority.title", { category: item.name }), doIt: () => decidePriority.mutateAsync({ name: item.name, accept: true }), decline: () => decidePriority.mutateAsync({ name: item.name, accept: false }) });
-  const suggestionItem = (item: NonNullable<typeof suggestions.data>["suggestions"][number]): WaitingItem => ({ key: `suggestion-${item.id}`, title: t("today.suggestion.title", { category: item.category, count: item.emails }), doIt: () => decideSuggestion.mutateAsync({ id: item.id, accept: true }), decline: () => decideSuggestion.mutateAsync({ id: item.id, accept: false }) });
-  const memoryItem = (item: (typeof proposedMemories)[number]): WaitingItem => ({ key: `memory-${item.id}`, title: item.text, doIt: () => decideMemory.mutateAsync({ id: item.id, accept: true }), decline: () => decideMemory.mutateAsync({ id: item.id, accept: false }) });
+  const doneTaskItem = (task: (typeof doneTasks)[number]): WaitingItem => ({ key: `done-task-${task.id}`, title: task.title, doIt: () => saveTask.mutateAsync({ id: task.id, title: task.title, notes: task.notes, status: "done", due: task.due ?? null, thread: task.thread ?? null, proposed: false }), decline: () => saveTask.mutateAsync({ id: task.id, title: task.title, notes: task.notes, status: task.status, due: task.due ?? null, thread: task.thread ?? null, proposed: false }) });
+  const doneReminderItem = (reminder: (typeof doneReminders)[number]): WaitingItem => ({ key: `done-reminder-${reminder.id}`, title: reminder.title, doIt: () => removeReminder.mutateAsync(reminder.id), decline: () => saveReminder.mutateAsync({ id: reminder.id, title: reminder.title, when: reminder.when, repeat: reminder.repeat, thread: reminder.thread ?? null, task: reminder.task ?? null, proposed: false }) });
   const approvalItem = (group: readonly ToolApproval[]): WaitingItem => {
     const ids = group.map((row) => row.id);
     // Mail going out and commands running are read one at a time, never waved through in a batch.
@@ -339,17 +348,15 @@ export function WaitingOnYou({ inPopover = false }: { inPopover?: boolean } = {}
     return { key: groupKey(group), title: group[0]?.tool_label ?? group[0]?.tool ?? "", ...(careful ? {} : { doIt: () => decideApprovals.mutateAsync({ allow: ids }) }), decline: () => decideApprovals.mutateAsync({ deny: ids }) };
   };
   const askItem = (message: ChannelMessage): WaitingItem => ({ key: `ask-${message.id}`, title: message.text, decline: () => dismiss.mutateAsync(message.id) });
-  const suggestionCount = proposedTasks.length + proposedReminders.length + proposedCategories.length + priorityPicks.length + (suggestions.data?.suggestions.length ?? 0) + proposedMemories.length;
+  const suggestionCount = proposedTasks.length + proposedReminders.length + doneTasks.length + doneReminders.length;
   const folded = !selecting && suggestionCount > SUGGESTIONS_SHOWN;
   const allItems: readonly WaitingItem[] = [
     ...groups.map(approvalItem),
     ...asks.map(askItem),
     ...proposedTasks.map(taskItem),
     ...proposedReminders.map(reminderItem),
-    ...proposedCategories.map(categoryItem),
-    ...priorityPicks.map(priorityItem),
-    ...(suggestions.data?.suggestions ?? []).map(suggestionItem),
-    ...proposedMemories.map(memoryItem),
+    ...doneTasks.map(doneTaskItem),
+    ...doneReminders.map(doneReminderItem),
   ];
   const toggle = (key: string) =>
     setPicked((current) => {
@@ -410,7 +417,7 @@ export function WaitingOnYou({ inPopover = false }: { inPopover?: boolean } = {}
           {(() => {
             const rows = proposedTasks.map((task) => {
               const item = taskItem(task);
-              return <ProposalRow key={item.key} {...row(item)} icon="tasks" title={task.title} source={task.source_ref} meta={task.due ? t("today.proposal.taskDue", { when: formatDay(task.due) }) : t("today.proposal.task")} />;
+              return <ProposalRow key={item.key} {...row(item)} icon="tasks" title={task.title} source={task.source_ref} matter={matterOf(`task:${task.id}`)} meta={task.due ? t("today.proposal.taskDue", { when: formatDay(task.due) }) : t("today.proposal.task")} />;
             });
             if (selecting || rows.length <= GROUP_AT) return rows;
             return (
@@ -421,35 +428,45 @@ export function WaitingOnYou({ inPopover = false }: { inPopover?: boolean } = {}
           })()}
           {proposedReminders.map((reminder) => {
             const item = reminderItem(reminder);
-            return <ProposalRow key={item.key} {...row(item)} icon="reminders" title={reminder.title} source={reminder.source_ref} meta={t("today.proposal.reminder", { when: formatWhen(reminder.when) })} />;
+            return <ProposalRow key={item.key} {...row(item)} icon="reminders" title={reminder.title} source={reminder.source_ref} matter={matterOf(`reminder:${reminder.id}`)} meta={t("today.proposal.reminder", { when: formatWhen(reminder.when) })} />;
           })}
-          {proposedCategories.map((category) => {
-            const item = categoryItem(category);
-            return <ProposalRow key={item.key} {...row(item)} icon="categories" title={category.name} meta={category.sender ? t("today.proposal.categoryFrom", { sender: category.sender }) : t("today.proposal.category")} why={category.why} accept={t("categories.create")} />;
+          {doneTasks.map((task) => {
+            const item = doneTaskItem(task);
+            return <ProposalRow key={item.key} {...row(item)} icon="check" kicker={t("today.looksDone")} title={task.title} source={task.source_ref} matter={matterOf(`task:${task.id}`)} meta={task.due ? t("today.proposal.taskDue", { when: formatDay(task.due) }) : t("today.proposal.task")} why={task.looks_done} accept={t("today.looksDone.close")} decline={t("today.looksDone.keep")} />;
           })}
-          {priorityPicks.map((category) => {
-            const item = priorityItem(category);
-            return <ProposalRow key={item.key} {...row(item)} icon="priority" title={item.title} meta={t("today.priority.meta", { needed: category.needed_you ?? 0, total: category.count ?? 0 })} why={category.priority_why} accept={t("today.priority.accept")} />;
+          {doneReminders.map((reminder) => {
+            const item = doneReminderItem(reminder);
+            return <ProposalRow key={item.key} {...row(item)} icon="check" kicker={t("today.looksDone")} title={reminder.title} source={reminder.source_ref} matter={matterOf(`reminder:${reminder.id}`)} meta={t("today.proposal.reminder", { when: formatWhen(reminder.when) })} why={reminder.looks_done} accept={t("today.looksDone.close")} decline={t("today.looksDone.keep")} />;
           })}
-          {(suggestions.data?.suggestions ?? []).map((suggestion) => {
-            const item = suggestionItem(suggestion);
-            return <ProposalRow key={item.key} {...row(item)} icon="categories" title={item.title} meta={t("today.suggestion.meta", { senders: suggestion.senders.length, opened: suggestion.opened, replied: suggestion.replied })} why={suggestion.quiet ? t("today.suggestion.quiet", { why: suggestion.reason, count: suggestion.to_archive }) : suggestion.reason} accept={t("today.suggestion.accept")} />;
-          })}
-          {(() => {
-            const rows = proposedMemories.map((proposal) => {
-              const item = memoryItem(proposal);
-              return <ProposalRow key={item.key} {...row(item)} icon="memory" title={proposal.text} meta={t("today.proposal.memory")} accept={t("memory.keep")} />;
-            });
-            if (selecting || rows.length <= GROUP_AT) return rows;
-            return (
-              <ProposalGroup key="memory-group" testid="proposal-group-memory" icon="memory" title={t("today.group.memory", { count: rows.length, name: lead })} accept={t("today.group.keepAll")} items={proposedMemories.map(memoryItem)}>
-                {rows}
-              </ProposalGroup>
-            );
-          })()}
         </Presence>
       </ul>}
     </Panel>
+  );
+}
+
+/** The brief laid out the same way every day: what matters most, then what's new and what's
+ *  still open, one line per matter. */
+function BriefSections({ sections, sources }: { sections: Sections; sources: SourceRef[] }) {
+  const part = (key: "new" | "open", lines: string[]) =>
+    lines.length ? (
+      <section aria-label={t(`today.brief.${key}`)} data-testid={`brief-${key}`} className="flex flex-col gap-2">
+        <h3 className="text-sm font-medium text-ink-muted">{t(`today.brief.${key}`)}</h3>
+        <ul className="flex flex-col gap-2">
+          {lines.map((line, index) => (
+            <li key={index} className="flex gap-3">
+              <span aria-hidden="true" className={`mt-2 h-2 w-2 shrink-0 rounded-full ${key === "new" ? "bg-accent-default" : "border border-line-strong"}`} />
+              <div className="min-w-0 flex-1"><Markdown text={line} sources={sources} /></div>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ) : null;
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="font-medium"><Markdown text={sections.lead} sources={sources} /></div>
+      {part("new", sections.new ?? [])}
+      {part("open", sections.open ?? [])}
+    </div>
   );
 }
 
@@ -461,6 +478,7 @@ function MorningBrief() {
   const toast = useToast();
   const format = useDateTime();
   const time = useTimeOnly();
+  const day = useShortDate();
   const data = today.data;
   const [comment, setComment] = useState("");
   const [telling, setTelling] = useState(false);
@@ -502,7 +520,12 @@ function MorningBrief() {
         {data.prep_at ? <span className="text-sm tabular-nums text-ink-muted">{t("today.brief.when", { when: format(data.prep_at) })}</span> : null}
       </header>
       {data.prep_freshness && data.prep_freshness !== "fresh" && data.prep_freshness !== "none" ? <p role="status" className="text-sm text-ink-secondary">{t(`today.brief.freshness.${data.prep_freshness}`)}</p> : null}
-      <div data-testid="today-prep" className="text-md text-ink-primary"><Markdown text={data.prep_text} sources={data.prep_sources ?? []} /></div>
+      <div data-testid="today-prep" className="text-md text-ink-primary">
+        {data.prep_sections ? <BriefSections sections={data.prep_sections} sources={data.prep_sources ?? []} /> : <Markdown text={data.prep_text} sources={data.prep_sources ?? []} />}
+      </div>
+      <DoneGroup label={t("today.brief.done")} count={data.prep_done?.length ?? 0} testid="brief-done">
+        {(data.prep_done ?? []).map((item, index) => <DoneRow key={`${item.title}-${index}`} title={item.title} meta={[item.when ? day(item.when) : null, item.why || null].filter(Boolean).join(" · ")} />)}
+      </DoneGroup>
       {data.prep_sources?.length ? <div><MessageSources sources={data.prep_sources} /></div> : null}
       <div className="flex flex-wrap items-center gap-1">
         <IconButton icon="like" label={t("today.brief.like")} aria-pressed={rating === "up"} data-testid="brief-like" className={rating === "up" ? "text-accent-default" : ""} disabled={react.isPending} onClick={() => rate("up")} />
@@ -570,12 +593,14 @@ function SinceYouLooked() {
   const today = useToday();
   const assistant = useAssistant();
   const since = today.data?.since_last_look;
-  if (!since?.mail && !since?.judged) return null;
+  const changed = useChangedMatters().size;
+  if (!since?.mail && !since?.judged && !changed) return null;
   return (
     <section aria-label={t("today.since")} data-testid="since-last-look" className="flex flex-col gap-1 rounded-lg border border-line-subtle bg-surface-raised p-4 shadow-raised">
       <h2 className="text-lg font-medium text-ink-primary">{t("today.since")}</h2>
-      <p className="text-md tabular-nums text-ink-secondary">{t("today.since.counts", { mail: since.mail ?? 0, important: since.important ?? 0, filed: since.filed ?? 0 })}</p>
-      {since.proposed ? <p className="text-md tabular-nums text-ink-secondary">{tn("today.since.proposed", since.proposed, { agent: mailAgent })}</p> : null}
+      {since?.mail || since?.judged ? <p className="text-md tabular-nums text-ink-secondary">{t("today.since.counts", { mail: since.mail ?? 0, important: since.important ?? 0, filed: since.filed ?? 0 })}</p> : null}
+      {since?.proposed ? <p className="text-md tabular-nums text-ink-secondary">{tn("today.since.proposed", since.proposed, { agent: mailAgent })}</p> : null}
+      {changed ? <TextLink href="#today-important" data-testid="since-changed" className="self-start text-md">{tn("today.since.changed", changed)}</TextLink> : null}
       <Pressable onClick={() => assistant.openSession(MAIL_AGENT)} className="self-start rounded-sm text-sm text-ink-secondary underline underline-offset-2 hover:text-ink-primary">{t("today.since.open", { agent: mailAgent })}</Pressable>
     </section>
   );
@@ -628,7 +653,6 @@ export function TodayScreen() {
   const brief = (
     <div className="flex flex-col gap-6">
       <MorningBrief />
-      <RunningBrief />
       <FinishSetup />
       {today.isError ? <ErrorState title={t("today.error")} onRetry={() => void today.refetch()} /> : null}
       {today.isPending ? <Skeleton className="h-6 w-full" /> : null}
