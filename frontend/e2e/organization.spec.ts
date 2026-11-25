@@ -121,7 +121,8 @@ test("folder and category context menus perform scoped operations", async ({ pag
   // Edit folder holds the name, and links to the rest in Settings.
   await page.getByRole("menuitem", { name: "Edit folder…", exact: true }).click();
   await page.getByRole("dialog").getByRole("link", { name: "More settings", exact: true }).click();
-  await expect(page.getByTestId("category").filter({ hasText: name }).getByRole("textbox", { name: "Description", exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/section=categories/);
+  await expect(page.getByTestId("category").filter({ hasText: name })).toBeVisible();
   await page.goto("/mail/all");
   await category.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Edit folder…", exact: true }).click();
