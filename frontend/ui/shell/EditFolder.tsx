@@ -11,7 +11,7 @@ import { Field } from "@/ui/primitives/Field";
 import { Input, Textarea } from "@/ui/primitives/Input";
 import { Select } from "@/ui/primitives/Select";
 import { t, tn } from "@/ui/strings";
-import { ancestors, AUTOMATED, CALENDAR, folderTree, keptFromAi, partlyKept } from "./customMail";
+import { ancestors, AUTOMATED, CALENDAR, categorySettingsHref, folderTree, keptFromAi, partlyKept } from "./customMail";
 
 // Chips shown before the rest are left to the Sort page.
 const SENDERS_SHOWN = 6;
@@ -90,7 +90,9 @@ export function EditFolder({ category, open, onOpenChange, onRenamed }: { catego
           </div>
         ) : null}
         {update.isError ? <p role="alert" className="text-sm text-status-danger">{update.error.message}</p> : null}
-        <div className="flex justify-end gap-2">
+        <div className="flex items-center justify-end gap-2">
+          {/* The rule or AI description, and the rest, live on the folder's settings page. */}
+          <Link href={categorySettingsHref(category.name)} onClick={() => onOpenChange(false)} className="focus-ring mr-auto rounded-sm text-sm text-accent-default hover:underline">{t("folder.edit.moreSettings")}</Link>
           <Button variant="quiet" onClick={() => onOpenChange(false)}>{t("folder.edit.cancel")}</Button>
           <Button type="submit" variant="primary" disabled={!name.trim()} loading={update.isPending}>{t("settings.save")}</Button>
         </div>

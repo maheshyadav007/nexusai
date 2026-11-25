@@ -111,3 +111,6 @@ export function previewMailHrefs(hrefs: readonly string[], pathname: string): Se
   if (active && !preview.includes(active)) preview[preview.length - 1] = active;
   return new Set(preview);
 }
+
+/** A folder's own page in Settings: its rule or AI description, and the rest. */
+export const categorySettingsHref = (name: string) => `/settings?section=categories&category=${encodeURIComponent(name)}`;

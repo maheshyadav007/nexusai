@@ -123,7 +123,7 @@ test("folders sit inside folders, each home holds its own side, and a parent cou
   await expect(inbox.getByRole("link", { name: "Alpha", exact: true })).toBeVisible();
   // A home's menu makes a folder for that side.
   await kept.getByRole("link", { name: "Hidden from AI", exact: true }).click({ button: "right" });
-  await expect(page.getByRole("menuitem")).toHaveText(["Open", "Mark downloaded mail as read", "New folder…", "Sort senders…"]);
+  await expect(page.getByRole("menuitem")).toHaveText(["Mark all as read", "New folder…", "Organize by sender…"]);
   await page.getByRole("menuitem", { name: "New folder…" }).click();
   const dialog = page.getByRole("dialog", { name: "New folder" });
   await expect(dialog.getByRole("combobox", { name: "Inside" })).toHaveText(/Hidden from AI/);
@@ -135,7 +135,8 @@ test("folders sit inside folders, each home holds its own side, and a parent cou
   await page.keyboard.press("Escape");
   // Every folder has Show in Priority, and wording says folder.
   await projects.click({ button: "right" });
-  for (const item of ["Show in Priority", "Rename folder…", "Folder settings…", "New folder inside…", "Remove folder…"]) await expect(page.getByRole("menuitem", { name: item })).toBeVisible();
+  await expect(page.getByRole("menuitem")).toHaveText(["Mark all as read", "New folder inside…", "Edit folder…", "File older mail here…", "Hide from sidebar", "Remove folder…"]);
+  await expect(page.getByRole("menuitemcheckbox", { name: "Show in Priority" })).toBeVisible();
   await page.keyboard.press("Escape");
 });
 

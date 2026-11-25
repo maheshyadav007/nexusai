@@ -282,7 +282,7 @@ def test_move_to_inbox_brings_a_sorted_conversation_back_to_the_ai(
         row["category"] is None and row["latest_rule"] is None and row["category_source"] == "user"
     )
     inbox = ctx.bus.db.fetch_all(
-        f"SELECT id FROM threads WHERE {FOLDER_FILTERS['priority']} AND id = ?", (thread,)
+        f"SELECT id FROM threads WHERE {FOLDER_FILTERS['reads']} AND id = ?", (thread,)
     )  # noqa: S608
     asked = ctx.bus.db.fetch_all("SELECT payload FROM events WHERE type = 'mail.needsTriage'")
     assert inbox and [json.loads(event["payload"])["thread_id"] for event in asked] == [thread]

@@ -213,6 +213,8 @@ time_format = "system"
 remote_images = "load"
 sound_muted = false
 sound_off = []
+# What the Priority view brings in: waiting_on_you, waiting_on_others, important, folders, unfiled.
+priority_shows = ["waiting_on_you", "waiting_on_others", "important"]
 
 [semantic]
 # Where models come from, unless the person sets a mirror.

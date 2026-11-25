@@ -10,6 +10,14 @@ DefaultScreen = Literal["today", "inbox"]
 DateFormat = Literal["system", "day-month", "month-day", "iso"]
 RemoteImages = Literal["load", "block"]
 TimeFormat = Literal["system", "12", "24"]
+# What the Priority view brings in. Mail in a closed matter stays out whatever is chosen.
+# The default is in defaults.toml; this copy is what SQL falls back on before anything is saved.
+PriorityShow = Literal["waiting_on_you", "waiting_on_others", "important", "folders", "unfiled"]
+PRIORITY_SHOWS_DEFAULT: tuple[PriorityShow, ...] = (
+    "waiting_on_you",
+    "waiting_on_others",
+    "important",
+)
 THEME_ID_PATTERN = r"^[a-z0-9-]+$"
 
 
@@ -25,6 +33,7 @@ class Settings(BaseModel):
     sound_muted: bool
     # Kinds of notification that make no sound.
     sound_off: list[str]
+    priority_shows: list[PriorityShow]
 
 
 class GetSettings(BaseModel):
@@ -46,6 +55,7 @@ class UpdateSettings(BaseModel):
     remote_images: RemoteImages | None = None
     sound_muted: bool | None = None
     sound_off: list[str] | None = None
+    priority_shows: list[PriorityShow] | None = None
 
 
 class Profile(BaseModel):

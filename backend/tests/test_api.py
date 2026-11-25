@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from nexusai.api.app import create_app
 from nexusai.api.security import TOKEN_FILE, TOKEN_HEADER
+from nexusai.contracts.settings import PRIORITY_SHOWS_DEFAULT
 from nexusai.kernel.config import Config, load_config
 
 GOOD = {"host": "127.0.0.1:4100"}
@@ -22,6 +23,10 @@ def client(config: Config) -> Iterator[TestClient]:
 
 def test_settings_defaults_come_from_config(client: TestClient, config: Config) -> None:
     assert client.post("/api/queries/settings.get").json() == config.default_settings
+
+
+def test_priority_filter_falls_back_on_the_configured_default(config: Config) -> None:
+    assert config.default_settings["priority_shows"] == list(PRIORITY_SHOWS_DEFAULT)
 
 
 def test_update_saves_and_emits_one_event_with_the_trace_id(client: TestClient) -> None:
