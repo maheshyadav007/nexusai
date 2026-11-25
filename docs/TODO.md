@@ -141,6 +141,25 @@ Shared behaviour first, so every list gets it. Then the page-by-page fixes.
 - **Matters tab: zip through and decide.** Noted 2026-11-25, after the Sharpy cards. On a big screen we don't need cards; make the existing Matters tab (`frontend/ui/features/today/matters/MattersTab.tsx`) fast to go through. The list and the matter each scroll on their own; ↑↓ moves through matters and opens each one at once; a decision bar pinned at the top of the matter (it never scrolls away) shows one line of what Posty suggests, with **Keep (K)**, which keeps its suggestions as the person's work, and **Not for me (X)**, which declines them and marks the matter done. After either, the next matter opens, with Undo in a toast. A matter with no suggestions shows only Done and Next. It uses existing actions (accept and decline for suggestions, `matters.done`, undo). Sketched in chat on 2026-11-25; needs a visual mockup and approval before building. Open: should "Not for me" also offer "stop reading this sender"? The suggestion was no at first.
 - **Q&A card.** Noted 2026-11-25. When Posty asks something with `ask_user`, the chat shows a question card (`frontend/ui/features/assistant/Cards.tsx`, `ChatView.tsx`). Improve it while it's waiting (clear options, a free answer, what it's for) and after it's answered (collapse to the question and the answer chosen, not the full card). Needs a mockup.
 
+### 4e. Installing an update shows in the status bar
+
+**What:** While a new version downloads, installs and starts for the first time, the app says so: a progress bar where the progress is known, and at least a line in the status bar at the top ("Installing version 0.9.3…") where it isn't.
+
+**Why:** Noted 2026-11-25. Installing a new version is silent. Nothing appears in the status bar at the top, so the person can't tell whether the app is updating, stuck or broken. The same happens when a new version first starts: it may back up the whole Home (about 2 GB on the real account) before the database upgrade, and the app shows nothing meanwhile.
+
+**Today:**
+- The desktop app downloads and installs with `electron-updater` in `desktop/main.cjs`. `updateState` holds `state` (checking, available, downloading, error…) and `percent`. Progress shows only in the taskbar or Dock icon (`window.setProgressBar`) and in the app menu's update item ("Downloading update: 42%"). After the download, `installBeside` installs next to the running version, then `markReady`.
+- The page reads that state through `window.nexusDesktop` (`frontend/ui/client/desktop.ts`, query `nexus:status`). Only Settings › About & Updates shows it (`frontend/ui/features/settings/DesktopUpdates.tsx`).
+- The status bar at the top is `frontend/ui/shell/ActivityIsland.tsx`. It shows running agent work, or "Nothing running" (`activity.idle`), and knows nothing about updates.
+- On the first start of a new version, the backend backs up the Home when database migrations are pending (`backups.create(home, "upgrade", …)` in `backend/src/nexusai/api/app.py`), then runs them. Requests can fail meanwhile. While testing on 2026-11-25, the health check answered "Internal Server Error" for a few seconds.
+- The desktop's start-up window (`desktop/loading.html`) shows a line per stage (`startupStage(…)`), but nothing for the backup or the upgrade.
+
+**Approach:** one "app update" state that the status bar shows like any other running work: downloading with a percentage, installing, ready to restart (with a Restart button), and on the next start "Backing up and upgrading your data…". Use a progress bar where a percentage is known (the download; the backup if it can report one). The start-up window gets the same lines for the backup and the upgrade. In the browser version, where there's no installer, only the start-up part applies.
+
+**Open questions:** can the backup report progress (bytes copied out of the total), or only a line? Should "ready to restart" ask once, or wait in the status bar until the person chooses?
+
+**Done when:** from clicking Update to the new version's first screen, the person can always see what the app is doing. Checked with a real update from one version to the next, on a Home large enough that the backup takes noticeable time. Approved from a mockup first.
+
 ## 5. Learn from Littlebird
 
 **What:** Study the Littlebird app (installed on this Mac) for ideas we can reuse. Research only; nothing is copied, and anything adopted goes through our own plan.
