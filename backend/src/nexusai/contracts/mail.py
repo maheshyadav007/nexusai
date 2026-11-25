@@ -904,6 +904,13 @@ class MailReceived(BaseModel):
     rule: str | None
 
 
+class MailSent(BaseModel):
+    """Mail the person sent is now stored here: from Sent on the server, or POP3's own copy."""
+
+    message_id: int
+    thread_id: int
+
+
 class ThreadUpdated(BaseModel):
     old_value: Any = None
     thread_id: int

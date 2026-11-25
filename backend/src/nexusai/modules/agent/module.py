@@ -195,7 +195,13 @@ from nexusai.contracts.agent import (
     UsageView,
 )
 from nexusai.contracts.events import AppEvent
-from nexusai.contracts.mail import FinishMailLearning, GetMailStatus, MailOrganization, MailStatus
+from nexusai.contracts.mail import (
+    FinishMailLearning,
+    GetMailStatus,
+    MailOrganization,
+    MailSent,
+    MailStatus,
+)
 from nexusai.contracts.semantic import IndexInfo
 from nexusai.kernel import backups
 from nexusai.kernel.database import Database, Migration
@@ -363,6 +369,9 @@ def _startup(ctx: Context) -> None:
         # What was open before matters existed becomes matters, once, and work takes its matter.
         matters.backfill(ctx)
         matters.adopt_all(ctx)
+        # Sends whose handling failed before mail.sent carried its message.
+        if mail_agent.repair_failed_sends(ctx):
+            _triggers.wake.set()
         memory.settle_proposals(ctx.bus.db, ctx.config.home)
         # Mail may have finished coming down while this wasn't running, or before it existed.
         synced = cast(MailStatus, mail.get_status(GetMailStatus(), ctx))
@@ -561,23 +570,9 @@ def needs_triage(event: AppEvent, ctx: Context) -> None:
 
 @agent_module.on("mail.sent", "agent.person_replied")
 def person_replied(event: AppEvent, ctx: Context) -> None:
-    message, thread = int(event.payload["message_id"]), int(event.payload["thread_id"])
-    mail_agent.person_replied(ctx, thread)
-    # Writing back makes it something going on, even when the agent is off or judged it fyi.
-    matters.link(ctx, thread)
-    personalization.observe(
-        ctx,
-        "sent",
-        "thread",
-        str(thread),
-        new={"message": message},
-        origin="mail.sent",
-        event_id=event.id,
-    )
-    if mail_agent.enabled(ctx):
-        mail_agent.enqueue(ctx, message, thread, event=f"{mail_agent.SENT_PREFIX}{message}")
-        if _triggers:
-            _triggers.wake.set()
+    sent = MailSent.model_validate(event.payload)
+    if mail_agent.handle_sent(ctx, sent.message_id, sent.thread_id, event.id) and _triggers:
+        _triggers.wake.set()
 
 
 @agent_module.on("mail.received", "agent.they_answered")

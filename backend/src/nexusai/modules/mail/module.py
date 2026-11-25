@@ -63,6 +63,7 @@ from nexusai.contracts.mail import (
     MailPresets,
     MailProfile,
     MailRule,
+    MailSent,
     MailSort,
     MailSortApplied,
     MailStatus,
@@ -2961,6 +2962,13 @@ def _keep_sent_copy(work: Any, ctx: Context, account: str, raw: bytes) -> None:
             source="mail",
             trace_id=ctx.trace_id,
         )
+        # No Sent folder to sync it back from, so this is where it's announced.
+        work.emit(
+            "mail.sent",
+            MailSent(message_id=stored.message, thread_id=stored.thread).model_dump(),
+            source="mail",
+            trace_id=ctx.trace_id,
+        )
 
 
 @mail_module.command("mail.send")
@@ -2995,7 +3003,8 @@ def send_mail(command: SendDraft, ctx: Context) -> MailDone:
         # Gmail files sent mail by itself, and a second copy would show up twice.
         elif "gmail.com" not in profile.smtp.host:
             _outbox(work.tx, active, "append", {"role": "sent", "raw": message.as_bytes().hex()})
-        work.emit("mail.sent", {"thread_id": draft.thread_id}, source="mail", trace_id=ctx.trace_id)
+        # mail.sent comes once the copy is stored, when its message and conversation are known:
+        # above for POP3, from syncing Sent otherwise.
         work.emit("drafts.changed", {"id": draft.id}, source="mail", trace_id=ctx.trace_id)
     _wake()
     return MailDone()

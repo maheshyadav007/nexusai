@@ -699,6 +699,18 @@ def test_sending_reaches_smtp_threads_correctly_and_files_in_sent(
     assert "hidden@x.com" not in raw
     wait(lambda: threads(client)[0]["message_count"] == 2, "sent copy to join the thread")
     assert any(t["subject"] == "Ask" for t in threads(client, folder="sent"))
+    # Announced once, by the copy synced from Sent, with its message, and handled.
+    log = wait(
+        lambda: (
+            (body := client.post("/api/events/log", json={}).json())["events"]
+            and any(e["type"] == "mail.sent" for e in body["events"])
+            and body
+        )
+    )
+    sends = [e["payload"] for e in log["events"] if e["type"] == "mail.sent"]
+    assert sends == [{"message_id": sends[0]["message_id"], "thread_id": thread["id"]}]
+    wait(lambda: threads(client)[0]["status"] == "waiting_on_others", "it to wait on them")
+    assert client.post("/api/events/log", json={}).json()["failed"] == []
 
 
 def test_failed_send_keeps_the_draft_and_explains(client: TestClient, fake: FakeMail) -> None:

@@ -32,6 +32,7 @@ from nexusai.modules.agent import (
     kinds,
     matters,
     memory,
+    personalization,
     prompts_builder,
     providers,
     signals,
@@ -757,23 +758,110 @@ def your_day(ctx: Context) -> str:
     return text
 
 
-def person_replied(ctx: Context, thread: int) -> None:
-    """They've answered, so it's off their plate at once. The agent then works out what's next."""
+def person_replied(ctx: Context, message: int, thread: int) -> bool:
+    """They've answered, so it's off their plate at once. The agent then works out what's next.
+
+    False when it isn't the conversation's newest email (or no longer exists), so there's
+    nothing left for the agent to work out from it.
+    """
+    rows = ctx.bus.db.fetch_all(
+        "SELECT NOT EXISTS (SELECT 1 FROM messages WHERE thread_id = ?"
+        " AND (date > m.date OR (date = m.date AND id > m.id))) AS newest"
+        " FROM messages m WHERE id = ? AND thread_id = ?",
+        (thread, message, thread),
+    )
+    # Events are handled in the background, and a sent copy can be synced after the answer to
+    # it. Then the answer is what counts, and a question about it still stands.
+    if not rows or not rows[0]["newest"]:
+        return False
     with ctx.bus.unit_of_work() as work:
-        work.tx.execute(
+        # A status they chose since then stays.
+        if work.tx.execute(
             "UPDATE threads SET status = 'waiting_on_others', next_action = NULL,"
-            " follow_up_on = NULL, followup_notified = NULL WHERE id = ?",
-            (thread,),
-        )
-        work.emit(
-            "mail.changed", {"threads": 1, "reason": "sent"}, source="agent", trace_id=ctx.trace_id
-        )
+            " follow_up_on = NULL, followup_notified = NULL WHERE id = ?"
+            " AND (status_user_message IS NULL OR status_user_message < ?)",
+            (thread, message),
+        ).rowcount:
+            work.emit(
+                "mail.changed",
+                {"threads": 1, "reason": "sent"},
+                source="agent",
+                trace_id=ctx.trace_id,
+            )
     asks = ctx.bus.db.fetch_all(
         "SELECT id FROM channel_messages WHERE thread = ? AND kind = 'ask' AND status = 'open'",
         (thread,),
     )
     for ask in asks:
         channel.close(ctx, ask["id"], "dismissed", None)
+    return True
+
+
+def handle_sent(ctx: Context, message: int, thread: int, event_id: str | None) -> bool:
+    """Everything that follows the person sending mail. True when the agent has it to look at."""
+    newest = person_replied(ctx, message, thread)
+    # Writing back makes it something going on, even when the agent is off or judged it fyi.
+    matters.link(ctx, thread)
+    personalization.observe(
+        ctx,
+        "sent",
+        "thread",
+        str(thread),
+        new={"message": message},
+        origin="mail.sent",
+        event_id=event_id,
+    )
+    if not newest or not enabled(ctx):
+        return False
+    enqueue(ctx, message, thread, event=f"{SENT_PREFIX}{message}")
+    return True
+
+
+# What handling a send failed with while sending announced it without its message.
+UNANNOUNCED_SEND = "'message_id'"
+# How far a sent copy's Date can sit from the moment it was announced.
+SEND_WINDOW_BEFORE_DAYS = 10 / (24 * 60)
+SEND_WINDOW_AFTER_DAYS = 1 / (24 * 60)
+
+
+def repair_failed_sends(ctx: Context) -> int:
+    """At start, for sends whose handling failed because they were announced without their
+    message: finds each stored copy and handles it now. Each is tried on its own; one that fails
+    again stays as it was, and nothing here stops the app from starting."""
+    db = ctx.bus.db
+    try:
+        rows = db.fetch_all(
+            "SELECT f.id, f.time AS failed, e.id AS event, e.time, e.payload FROM failed_events f"
+            " LEFT JOIN events e ON e.seq = f.event_seq WHERE f.listener = 'agent.person_replied'"
+            " AND f.event_type = 'mail.sent' AND f.error = ?",
+            (UNANNOUNCED_SEND,),
+        )
+    except Exception:
+        log.warning("sent_repair_skipped", exc_info=True)
+        return 0
+    queued = 0
+    for row in rows:
+        try:
+            thread = json.loads(row["payload"]).get("thread_id") if row["payload"] else None
+            when = row["time"] or row["failed"]
+            found = db.fetch_all(
+                "SELECT m.id, m.thread_id FROM messages m WHERE m.folder_role = 'sent'"
+                " AND (? IS NULL OR m.thread_id = ?)"
+                " AND julianday(m.date) BETWEEN julianday(?) - ? AND julianday(?) + ?"
+                # Handled already, when its copy came back from Sent.
+                " AND NOT EXISTS (SELECT 1 FROM interaction_events i WHERE i.action = 'sent'"
+                " AND i.artifact = 'thread' AND json_extract(i.new_value, '$.message') = m.id)"
+                " ORDER BY m.date DESC, m.id DESC LIMIT 1",
+                (thread, thread, when, SEND_WINDOW_BEFORE_DAYS, when, SEND_WINDOW_AFTER_DAYS),
+            )
+            if found and handle_sent(ctx, found[0]["id"], found[0]["thread_id"], row["event"]):
+                queued += 1
+            with db.transaction() as tx:
+                tx.execute("DELETE FROM failed_events WHERE id = ?", (row["id"],))
+            log.info("sent_repaired", failed_event=row["id"], found=bool(found))
+        except Exception:
+            log.warning("sent_repair_failed", failed_event=row["id"], exc_info=True)
+    return queued
 
 
 def they_answered(ctx: Context, message: int, thread: int) -> None:

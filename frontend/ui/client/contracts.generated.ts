@@ -1331,7 +1331,9 @@ export type State1 = "off" | "paused" | "connecting" | "syncing" | "backfilling"
 export type MessageId3 = number;
 export type ThreadId1 = number;
 export type Rule = string | null;
+export type MessageId4 = number;
 export type ThreadId2 = number;
+export type ThreadId3 = number;
 export type Field1 = string;
 export type By = string;
 export type Id14 = number;
@@ -1466,7 +1468,7 @@ export type Date3 = string;
 export type Source4 = "upload" | "email" | "home";
 export type Folder13 = string | null;
 export type Tags = string[];
-export type ThreadId3 = number | null;
+export type ThreadId4 = number | null;
 export type Risky = boolean;
 export type Status3 = string;
 export type StatusReason = string | null;
@@ -3099,6 +3101,7 @@ export interface Contracts {
   MailChanged?: MailChanged;
   MailSyncChanged?: MailSyncChanged;
   MailReceived?: MailReceived;
+  MailSent?: MailSent;
   ThreadUpdated?: ThreadUpdated;
   GetPstImports?: GetPstImports;
   PstImport?: PstImport;
@@ -4583,12 +4586,23 @@ export interface MailReceived {
   [k: string]: unknown;
 }
 /**
+ * Mail the person sent is now stored here: from Sent on the server, or POP3's own copy.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "MailSent".
+ */
+export interface MailSent {
+  message_id: MessageId4;
+  thread_id: ThreadId2;
+  [k: string]: unknown;
+}
+/**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "ThreadUpdated".
  */
 export interface ThreadUpdated {
   old_value?: OldValue;
-  thread_id: ThreadId2;
+  thread_id: ThreadId3;
   field: Field1;
   value?: Value2;
   by?: By;
@@ -4991,7 +5005,7 @@ export interface DocumentRow {
   source: Source4;
   folder: Folder13;
   tags: Tags;
-  thread_id?: ThreadId3;
+  thread_id?: ThreadId4;
   risky?: Risky;
   status?: Status3;
   status_reason?: StatusReason;
