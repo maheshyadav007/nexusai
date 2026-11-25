@@ -50,12 +50,15 @@ from nexusai.contracts.models import (
     TestModel,
 )
 from nexusai.contracts.notifications import (
+    ClearNotifications,
     ListNotifications,
     MarkNotificationsRead,
     Notification,
     NotificationList,
     NotificationRequested,
     NotificationsChanged,
+    NotificationsCleared,
+    RestoreNotifications,
 )
 from nexusai.contracts.onboarding import (
     DismissChecklist,
@@ -153,12 +156,15 @@ MODELS: list[type[BaseModel]] = [
     GetProfile,
     Profile,
     ProfileChanged,
+    ClearNotifications,
     ListNotifications,
     MarkNotificationsRead,
     Notification,
     NotificationList,
     NotificationRequested,
     NotificationsChanged,
+    NotificationsCleared,
+    RestoreNotifications,
     GetSidebar,
     ResetSidebar,
     SidebarChanged,

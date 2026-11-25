@@ -5,7 +5,6 @@ import { useId, type ReactNode } from "react";
 import { Icon, type IconName } from "@/ui/icons";
 import { ActiveMark } from "@/ui/primitives/Motion";
 import { Pressable } from "@/ui/primitives/Pressable";
-import { Progress } from "@/ui/primitives/Progress";
 import { Tooltip } from "@/ui/primitives/Tooltip";
 import { t } from "@/ui/strings";
 
@@ -20,14 +19,12 @@ const INDENT = ["", "pl-5", "pl-7", "pl-9"] as const;
 
 /** One folder in the sidebar: every kind looks the same, and only its icon's color says whether
  *  the AI reads it. A folder holding others folds them with the arrow at its end. */
-export function FolderLink({ href, icon, tone, label, unread, size, active, depth = 0, fold, detail, menu = (link) => link }: {
+export function FolderLink({ href, icon, tone, label, unread, active, depth = 0, fold, detail, menu = (link) => link }: {
   href: string;
   icon: IconName;
   tone: FolderTone;
   label: string;
   unread?: number;
-  /** How big it is beside the biggest in its home, from 0 to 1, drawn as a short bar. */
-  size?: number;
   active: boolean;
   depth?: number;
   fold?: { open: boolean; toggle: () => void };
@@ -54,7 +51,6 @@ export function FolderLink({ href, icon, tone, label, unread, size, active, dept
           <span aria-hidden className={`relative flex shrink-0 ${TONE_ICON[tone]}`}><Icon name={icon} /></span>
         </Tooltip>
         <span className="relative min-w-0 flex-1 truncate">{label}</span>
-        {size !== undefined ? <span aria-hidden className="relative w-6 shrink-0"><Progress label={label} value={Math.max(6, Math.round(size * 100))} quiet={tone === "kept" || tone === "label"} /></span> : null}
         {unread ? <span aria-hidden className="relative text-sm tabular-nums text-ink-muted">{unread.toLocaleString()}</span> : null}
       </Link>)}
       {fold ? (

@@ -42,3 +42,24 @@ class MarkNotificationsRead(BaseModel):
 
 class NotificationsChanged(BaseModel):
     unread: int
+
+
+class ClearNotifications(BaseModel):
+    """Every notification, or every one of a kind."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: str | None = Field(default=None, max_length=32)
+
+
+class NotificationsCleared(BaseModel):
+    """Which ones went, so Undo can bring exactly those back."""
+
+    ids: list[int]
+    unread: int
+
+
+class RestoreNotifications(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ids: list[int] = Field(max_length=1000)

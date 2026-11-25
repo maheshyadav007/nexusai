@@ -2940,10 +2940,11 @@ export type Vips = string;
 export type About = string;
 export type Fields = string[];
 export type Kind29 = string | null;
+export type Kind30 = string | null;
 export type Id111 = number | null;
 export type Id112 = number;
 export type Time22 = string;
-export type Kind30 = string;
+export type Kind31 = string;
 export type Title29 = string;
 export type Detail8 = string;
 export type Link5 = string | null;
@@ -2951,11 +2952,17 @@ export type Read3 = boolean;
 export type Items5 = Notification[];
 export type Unread3 = number;
 export type Kinds1 = string[];
-export type Kind31 = string;
+export type Kind32 = string;
 export type Title30 = string;
 export type Detail9 = string;
 export type Link6 = string | null;
 export type Unread4 = number;
+export type Ids1 = number[];
+export type Unread5 = number;
+/**
+ * @maxItems 1000
+ */
+export type Ids2 = number[];
 export type Reset = boolean;
 /**
  * @maxItems 64
@@ -3479,12 +3486,15 @@ export interface Contracts {
   GetProfile?: GetProfile;
   Profile?: Profile;
   ProfileChanged?: ProfileChanged;
+  ClearNotifications?: ClearNotifications;
   ListNotifications?: ListNotifications;
   MarkNotificationsRead?: MarkNotificationsRead;
   Notification?: Notification;
   NotificationList?: NotificationList;
   NotificationRequested?: NotificationRequested;
   NotificationsChanged?: NotificationsChanged;
+  NotificationsCleared?: NotificationsCleared;
+  RestoreNotifications?: RestoreNotifications;
   GetSidebar?: GetSidebar;
   ResetSidebar?: ResetSidebar;
   SidebarChanged?: SidebarChanged;
@@ -8519,11 +8529,20 @@ export interface ProfileChanged {
   [k: string]: unknown;
 }
 /**
+ * Every notification, or every one of a kind.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ClearNotifications".
+ */
+export interface ClearNotifications {
+  kind?: Kind29;
+}
+/**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "ListNotifications".
  */
 export interface ListNotifications {
-  kind?: Kind29;
+  kind?: Kind30;
 }
 /**
  * No id means all of them.
@@ -8541,7 +8560,7 @@ export interface MarkNotificationsRead {
 export interface Notification {
   id: Id112;
   time: Time22;
-  kind: Kind30;
+  kind: Kind31;
   title: Title29;
   detail: Detail8;
   link: Link5;
@@ -8565,7 +8584,7 @@ export interface NotificationList {
  * via the `definition` "NotificationRequested".
  */
 export interface NotificationRequested {
-  kind: Kind31;
+  kind: Kind32;
   title: Title30;
   detail?: Detail9;
   link?: Link6;
@@ -8578,6 +8597,24 @@ export interface NotificationRequested {
 export interface NotificationsChanged {
   unread: Unread4;
   [k: string]: unknown;
+}
+/**
+ * Which ones went, so Undo can bring exactly those back.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "NotificationsCleared".
+ */
+export interface NotificationsCleared {
+  ids: Ids1;
+  unread: Unread5;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "RestoreNotifications".
+ */
+export interface RestoreNotifications {
+  ids: Ids2;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema

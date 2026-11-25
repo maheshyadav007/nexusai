@@ -4,6 +4,7 @@ import json
 import os
 import poplib
 import threading
+import time
 from collections.abc import Callable, Iterator
 from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -17,7 +18,7 @@ from fake_mail import PASSWORD, USER, FakeMail, make_mail, start_fake_mail
 from fake_pop3 import FakePop3, start_fake_pop3
 from nexusai.api.app import create_app
 from nexusai.kernel.config import Config, SystemMail, SystemModel, load_config
-from nexusai.modules.mail import rules, store
+from nexusai.modules.mail import rules, store, sync
 from nexusai.modules.mail.parse import parse_message
 from nexusai.modules.mail.pop3 import Pop3Session
 from test_mail_sync import status, threads, wait
@@ -293,6 +294,45 @@ def test_a_reply_sent_here_waits_on_them_with_nothing_failing(
     wait(lambda: len(sent_events(client)) == 2, "both sends announced")
     assert all(event["message_id"] and event["thread_id"] for event in sent_events(client))
     assert failed_handlers(client) == []
+
+
+def morning(config: Config, pop3: FakePop3, smtp: FakeMail) -> TestClient:
+    """The app starting again next day with the password saved the day before."""
+    return TestClient(
+        create_app(with_servers(config, pop3, smtp)), base_url="http://127.0.0.1:4100"
+    )
+
+
+def test_a_saved_password_refused_one_morning_is_tried_again_without_asking(
+    config: Config, pop3: FakePop3, smtp: FakeMail, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: the company server refused a sign-in once, and mail asked for the password
+    every morning, though the password was right."""
+    monkeypatch.setattr(sync, "SIGN_IN_RETRY_SECONDS", 0.3)
+    with morning(config, pop3, smtp) as client:
+        connect(client)
+    pop3.server.login = (USER, "not today")  # type: ignore[attr-defined]
+    with morning(config, pop3, smtp) as client:
+        wait(lambda: "Trying again" in (status(client)["message"] or ""), "a retry")
+        assert status(client)["state"] != "failed"
+        pop3.server.login = (USER, PASSWORD)  # type: ignore[attr-defined]
+        wait(lambda: status(client)["state"] == "live", "it to sign in by itself")
+
+
+def test_a_password_refused_every_time_is_asked_for_after_a_few_tries(
+    config: Config, pop3: FakePop3, smtp: FakeMail, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sync, "SIGN_IN_RETRY_SECONDS", 0.05)
+    with morning(config, pop3, smtp) as client:
+        connect(client)
+    pop3.server.login = (USER, "changed elsewhere")  # type: ignore[attr-defined]
+    with morning(config, pop3, smtp) as client:
+        wait(lambda: status(client)["state"] == "failed", "it to ask for the password")
+        # What the server said is kept, so the next problem like this can be read from Status.
+        assert "[AUTH] bad login" in status(client)["message"]
+        tries = pop3.state.connections
+        time.sleep(0.5)
+        assert pop3.state.connections == tries
 
 
 def test_a_relay_that_wants_no_sign_in_still_sends(

@@ -120,6 +120,23 @@ def test_notifications_arrive_through_events_and_can_be_read(client: TestClient)
     )
     assert client.post("/api/commands/notifications.markRead", json={}).json()["unread"] == 0
 
+    request("Third")
+    for _ in range(200):
+        if listing()["unread"] == 1:
+            break
+        time.sleep(0.01)
+    agent_only = client.post("/api/commands/notifications.clear", json={"kind": "agent"}).json()
+    assert [item["title"] for item in listing()["items"]] == ["Third", "First"]
+    cleared = client.post("/api/commands/notifications.clear", json={}).json()
+    assert len(cleared["ids"]) == 2 and cleared["unread"] == 0
+    gone = client.post("/api/queries/notifications.list", json={}).json()
+    assert gone == {"items": [], "unread": 0, "kinds": []}
+    # Undo brings back exactly what that click cleared, unread as it was.
+    restored = client.post("/api/commands/notifications.restore", json={"ids": cleared["ids"]})
+    assert restored.json()["unread"] == 1
+    assert [item["title"] for item in listing()["items"]] == ["Third", "First"]
+    assert agent_only["ids"] == [newest]
+
 
 def test_sidebar_layout_saves_and_resets(client: TestClient) -> None:
     layout = {

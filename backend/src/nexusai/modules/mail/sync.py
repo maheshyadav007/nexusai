@@ -46,6 +46,12 @@ PROGRESS_NOTICE_SECONDS = 1.0
 DOWNLOADING_RETRY_SECONDS = 30.0
 # The shortest wait after the server said it's busy: trying sooner only adds to its count.
 BUSY_RETRY_SECONDS = 120.0
+# A password that worked before and is then refused is often the server, not the password: a
+# nightly restart, or its directory out of reach just after the laptop wakes. Tries are few and
+# far apart (5, 10 and 20 minutes), so a password changed elsewhere doesn't lock the account
+# before the person is asked for it.
+SIGN_IN_RETRY_SECONDS = 300.0
+SIGN_IN_TRIES = 4
 MailSession = ImapSession | Pop3Session
 
 
@@ -77,11 +83,21 @@ class SyncStatus:
 
 
 class MailSync:
-    def __init__(self, ctx: Context, account: str, profile: MailProfile, password: str) -> None:
+    def __init__(
+        self,
+        ctx: Context,
+        account: str,
+        profile: MailProfile,
+        password: str,
+        *,
+        proven: bool = True,
+    ) -> None:
         self.ctx = ctx
         self.account = account
         self.profile = profile
         self.password = password
+        # Whether this password has signed in before. One just typed is asked again at once.
+        self._proven = proven
         self.config = ctx.config.mail
         self._own_domain = own_domain_of(profile.address or profile.auth.user)
         self._own = {(profile.address or profile.auth.user).lower(), profile.auth.user.lower()}
@@ -156,6 +172,7 @@ class MailSync:
 
     def _run(self) -> None:
         delay = self.config.reconnect_min_seconds
+        refused = 0
         while not self._stop.is_set():
             session: MailSession | None = None
             try:
@@ -177,10 +194,29 @@ class MailSync:
                         self.profile, self.password, timeout, never_delete=never_delete
                     )
                 delay = self.config.reconnect_min_seconds
+                refused = 0
+                self._proven = True
                 self._session(session)
-            except SignInFailed:
-                self._set_state("failed", "The mail server refused the username or password.")
-                return
+            except SignInFailed as error:
+                refused += 1
+                said = str(error)
+                log.info(
+                    "mail_sign_in_refused", account=self.account, said=said[:300], tries=refused
+                )
+                if not self._proven or refused >= SIGN_IN_TRIES:
+                    self._set_state(
+                        "failed",
+                        "The mail server refused the username or password."
+                        + (f" It said: {said}" if said else ""),
+                    )
+                    return
+                self._set_state(
+                    "offline",
+                    "The mail server refused the sign-in. Trying again in a few minutes;"
+                    " if the password changed, enter the new one in Settings.",
+                )
+                # Only stopping cuts this short: a wake for local work would spend a try.
+                self._stop.wait(SIGN_IN_RETRY_SECONDS * 2 ** (refused - 1))
             except ServerBusy as error:
                 # Limits like Gmail's daily download take hours to lift, and every try counts
                 # against them, so these wait the long way, whatever is still to come down.
