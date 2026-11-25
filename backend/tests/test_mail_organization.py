@@ -889,3 +889,164 @@ def test_a_team_name_added_after_sorting_lets_its_hidden_replies_reach_the_ai(
     mail.save_me(MailMe(names=["Mahesh"], addresses=["me@example.com"]), ctx)
     assert thread(ctx, first)["named"] is None
     assert signals.hidden_threads(ctx, [first]) == {first}
+
+
+def sent(ctx: Context, subject: str, *, days: int = 0, reply_to: str | None = None) -> store.Stored:
+    """A copy of mail the person sent, as Sent brings it in."""
+    count = ctx.bus.db.fetch_all("SELECT COUNT(*) AS n FROM messages")[0]["n"] + 1
+    raw = make_mail(
+        subject=subject,
+        sender="me@example.com",
+        to="priya@example.com",
+        date=format_datetime(datetime.now(UTC) - timedelta(days=days)),
+        message_id=f"<organization-{count}@test>",
+        in_reply_to=reply_to,
+    )
+    with ctx.bus.db.transaction() as tx:
+        result = store.store_message(
+            tx,
+            account="test",
+            folder="Sent",
+            role="sent",
+            uid=count,
+            raw=raw,
+            read=True,
+            flagged=False,
+            parsed=parse_message(raw),
+            decision=rules.decision_for(None, parse_message(raw)),
+            config=ctx.config.mail,
+        )
+    assert result is not None
+    return result
+
+
+def ask(ctx: Context, thread_id: int, days: float) -> int:
+    with ctx.bus.db.transaction() as tx:
+        return int(
+            tx.execute(
+                "INSERT INTO channel_messages (kind, agent, thread, text, time) VALUES"
+                " ('ask', 'mail', ?, 'Reply to Priya?', ?)",
+                (thread_id, (datetime.now(UTC) - timedelta(days=days)).isoformat()),
+            ).lastrowid
+            or 0
+        )
+
+
+def ask_status(ctx: Context, identifier: int) -> str:
+    rows = ctx.bus.db.fetch_all("SELECT status FROM channel_messages WHERE id=?", (identifier,))
+    return str(rows[0]["status"])
+
+
+def test_writing_back_waits_on_them_and_answers_the_question(ctx: Context) -> None:
+    first = add(ctx, "Quote", days=2)
+    question = ask(ctx, first.thread, days=1.5)
+    reply = sent(ctx, "Re: Quote", days=1, reply_to="<organization-1@test>")
+    assert reply.thread == first.thread
+    assert mail_agent.person_replied(ctx, reply.message, reply.thread)
+    assert thread(ctx, first.thread)["status"] == "waiting_on_others"
+    assert ask_status(ctx, question) == "dismissed"
+
+
+def test_a_sent_copy_synced_after_the_answer_leaves_the_answer_waiting(ctx: Context) -> None:
+    """Sent can come down after Inbox, so the answer to a reply is stored before the reply."""
+    first = add(ctx, "Quote", days=3)
+    answer = add(ctx, "Re: Quote", days=1, reply_to="<organization-1@test>")
+    with ctx.bus.db.transaction() as tx:
+        tx.execute("UPDATE threads SET status='waiting_on_you' WHERE id=?", (first.thread,))
+    question = ask(ctx, first.thread, days=0)
+    reply = sent(ctx, "Re: Quote", days=2, reply_to="<organization-1@test>")
+    assert reply.thread == answer.thread == first.thread
+    assert not mail_agent.person_replied(ctx, reply.message, reply.thread)
+    assert thread(ctx, first.thread)["status"] == "waiting_on_you"
+    assert ask_status(ctx, question) == "open"
+
+
+def test_a_status_chosen_after_writing_back_stays(ctx: Context) -> None:
+    first = add(ctx, "Quote", days=2)
+    reply = sent(ctx, "Re: Quote", days=1, reply_to="<organization-1@test>")
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "UPDATE threads SET status='waiting_on_you', status_user_message=? WHERE id=?",
+            (reply.message, first.thread),
+        )
+    mail_agent.person_replied(ctx, reply.message, reply.thread)
+    assert thread(ctx, first.thread)["status"] == "waiting_on_you"
+
+
+def failed_send(ctx: Context, thread_id: int | None, *, kept: bool = True, error: str = "") -> int:
+    """A send whose handling failed while mail.sent was announced without its message."""
+    seq = 0
+    if kept:
+        with ctx.bus.unit_of_work() as work:
+            work.emit("mail.sent", {"thread_id": thread_id}, source="mail")
+        seq = ctx.bus.latest_seq()
+    with ctx.bus.db.transaction() as tx:
+        return int(
+            tx.execute(
+                "INSERT INTO failed_events (listener, event_seq, event_type, error, time)"
+                " VALUES ('agent.person_replied', ?, 'mail.sent', ?, ?)",
+                (seq, error or mail_agent.UNANNOUNCED_SEND, datetime.now(UTC).isoformat()),
+            ).lastrowid
+            or 0
+        )
+
+
+def failed_ids(ctx: Context) -> set[int]:
+    return {row["id"] for row in ctx.bus.db.fetch_all("SELECT id FROM failed_events")}
+
+
+def test_sends_that_failed_before_are_handled_at_start(ctx: Context) -> None:
+    reply_to = add(ctx, "Quote", days=1)
+    reply = sent(ctx, "Re: Quote", reply_to="<organization-1@test>")
+    new = sent(ctx, "Kickoff")
+    other = failed_send(ctx, reply.thread, error="'thread_id'")
+    failed_send(ctx, reply.thread)
+    # A new email had no conversation yet, and this event has since been cleaned up.
+    failed_send(ctx, None, kept=False)
+    mail_agent.repair_failed_sends(ctx)
+    assert thread(ctx, reply_to.thread)["status"] == "waiting_on_others"
+    assert thread(ctx, new.thread)["status"] == "waiting_on_others"
+    # Only the failure this repairs is cleared.
+    assert failed_ids(ctx) == {other}
+    observed = ctx.bus.db.fetch_all(
+        "SELECT COUNT(*) AS n FROM interaction_events WHERE action='sent'"
+    )
+    assert observed[0]["n"] == 2
+    # Run again, nothing is handled twice.
+    failed_send(ctx, reply.thread)
+    mail_agent.repair_failed_sends(ctx)
+    observed = ctx.bus.db.fetch_all(
+        "SELECT COUNT(*) AS n FROM interaction_events WHERE action='sent'"
+    )
+    assert observed[0]["n"] == 2
+    assert failed_ids(ctx) == {other}
+
+
+def test_a_repair_that_fails_leaves_that_failure_and_carries_on(
+    ctx: Context, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    first = sent(ctx, "First")
+    second = sent(ctx, "Second")
+    broken = failed_send(ctx, first.thread)
+    failed_send(ctx, second.thread)
+    original = mail_agent.handle_sent
+
+    def handle(ctx: Context, message: int, thread_id: int, event_id: str | None) -> bool:
+        if thread_id == first.thread:
+            raise RuntimeError("Disk full")
+        return original(ctx, message, thread_id, event_id)
+
+    monkeypatch.setattr(mail_agent, "handle_sent", handle)
+    mail_agent.repair_failed_sends(ctx)
+    assert failed_ids(ctx) == {broken}
+    assert thread(ctx, second.thread)["status"] == "waiting_on_others"
+
+
+def test_a_repair_that_cannot_read_failures_starts_anyway(
+    ctx: Context, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def refuse(*_: Any) -> Any:
+        raise RuntimeError("Locked")
+
+    monkeypatch.setattr(ctx.bus.db, "fetch_all", refuse)
+    assert mail_agent.repair_failed_sends(ctx) == 0

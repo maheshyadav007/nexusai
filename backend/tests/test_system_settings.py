@@ -261,6 +261,40 @@ def test_sent_mail_goes_by_plain_smtp_and_is_kept_here(
     wait(lambda: "Status update" in subjects(client, folder="sent"), "the sent copy")
 
 
+def failed_handlers(client: TestClient) -> list[dict[str, Any]]:
+    log = client.post("/api/events/log", json={"since": 0}).json()
+    return list(log["failed"])
+
+
+def sent_events(client: TestClient) -> list[dict[str, Any]]:
+    log = client.post("/api/events/log", json={"since": 0}).json()
+    return [event["payload"] for event in log["events"] if event["type"] == "mail.sent"]
+
+
+def test_a_reply_sent_here_waits_on_them_with_nothing_failing(
+    client: TestClient, pop3: FakePop3, smtp: FakeMail
+) -> None:
+    """Regression: POP3 announced a send without its message, and handling it failed every time."""
+    pop3.state.deliver(make_mail("Budget question", message_id="<budget@corp.example>"))
+    connect(client)
+    asked = wait(
+        lambda: next((t for t in threads(client) if t["subject"] == "Budget question"), None)
+    )
+    _send(client, "Re: Budget question", thread_id=asked["id"])
+    wait(
+        lambda: (
+            next(t for t in threads(client, folder="all") if t["id"] == asked["id"])["status"]
+            == "waiting_on_others"
+        ),
+        "it to wait on them",
+    )
+    # A new email has no conversation until its copy is kept.
+    _send(client, "Kickoff")
+    wait(lambda: len(sent_events(client)) == 2, "both sends announced")
+    assert all(event["message_id"] and event["thread_id"] for event in sent_events(client))
+    assert failed_handlers(client) == []
+
+
 def test_a_relay_that_wants_no_sign_in_still_sends(
     client: TestClient, pop3: FakePop3, smtp: FakeMail
 ) -> None:

@@ -15,6 +15,7 @@ from nexusai.contracts.mail import (
     MailProfile,
     MailPulled,
     MailReceived,
+    MailSent,
     MailSyncChanged,
     SyncState,
 )
@@ -744,7 +745,7 @@ class MailSync:
                 for result in stored:
                     work.emit(
                         "mail.sent",
-                        {"message_id": result.message, "thread_id": result.thread},
+                        MailSent(message_id=result.message, thread_id=result.thread).model_dump(),
                         source="mail",
                         trace_id=self.ctx.trace_id,
                     )
