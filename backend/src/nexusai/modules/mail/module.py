@@ -186,7 +186,7 @@ _sync_lock = threading.Lock()
 _maintenance: threading.Thread | None = None
 
 
-def _start_sync(ctx: Context) -> None:
+def _start_sync(ctx: Context, *, new_password: bool = False) -> None:
     global _sync
     with _sync_lock:
         if _sync:
@@ -207,7 +207,7 @@ def _start_sync(ctx: Context) -> None:
         settings = store.sync_settings(ctx.bus.db, active)
         if settings is None or settings["paused"]:
             return
-        _sync = MailSync(ctx, active, profile, password)
+        _sync = MailSync(ctx, active, profile, password, proven=not new_password)
         _sync.start()
 
 
@@ -448,7 +448,7 @@ def save_account(command: SaveMailAccount, ctx: Context) -> MailAccounts:
             " ON CONFLICT (account) DO UPDATE SET paused = 0",
             (command.name, command.pull_limit),
         )
-    _start_sync(ctx)
+    _start_sync(ctx, new_password=bool(command.password))
     with ctx.bus.unit_of_work() as work:
         work.emit(
             "mail.accountsChanged", {"name": command.name}, source="mail", trace_id=ctx.trace_id

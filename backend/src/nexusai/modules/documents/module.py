@@ -82,6 +82,8 @@ CREATE TABLE home_files (
 )
 # Pictures inside a mail are part of it. They're seen there, and aren't documents.
 EMAIL_KINDS = ("attachment", "calendar", "risky")
+# Invites belong to their email, not the Documents list. The agent can still read one by its key.
+LISTED_KINDS = ("attachment", "risky")
 READER_IDLE_SECONDS = 30.0
 BETWEEN_OLD_ATTACHMENTS = 0.1
 # How good a match is, best first.
@@ -128,15 +130,18 @@ def _meta(ctx: Context) -> dict[str, tuple[str | None, list[str]]]:
 
 
 def _email_parts(
-    ctx: Context, where: str = "", params: tuple[object, ...] = ()
+    ctx: Context,
+    where: str = "",
+    params: tuple[object, ...] = (),
+    kinds: tuple[str, ...] = EMAIL_KINDS,
 ) -> list[DocumentRow]:
     meta = _meta(ctx)
-    marks = ",".join("?" * len(EMAIL_KINDS))
+    marks = ",".join("?" * len(kinds))
     rows = ctx.bus.db.fetch_all(
         "SELECT p.extraction, p.extraction_reason, p.message, p.part_index, p.filename, p.content_type, p.size, p.kind, m.date, m.thread_id, m.from_name, m.from_addr"
         f" FROM message_parts p JOIN messages m ON m.id = p.message WHERE p.kind IN ({marks}) AND m.folder_role NOT IN ('junk', 'trash') {where}"  # noqa: S608
         " ORDER BY m.date DESC LIMIT 5000",
-        (*EMAIL_KINDS, *params),
+        (*kinds, *params),
     )
     documents = []
     for row in rows:
@@ -249,7 +254,7 @@ def list_documents(query: ListDocuments, ctx: Context) -> DocumentLibrary:
     if query.source in {None, "home"}:
         documents += _home_rows(ctx)
     if query.source in {None, "email"}:
-        documents += _email_parts(ctx)
+        documents += _email_parts(ctx, kinds=LISTED_KINDS)
     tags = sorted({tag for document in documents for tag in document.tags})
     if query.folder:
         documents = [d for d in documents if d.folder == query.folder]

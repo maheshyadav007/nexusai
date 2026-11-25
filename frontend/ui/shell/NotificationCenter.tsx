@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useDateTime } from "@/ui/client/format";
-import { useMarkRead, useNotifications } from "@/ui/client/notifications";
+import { useClearNotifications, useMarkRead, useNotifications, useRestoreNotifications } from "@/ui/client/notifications";
 import { Icon } from "@/ui/icons";
 import { useSettings, useUpdateSettings } from "@/ui/client/settings";
 import { Button } from "@/ui/primitives/Button";
@@ -15,8 +15,9 @@ import { AttentionCount } from "@/ui/primitives/AttentionCount";
 import { Pressable } from "@/ui/primitives/Pressable";
 import { Select } from "@/ui/primitives/Select";
 import { Skeleton } from "@/ui/primitives/Skeleton";
+import { useToast } from "@/ui/primitives/Toast";
 import { StatusDot } from "@/ui/primitives/StatusDot";
-import { t } from "@/ui/strings";
+import { t, tn } from "@/ui/strings";
 
 const ALL = "all";
 
@@ -25,6 +26,9 @@ export function NotificationCenter() {
   const [kind, setKind] = useState(ALL);
   const list = useNotifications(kind === ALL ? null : kind);
   const markRead = useMarkRead();
+  const clear = useClearNotifications();
+  const restore = useRestoreNotifications();
+  const toast = useToast();
   const format = useDateTime();
   const settings = useSettings();
   const update = useUpdateSettings();
@@ -50,6 +54,17 @@ export function NotificationCenter() {
           {unread ? (
             <Button variant="quiet" onClick={() => markRead.mutate(null)}>
               {t("notifications.markAll")}
+            </Button>
+          ) : null}
+          {items.length ? (
+            <Button variant="quiet" onClick={() => clear.mutate(kind === ALL ? null : kind, {
+              onSuccess: ({ ids }) => {
+                setKind(ALL);
+                toast({ title: tn("notifications.cleared", ids.length), action: { label: t("matters.undo"), run: () => restore.mutate(ids) } });
+              },
+              onError: (error) => toast({ title: error.message, tone: "danger" }),
+            })}>
+              {t("notifications.clearAll")}
             </Button>
           ) : null}
         </div>

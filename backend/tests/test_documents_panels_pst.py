@@ -273,6 +273,31 @@ def test_risky_attachments_are_listed_but_never_open(client: TestClient, fake: F
     )
 
 
+def test_calendar_invites_stay_with_their_email_but_can_still_be_read(
+    client: TestClient, fake: FakeMail
+) -> None:
+    connect(client, fake)
+    invite = (
+        b"BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:Kite review\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+    )
+    fake.state.deliver(
+        make_mail(
+            "Kite review",
+            attachments=[
+                ("invite.ics", "text/calendar", invite),
+                ("agenda.pdf", "application/pdf", b"%PDF-1.4"),
+            ],
+        )
+    )
+    listed = wait(lambda: library(client, source="email")["documents"], "attachment")
+    assert [document["name"] for document in listed] == ["agenda.pdf"]
+    db = client.app.state.bus.db  # type: ignore[attr-defined]
+    row = db.fetch_all("SELECT message, part_index FROM message_parts WHERE kind = 'calendar'")[0]
+    key = f"m:{row['message']}:{row['part_index']}"
+    read = client.post("/api/queries/documents.get", json={"key": key})
+    assert read.status_code == 200 and read.json()["document"]["name"] == "invite.ics"
+
+
 def board(client: TestClient) -> dict[str, Any]:
     return client.post("/api/queries/panels.board").json()
 

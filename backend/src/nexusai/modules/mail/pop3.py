@@ -85,7 +85,7 @@ class Pop3Session:
             # Another mail program has the mailbox open, which passes by itself.
             if any(word in _reply(error).upper() for word in BUSY_REPLIES):
                 raise Pop3Failed(_reply(error).decode(errors="replace")) from error
-            raise SignInFailed from error
+            raise SignInFailed(_reply(error).decode(errors="replace")) from error
         self.client = client
         self.opened = time.monotonic()
         self.numbers = None

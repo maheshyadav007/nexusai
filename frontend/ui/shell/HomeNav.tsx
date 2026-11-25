@@ -56,7 +56,6 @@ export function HomeNav({ side, collapsed }: { side: Side; collapsed: boolean })
   // Calendar has a place of its own in Hidden from AI, never ranked with the rest.
   const rows = folderTree(items, kept, unfolded).filter((row) => row.item.name !== CALENDAR);
   const top = rows.filter((row) => row.depth === 0);
-  const biggest = Math.max(1, ...top.map((row) => row.count));
   const rootOf = (row: TreeRow) => [row.item.name, ...ancestors(items, row.item.name)].at(-1) as string;
   const preview = (chosen ? top : top.slice(0, HOME_PREVIEW))
     .filter((row) => !hidden.has(row.item.name))
@@ -77,7 +76,7 @@ export function HomeNav({ side, collapsed }: { side: Side; collapsed: boolean })
       {link}
       {home.open ? <>
         <ul className="flex flex-col gap-px">
-          {shown.map(({ item, depth, children, unread: within, count }) => {
+          {shown.map(({ item, depth, children, unread: within }) => {
             const to = categoryHref(item.name);
             return (
               <li key={item.name} data-testid="nav-category">
@@ -87,7 +86,6 @@ export function HomeNav({ side, collapsed }: { side: Side; collapsed: boolean })
                   tone={kept ? "kept" : partlyKept(item) ? "partly" : "ai"}
                   label={item.name}
                   unread={within}
-                  {...(depth === 0 ? { size: count / biggest } : {})}
                   active={isCurrentMail(pathname, to)}
                   depth={depth + 1}
                   detail={[t(item.mode === "exact" ? "categories.kind.exact" : "categories.kind.smart"), ...(partlyKept(item) ? [t("nav.folder.mixed")] : [])].join(". ")}

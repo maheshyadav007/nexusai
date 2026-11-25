@@ -244,6 +244,9 @@ import type {
   ListNotifications,
   LogLines,
   MarkNotificationsRead,
+  ClearNotifications,
+  NotificationsCleared,
+  RestoreNotifications,
   ModelReply,
   ModelStatus,
   NetworkChecks,
@@ -276,6 +279,8 @@ interface Commands {
   "sidebar.update": [SidebarLayout, SidebarLayout];
   "sidebar.reset": [ResetSidebar, SidebarLayout];
   "notifications.markRead": [MarkNotificationsRead, NotificationsChanged];
+  "notifications.clear": [ClearNotifications, NotificationsCleared];
+  "notifications.restore": [RestoreNotifications, NotificationsChanged];
   "network.check": [CheckNetwork, NetworkChecks];
   "mail.accounts.test": [TestMailAccount, MailTestResult];
   "mail.history.stop": [StopHistory, MailStatus];
