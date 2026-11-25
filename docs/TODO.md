@@ -184,6 +184,16 @@ Shared behaviour first, so every list gets it. Then the page-by-page fixes.
 
 **Done when:** nothing kept from the AI, by folder or by rule, is in the index, on a new Home and on an old one.
 
+## 7. Preferences: one tool, the fewest places
+
+**What:** Everything the person wants from Posty, the Mail agent and the Brief agent is saved by one tool (`save_preference`), called wherever they say it (chat, the brief, the first meeting, Settings), into one place for instructions (the `preferences` table). Each agent reads its instructions as one section and is told they come before its own prompt and every default.
+
+**Why:** Noted 2026-11-25. Today nine places shape what the agents do, written by four tools (`save_personal_prompt`, `propose_preference`, `remember`, the Prompts tab), and only the Brief agent is told the person's wishes outrank its defaults. The same wish can land in memory, a brief comment, a preference or a prompt file depending on where it was said.
+
+**Today, approach, open questions and steps:** written out in full in `docs/PREFERENCES_PLAN.md`.
+
+**Done when:** as in that plan, section 9: one row per instruction wherever it was said, one "Your instructions" section per agent ranked above its defaults, and no other place storing instructions. Checked on the real Gmail account.
+
 ## To try
 
 - **Posty sees what the app shows** (built 2026-11-24, `docs/AGENT_SYNC_PLAN.md`): on the real account with the real model, ask "What needs me today?" and "what things have been completed". Check that answers cite matters and tasks as numbered chips with real titles, that nothing done shows as overdue (the RCA case), and that the Agents page shows no detour alert for a day question. Ask first, since it spends the ChatGPT allowance. Remember to restart the backend and rebuild the frontend first: a running backend doesn't pick up code changes (on 2026-11-24 an old backend made it look as if the change hadn't worked).
