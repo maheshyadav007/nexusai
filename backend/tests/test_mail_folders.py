@@ -15,9 +15,11 @@ from nexusai.contracts.mail import (
     SplitFolders,
     UpdateCategory,
 )
+from nexusai.contracts.settings import UpdateSettings
 from nexusai.kernel.module import CommandError, Context
 from nexusai.modules.mail import folders, rules, sorting, store
 from nexusai.modules.mail import module as mail
+from nexusai.modules.settings.module import update_settings
 from test_mail_organization import ctx  # noqa: F401
 from test_mail_sorting import stored as stored_by
 
@@ -219,6 +221,8 @@ def test_a_rule_of_any_shape_files_what_matches_and_counts_it_first(ctx: Context
     # In the Inbox, a rule files it and the AI still reads it; Show in Priority puts it there.
     later = stored(ctx, "Again", "kim@else.example", "Personal again.")
     assert not later.skip_agent and thread_of(ctx, later)["category"] == "Personal"
+    assert later.thread not in in_view(ctx, "priority")
+    update_settings(UpdateSettings(priority_shows=["folders"]), ctx)
     assert later.thread in in_view(ctx, "priority")
     # Saved without filing what's here, only new mail follows it.
     mail.save_category(

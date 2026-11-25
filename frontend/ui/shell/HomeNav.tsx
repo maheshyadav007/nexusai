@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useCategories, useMailFolders } from "@/ui/client/mail";
 import { Button } from "@/ui/primitives/Button";
 import { Tooltip } from "@/ui/primitives/Tooltip";
@@ -108,6 +108,7 @@ export function HomeNav({ side, collapsed }: { side: Side; collapsed: boolean })
                 active={isCurrentMail(pathname, categoryHref(CALENDAR))}
                 depth={1}
                 detail={t("nav.calendar.about")}
+                {...(calendar ? { menu: (row: ReactNode) => <MailNavMenu href={categoryHref(CALENDAR)} scope={{ folder: "all", category: CALENDAR }} category={calendar}>{row}</MailNavMenu> } : {})}
               />
             </li>
           ) : null}

@@ -2,8 +2,14 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { command, query } from "./api";
-import type { SidebarLayout, UpdateSettings } from "./contracts.generated";
+import type { PriorityShows, SidebarLayout, UpdateSettings } from "./contracts.generated";
 import { useHomeReady } from "./home";
+
+/** What the Priority view can bring in, in the order its menu lists them. */
+export type PriorityShow = PriorityShows[number];
+export const PRIORITY_SHOWS: readonly PriorityShow[] = ["waiting_on_you", "waiting_on_others", "important", "folders", "unfiled"];
+// The backend's default too (PRIORITY_SHOWS_DEFAULT in contracts/settings.py).
+export const PRIORITY_SHOWS_DEFAULT: readonly PriorityShow[] = ["waiting_on_you", "waiting_on_others", "important"];
 
 export function useSettings() {
   const ready = useHomeReady();

@@ -2850,6 +2850,7 @@ export type TimeFormat = "system" | "12" | "24";
 export type RemoteImages = "load" | "block";
 export type SoundMuted = boolean;
 export type SoundOff = string[];
+export type PriorityShows = ("waiting_on_you" | "waiting_on_others" | "important" | "folders" | "unfiled")[];
 export type Theme1 = string | null;
 export type Density1 = ("compact" | "comfortable" | "spacious") | null;
 export type TextSize1 = ("small" | "medium" | "large") | null;
@@ -2860,6 +2861,7 @@ export type TimeFormat1 = ("system" | "12" | "24") | null;
 export type RemoteImages1 = ("load" | "block") | null;
 export type SoundMuted1 = boolean | null;
 export type SoundOff1 = string[] | null;
+export type PriorityShows1 = ("waiting_on_you" | "waiting_on_others" | "important" | "folders" | "unfiled")[] | null;
 export type Id110 = string;
 export type Name48 = string;
 export type Models1 = AvailableModel[];
@@ -8123,6 +8125,7 @@ export interface Settings {
   remote_images: RemoteImages;
   sound_muted: SoundMuted;
   sound_off: SoundOff;
+  priority_shows: PriorityShows;
   [k: string]: unknown;
 }
 /**
@@ -8153,6 +8156,7 @@ export interface UpdateSettings {
   remote_images?: RemoteImages1;
   sound_muted?: SoundMuted1;
   sound_off?: SoundOff1;
+  priority_shows?: PriorityShows1;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema

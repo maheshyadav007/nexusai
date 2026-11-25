@@ -27,6 +27,7 @@ from nexusai.contracts.mail import (
     SortCategory,
     UpdateCategory,
 )
+from nexusai.contracts.settings import UpdateSettings
 from nexusai.kernel.config import Config
 from nexusai.kernel.database import Database
 from nexusai.kernel.event_bus import MIGRATIONS, EventBus
@@ -36,6 +37,7 @@ from nexusai.modules.agent import bulk_learning, mail_agent, signals
 from nexusai.modules.mail import accounts, mentions, rules, store
 from nexusai.modules.mail import module as mail
 from nexusai.modules.mail.parse import parse_message
+from nexusai.modules.settings.module import update_settings
 
 
 @pytest.fixture
@@ -129,38 +131,71 @@ def test_literal_prefix_and_exact_address_and_multiple_folder_order(ctx: Context
     assert rules.evaluate(parse_message(make_mail(sender="notboss@example.com")), [rule]) is None
 
 
-def test_priority_tracks_latest_message_rule_even_with_old_backfill(ctx: Context) -> None:
-    mail.save_category(
-        SaveCategory(name="PLM", mode="exact", subject="[PLM]", in_priority=False), ctx
-    )
-    match = rules.evaluate(
-        parse_message(make_mail(subject="[PLM] Build 12")), mail.ordered_rules(ctx)
-    )
-    first = add(ctx, "[PLM] Build 12", days=2, match=match)
+def choose(ctx: Context, *shows: str) -> None:
+    update_settings(UpdateSettings.model_validate({"priority_shows": list(shows)}), ctx)
+
+
+def test_priority_shows_only_what_is_chosen(ctx: Context) -> None:
+    first = add(ctx, "Plain")
+    # By default: waiting on you or on others, or important. Plain mail stays out.
     assert not visible(ctx, first.thread)
-    reply = add(ctx, "Re: [PLM] Build 12", days=1, reply_to="<organization-1@test>")
-    assert reply.thread == first.thread
+    choose(ctx, "unfiled")
     assert visible(ctx, first.thread)
-    add(ctx, "[PLM] Build 12", match=match, reply_to="<organization-1@test>")
-    assert not visible(ctx, first.thread)
-    add(ctx, "Re: [PLM] Build 12", days=5, reply_to="<organization-1@test>")
+    choose(ctx, "important")
     assert not visible(ctx, first.thread)
     with ctx.bus.db.transaction() as tx:
         tx.execute("UPDATE threads SET importance='high' WHERE id=?", (first.thread,))
-    assert visible(ctx, first.thread) and visible(ctx, first.thread, "important")
-
-
-def test_priority_includes_extra_folder_and_unfiled_old_low_mail(ctx: Context) -> None:
-    first = add(ctx, "Old one", days=100)
-    with ctx.bus.db.transaction() as tx:
-        tx.execute("UPDATE threads SET importance='low' WHERE id=?", (first.thread,))
     assert visible(ctx, first.thread)
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "UPDATE threads SET importance='normal', status='waiting_on_others' WHERE id=?",
+            (first.thread,),
+        )
+    assert not visible(ctx, first.thread)
+    choose(ctx, "waiting_on_others")
+    assert visible(ctx, first.thread)
+    # A folder set to Show in Priority counts only when folders are chosen.
     mail.save_category(SaveCategory(name="Project", in_priority=True), ctx)
     with ctx.bus.db.transaction() as tx:
         tx.execute(
-            "UPDATE threads SET category='Broadcast',extra_categories='[\"Project\"]',latest_rule='rule' WHERE id=?",
+            "UPDATE threads SET status='none', category='Broadcast',"
+            " extra_categories='[\"Project\"]' WHERE id=?",
             (first.thread,),
         )
+    assert not visible(ctx, first.thread)
+    choose(ctx, "folders")
+    assert visible(ctx, first.thread)
+
+
+def test_priority_leaves_out_a_closed_matter_even_when_important(ctx: Context) -> None:
+    first = add(ctx, "Decided")
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "UPDATE threads SET importance='high', status='resolved' WHERE id=?", (first.thread,)
+        )
+    assert visible(ctx, first.thread)
+    now = datetime.now(UTC).isoformat()
+    with ctx.bus.db.transaction() as tx:
+        matter = tx.execute(
+            "INSERT INTO matters (account, title, created, updated) VALUES ('test', 'Decision', ?, ?)",
+            (now, now),
+        ).lastrowid
+        tx.execute(
+            "INSERT INTO matter_threads (thread, matter, how, why, linked) VALUES (?, ?, 'test', '', ?)",
+            (first.thread, matter, now),
+        )
+    # Nothing in it is open, so the matter is closed and its mail leaves Priority.
+    assert not visible(ctx, first.thread)
+    # A kept task still to do keeps it open.
+    with ctx.bus.db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO tasks (title, status, source, created, matter) VALUES ('Send it', 'open', 'test', ?, ?)",
+            (now, matter),
+        )
+    assert visible(ctx, first.thread)
+    with ctx.bus.db.transaction() as tx:
+        tx.execute("UPDATE tasks SET status='done'")
+        tx.execute("UPDATE threads SET status='waiting_on_you' WHERE id=?", (first.thread,))
     assert visible(ctx, first.thread)
 
 
@@ -661,7 +696,7 @@ def test_mark_folder_read_handles_more_than_one_page_and_respects_view(ctx: Cont
         add(ctx, f"Inbox {i}")
     archived = add(ctx, "Archived unread")
     mail.move_thread(MoveThread(id=archived.thread, to="archive"), ctx)
-    mail.mark_folder_read(MarkFolderRead(folder="priority"), ctx)
+    mail.mark_folder_read(MarkFolderRead(folder="reads"), ctx)
     assert (
         ctx.bus.db.fetch_all(
             "SELECT COUNT(*) AS n FROM threads WHERE in_inbox=1 AND unread_count>0"

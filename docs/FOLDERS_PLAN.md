@@ -96,7 +96,7 @@ The person has already agreed: Priority view on top with the folder-and-gear ico
 ## 4. The model (target)
 
 ```
-Priority          view   (important, waiting on you, unfiled by rules, folders marked Show in Priority)
+Priority          view   (chosen by right-click › What Priority shows; default: waiting on you, waiting on others, important; never a closed matter)
 Inbox             home   (everything the AI reads, not archived)
   Finance         folder (rule or smart)
   Projects        folder

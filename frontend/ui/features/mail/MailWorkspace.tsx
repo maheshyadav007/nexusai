@@ -73,9 +73,12 @@ function FilteredList({ text, role, category, location, base, title }: { text: s
 /** Why a conversation is in Priority, in a few words, so the view never seems random. */
 function priorityReason(thread: ThreadRow, inPriority: ReadonlySet<string>): string {
   if (thread.status === "waiting_on_you") return t("mail.priority.why.waiting");
+  if (thread.status === "waiting_on_others") return t("mail.priority.why.others");
   if (thread.importance === "high") return t("mail.priority.why.important");
   const folder = [thread.category, ...(thread.extra_categories ?? [])].find((name) => name && inPriority.has(name));
-  return folder ? t("mail.priority.why.folder", { name: folder }) : t("mail.priority.why.unfiled");
+  if (folder) return t("mail.priority.why.folder", { name: folder });
+  // In no folder; otherwise it's here for a task still to do.
+  return !thread.category && !thread.extra_categories?.length ? t("mail.priority.why.unfiled") : t("mail.priority.why.waiting");
 }
 
 function ThreadList({ title, role, category, location, base, icon, empty }: { title: string; role: FolderRole; category: string | null; location: string | null; base: string; icon: IconName; empty: StringKey }) {

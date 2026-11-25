@@ -639,8 +639,15 @@ def test_priority_inbox_is_a_filter_of_all_mail(
     triaged(client, "Monthly report")
 
     assert set(subjects(client, folder="all")) == {"Needs a decision", "Monthly report"}
-    assert set(subjects(client, folder="priority")) == {"Needs a decision", "Monthly report"}
+    # By default only what waits on someone or is important.
+    assert subjects(client, folder="priority") == ["Needs a decision"]
     client.post("/api/commands/categories.save", json={"name": "Reports", "in_priority": True})
+    assert subjects(client, folder="priority") == ["Needs a decision"]
+    # A folder's Show in Priority counts once folders are chosen.
+    client.post(
+        "/api/commands/settings.update",
+        json={"priority_shows": ["waiting_on_you", "waiting_on_others", "important", "folders"]},
+    )
     assert set(subjects(client, folder="priority")) == {"Needs a decision", "Monthly report"}
     assert subjects(client, folder="all", category="Reports") == ["Monthly report"]
 

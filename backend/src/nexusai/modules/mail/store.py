@@ -23,6 +23,7 @@ from nexusai.contracts.mail import (
     ThreadRow,
     ThreadView,
 )
+from nexusai.contracts.settings import PRIORITY_SHOWS_DEFAULT
 from nexusai.kernel import textmatch
 from nexusai.kernel.config import MailConfig
 from nexusai.kernel.database import Database, Migration
@@ -298,6 +299,53 @@ def hidden_from_ai(column: str = "category") -> str:
     return f"(COALESCE({column}, '') IN {KEPT_FOLDERS} AND {named} IS NULL)"
 
 
+def _shows(option: str) -> str:
+    """Whether Priority is set to bring this in; the setting's default until it's changed."""
+    default = json.dumps(list(PRIORITY_SHOWS_DEFAULT))
+    return (
+        f"'{option}' IN (SELECT value FROM json_each(COALESCE("
+        f"(SELECT value FROM settings WHERE key = 'priority_shows'), '{default}')))"
+    )
+
+
+def _closed_matter(thread: str) -> str:
+    """In a matter with nothing left open: nothing waiting on anyone, nothing important still
+    to read, no task kept. The same test the matter's own state uses."""
+    return (
+        f"EXISTS (SELECT 1 FROM matter_threads mt WHERE mt.thread = {thread}.id AND NOT EXISTS"
+        " (SELECT 1 FROM matter_threads o JOIN threads x ON x.id = o.thread WHERE o.matter = mt.matter"
+        " AND (x.status IN ('waiting_on_you', 'waiting_on_others')"
+        " OR (x.importance = 'high' AND x.status IN ('none', 'fyi'))))"
+        " AND NOT EXISTS (SELECT 1 FROM tasks k WHERE k.status != 'done' AND k.proposed = 0"
+        " AND (k.matter = mt.matter OR k.thread IN"
+        " (SELECT thread FROM matter_threads WHERE matter = mt.matter))))"
+    )
+
+
+def priority_filter(thread: str) -> str:
+    """What Priority shows, as the person chose: open matters' mail waiting on them or on
+    others, what's important, folders set to show here, mail in no folder. Mail kept from the
+    AI comes only by its folder, never by what the AI judged before it was kept."""
+    t = thread
+    in_folder = (
+        f"({t}.category IN (SELECT name FROM mail_categories WHERE in_priority = 1 AND proposed = 0)"
+        f" OR EXISTS (SELECT 1 FROM json_each({t}.extra_categories) e WHERE e.value IN"
+        " (SELECT name FROM mail_categories WHERE in_priority = 1 AND proposed = 0)))"
+    )
+    judged = (
+        f"(({_shows('waiting_on_you')} AND ({t}.status = 'waiting_on_you'"
+        " OR {t}.id IN (SELECT thread FROM tasks WHERE status != 'done' AND proposed = 0 AND thread IS NOT NULL)))"
+        f" OR ({_shows('waiting_on_others')} AND {t}.status = 'waiting_on_others')"
+        f" OR ({_shows('important')} AND {t}.importance = 'high'))"
+    ).replace("{t}", t)
+    return (
+        f"({t}.in_inbox = 1 AND NOT {_closed_matter(t)} AND ("
+        f"({_shows('folders')} AND {in_folder})"
+        f" OR (NOT COALESCE({t}.category, '') IN {KEPT_FOLDERS} AND ({judged}"
+        f" OR ({_shows('unfiled')} AND {t}.category IS NULL AND {t}.extra_categories = '[]')))))"
+    )
+
+
 FOLDER_FILTERS = {
     **{name: f"{column} = 1" for name, column in THREAD_COLUMNS.items()},
     # What came in, wherever it's been filed since.
@@ -311,18 +359,7 @@ FOLDER_FILTERS = {
     # The two homes: what the AI reads, and what's kept from it, each without what's archived.
     "reads": f"(in_inbox = 1 AND (category IS NULL OR category NOT IN {KEPT_FOLDERS}))",
     "kept": f"(in_inbox = 1 AND category IN {KEPT_FOLDERS})",
-    # Mail kept from the AI comes to Priority only by its folder's Show in Priority, never by
-    # what the AI judged before it was kept.
-    "priority": (
-        "(in_inbox = 1 AND (category IN (SELECT name FROM mail_categories WHERE in_priority = 1 AND proposed = 0)"
-        " OR EXISTS (SELECT 1 FROM json_each(extra_categories) e WHERE e.value IN"
-        " (SELECT name FROM mail_categories WHERE in_priority = 1 AND proposed = 0))"
-        f" OR (NOT COALESCE(category, '') IN {KEPT_FOLDERS}"
-        " AND (importance = 'high' OR status = 'waiting_on_you'"
-        " OR (category IS NULL AND extra_categories = '[]')"
-        " OR (latest_rule IS NULL AND COALESCE(category,'') != 'Broadcast'"
-        " AND NOT EXISTS (SELECT 1 FROM json_each(extra_categories) WHERE value='Broadcast'))))))"
-    ),
+    "priority": priority_filter("threads"),
 }
 SUBJECT_WINDOW_DAYS = 30
 MOST_PARTICIPANTS_LISTED = 20
@@ -1227,7 +1264,9 @@ def _filters(account: str, query: SearchMail) -> tuple[list[str], list[object]]:
         conditions.append("m.has_attachments = ?")
         params.append(int(query.has_attachment))
     if query.folder:
-        if query.folder in {"priority", "important", "starred", "all", "reads", "kept"}:
+        if query.folder == "priority":
+            conditions.append(priority_filter("t"))
+        elif query.folder in {"important", "starred", "all", "reads", "kept"}:
             conditions.append(FOLDER_FILTERS[query.folder])
         else:
             conditions.append(f"t.{THREAD_COLUMNS[query.folder]} = 1")

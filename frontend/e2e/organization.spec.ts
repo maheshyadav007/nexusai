@@ -78,14 +78,28 @@ test("Priority, Inbox, Important and Starred are separate views", async ({ page,
 test("folder and category context menus perform scoped operations", async ({ page, request }) => {
   await page.goto("/mail/all");
   // Drafts shows only when there are drafts; the rest wait under More, open here because All mail is.
-  for (const href of ["priority", "inbox", "kept", "important", "starred", "all", "sent", "archive", "trash"]) {
+  for (const href of ["priority", "inbox", "kept", "important", "starred", "all", "archive", "trash"]) {
     await page.locator(`nav a[href='/mail/${href}']`).click({ button: "right" });
-    await expect(page.getByRole("menuitem", { name: "Open", exact: true })).toBeVisible();
-    await expect(page.getByRole("menuitem", { name: "Mark downloaded mail as read", exact: true })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Mark all as read", exact: true })).toBeVisible();
+    // A click opens it, so the menu doesn't offer Open.
+    await expect(page.getByRole("menuitem", { name: "Open", exact: true })).toHaveCount(0);
     await page.keyboard.press("Escape");
   }
+  // Sent has nothing to mark read or change, so no menu.
+  await page.locator("nav a[href='/mail/sent']").click({ button: "right" });
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  // Priority's side menu chooses what it shows, and stays open to tick several.
+  await page.locator("nav a[href='/mail/priority']").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "What Priority shows", exact: true }).click();
+  await expect(page.getByRole("menuitemcheckbox", { name: "Waiting on you", exact: true })).toHaveAttribute("aria-checked", "true");
+  await page.getByRole("menuitemcheckbox", { name: "Mail not in any folder", exact: true }).click();
+  await expect(page.getByRole("menuitemcheckbox", { name: "Mail not in any folder", exact: true })).toHaveAttribute("aria-checked", "true");
+  await expect.poll(async () => (await post(request, "/api/queries/settings.get")).priority_shows).toEqual(["waiting_on_you", "waiting_on_others", "important", "unfiled"]);
+  await page.getByRole("menuitem", { name: "Reset to default", exact: true }).click();
+  await expect.poll(async () => (await post(request, "/api/queries/settings.get")).priority_shows).toEqual(["waiting_on_you", "waiting_on_others", "important"]);
   await page.locator("nav a[href='/mail/all']").click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Mark downloaded mail as read", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Mark all as read", exact: true }).click();
   await expect.poll(async () => (await post(request, "/api/queries/threads.list", { folder: "all" })).threads.every((row: {unread_count:number}) => row.unread_count === 0)).toBe(true);
   let name = "Context menu test";
   await post(request, "/api/commands/categories.save", { name, mode: "exact", subject: "[MENU]", in_priority: false });
@@ -96,27 +110,28 @@ test("folder and category context menus perform scoped operations", async ({ pag
   await page.reload();
   let category = page.locator("nav").getByRole("link", { name, exact: false });
   await category.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Mark downloaded mail as read", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Mark all as read", exact: true }).click();
   await expect.poll(async () => (await post(request, "/api/queries/threads.list", { folder: "all", category: name })).threads[0].unread_count).toBe(0);
   await category.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Show in Priority", exact: true }).click();
+  await page.getByRole("menuitemcheckbox", { name: "Show in Priority", exact: true }).click();
   await expect.poll(async () => (await post(request, "/api/queries/categories.list")).categories.find((c: { name: string }) => c.name === name).in_priority).toBe(true);
   await category.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Let the AI sort it", exact: true }).click();
-  await expect.poll(async () => (await post(request, "/api/queries/categories.list")).categories.find((c: { name: string }) => c.name === name).mode).toBe("smart");
-  await category.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Folder settings…", exact: true }).click();
+  await expect(page.getByRole("menuitemcheckbox", { name: "Show in Priority", exact: true })).toHaveAttribute("aria-checked", "true");
+  for (const gone of ["Open", "Rename folder…", "Let the AI sort it", "Folder settings…"]) await expect(page.getByRole("menuitem", { name: gone, exact: true })).toHaveCount(0);
+  // Edit folder holds the name, and links to the rest in Settings.
+  await page.getByRole("menuitem", { name: "Edit folder…", exact: true }).click();
+  await page.getByRole("dialog").getByRole("link", { name: "More settings", exact: true }).click();
   await expect(page.getByTestId("category").filter({ hasText: name }).getByRole("textbox", { name: "Description", exact: true })).toBeVisible();
   await page.goto("/mail/all");
   await category.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Rename folder…", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Edit folder…", exact: true }).click();
   await page.getByRole("dialog").getByRole("textbox", { name: "Name", exact: true }).fill("Renamed context category");
   await page.getByRole("dialog").getByRole("button", { name: "Save", exact: true }).click();
   name = "Renamed context category";
   category = page.locator("nav").getByRole("link", { name, exact: false });
   await expect(category).toBeVisible();
   await category.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Sort older mail…", exact: true }).click();
+  await page.getByRole("menuitem", { name: "File older mail here…", exact: true }).click();
   await expect(page.getByRole("dialog").getByRole("button", { name: "Confirm sorting", exact: true })).toBeEnabled();
   await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
   await category.click({ button: "right" });
