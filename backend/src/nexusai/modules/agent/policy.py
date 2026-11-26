@@ -230,6 +230,14 @@ TOOL_ENTRIES = (
     ),
     ToolEntry("list_plugins", AGENTS, "List plugins", "See the installed plugins.", "read"),
     ToolEntry(
+        "create_plugin",
+        AGENTS,
+        "Create plugins",
+        "Make your own plugin from what you describe, saved in your Home.",
+        "data",
+    ),
+    ToolEntry("export_plugin", AGENTS, "Export plugins", "Save your plugin as a zip.", "data"),
+    ToolEntry(
         "remove_plugin",
         AGENTS,
         "Remove plugins",
@@ -278,6 +286,28 @@ def can_remember(tool: str, untrusted: bool) -> bool:
     if not untrusted:
         return True
     return entry.action == "data" and entry.default is None
+
+
+# Decided 2026-11-26: changes to the person's own data that are small and easy to put back don't
+# ask, even after a chat read mail. What sends, deletes, runs, writes files, sets up something that
+# runs later, or changes which mail the AI or the person sees (rules, senders) still asks there.
+UNDOABLE_AFTER_READING = frozenset(
+    {
+        "create_tasks",
+        "update_tasks",
+        "create_reminders",
+        "update_reminders",
+        "update_mail",
+        "save_draft",
+        "create_categories",
+        "update_category",
+        "reorder_categories",
+        "update_memory",
+        "save_panel",
+        "update_documents",
+        "apply_mail_learning_answers",
+    }
+)
 
 
 # Decided 2026-11-26: tools from MCP servers the person added don't ask by default, even after a

@@ -172,3 +172,42 @@ def test_a_routines_runs_are_listed_and_a_failed_one_can_be_tried_again(client: 
         status["status"] in {"pending", "running", "done", "failed"}
         and status["error"] != "The model was busy"
     )
+
+
+def test_a_routine_on_mail_that_mentions_me_uses_my_names_without_a_model() -> None:
+    from nexusai.modules.mail import mentions
+
+    me = mentions.found("Mahesh Yadav", ["mahesh.y@corp.example"])
+    event = {"message_id": 7}
+    plm = {
+        "from_addr": "plm@corp.example",
+        "from_name": "PLM",
+        "subject": "PLM-4411 assigned",
+        "clean_text": "Issue PLM-4411 is now assigned to Mahesh Yadav. Please triage by Friday.",
+    }
+    other = {**plm, "clean_text": "Issue PLM-4412 is now assigned to Rahul Kumar."}
+    told = {**other, "subject": "Rahul mentioned you in PLM-4413"}
+    about_me = rule(match_from="plm@", match_words="")
+    about_me_row = {**about_me, "match_me": 1}
+    assert triggers.mail_matches(Db(plm), about_me_row, event, me)
+    assert not triggers.mail_matches(Db(other), about_me_row, event, me)
+    # A tool passing on that someone mentioned them counts too.
+    assert triggers.mail_matches(Db(told), about_me_row, event, me)
+    # With no names set yet, nothing is about them.
+    assert not triggers.mail_matches(Db(plm), about_me_row, event, None)
+    # The other conditions still apply alongside it.
+    assert not triggers.mail_matches(Db(plm), {**about_me_row, "match_from": "jira@"}, event, me)
+
+
+def test_a_trigger_keeps_that_it_is_for_mail_that_mentions_me(client: TestClient) -> None:
+    saved = client.post(
+        "/api/commands/triggers.save",
+        json={
+            "title": "PLM on me",
+            "event": "mail.received",
+            "prompt": "Add a task.",
+            "match_me": True,
+        },
+    ).json()
+    mine = next(t for t in saved["triggers"] if t["title"] == "PLM on me")
+    assert mine["match_me"] is True

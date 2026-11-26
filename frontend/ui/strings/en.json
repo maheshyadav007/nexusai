@@ -1042,6 +1042,7 @@
   "triggers.match.subject.hint": "Every word must be in the subject, such as invoice.",
   "triggers.match.words": "Mentions",
   "triggers.match.words.hint": "Any of these words anywhere in the email, separated by commas.",
+  "triggers.match.me": "Only when it mentions me, by the names I set for who I am",
   "triggers.prompt.hint": "Written as you'd say it to the agent. It shows in the chat as a message.",
   "triggers.add": "Add trigger",
   "triggers.chat": "Open chat",

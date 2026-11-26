@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Checkbox } from "@/ui/primitives/Checkbox";
 import { RoutineRuns } from "./RoutineRuns";
 import type { SaveTrigger, Trigger } from "@/ui/client/contracts.generated";
 import { useRemoveTrigger, useSaveTrigger, useTriggers } from "@/ui/client/work";
@@ -28,6 +29,7 @@ export const triggerSaved = (trigger: Trigger, enabled = trigger.enabled ?? true
   match_from: trigger.match_from ?? "",
   match_subject: trigger.match_subject ?? "",
   match_words: trigger.match_words ?? "",
+  match_me: trigger.match_me ?? false,
 });
 
 /** What starts an agent when something happens, as a schedule does when a time comes. */
@@ -44,6 +46,7 @@ export function TriggerForm({ initial, onSaved }: { initial?: Trigger; onSaved: 
   const [from, setFrom] = useState(initial?.match_from ?? "");
   const [subject, setSubject] = useState(initial?.match_subject ?? "");
   const [words, setWords] = useState(initial?.match_words ?? "");
+  const [aboutMe, setAboutMe] = useState(initial?.match_me ?? false);
   return (
     <form
       className="flex flex-col gap-4"
@@ -55,7 +58,7 @@ export function TriggerForm({ initial, onSaved }: { initial?: Trigger; onSaved: 
             title: title.trim(),
             ...(builtIn ? {} : { event: event as Event }),
             prompt,
-            ...(builtIn ? {} : { match_from: from.trim(), match_subject: subject.trim(), match_words: words.trim() }),
+            ...(builtIn ? {} : { match_from: from.trim(), match_subject: subject.trim(), match_words: words.trim(), match_me: aboutMe }),
             ...savedRunOptions(options),
           },
           { onSuccess: onSaved },
@@ -73,6 +76,7 @@ export function TriggerForm({ initial, onSaved }: { initial?: Trigger; onSaved: 
             <Field label={t("triggers.match.from")} hint={t("triggers.match.from.hint")}>{({ invalid, ...control }) => <Input invalid={invalid} value={from} onChange={(change) => setFrom(change.target.value)} {...control} />}</Field>
             <Field label={t("triggers.match.subject")} hint={t("triggers.match.subject.hint")}>{({ invalid, ...control }) => <Input invalid={invalid} value={subject} onChange={(change) => setSubject(change.target.value)} {...control} />}</Field>
             <Field label={t("triggers.match.words")} hint={t("triggers.match.words.hint")}>{({ invalid, ...control }) => <Input invalid={invalid} value={words} onChange={(change) => setWords(change.target.value)} {...control} />}</Field>
+            <Checkbox label={t("triggers.match.me")} checked={aboutMe} onChange={setAboutMe} />
           </fieldset>
           <Field label={t("triggers.prompt")} hint={t("triggers.prompt.hint")}>{({ invalid, ...control }) => <Textarea invalid={invalid} rows={3} value={prompt} onChange={(change) => setPrompt(change.target.value)} {...control} />}</Field>
         </>

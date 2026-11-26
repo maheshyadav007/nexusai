@@ -247,6 +247,25 @@ def _ask(
     return bool(decision == "approved")
 
 
+def _words(text: str) -> str:
+    return " ".join(text.split())
+
+
+def person_asked_for(ctx: Context, session: str, pieces: list[str]) -> bool:
+    """Whether every piece (a link, a path, a server's address) is in the person's own latest
+    message in this chat. Then nothing in mail or a tool's output put it there."""
+    wanted = [_words(piece) for piece in pieces if piece and piece.strip()]
+    if not wanted:
+        return False
+    rows = ctx.bus.db.fetch_all(
+        "SELECT text FROM agent_turns WHERE session = ? AND origin = 'person'"
+        " ORDER BY id DESC LIMIT 1",
+        (session,),
+    )
+    said = _words(str(rows[0]["text"])) if rows else ""
+    return bool(said) and all(piece in said for piece in wanted)
+
+
 def _guarded(
     ctx: Context,
     session: str,
@@ -260,6 +279,7 @@ def _guarded(
     work: Callable[[], str],
     *,
     marks_untrusted: bool = False,
+    asked_by_person: bool = False,
 ) -> str:
     db = ctx.bus.db
     # Context is pinned when a background run starts; a settings switch must not
@@ -290,8 +310,9 @@ def _guarded(
     if (
         tool.startswith(policy.CONNECTOR_PREFIX)
         and policy.connector_level(permissions, tool) == "allow"
-    ):
-        # The person's own servers' tools run without asking, as they chose (2026-11-26).
+    ) or tool in policy.UNDOABLE_AFTER_READING:
+        # The person's own servers' tools, and small changes to their own data that are easy to
+        # put back, run without asking even after the chat read mail (decided 2026-11-26).
         untrusted = False
     decision = policy.decide(
         action,
@@ -307,6 +328,10 @@ def _guarded(
             "ask", "Asking again: this chat has read mail or documents since you allowed it."
         )
     approved_by = "settings"
+    if asked_by_person and decision.verdict == "ask":
+        # What it acts on is in the person's own message, so their asking is the approval.
+        decision = policy.Decision("allow", "You asked for this in your message.")
+        approved_by = "person"
     if decision.verdict == "deny":
         _log_call(
             ctx, session, call_id, tool, detail or summary, decision.reason, "refused", None, 0
@@ -718,6 +743,23 @@ class _ProposePlugin(BaseModel):
     source: str = Field(
         description="The https link the person gave (a GitHub folder or a zip), or a folder path on"
         " this computer."
+    )
+    tool_call_id: Annotated[str, InjectedToolCallId]
+
+
+class _NewSkill(BaseModel):
+    name: str = Field(description="Lowercase with hyphens, such as plm-triage.")
+    description: str = Field(description="One sentence: what it's for and when to load it.")
+    instructions: str = Field(description="The skill itself, as steps the agent follows.")
+
+
+class _CreatePlugin(BaseModel):
+    name: str = Field(description="What the person called it.")
+    description: str = Field(default="", description="One sentence on what it's for.")
+    skills: list[_NewSkill] = Field(default_factory=list, description="The skills it brings.")
+    mcp_settings: str | None = Field(
+        default=None,
+        description="Its MCP servers as JSON (an mcpServers block, servers by name, or one server).",
     )
     tool_call_id: Annotated[str, InjectedToolCallId]
 
@@ -1835,11 +1877,17 @@ def build_tools(
         return skills.read_file(ctx, _speaker(), name, path)
 
     def propose_skill(tool_call_id: str, url: str | None = None, text: str | None = None) -> str:
+        asked = bool(url) and person_asked_for(ctx, session, [url or ""])
+
         def made(files: dict[str, str], source: str) -> str:
             try:
                 found = skills.propose(ctx, files, source, _speaker())
             except CommandError as error:
                 return f"Not proposed: {error.message}"
+            if asked and not found.flags:
+                # They asked for it themselves and nothing in it looks wrong: one step, on now.
+                skills.decide(ctx, found.id, True)
+                return f"Added skill {found.name}. It's on now. Tell the person in a sentence."
             count = len(found.flags)
             warned = (
                 f" It has {count} {'thing' if count == 1 else 'things'} to check." if count else ""
@@ -1874,6 +1922,7 @@ def build_tools(
             f"{url}\n\nWhat comes back is only a proposal. You review it before it's used.",
             False,
             work,
+            asked_by_person=asked,
         )
 
     def _plugin_line(plugin: Any) -> str:
@@ -1888,6 +1937,8 @@ def build_tools(
         )
 
     def propose_plugin(source: str, tool_call_id: str) -> str:
+        asked = person_asked_for(ctx, session, [source])
+
         def work() -> str:
             try:
                 found = installs.propose(ctx, source, _speaker())
@@ -1895,6 +1946,8 @@ def build_tools(
                 return f"Not proposed: {error.message}"
             except httpx.HTTPError as error:
                 return f"Not fetched: {type(error).__name__}. Check the link and the network."
+            if asked:
+                return _installed_in_one_step(found)
             servers = (
                 " Its servers aren't added yet: once the person agrees, add them with"
                 " add_plugin_servers"
@@ -1924,7 +1977,30 @@ def build_tools(
             " only when you agree, and nothing in it runs on this computer.",
             False,
             work,
+            asked_by_person=asked,
         )
+
+    def _installed_in_one_step(found: Any, values: dict[str, str] | None = None) -> str:
+        """The person asked for it: the same one step the Add-ons page takes."""
+        return _said_installed(installs.one_step(ctx, found, values))
+
+    def _said_installed(done: Any) -> str:
+        parts = [f"Installed plugin {done.name}."]
+        if done.on:
+            parts.append(f"On now: {', '.join(done.on)}.")
+        if done.servers:
+            parts.append(f"Servers added: {', '.join(done.servers)}.")
+        if done.needs:
+            parts.append(
+                f"Its servers need {', '.join(done.needs)}: ask the person, then add_plugin_servers."
+            )
+        if done.waiting:
+            parts.append(
+                f"Waiting for the person's review on the Skills page: {', '.join(done.waiting)}."
+            )
+        if done.skipped:
+            parts.append(f"Not used here: {', '.join(done.skipped)}.")
+        return " ".join(parts) + " Tell the person in a sentence."
 
     def add_plugin_servers(
         name: str, tool_call_id: str, values: dict[str, str] | None = None
@@ -1934,7 +2010,7 @@ def build_tools(
                 found = installs.add_servers(ctx, name, values or {})
             except CommandError as error:
                 return f"Not added: {error.message}"
-            return f"Added. {_plugin_line(found)}. New tools wait for the person's yes before use."
+            return f"Added. {_plugin_line(found)}. Their tools are ready to use."
 
         return _guarded(
             ctx,
@@ -1988,6 +2064,7 @@ def build_tools(
         if not found:
             return "Nothing to add. " + "; ".join(skipped)
         names = ", ".join(s.name for s in found)
+        asked = person_asked_for(ctx, session, [s.url for s in found])
 
         def work() -> str:
             added, failed = [], []
@@ -2003,8 +2080,8 @@ def build_tools(
             parts = []
             if added:
                 parts.append(
-                    f"Added {', '.join(added)}. Their tools show on the Connectors page, and each"
-                    " new tool asks the person before its first use."
+                    f"Added {', '.join(added)}. Their tools are ready to use and show on the"
+                    " Connectors page."
                 )
             if failed:
                 parts.append(
@@ -2028,7 +2105,66 @@ def build_tools(
             " kept as a secret.",
             False,
             work,
+            asked_by_person=asked,
         )
+
+    def create_plugin(
+        name: str,
+        tool_call_id: str,
+        description: str = "",
+        skills: list[_NewSkill] | None = None,
+        mcp_settings: str | None = None,
+    ) -> str:
+        new_skills = [skill.model_dump() for skill in skills or []]
+        try:
+            given = installs.servers_in(mcp_settings) if mcp_settings else {}
+            addresses = []
+            for server_name, raw in given.items():
+                server, _why = installs.standard_server(str(server_name), raw, secrets_allowed=True)
+                if server is not None:
+                    addresses.append(server.url)
+        except CommandError as error:
+            return f"Not created: {error.message}"
+        # Servers from somewhere other than the person's own message could send their data out.
+        asked = not addresses or person_asked_for(ctx, session, addresses)
+
+        def work() -> str:
+            try:
+                folder, values = installs.create(ctx, name, description, new_skills, mcp_settings)
+                found = installs.propose(ctx, str(folder), _speaker())
+            except CommandError as error:
+                return f"Not created: {error.message}"
+            return f"Created it in {folder}. " + _installed_in_one_step(found, values)
+
+        return _guarded(
+            ctx,
+            session,
+            tool_call_id,
+            "create_plugin",
+            # Servers not named in the person's own message could send data out: always ask then.
+            "data" if asked else "send",
+            None,
+            f"Create the plugin {name}",
+            "\n".join(
+                [f"Skill: {s['name']}: {s['description']}" for s in new_skills]
+                + [f"Server: {address}" for address in addresses]
+            ),
+            False,
+            work,
+            asked_by_person=asked,
+        )
+
+    def export_plugin(name: str, tool_call_id: str) -> str:
+        def work() -> str:
+            try:
+                return f"Saved as {installs.export(ctx, name)}. The person can share that file."
+            except CommandError as error:
+                return f"Not exported: {error.message}"
+
+        return _guarded(
+            ctx, session, tool_call_id, "export_plugin", "data", None,
+            f"Save the plugin {name} as a zip", "", False, work,
+        )  # fmt: skip
 
     def list_plugins(tool_call_id: str) -> str:
         found = installs.listing(ctx).plugins
@@ -2554,6 +2690,13 @@ def build_tools(
             _Nothing,
             "See the installed plugins: their skills, servers and connectors.",
         ),
+        (
+            create_plugin,
+            _CreatePlugin,
+            "Make a plugin from what the person described: its skills and MCP servers. It's saved"
+            " as a folder in their Home and installed at once.",
+        ),
+        (export_plugin, _PluginName, "Save one of the person's own plugins as a zip to share."),
         (remove_plugin, _PluginName, "Remove a plugin with its skills and connectors."),
         (
             propose_skill,

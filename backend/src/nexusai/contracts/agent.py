@@ -723,6 +723,8 @@ class Trigger(BaseModel):
     match_from: str = Field(default="", max_length=200)
     match_subject: str = Field(default="", max_length=200)
     match_words: str = Field(default="", max_length=500)
+    # Only mail that names the person, by the names they set for who they are, with no model.
+    match_me: bool = False
 
 
 class TriggerChoice(BaseModel):
@@ -756,6 +758,8 @@ class SaveTrigger(BaseModel):
     match_from: str = Field(default="", max_length=200)
     match_subject: str = Field(default="", max_length=200)
     match_words: str = Field(default="", max_length=500)
+    # Only mail that names the person, by the names they set for who they are, with no model.
+    match_me: bool = False
 
 
 class RemoveTrigger(BaseModel):
@@ -1054,6 +1058,31 @@ class InstalledPlugin(BaseModel):
 
 class PluginList(BaseModel):
     plugins: list[InstalledPlugin]
+
+
+class InstallSomething(BaseModel):
+    """A link, a folder path or pasted MCP settings, from the Add-ons page's one box."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: str = Field(min_length=1, max_length=200_000)
+
+
+class ExportedPlugin(BaseModel):
+    path: str
+
+
+class InstallResult(BaseModel):
+    """What one install did: what's on, what waits for the person's review, which servers were
+    added, which settings they still need, and what isn't used here."""
+
+    kind: Literal["plugin", "skill", "servers"]
+    name: str
+    on: list[str] = Field(default_factory=list)
+    waiting: list[str] = Field(default_factory=list)
+    servers: list[str] = Field(default_factory=list)
+    needs: list[str] = Field(default_factory=list)
+    skipped: list[str] = Field(default_factory=list)
 
 
 class ListPlugins(BaseModel):

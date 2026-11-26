@@ -228,11 +228,9 @@ def test_many_conversations_change_in_one_call_with_one_approval(
         [ToolCall("u", "update_mail", change)],
         [TextChunk("Done.")],
     ]
-    done = chat_in_background(client, session, "Sort them")
-    approval = approve_one(client)
-    assert "“Report one”" in approval["summary"]
-    assert "“Report two”" in approval["detail"]
-    wait(lambda: done, "finish")
+    # Filing mail is easy to put back, so it no longer asks after the chat read mail.
+    chat(client, session, "Sort them")
+    assert client.post("/api/queries/approvals.list").json()["approvals"] == []
     rows = client.post("/api/queries/threads.list", json={"folder": "all"}).json()["threads"]
     assert {(t["category"], t["flagged"], t["status"]) for t in rows} == {
         ("Finance", True, "resolved")

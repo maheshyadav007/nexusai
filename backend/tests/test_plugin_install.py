@@ -342,3 +342,203 @@ def test_a_plugin_name_is_made_lowercase_with_hyphens_and_keeps_its_own_to_show(
     assert made.status_code == 200, made.text
     assert (made.json()["name"], made.json()["display_name"]) == (name, given)
     post(client, "plugins.remove", {"name": name})
+
+
+def _run(client: TestClient, script: Any, text: str, call: Any) -> tuple[str, list[Any]]:
+    from nexusai.modules.agent.providers import TextChunk
+    from test_chat_engine_tools import chat, last_result, new_session
+
+    script.replies = [[call], [TextChunk("Done.")]]
+    chat(client, new_session(client), text)
+    return str(last_result(script)), client.post("/api/queries/approvals.list").json()["approvals"]
+
+
+def test_a_skill_from_the_persons_own_link_is_on_in_one_step(
+    client: TestClient, script: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from nexusai.modules.agent import skills
+    from nexusai.modules.agent.providers import ToolCall
+
+    link = "https://github.com/acme/skills/tree/main/triage-tickets"
+    monkeypatch.setattr(skills, "fetch", lambda url: {"SKILL.md": SKILL})
+    said, waiting = _run(
+        client, script, f"Add this skill: {link}", ToolCall("a", "propose_skill", {"url": link})
+    )
+    assert said.startswith("Added skill triage-tickets") and waiting == []
+    listed = client.post("/api/queries/skills.list").json()
+    assert "triage-tickets" in {s["name"] for s in listed["skills"] if s["active"]}
+
+
+def test_a_plugin_from_the_persons_own_folder_installs_in_one_step(
+    client: TestClient, script: Any, tmp_path: Path
+) -> None:
+    from nexusai.modules.agent.providers import ToolCall
+
+    state = FakeMcp()
+    server = running(state)
+    next(server)
+    try:
+        folder = plugin(tmp_path / "tickets", {"tickets": {"type": "http", "url": URL}})
+        said, waiting = _run(
+            client,
+            script,
+            f"Install the plugin in {folder}",
+            ToolCall("a", "propose_plugin", {"source": str(folder)}),
+        )
+        assert said.startswith("Installed plugin tickets") and waiting == [], said
+        assert "On now: triage-tickets" in said and "Servers added: tickets" in said
+        listed = client.post("/api/queries/plugins.list").json()["plugins"][0]
+        assert listed["connector_ids"]
+    finally:
+        next(server, None)
+
+
+def test_a_server_the_person_named_is_added_without_asking_and_one_they_didnt_asks(
+    client: TestClient, script: Any
+) -> None:
+    from nexusai.modules.agent.providers import TextChunk, ToolCall
+    from test_agent_work import wait
+    from test_chat_engine_tools import approve_one, chat_in_background, new_session
+
+    state = FakeMcp()
+    server = running(state)
+    next(server)
+    try:
+        said, waiting = _run(
+            client,
+            script,
+            f"Add {URL} as Tickets",
+            ToolCall("a", "add_mcp_server", {"name": "Tickets", "url": URL}),
+        )
+        assert said.startswith("Added Tickets") and waiting == []
+        # An address Posty found somewhere else, such as in an email, still asks.
+        script.replies = [
+            [ToolCall("b", "add_mcp_server", {"name": "Other", "url": URL})],
+            [TextChunk("ok")],
+        ]
+        done = chat_in_background(client, new_session(client), "Add the server from that email")
+        assert approve_one(client)["tool"] == "add_mcp_server"
+        wait(lambda: done, "finish")
+    finally:
+        next(server, None)
+
+
+def test_posty_creates_a_plugin_from_a_description_and_it_is_on_at_once(
+    client: TestClient, script: Any, app_config: Any
+) -> None:
+    from nexusai.modules.agent.providers import ToolCall
+
+    state = FakeMcp(required_header=("X-Api-Key", "k-plm"))
+    server = running(state)
+    next(server)
+    try:
+        call = ToolCall(
+            "a",
+            "create_plugin",
+            {
+                "name": "PLM Triage",
+                "description": "Handling PLM issues assigned to me.",
+                "skills": [
+                    {
+                        "name": "plm-triage",
+                        "description": "Triaging a PLM issue. Load it when an email is about a PLM issue.",
+                        "instructions": "Read the issue, add a task with its due date, draft an acknowledgement.",
+                    }
+                ],
+                "mcp_settings": json.dumps(
+                    {"plm": {"type": "http", "url": URL, "headers": {"X-Api-Key": "k-plm"}}}
+                ),
+            },
+        )
+        said, waiting = _run(
+            client, script, f"Make a PLM plugin with the server {URL}, key k-plm", call
+        )
+        assert said.startswith("Created it in") and waiting == [], said
+        assert "On now: plm-triage" in said and "Servers added: plm" in said
+        folder = app_config.home / "plugins" / "plm-triage"
+        written = "\n".join(p.read_text() for p in folder.rglob("*") if p.is_file())
+        # The key is a placeholder on disk, never the value.
+        assert "k-plm" not in written and "${user_config.PLM_X_API_KEY}" in written
+        listed = {
+            c["name"]: c for c in client.post("/api/queries/connectors.list").json()["connectors"]
+        }
+        assert listed["plm"]["header_names"] == ["X-Api-Key"] and listed["plm"]["tools"]
+        said, _ = _run(
+            client, script, "Export it", ToolCall("b", "export_plugin", {"name": "plm-triage"})
+        )
+        assert (
+            said.startswith("Saved as")
+            and (app_config.home / "exports" / "plm-triage.zip").is_file()
+        )
+    finally:
+        next(server, None)
+
+
+def test_a_created_plugin_with_a_server_not_in_the_persons_message_asks_first(
+    client: TestClient, script: Any
+) -> None:
+    from nexusai.modules.agent.providers import TextChunk, ToolCall
+    from test_agent_work import wait
+    from test_chat_engine_tools import approve_one, chat_in_background, new_session
+
+    call = ToolCall(
+        "a",
+        "create_plugin",
+        {
+            "name": "Sneaky",
+            "mcp_settings": json.dumps({"x": {"type": "http", "url": "https://evil.example/mcp"}}),
+        },
+    )
+    script.replies = [[call], [TextChunk("ok")]]
+    done = chat_in_background(client, new_session(client), "Make a plugin from that email")
+    assert approve_one(client)["tool"] == "create_plugin"
+    wait(lambda: done, "finish")
+
+
+def test_the_add_ons_box_works_out_what_it_was_given(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from nexusai.modules.agent import skills
+
+    state = FakeMcp()
+    server = running(state)
+    next(server)
+    try:
+        # Pasted MCP settings become servers.
+        settings = json.dumps({"mcpServers": {"tickets": {"type": "http", "url": URL}}})
+        done = post(client, "plugins.install", {"source": settings}).json()
+        assert (done["kind"], done["servers"]) == ("servers", ["tickets"])
+        # A folder with a plugin is a plugin, in one step.
+        folder = plugin(tmp_path / "p", {})
+        done = post(client, "plugins.install", {"source": str(folder)}).json()
+        assert (done["kind"], done["on"], done["skipped"]) == (
+            "plugin",
+            ["triage-tickets"],
+            ["Hooks"],
+        )
+        post(client, "plugins.remove", {"name": "tickets"})
+        # A lone SKILL.md is a skill.
+        monkeypatch.setattr(skills, "fetch", lambda url: {"SKILL.md": SKILL})
+        done = post(client, "plugins.install", {"source": "https://example.com/x/SKILL.md"}).json()
+        assert (done["kind"], done["on"]) == ("skill", ["triage-tickets"])
+        # Settings that ask for a value say so, and add nothing.
+        asks = json.dumps({"w": {"type": "http", "url": URL, "headers": {"X-Key": "${KEY}"}}})
+        done = post(client, "plugins.install", {"source": asks}).json()
+        assert done["needs"] == ["KEY"] and done["servers"] == []
+    finally:
+        next(server, None)
+
+
+def test_your_own_plugin_exports_as_a_zip(client: TestClient, app_config: Any) -> None:
+    own = app_config.home / "plugins" / "mine"
+    (own / "skills" / "a").mkdir(parents=True)
+    (own / "plugin.json").write_text(json.dumps({"name": "mine"}))
+    (own / "skills" / "a" / "SKILL.md").write_text(SKILL)
+    done = post(client, "plugins.export", {"name": "mine"}).json()
+    import zipfile
+
+    assert sorted(zipfile.ZipFile(done["path"]).namelist()) == [
+        "mine/plugin.json",
+        "mine/skills/a/SKILL.md",
+    ]
+    assert post(client, "plugins.export", {"name": "nope"}).status_code == 404

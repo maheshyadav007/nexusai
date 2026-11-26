@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from nexusai.contracts.agent import InstalledPlugin, PluginList, PluginServer
+from nexusai.contracts.agent import InstalledPlugin, InstallResult, PluginList, PluginServer
 from nexusai.contracts.connectors import AddConnector, ConnectorAction, Connectors, GetConnectors
 from nexusai.kernel.database import Migration
 from nexusai.kernel.module import CommandError, Context
@@ -373,7 +373,11 @@ def listing(ctx: Context) -> PluginList:
 def propose(ctx: Context, source: str, by: str) -> InstalledPlugin:
     """Reads a plugin and proposes each of its skills for the person to review. Nothing is used
     until they approve each one; its servers wait until they're added."""
-    files = fetch(source)
+    return propose_files(ctx, fetch(source), source, by)
+
+
+def propose_files(ctx: Context, files: dict[str, str], source: str, by: str) -> InstalledPlugin:
+    """As propose, for files already fetched."""
     manifest, found_skills, servers, skipped = read(files, _name_of(source))
     name = str(manifest["name"])
     if ctx.bus.db.fetch_all("SELECT 1 FROM plugin_installs WHERE name = ?", (name,)):
@@ -408,6 +412,23 @@ def propose(ctx: Context, source: str, by: str) -> InstalledPlugin:
 def _connector_ids(ctx: Context) -> set[str]:
     found = cast(Connectors, connectors.list_connectors(GetConnectors(), ctx))
     return {connector.id for connector in found.connectors}
+
+
+def switch_on(ctx: Context, name: str) -> tuple[list[str], list[str]]:
+    """Approves the plugin's waiting skills that raised no warnings, for when the person asked
+    for it themselves. Returns the skills now on, and those still waiting for their review."""
+    rows = ctx.bus.db.fetch_all("SELECT proposals FROM plugin_installs WHERE name = ?", (name,))
+    on, waiting = [], []
+    for identifier in json.loads(rows[0]["proposals"]) if rows else []:
+        found = skills.proposal(ctx.bus.db, identifier)
+        if found.status != "waiting":
+            continue
+        if found.flags:
+            waiting.append(found.name)
+        else:
+            skills.decide(ctx, identifier, True)
+            on.append(found.name)
+    return on, waiting
 
 
 def add_servers(ctx: Context, name: str, values: dict[str, str]) -> InstalledPlugin:
@@ -459,3 +480,170 @@ def remove(ctx: Context, name: str) -> PluginList:
         work.tx.execute("DELETE FROM plugin_installs WHERE name = ?", (name,))
         work.emit("plugins.changed", {"name": name}, source="agent", trace_id=ctx.trace_id)
     return listing(ctx)
+
+
+# The person's own plugins, as folders in Home they can open, change and share.
+OWN_FOLDER = "plugins"
+
+
+def create(
+    ctx: Context,
+    name: str,
+    description: str,
+    new_skills: list[dict[str, str]],
+    settings: str | None,
+) -> tuple[Path, dict[str, str]]:
+    """Writes a plugin folder in the person's Home from what they described: its skills and its
+    MCP settings. A key given for a server is never written: its header becomes a placeholder and
+    the value comes back to be kept as a secret when the servers are added."""
+    slug = _slug(name)
+    if not NAME.match(slug):
+        raise CommandError("plugin.invalid", "Give the plugin a name.", 422)
+    folder = ctx.config.home / OWN_FOLDER / slug
+    if folder.exists():
+        raise CommandError(
+            "plugin.exists",
+            f"You already have a plugin folder called {slug}. Pick another name.",
+            409,
+        )
+    files: dict[str, str] = {
+        "plugin.json": json.dumps(
+            {
+                "name": slug,
+                "displayName": name.strip(),
+                "version": "1.0.0",
+                "description": description.strip(),
+            },
+            indent=2,
+        )
+        + "\n"
+    }
+    for skill in new_skills:
+        skill_name = _slug(skill.get("name", ""))
+        body = skill.get("instructions", "").strip()
+        about = " ".join(skill.get("description", "").split())
+        if not body or not about:
+            raise CommandError(
+                "plugin.skill", f"The skill {skill_name} needs a description and instructions.", 422
+            )
+        files[f"skills/{skill_name}/SKILL.md"] = (
+            f"---\nname: {skill_name}\ndescription: {json.dumps(about)}\n---\n{body}\n"
+        )
+    values: dict[str, str] = {}
+    if settings:
+        servers: dict[str, Any] = {}
+        for server_name, raw in servers_in(settings).items():
+            if not isinstance(raw, dict):
+                continue
+            clean = dict(raw)
+            found_headers = clean.get("headers")
+            given: dict[str, Any] = found_headers if isinstance(found_headers, dict) else {}
+            kept: dict[str, str] = {}
+            for header, value in given.items():
+                text = str(value).strip()
+                if SETTING.match(text):
+                    kept[header] = text
+                    continue
+                key = re.sub(r"[^A-Z0-9]+", "_", f"{server_name}_{header}".upper()).strip("_")
+                kept[header] = f"${{user_config.{key}}}"
+                values[key] = text
+            clean["headers"] = kept
+            servers[str(server_name)] = clean
+        files[".mcp.json"] = json.dumps({"mcpServers": servers}, indent=2) + "\n"
+    if len(files) == 1:
+        raise CommandError("plugin.empty", "A plugin needs at least one skill or one server.", 422)
+    for path, text in files.items():
+        target = folder / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, "utf-8")
+    return folder, values
+
+
+def export(ctx: Context, name: str) -> Path:
+    """The person's own plugin as a zip in Home's exports, to share."""
+    folder = ctx.config.home / OWN_FOLDER / _slug(name)
+    if not folder.is_dir():
+        raise CommandError("plugin.not_found", f"You have no plugin folder called {name}.", 404)
+    out = ctx.config.home / "exports" / f"{folder.name}.zip"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted(folder.rglob("*")):
+            if path.is_file():
+                archive.write(path, f"{folder.name}/{path.relative_to(folder).as_posix()}")
+    return out
+
+
+def one_step(
+    ctx: Context, found: InstalledPlugin, values: dict[str, str] | None = None
+) -> InstallResult:
+    """A plugin the person asked for themselves: skills with no warnings on, servers that need
+    nothing more added (with the values given for them)."""
+    given = values or {}
+    on, waiting = switch_on(ctx, found.name)
+    needs = sorted({k for s in found.servers for k in s.needs if not given.get(k)})
+    servers: list[str] = []
+    if found.servers and not needs:
+        try:
+            add_servers(ctx, found.name, given)
+            servers = [s.name for s in found.servers]
+        except CommandError as error:
+            waiting.append(f"its servers ({error.message})")
+    return InstallResult(
+        kind="plugin",
+        name=found.name,
+        on=on,
+        waiting=waiting,
+        servers=servers,
+        needs=needs,
+        skipped=found.skipped,
+    )
+
+
+def _servers_from_settings(ctx: Context, text: str) -> InstallResult:
+    found, skipped, added = [], [], []
+    for server_name, raw in servers_in(text).items():
+        server, why = standard_server(str(server_name), raw, secrets_allowed=True)
+        if server is not None:
+            found.append(server)
+        if why:
+            skipped.append(why)
+    needs = sorted({key for s in found for key in s.needs})
+    if needs:
+        return InstallResult(
+            kind="servers", name=", ".join(s.name for s in found), needs=needs, skipped=skipped
+        )
+    for server in found:
+        connectors.add_connector(connector_for(server, {}), ctx)
+        added.append(server.name)
+    if not found:
+        raise CommandError(
+            "mcp.settings", "There's no server in those settings that can be used here.", 422
+        )
+    return InstallResult(kind="servers", name=", ".join(added), servers=added, skipped=skipped)
+
+
+def _looks_like_one_skill(files: dict[str, str]) -> bool:
+    return (
+        skills.ENTRY in files
+        and not any(path in files for path in (*MANIFESTS, *MCP_FILES))
+        and not any(PurePosixPath(p).parts[:1] == ("skills",) for p in files)
+    )
+
+
+def install(ctx: Context, source: str, by: str) -> InstallResult:
+    """What the person gave, worked out and installed in one step: pasted MCP settings become
+    servers, a single skill becomes a skill, anything else is read as a plugin."""
+    text = source.strip()
+    if text.startswith("{"):
+        return _servers_from_settings(ctx, text)
+    if text.lower().endswith(skills.ENTRY.lower()) and "://" in text:
+        files = skills.fetch(text)
+    else:
+        files = fetch(text)
+    if _looks_like_one_skill(files):
+        proposal = skills.propose(ctx, files, text, by)
+        if proposal.flags:
+            return InstallResult(kind="skill", name=proposal.name, waiting=[proposal.name])
+        skills.decide(ctx, proposal.id, True)
+        return InstallResult(kind="skill", name=proposal.name, on=[proposal.name])
+    return one_step(ctx, propose_files(ctx, files, text, by))
