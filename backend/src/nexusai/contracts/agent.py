@@ -957,6 +957,47 @@ class ListSchedules(BaseModel):
     pass
 
 
+class RoutineCheck(BaseModel):
+    """A routine that starts on a check: a web address looked at every so often, with no model."""
+
+    id: int
+    title: str
+    url: str
+    every_minutes: int
+    expect_status: int = 200
+    enabled: bool = True
+    state: Literal["unknown", "ok", "failing"] = "unknown"
+    failures: int = 0
+    next_check: str | None = None
+    last_checked: str | None = None
+    last_result: str | None = None
+
+
+class SaveCheck(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int | None = None
+    title: str = Field(min_length=1, max_length=200)
+    url: str = Field(min_length=1, max_length=2000)
+    every_minutes: int = Field(default=60, ge=5, le=1440)
+    expect_status: int = Field(default=200, ge=100, le=599)
+    enabled: bool = True
+
+
+class CheckList(BaseModel):
+    checks: list[RoutineCheck]
+
+
+class ListChecks(BaseModel):
+    pass
+
+
+class CheckId(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+
+
 class BuiltInRoutine(BaseModel):
     """A routine that comes with the app: its plugin's routine file, and the row that runs it."""
 

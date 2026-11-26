@@ -1,4 +1,4 @@
-import type { AgentMap, GetAgentMap, GetRunTree, ListRuns, RunList, RunSpan, SeeAlerts, SetBuiltInRoutine } from "./contracts.generated";
+import type { AgentMap, CheckId, CheckList, GetAgentMap, GetRunTree, ListChecks, ListRuns, RunList, RunSpan, SaveCheck, SeeAlerts, SetBuiltInRoutine } from "./contracts.generated";
 import type { HiddenFromAi, HideFromAi, HideFromAiPreview, HidePreview, UndoHide } from "./contracts.generated";
 import type { AddSkill, DecideSkill, ListSkills, SkillList, SkillName } from "./contracts.generated";
 import type { CancelTeamTask, CardList, GetTeamTask, ListCards, ListTeamTasks, NoteOnTeamTask, RenameAgent, ResetAgentName, RetryTeamTask, SetMascot, TeamTaskList, TeamTaskView } from "./contracts.generated";
@@ -375,6 +375,9 @@ interface Commands {
   "schedules.runNow": [RunSchedule, AgentDone];
   "schedules.setDefaults": [SetDefaults, ScheduleList];
   "schedules.setBuiltIn": [SetBuiltInRoutine, ScheduleList];
+  "checks.save": [SaveCheck, CheckList];
+  "checks.remove": [CheckId, CheckList];
+  "checks.run": [CheckId, CheckList];
   "activity.undo": [UndoActivity, AgentDone];
   "prompts.save": [SavePrompt, AgentDone];
   "agentQueue.act": [QueueAction, AgentDone];
@@ -516,6 +519,7 @@ interface Queries {
   "tasks.list": [ListTasks, TaskList];
   "reminders.list": [ListReminders, ReminderList];
   "schedules.list": [ListSchedules, ScheduleList];
+  "checks.list": [ListChecks, CheckList];
   "jobs.list": [ListJobs, JobList];
   "activity.list": [ListActivity, ActivityList];
   "prompts.list": [ListPrompts, PromptList];

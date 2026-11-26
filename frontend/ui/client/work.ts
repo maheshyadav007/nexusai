@@ -1,6 +1,6 @@
 "use client";
 
-import type { SimulatePreference, ExpireLearnedNote, QueueAction, SavePreference, RestorePreference, RecordInteraction, PromptHistory, RestorePrompt, PreviewPreference } from "./contracts.generated";
+import type { ExpireLearnedNote, PreviewPreference, PromptHistory, QueueAction, RecordInteraction, RestorePreference, RestorePrompt, SaveCheck, SavePreference, SimulatePreference } from "./contracts.generated";
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { command, query } from "./api";
@@ -92,6 +92,10 @@ export const useSchedules = () => useReady(["schedules"], () => query("schedules
 export const useSaveSchedule = () => useCommand(["schedules"], (input: Schedule) => command("schedules.save", input));
 export const useRemoveSchedule = () => useCommand(["schedules"], (id: number) => command("schedules.remove", { id }));
 export const useRunSchedule = () => useCommand(["schedules"], (id: number) => command("schedules.runNow", { id }));
+export const useChecks = () => useReady(["checks"], () => query("checks.list", {}));
+export const useSaveCheck = () => useCommand(["checks"], (input: SaveCheck) => command("checks.save", input));
+export const useRemoveCheck = () => useCommand(["checks"], (id: number) => command("checks.remove", { id }));
+export const useRunCheck = () => useCommand(["checks"], (id: number) => command("checks.run", { id }));
 export const useSetBuiltIn = () => useCommand(["schedules"], (input: { name: string; enabled: boolean }) => command("schedules.setBuiltIn", input));
 export const useSetDefaults = () => useCommand(["schedules"], (input: { time_check_enabled?: boolean; live_mail_enabled?: boolean; morning_brief_enabled?: boolean }) => command("schedules.setDefaults", input));
 
@@ -226,7 +230,9 @@ export function usePlannerCounts(): Readonly<Record<string, number>> {
   const open = (tasks.data?.tasks ?? []).filter((task) => !task.proposed).length;
   const coming = (reminders.data?.reminders ?? []).filter((reminder) => !reminder.proposed).length;
   // Routines only count when one needs a look, so the number means something: none when all's well.
-  const needsLook = (agents.data?.agents ?? []).filter((agent) => agent.state === "failed").length;
+  const checks = useChecks();
+  const failing = (checks.data?.checks ?? []).filter((check) => check.enabled !== false && check.state === "failing").length;
+  const needsLook = (agents.data?.agents ?? []).filter((agent) => agent.state === "failed").length + failing;
   return { tasks: open, reminders: coming, schedules: needsLook };
 }
 

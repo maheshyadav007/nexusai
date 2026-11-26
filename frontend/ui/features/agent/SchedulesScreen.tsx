@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { Schedule, ScheduleList, ScheduleRow, Trigger } from "@/ui/client/contracts.generated";
 import { useLeadName } from "@/ui/client/home";
 import { useDateOnly, useDateTime, useRelativeTime, useTimeOnly } from "@/ui/client/format";
-import { useAgentName, usePausePipeline, usePipelines, useRemoveSchedule, useRunSchedule, useSaveSchedule, useSaveTrigger, useSchedules, useSetBuiltIn, useSetDefaults, useTriggers } from "@/ui/client/work";
+import { useAgentName, useChecks, usePausePipeline, usePipelines, useRemoveSchedule, useRunSchedule, useSaveSchedule, useSaveTrigger, useSchedules, useSetBuiltIn, useSetDefaults, useTriggers } from "@/ui/client/work";
 import { SessionGeneration } from "@/ui/features/agent/SessionGeneration";
 import { AskAgent } from "@/ui/features/agent/AskAgent";
 import { SessionLink } from "@/ui/features/assistant/SessionLink";
@@ -25,6 +25,7 @@ import { StatusDot } from "@/ui/primitives/StatusDot";
 import { Switch } from "@/ui/primitives/Switch";
 import { MoreOptions, runOptions, savedRunOptions } from "./RunOptions";
 import { TriggerForm, triggerSaved } from "./TriggerForm";
+import { CheckForm, CheckItem } from "./CheckForm";
 import { t, type StringKey } from "@/ui/strings";
 
 type Every = NonNullable<Schedule["every"]>;
@@ -47,7 +48,7 @@ const TEMPLATES: readonly { title: StringKey; prompt?: StringKey; kind?: Schedul
 ];
 type Template = (typeof TEMPLATES)[number];
 
-type Open = { schedule: number } | { trigger: string } | { create: Template | null };
+type Open = { schedule: number } | { trigger: string } | { check: number } | { create: Template | null };
 
 const saved = (row: ScheduleRow, enabled = row.enabled ?? true): Schedule => ({
   id: row.id ?? null,
@@ -188,10 +189,10 @@ function ScheduleDetails({ row, onDone }: { row: ScheduleRow; onDone: () => void
 }
 
 function NewSchedule({ template, onTemplate, onDone }: { template: Template | null; onTemplate: (template: Template | null) => void; onDone: () => void }) {
-  const [kind, setKind] = useState<"clock" | "event">("clock");
+  const [kind, setKind] = useState<"clock" | "event" | "check">("clock");
   return (
     <div className="flex flex-col gap-5">
-      <Segmented label={t("schedules.kind")} value={kind} options={[{ value: "clock", label: t("schedules.kind.clock") }, { value: "event", label: t("schedules.kind.event") }]} onChange={setKind} />
+      <Segmented label={t("schedules.kind")} value={kind} options={[{ value: "clock", label: t("schedules.kind.clock") }, { value: "event", label: t("schedules.kind.event") }, { value: "check", label: t("schedules.kind.check") }]} onChange={setKind} />
       {kind === "clock" ? (
         <>
           <div className="flex flex-col gap-2">
@@ -204,8 +205,10 @@ function NewSchedule({ template, onTemplate, onDone }: { template: Template | nu
           </div>
           <ScheduleForm key={template?.title ?? "blank"} template={template} onSaved={onDone} />
         </>
-      ) : (
+      ) : kind === "event" ? (
         <TriggerForm onSaved={onDone} />
+      ) : (
+        <CheckForm onSaved={onDone} />
       )}
     </div>
   );
@@ -303,6 +306,8 @@ function BuiltIn({ list, triggers }: { list: ScheduleList; triggers: React.React
 export function SchedulesScreen() {
   const schedules = useSchedules();
   const triggers = useTriggers();
+  const checks = useChecks();
+  const checkRows = checks.data?.checks ?? [];
   const relative = useRelativeTime();
   const mailAgent = useAgentName()("mail");
   const [open, setOpen] = useState<Open | null>(null);
@@ -313,8 +318,9 @@ export function SchedulesScreen() {
   const labelOf = (trigger: Trigger) => (trigger.kind === "mail" ? t("triggers.builtIn", { agent: mailAgent }) : (triggers.data?.events.find((row) => row.event === trigger.event)?.label ?? trigger.event));
   const editing = open && "schedule" in open ? rows.find((row) => row.id === open.schedule) : undefined;
   const editingTrigger = open && "trigger" in open ? triggerRows.find((row) => row.id === open.trigger) : undefined;
+  const editingCheck = open && "check" in open ? checkRows.find((row) => row.id === open.check) : undefined;
   const close = () => setOpen(null);
-  const title = editing?.title ?? editingTrigger?.title ?? t("schedules.new");
+  const title = editing?.title ?? editingTrigger?.title ?? editingCheck?.title ?? t("schedules.new");
   return (
     <div className="mx-auto flex max-w-reading flex-col gap-6 p-6">
       <PageHeader
@@ -325,7 +331,7 @@ export function SchedulesScreen() {
       {schedules.isPending || triggers.isPending ? <Skeleton className="h-6 w-full" /> : null}
       {schedules.isError ? <ErrorState title={t("schedules.error")} onRetry={() => void schedules.refetch()} /> : null}
       {triggers.isError ? <ErrorState title={t("triggers.error")} onRetry={() => void triggers.refetch()} /> : null}
-      {schedules.isSuccess && triggers.isSuccess && !rows.length && !yours.length ? (
+      {schedules.isSuccess && triggers.isSuccess && !rows.length && !yours.length && !checkRows.length ? (
         <div className="flex flex-col gap-4 rounded-lg border border-line-subtle bg-surface-raised p-5">
           <EmptyState icon="schedules" title={t("schedules.empty.title")} description={t("schedules.empty.description")} />
           <div className="flex flex-wrap gap-2">
@@ -334,10 +340,11 @@ export function SchedulesScreen() {
           </div>
         </div>
       ) : null}
-      {rows.length || yours.length ? (
+      {rows.length || yours.length || checkRows.length ? (
         <ListGroup title={t("routines.group.yours")}>
           {rows.map((row) => <ScheduleItem key={row.id} row={row} onOpen={() => row.id != null && setOpen({ schedule: row.id })} />)}
           {yours.map((trigger) => <TriggerItem key={trigger.id} trigger={trigger} label={labelOf(trigger)} onOpen={() => setOpen({ trigger: trigger.id })} />)}
+          {checkRows.map((check) => <CheckItem key={check.id} check={check} onOpen={() => setOpen({ check: check.id })} />)}
         </ListGroup>
       ) : null}
       {schedules.data ? (
@@ -350,6 +357,7 @@ export function SchedulesScreen() {
         <div className="-mx-5 min-h-0 flex-1 overflow-y-auto px-5 pb-5">
           {editing ? <ScheduleDetails row={editing} onDone={close} /> : null}
           {editingTrigger ? <TriggerForm key={editingTrigger.id} initial={editingTrigger} onSaved={close} /> : null}
+          {editingCheck ? <CheckForm key={editingCheck.id} initial={editingCheck} onSaved={close} /> : null}
           {open && "create" in open ? <NewSchedule template={open.create} onTemplate={(template) => setOpen({ create: template })} onDone={close} /> : null}
         </div>
       </Dialog>

@@ -11,6 +11,7 @@ from test_agent_work import (
     client,  # noqa: F401
     fake,  # noqa: F401
     script,  # noqa: F401
+    wait,
 )
 
 INVOICE = {
@@ -70,3 +71,68 @@ def test_a_trigger_keeps_which_mail_it_is_for(client: TestClient) -> None:
         "invoice",
         "",
     )
+
+
+def test_a_check_tells_the_person_once_when_it_goes_down_and_once_when_it_is_back(
+    client: TestClient, monkeypatch: Any
+) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from nexusai.modules.agent import checks
+    from nexusai.modules.agent import module as agent
+
+    answers = iter(
+        [
+            (False, "Answered 503"),
+            (False, "Answered 503"),
+            (False, "Answered 503"),
+            (True, "Answered 200"),
+        ]
+    )
+    monkeypatch.setattr(checks, "look", lambda url, expect: next(answers))
+    saved = client.post(
+        "/api/commands/checks.save",
+        json={
+            "title": "Status page",
+            "url": "https://status.example.com/health",
+            "every_minutes": 15,
+        },
+    ).json()["checks"]
+    check = saved[0]["id"]
+    ctx = agent.current().ctx
+    start = datetime(2031, 6, 2, 10, 0, tzinfo=UTC)
+
+    def read() -> list[str]:
+        found = client.post("/api/queries/notifications.list", json={"kind": "check"}).json()
+        return sorted(n["title"] for n in found["items"])
+
+    def notices(expected: int = 0) -> list[str]:
+        # Saved by a listener after the event, so wait for as many as expected.
+        if expected:
+            found: list[str] = wait(lambda: read() if len(read()) == expected else None, "notices")
+            return found
+        return read()
+
+    # One failure isn't down yet: a single slow answer doesn't raise an alarm.
+    assert checks.run_due(ctx, start) == 1
+    assert (
+        notices() == []
+        and client.post("/api/queries/checks.list").json()["checks"][0]["state"] == "unknown"
+    )
+    # Due again only after its interval; checking early does nothing.
+    assert checks.run_due(ctx, start + timedelta(minutes=5)) == 0
+    checks.run_due(ctx, start + timedelta(minutes=15))
+    assert notices(1) == ["Down: Status page"]
+    # Still down: not told again.
+    checks.run_due(ctx, start + timedelta(minutes=30))
+    assert notices() == ["Down: Status page"]
+    checks.run_due(ctx, start + timedelta(minutes=45))
+    assert notices(2) == ["Back up: Status page", "Down: Status page"]
+    row = client.post("/api/queries/checks.list").json()["checks"][0]
+    assert row["state"] == "ok" and row["last_result"] == "Answered 200" and row["failures"] == 0
+    assert row["next_check"].startswith("2031-06-02T11:00")
+    # Only web addresses.
+    bad = client.post("/api/commands/checks.save", json={"title": "x", "url": "file:///etc/passwd"})
+    assert bad.status_code == 422 and "web address" in bad.text
+    client.post("/api/commands/checks.remove", json={"id": check})
+    assert client.post("/api/queries/checks.list").json()["checks"] == []

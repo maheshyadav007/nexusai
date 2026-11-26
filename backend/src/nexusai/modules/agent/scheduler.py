@@ -16,7 +16,7 @@ from tzlocal import get_localzone_name
 from nexusai.contracts.agent import Schedule, ScheduleRow
 from nexusai.kernel.database import Migration
 from nexusai.kernel.module import Context
-from nexusai.modules.agent import channel
+from nexusai.modules.agent import channel, checks
 from nexusai.modules.planner import module as planner
 
 log = structlog.get_logger()
@@ -317,7 +317,11 @@ class Scheduler:
         rows = self.ctx.bus.db.fetch_all(
             "SELECT MIN(next_run) AS due FROM schedules WHERE enabled = 1 AND next_run IS NOT NULL"
         )
-        candidates = [rows[0]["due"], planner.next_reminder_due(self.ctx)]
+        candidates = [
+            rows[0]["due"],
+            planner.next_reminder_due(self.ctx),
+            checks.next_due(self.ctx),
+        ]
         moments = []
         for value in candidates:
             if value:
@@ -368,6 +372,7 @@ class Scheduler:
                 ]
             )
         jobs.append(("schedules", self._run_due))
+        jobs.append(("checks", lambda instant: checks.run_due(self.ctx, instant)))
         for name, job in jobs:
             try:
                 job(now)

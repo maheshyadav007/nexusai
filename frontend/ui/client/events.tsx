@@ -45,6 +45,7 @@ const INVALIDATES: Record<string, readonly string[]> = {
   "tasks.changed": ["tasks", "today", "matters"],
   "reminders.changed": ["reminders", "today", "matters"],
   "schedule.changed": ["schedules"],
+  "checks.changed": ["checks"],
   "schedule.ran": ["schedules", "jobs"],
   "activity.added": ["activity"],
   "memory.changed": ["memory", "knowledge"],

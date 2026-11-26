@@ -29,6 +29,8 @@ from nexusai.contracts.agent import (
     CardList,
     ChangeLearnedNote,
     ChannelList,
+    CheckId,
+    CheckList,
     ChooseVersion,
     CloseMatterItems,
     Cockpit,
@@ -85,6 +87,7 @@ from nexusai.contracts.agent import (
     ListApprovals,
     ListCards,
     ListChannel,
+    ListChecks,
     ListJobs,
     ListMailSuggestions,
     ListMatters,
@@ -154,6 +157,7 @@ from nexusai.contracts.agent import (
     RunPipeline,
     RunSchedule,
     RunSpan,
+    SaveCheck,
     SaveMemory,
     SavePreference,
     SavePrompt,
@@ -213,6 +217,7 @@ from nexusai.modules.agent import (
     bulk_learning,
     cards,
     channel,
+    checks,
     citations,
     cockpit,
     context,
@@ -296,6 +301,7 @@ agent_module = Module(
         scheduler.CONTEXT_MIGRATION,
         triggers.MIGRATION,
         triggers.MATCH_MIGRATION,
+        checks.MIGRATION,
         scheduler.BUILT_IN_MIGRATION,
         feedback.MIGRATION,
         feedback.BRIEF_MIGRATION,
@@ -1300,6 +1306,30 @@ def _built_in_routines(ctx: Context) -> list[BuiltInRoutine]:
             )
         )
     return found
+
+
+@agent_module.query("checks.list")
+def list_checks(query: ListChecks, ctx: Context) -> CheckList:
+    return checks.listing(ctx)
+
+
+@agent_module.command("checks.save")
+def save_check(command: SaveCheck, ctx: Context) -> CheckList:
+    found = checks.save(ctx, command)
+    if _scheduler:
+        _scheduler.poke()
+    return found
+
+
+@agent_module.command("checks.remove")
+def remove_check(command: CheckId, ctx: Context) -> CheckList:
+    return checks.remove(ctx, command.id)
+
+
+@agent_module.command("checks.run")
+def run_check(command: CheckId, ctx: Context) -> CheckList:
+    checks.run(ctx, command.id)
+    return checks.listing(ctx)
 
 
 @agent_module.command("schedules.setBuiltIn")
