@@ -1121,3 +1121,26 @@ def test_a_report_from_a_run_that_changed_nothing_says_so(
     plugins_used = {json.loads(t["versions"]).get("plugin") for t in turns}
     # Each run records which plugin its agent came from.
     assert {"nexusai", "mail"} <= plugins_used
+
+
+def test_a_routine_runs_with_the_leads_prompt_and_a_note_that_nobody_is_waiting(
+    client: TestClient, script: TeamScript
+) -> None:
+    make_agent(client, "Friday status", "Write my Friday status from this week's mail.")
+    session = post(client, "session.create")["id"]
+    chat(client, session, "@friday-status write it now")
+    speaker, request = script.requests[-1]
+    assert speaker == "Friday status"
+    # The lead's prompt and know-how, not a thinner one of its own.
+    assert (
+        "## Where to start" in request.instructions
+        and "## Tasks and reminders" in request.instructions
+    )
+    assert "nobody is waiting in the chat" in request.instructions
+    assert "Write my Friday status from this week's mail." in request.instructions
+    offered = {tool.name for tool in request.tools}
+    # The lead's tools, without other agents' jobs.
+    assert {"create_tasks", "draft_reply"} <= offered and not {
+        "record_triage",
+        "create_schedule",
+    } & offered

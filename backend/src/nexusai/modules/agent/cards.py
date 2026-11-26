@@ -136,7 +136,10 @@ YOURS = (
     ("trigger", "SELECT id, title, prompt, created FROM agent_triggers WHERE kind = 'custom'"),
 )
 SHAPES = ("round", "square", "tall")
-ENGINE = "scheduled"
+# A routine the person made runs as the lead, with the lead's prompt, tools and know-how. The
+# routine template adds only what's different about a run nobody is waiting on (ROUTINE_NOTE).
+ENGINE = "session"
+ROUTINE_NOTE = "scheduled"
 
 
 def _slug(title: str) -> str:

@@ -133,6 +133,14 @@ def build_layers(
     if team:
         layers.append(Layer("Who you are", team))
     layers.append(Layer("Agent prompt", text))
+    if found is not None and found.kind == "yours":
+        # Run as the lead, with what's different about a routine: nobody is waiting on it.
+        note = agent_base(cards.ROUTINE_NOTE)
+        for name, value in values.items():
+            note = note.replace(f"{{{name}}}", value)
+        layers.append(
+            Layer("This routine", cards.fill(db, note, agent) if db is not None else note)
+        )
     if found is not None and found.instructions:
         layers.append(Layer("Your instructions", found.instructions.strip()))
     if about:
