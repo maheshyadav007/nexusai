@@ -206,6 +206,14 @@ TOOL_ENTRIES = (
     ),
     ToolEntry("run_schedule", AGENTS, "Run schedules", "Run a schedule now.", "data"),
     ToolEntry(
+        "add_mcp_server",
+        AGENTS,
+        "Add MCP servers",
+        "Connect to an MCP server by its address. Keys are added on the Connectors page.",
+        "data",
+        ASK,
+    ),
+    ToolEntry(
         "propose_plugin",
         AGENTS,
         "Fetch plugins",

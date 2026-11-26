@@ -715,6 +715,12 @@ class _ProposePlugin(BaseModel):
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
+class _AddMcpServer(BaseModel):
+    name: str = Field(description="A short name for it, such as Jira or Company wiki.")
+    url: str = Field(description="The server's address the person gave, starting with https://.")
+    tool_call_id: Annotated[str, InjectedToolCallId]
+
+
 class _AddPluginServers(BaseModel):
     name: str = Field(description="The plugin's name, from list_plugins.")
     values: dict[str, str] = Field(
@@ -1918,6 +1924,38 @@ def build_tools(
             work,
         )
 
+    def add_mcp_server(name: str, url: str, tool_call_id: str) -> str:
+        def work() -> str:
+            from nexusai.contracts.connectors import AddConnector
+
+            try:
+                connectors.add_connector(
+                    AddConnector(name=name.strip()[:60], url=url.strip(), audience="internal"), ctx
+                )
+            except CommandError as error:
+                return (
+                    f"Not added: {error.message} If it needs a key or token, the person adds it"
+                    " on the Connectors page (Add, then the token or a header), not in chat."
+                )
+            return (
+                f"Added {name}. Its tools show on the Connectors page, and each new tool asks the"
+                " person before its first use."
+            )
+
+        return _guarded(
+            ctx,
+            session,
+            tool_call_id,
+            "add_mcp_server",
+            "data",
+            None,
+            f"Connect to the MCP server {name}",
+            f"{url}\n\nIts tools are listed and checked like any connector's. A key or token is"
+            " added on the Connectors page, never in chat.",
+            False,
+            work,
+        )
+
     def list_plugins(tool_call_id: str) -> str:
         found = installs.listing(ctx).plugins
         return "\n".join(_plugin_line(p) for p in found) or "No plugins are installed."
@@ -2419,6 +2457,12 @@ def build_tools(
             read_skill_file,
             _ReadSkillFile,
             "Read one more file from a loaded skill, when a step of it says to.",
+        ),
+        (
+            add_mcp_server,
+            _AddMcpServer,
+            "Connect one MCP server by the address the person gave. For a folder or link with a"
+            " plugin or MCP settings, use propose_plugin instead.",
         ),
         (
             propose_plugin,

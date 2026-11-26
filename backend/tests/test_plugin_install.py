@@ -199,3 +199,38 @@ def test_mcp_settings_alone_install_from_a_folder_or_a_single_file(
     assert made.json()["name"] == "tools" and [s["name"] for s in made.json()["servers"]] == [
         "wiki"
     ]
+
+
+def test_posty_adds_an_mcp_server_by_its_address_alone(client: TestClient, script: Any) -> None:
+    from nexusai.modules.agent.providers import TextChunk, ToolCall
+    from test_agent_work import wait
+    from test_chat_engine_tools import approve_one, chat_in_background, last_result, new_session
+
+    def ask(arguments: dict[str, str]) -> str:
+        script.replies = [[ToolCall("a", "add_mcp_server", arguments)], [TextChunk("Done.")]]
+        done = chat_in_background(client, new_session(client), "Add this MCP server")
+        approve_one(client)
+        wait(lambda: done, "finish")
+        return last_result(script)
+
+    state = FakeMcp()
+    server = running(state)
+    next(server)
+    try:
+        said = ask({"name": "Tickets", "url": URL})
+        assert said.startswith("Added Tickets"), said
+        listed = {
+            c["name"]: c for c in client.post("/api/queries/connectors.list").json()["connectors"]
+        }
+        assert listed["Tickets"]["tools"]
+    finally:
+        next(server, None)
+    # One that wants a key says where to add it, never asks for it in chat.
+    locked = FakeMcp(required_token="t-1")
+    server = running(locked)
+    next(server)
+    try:
+        said = ask({"name": "Locked", "url": URL})
+        assert said.startswith("Not added") and "Connectors page" in said
+    finally:
+        next(server, None)
