@@ -1391,7 +1391,9 @@ def run_again(command: RunAgain, ctx: Context) -> AgentDone:
         return AgentDone()
     if row["trigger"] == mail_agent.MAIL_TRIGGER:
         raise CommandError(
-            "run.built_in", "New mail is read again from the Mail agent's settings.", 409
+            "run.built_in",
+            f"New mail is read again from {cards.name(ctx.bus.db, mail_agent.AGENT)}'s settings.",
+            409,
         )
     with ctx.bus.unit_of_work() as work:
         work.tx.execute(

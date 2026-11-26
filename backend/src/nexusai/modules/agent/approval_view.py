@@ -45,14 +45,14 @@ DATA_TOOLS = {
     "save_personal_prompt", "delete_documents", "remove_panels", "remove_schedules", "run_schedule",
     "suggest", "tell", "notify_person", "use", "update_category", "save_rule", "move_sender",
     "update_documents", "save_panel", "create_schedule", "update_schedule", "apply_mail_learning_answers",
-    "propose_skill", "update_brief",
+    "propose_skill", "update_brief", "propose_plugin", "add_plugin_servers", "remove_plugin",
 }  # fmt: skip
 # Tools that only read never reach a person, unless their permission was set to ask.
 READ_TOOLS = {
     "read_file", "list_folder", "search_mail", "read_thread", "read_recipients", "search_documents", "read_document",
     "list_documents", "list_tasks", "list_reminders", "list_categories", "list_rules",
     "list_drafts", "list_memory", "list_panels", "list_schedules", "read_database", "semantic_search",
-    "list_mail", "read_plate", "open_item", "find_matters",
+    "list_mail", "read_plate", "open_item", "find_matters", "list_plugins",
 }  # fmt: skip
 
 

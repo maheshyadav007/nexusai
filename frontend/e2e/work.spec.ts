@@ -617,3 +617,39 @@ test("the team shows calm cards, and the chosen agent's details beside them", as
   expect(card && button && button.x + button.width <= card.x + card.width).toBeTruthy();
   await noViolations(page);
 });
+
+test("a check and a trigger for some mail are set up from Routines, and runs are listed", async ({ page }) => {
+  await page.goto("/agent/schedules");
+  const drawer = page.getByRole("dialog");
+  const name = unique("Health page");
+  await page.getByRole("button", { name: "New", exact: true }).click();
+  await drawer.getByRole("radio", { name: "A check" }).click();
+  await drawer.getByRole("textbox", { name: "Name" }).fill(name);
+  // Nothing listens on port 9, so it fails at once, without the network.
+  await drawer.getByRole("textbox", { name: "Web address" }).fill("https://127.0.0.1:9/health");
+  await drawer.getByRole("button", { name: "Create check" }).click();
+  const row = page.getByTestId("check").filter({ hasText: name });
+  await expect(row).toBeVisible();
+  await expect(row).toContainText("Every 60 min");
+  await noViolations(page);
+
+  const title = unique("Invoices");
+  await page.getByRole("button", { name: "New", exact: true }).click();
+  await drawer.getByRole("radio", { name: "Something happening" }).click();
+  await drawer.getByRole("textbox", { name: "Trigger name" }).fill(title);
+  await drawer.getByRole("textbox", { name: "From" }).fill("kite.example");
+  await drawer.getByRole("textbox", { name: "Subject has" }).fill("invoice");
+  await drawer.getByRole("textbox", { name: "What should the agent do then?" }).fill("File it and add a task to pay it.");
+  await drawer.getByRole("button", { name: "Add trigger" }).click();
+  const trigger = page.getByTestId("trigger").filter({ hasText: title });
+  await expect(trigger).toBeVisible();
+  await trigger.click();
+  await expect(drawer.getByRole("textbox", { name: "From" })).toHaveValue("kite.example");
+  await expect(drawer.getByText("It hasn't run yet.")).toBeVisible();
+  await page.keyboard.press("Escape");
+  // Switching it off keeps which mail it's for.
+  await trigger.getByRole("switch").click();
+  await expect(trigger.getByRole("switch")).not.toBeChecked();
+  await trigger.click();
+  await expect(drawer.getByRole("textbox", { name: "Subject has" })).toHaveValue("invoice");
+});
