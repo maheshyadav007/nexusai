@@ -319,3 +319,26 @@ def test_settings_that_ask_for_a_value_are_not_guessed(client: TestClient, scrip
     chat(client, new_session(client), "Add it")
     said = last_result(script)
     assert said.startswith("Not added") and "WIKI_KEY" in said
+
+
+@pytest.mark.parametrize(
+    ("given", "name"),
+    [
+        ("Sensing Agent", "sensing-agent"),
+        ("sensing_agent", "sensing-agent"),
+        ("Sensing.Agent v2", "sensing-agent-v2"),
+    ],
+)
+def test_a_plugin_name_is_made_lowercase_with_hyphens_and_keeps_its_own_to_show(
+    client: TestClient, tmp_path: Path, given: str, name: str
+) -> None:
+    folder = tmp_path / "p"
+    folder.mkdir()
+    (folder / "plugin.json").write_text(json.dumps({"name": given}))
+    (folder / ".mcp.json").write_text(
+        json.dumps({"mcpServers": {"s": {"type": "http", "url": "https://s.example/mcp"}}})
+    )
+    made = post(client, "plugins.propose", {"source": str(folder)})
+    assert made.status_code == 200, made.text
+    assert (made.json()["name"], made.json()["display_name"]) == (name, given)
+    post(client, "plugins.remove", {"name": name})

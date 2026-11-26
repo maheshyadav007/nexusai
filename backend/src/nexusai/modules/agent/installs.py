@@ -312,9 +312,14 @@ def read(
 ) -> tuple[dict[str, Any], dict[str, dict[str, str]], list[PluginServer], list[str]]:
     """What's in a plugin: its manifest, its skills' files, its remote servers, and what isn't used."""
     manifest = _manifest(files, fallback)
-    name = str(manifest.get("name", ""))
-    if not NAME.match(name):
-        raise CommandError("plugin.invalid", f"Its name, {name!r}, isn't a plugin name.", 422)
+    given = str(manifest.get("name") or fallback).strip()
+    name = given if NAME.match(given) else _slug(given)
+    if not given or not NAME.match(name):
+        raise CommandError("plugin.invalid", "It has no name that can be used.", 422)
+    if name != given:
+        # "Sensing Agent" or "sensing_agent" becomes sensing-agent, the shape plugin names take,
+        # and keeps the name it was given to show.
+        manifest = {**manifest, "name": name, "displayName": manifest.get("displayName") or given}
     found_skills: dict[str, dict[str, str]] = {}
     for path, text in files.items():
         parts = PurePosixPath(path).parts
