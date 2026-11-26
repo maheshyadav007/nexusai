@@ -48,6 +48,12 @@ CREATE TABLE connectors (
             # secure store, never here.
             "ALTER TABLE connectors ADD COLUMN header_names TEXT NOT NULL DEFAULT '[]';",
         ),
+        Migration(
+            "connectors_transport_001",
+            # How a server is reached, and how long its tools may take.
+            "ALTER TABLE connectors ADD COLUMN transport TEXT NOT NULL DEFAULT 'http';"
+            "ALTER TABLE connectors ADD COLUMN timeout_seconds INTEGER;",
+        ),
     ],
 )
 EMAIL = "email"
@@ -90,6 +96,8 @@ class AgentTool:
     connector_name: str
     url: str
     audience: str
+    transport: str = "http"
+    timeout_seconds: int | None = None
 
 
 def _token_key(identifier: str) -> str:
@@ -196,6 +204,8 @@ def _row(ctx: Context, row: Any) -> Connector:
         tools=[ConnectorTool(**tool) for tool in tools],
         has_token=_token(ctx, row["id"]) is not None,
         header_names=json.loads(row["header_names"] or "[]"),
+        transport=row["transport"] or "http",
+        timeout_seconds=row["timeout_seconds"],
     )
 
 
@@ -213,7 +223,13 @@ def list_connectors(query: GetConnectors, ctx: Context) -> Connectors:
 def test_connector(command: TestConnector, ctx: Context) -> ConnectorTest:
     try:
         client.check_url(command.url)
-        listed = client.list_tools(command.url, command.token, LIST_SECONDS)
+        listed = client.list_tools(
+            command.url,
+            command.token,
+            LIST_SECONDS,
+            checked_headers(command.headers),
+            command.transport,
+        )
     except ConnectorUnavailable as error:
         return ConnectorTest(ok=False, error=str(error))
     tools = _tools_from("new", listed)
@@ -237,7 +253,9 @@ def add_connector(command: AddConnector, ctx: Context) -> Connectors:
     headers = checked_headers(command.headers)
     try:
         client.check_url(command.url)
-        listed = client.list_tools(command.url, command.token, LIST_SECONDS, headers)
+        listed = client.list_tools(
+            command.url, command.token, LIST_SECONDS, headers, command.transport
+        )
     except ConnectorUnavailable as error:
         raise CommandError("connector.unreachable", str(error), 422) from error
     tools = _tools_from(identifier, listed)
@@ -250,7 +268,7 @@ def add_connector(command: AddConnector, ctx: Context) -> Connectors:
     with ctx.bus.db.transaction() as tx:
         tx.execute(
             "INSERT INTO connectors (id, name, url, audience, state, tools, tools_hash, created,"
-            " header_names) VALUES (?, ?, ?, ?, 'ok', ?, ?, ?, ?)",
+            " header_names, transport, timeout_seconds) VALUES (?, ?, ?, ?, 'ok', ?, ?, ?, ?, ?, ?)",
             (
                 identifier,
                 command.name,
@@ -260,6 +278,8 @@ def add_connector(command: AddConnector, ctx: Context) -> Connectors:
                 _hash(tools),
                 datetime.now(UTC).isoformat(),
                 json.dumps(sorted(headers)),
+                command.transport,
+                command.timeout_seconds,
             ),
         )
     _announce(ctx, identifier, "ok")
@@ -278,7 +298,11 @@ def _refresh(ctx: Context, row: Any) -> str:
     detail: str | None
     try:
         listed = client.list_tools(
-            row["url"], _token(ctx, identifier), LIST_SECONDS, _headers(ctx, identifier)
+            row["url"],
+            _token(ctx, identifier),
+            LIST_SECONDS,
+            _headers(ctx, identifier),
+            row["transport"] or "http",
         )
     except ConnectorUnavailable as error:
         state, detail, new_tools = "failed", str(error), row["new_tools"]
@@ -363,6 +387,8 @@ def agent_tools(ctx: Context) -> list[AgentTool]:
             connector_name=row["name"],
             url=row["url"],
             audience=row["audience"],
+            transport=row["transport"] or "http",
+            timeout_seconds=row["timeout_seconds"],
         )
         for row in rows
         for tool in json.loads(row["tools"])
@@ -377,8 +403,9 @@ def call(ctx: Context, tool: AgentTool, arguments: dict[str, Any]) -> str:
             _token(ctx, tool.connector),
             tool.name,
             arguments,
-            CALL_SECONDS,
+            float(tool.timeout_seconds or CALL_SECONDS),
             _headers(ctx, tool.connector),
+            tool.transport,
         )
     except ConnectorUnavailable as error:
         return f"That didn't work: {error}"

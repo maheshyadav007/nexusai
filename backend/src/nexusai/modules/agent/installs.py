@@ -41,7 +41,9 @@ MANIFESTS = ("plugin.json", ".claude-plugin/plugin.json", ".codex-plugin/plugin.
 MCP_FILES = (".mcp.json", "mcp.json")
 NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 SETTING = re.compile(r"^\$\{(?:user_config\.)?([A-Za-z_][A-Za-z0-9_]*)\}$")
-REMOTE = {"http", "streamable-http", "sse"}
+# The transports in standard MCP settings, as NexusAI reaches them.
+TRANSPORTS = {"http": "http", "streamable-http": "http", "streamablehttp": "http", "sse": "sse"}
+MOST_TIMEOUT_SECONDS = 600
 # Parts other tools' plugins carry that NexusAI doesn't run, by the folder or file they live in.
 NOT_USED = {
     "agents": "Agents",
@@ -207,28 +209,102 @@ def _servers(files: dict[str, str], manifest: dict[str, Any]) -> dict[str, Any]:
     return found
 
 
-def _server(name: str, raw: Any) -> tuple[PluginServer | None, str | None]:
-    """A remote server, or why it isn't used here."""
+def standard_server(
+    name: str, raw: Any, *, secrets_allowed: bool
+) -> tuple[PluginServer | None, str | None]:
+    """One server from standard MCP settings (type, url, headers, timeout), or why it isn't used.
+
+    From a plugin, a header must ask for its value (${user_config.KEY}); from the person, the
+    values they gave are used as they are. A server that runs a program on this computer (stdio,
+    command, args, env) or speaks WebSocket isn't used here yet."""
     if not isinstance(raw, dict):
         return None, f"MCP server {name}: not a server description"
-    kind = str(raw.get("type") or ("stdio" if raw.get("command") else "http"))
+    kind = str(raw.get("type") or ("stdio" if raw.get("command") else "http")).casefold()
+    if kind == "stdio" or raw.get("command"):
+        return (
+            None,
+            f"MCP server {name}: it runs a program on this computer, which isn't used here yet",
+        )
+    if kind not in TRANSPORTS:
+        return None, f"MCP server {name}: its {kind} transport isn't supported here"
     url = str(raw.get("url") or "")
-    if kind not in REMOTE or not url.startswith(("https://", "http://")):
-        return None, f"MCP server {name}: it runs on this computer, so it isn't used here"
+    if not url.startswith(("https://", "http://")):
+        return None, f"MCP server {name}: it has no web address"
     needs: list[str] = []
     given = raw.get("headers")
-    headers: dict[str, Any] = given if isinstance(given, dict) else {}
+    headers: dict[str, str] = {
+        str(k): str(v) for k, v in (given if isinstance(given, dict) else {}).items()
+    }
     for header, value in headers.items():
-        match = SETTING.match(str(value).strip())
-        if not match:
+        match = SETTING.match(value.strip())
+        if match:
+            needs.append(match.group(1))
+        elif not secrets_allowed:
             raise CommandError(
                 "plugin.secret",
                 f"MCP server {name} has a value written into its {header} header. A plugin must"
                 " ask for secrets instead, so it isn't installed.",
                 422,
             )
-        needs.append(match.group(1))
-    return PluginServer(name=name, url=url, headers=dict(headers), needs=needs), None
+    timeout = raw.get("timeout")
+    seconds = (
+        max(1, min(MOST_TIMEOUT_SECONDS, round(timeout / 1000)))
+        if isinstance(timeout, int | float) and timeout > 0
+        else None
+    )
+    return (
+        PluginServer(
+            name=name,
+            url=url,
+            headers=headers,
+            needs=needs,
+            transport="sse" if TRANSPORTS[kind] == "sse" else "http",
+            timeout_seconds=seconds,
+        ),
+        None,
+    )
+
+
+def _server(name: str, raw: Any) -> tuple[PluginServer | None, str | None]:
+    return standard_server(name, raw, secrets_allowed=False)
+
+
+def servers_in(text: str) -> dict[str, Any]:
+    """The servers in pasted MCP settings: an mcpServers block, servers by name, or one server."""
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as error:
+        raise CommandError("mcp.settings", "Those settings aren't valid JSON.", 422) from error
+    if not isinstance(parsed, dict):
+        raise CommandError("mcp.settings", "Those settings aren't a JSON object.", 422)
+    if isinstance(parsed.get("mcpServers"), dict):
+        return dict(parsed["mcpServers"])
+    if "url" in parsed or "command" in parsed or "type" in parsed:
+        return {"server": parsed}
+    return parsed
+
+
+def connector_for(server: PluginServer, values: dict[str, str]) -> AddConnector:
+    """What adds a server as a connector: its headers with their values, a bearer token as the
+    token, and how it's reached."""
+    headers: dict[str, str] = {}
+    token = None
+    for header, value in server.headers.items():
+        match = SETTING.match(value.strip())
+        actual = values.get(match.group(1), "") if match else value
+        if header.casefold() == "authorization" and actual.startswith("Bearer "):
+            token = actual.removeprefix("Bearer ").strip()
+        else:
+            headers[header] = actual
+    return AddConnector(
+        name=server.name[:60],
+        url=server.url,
+        audience="internal",
+        token=token,
+        headers=headers,
+        transport=server.transport,
+        timeout_seconds=server.timeout_seconds,
+    )
 
 
 def read(
@@ -343,18 +419,8 @@ def add_servers(ctx: Context, name: str, values: dict[str, str]) -> InstalledPlu
         )
     added = list(plugin.connector_ids)
     for server in plugin.servers:
-        headers = {}
-        for header, value in server.headers.items():
-            match = SETTING.match(str(value).strip())
-            if match:
-                headers[header] = values[match.group(1)]
         before = _connector_ids(ctx)
-        connectors.add_connector(
-            AddConnector(
-                name=server.name[:60], url=server.url, audience="internal", headers=headers
-            ),
-            ctx,
-        )
+        connectors.add_connector(connector_for(server, values), ctx)
         after = _connector_ids(ctx)
         added += sorted(after - before)
     with ctx.bus.unit_of_work() as work:

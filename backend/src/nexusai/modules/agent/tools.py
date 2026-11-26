@@ -16,6 +16,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal, cast
+from urllib.parse import urlparse
 
 import httpx
 import psutil
@@ -716,8 +717,24 @@ class _ProposePlugin(BaseModel):
 
 
 class _AddMcpServer(BaseModel):
-    name: str = Field(description="A short name for it, such as Jira or Company wiki.")
-    url: str = Field(description="The server's address the person gave, starting with https://.")
+    name: str | None = Field(default=None, description="A short name for it, such as Jira.")
+    url: str | None = Field(
+        default=None, description="The server's address, starting with https://."
+    )
+    type: str = Field(
+        default="http", description="http (also streamable-http), or sse for older servers."
+    )
+    headers: dict[str, str] = Field(
+        default_factory=dict,
+        description="Headers it needs, as the person gave them, such as X-Api-Key or a tenant id.",
+    )
+    token: str | None = Field(default=None, description="A bearer token, if the person gave one.")
+    timeout_seconds: int | None = Field(default=None, description="How long a call may take.")
+    settings: str | None = Field(
+        default=None,
+        description="Standard MCP settings the person pasted, as JSON: an mcpServers block, servers"
+        " by name, or one server. Use instead of the fields above.",
+    )
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
@@ -1924,23 +1941,70 @@ def build_tools(
             work,
         )
 
-    def add_mcp_server(name: str, url: str, tool_call_id: str) -> str:
-        def work() -> str:
-            from nexusai.contracts.connectors import AddConnector
-
-            try:
-                connectors.add_connector(
-                    AddConnector(name=name.strip()[:60], url=url.strip(), audience="internal"), ctx
-                )
-            except CommandError as error:
+    def add_mcp_server(
+        tool_call_id: str,
+        name: str | None = None,
+        url: str | None = None,
+        type: str = "http",  # noqa: A002 - the field's name in standard MCP settings
+        headers: dict[str, str] | None = None,
+        token: str | None = None,
+        timeout_seconds: int | None = None,
+        settings: str | None = None,
+    ) -> str:
+        try:
+            if settings:
+                given = installs.servers_in(settings)
+            elif url:
+                one: dict[str, Any] = {"type": type, "url": url, "headers": headers or {}}
+                if timeout_seconds:
+                    one["timeout"] = timeout_seconds * 1000
+                given = {name or urlparse(url).netloc or "server": one}
+            else:
+                return "Give the server's address, or the MCP settings the person pasted."
+            found, skipped = [], []
+            for server_name, raw in given.items():
+                server, why = installs.standard_server(str(server_name), raw, secrets_allowed=True)
+                if server is not None:
+                    found.append(server)
+                if why:
+                    skipped.append(why)
+            missing = sorted({key for s in found for key in s.needs})
+            if missing:
                 return (
-                    f"Not added: {error.message} If it needs a key or token, the person adds it"
-                    " on the Connectors page (Add, then the token or a header), not in chat."
+                    f"Not added: its settings ask for {', '.join(missing)}. Ask the person for the"
+                    " values and give them in headers, or have them add it on the Connectors page."
                 )
-            return (
-                f"Added {name}. Its tools show on the Connectors page, and each new tool asks the"
-                " person before its first use."
-            )
+        except CommandError as error:
+            return f"Not added: {error.message}"
+        if not found:
+            return "Nothing to add. " + "; ".join(skipped)
+        names = ", ".join(s.name for s in found)
+
+        def work() -> str:
+            added, failed = [], []
+            for server in found:
+                command = installs.connector_for(server, {})
+                if token and len(found) == 1 and not command.token:
+                    command = command.model_copy(update={"token": token})
+                try:
+                    connectors.add_connector(command, ctx)
+                    added.append(server.name)
+                except CommandError as error:
+                    failed.append(f"{server.name}: {error.message}")
+            parts = []
+            if added:
+                parts.append(
+                    f"Added {', '.join(added)}. Their tools show on the Connectors page, and each"
+                    " new tool asks the person before its first use."
+                )
+            if failed:
+                parts.append(
+                    "Not added: " + "; ".join(failed) + ". If it needs a key the person hasn't"
+                    " given, they can add it on the Connectors page."
+                )
+            if skipped:
+                parts.append("Left out: " + "; ".join(skipped) + ".")
+            return " ".join(parts)
 
         return _guarded(
             ctx,
@@ -1949,9 +2013,10 @@ def build_tools(
             "add_mcp_server",
             "data",
             None,
-            f"Connect to the MCP server {name}",
-            f"{url}\n\nIts tools are listed and checked like any connector's. A key or token is"
-            " added on the Connectors page, never in chat.",
+            f"Connect to the MCP server {names}",
+            "\n".join(f"{s.name}: {s.url} ({s.transport})" for s in found)
+            + "\n\nIts tools are listed and checked like any connector's. Any key it was given is"
+            " kept as a secret.",
             False,
             work,
         )

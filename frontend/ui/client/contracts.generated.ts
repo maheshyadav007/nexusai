@@ -2252,6 +2252,8 @@ export type Run = number;
 export type Name35 = string;
 export type Url3 = string;
 export type Needs = string[];
+export type Transport = "http" | "sse";
+export type TimeoutSeconds = number | null;
 export type Name36 = string;
 export type DisplayName = string;
 export type Version = string;
@@ -2893,9 +2895,12 @@ export type Detail7 = string | null;
 export type Tools3 = ConnectorTool[];
 export type HasToken = boolean;
 export type HeaderNames = string[];
+export type Transport1 = "http" | "sse";
+export type TimeoutSeconds1 = number | null;
 export type Connectors1 = Connector[];
 export type Url6 = string;
 export type Token = string | null;
+export type Transport2 = "http" | "sse";
 export type Ok6 = boolean;
 export type Error8 = string | null;
 export type Tools4 = ConnectorTool[];
@@ -2903,6 +2908,8 @@ export type Name53 = string;
 export type Url7 = string;
 export type Token1 = string | null;
 export type Audience1 = "internal" | "public";
+export type Transport3 = "http" | "sse";
+export type TimeoutSeconds2 = number | null;
 export type Id111 = string;
 export type Id112 = string;
 export type Enabled12 = boolean;
@@ -6620,6 +6627,8 @@ export interface PluginServer {
   url: Url3;
   headers?: Headers;
   needs?: Needs;
+  transport?: Transport;
+  timeout_seconds?: TimeoutSeconds;
   [k: string]: unknown;
 }
 export interface Headers {
@@ -8343,6 +8352,8 @@ export interface Connector {
   tools?: Tools3;
   has_token?: HasToken;
   header_names?: HeaderNames;
+  transport?: Transport1;
+  timeout_seconds?: TimeoutSeconds1;
   [k: string]: unknown;
 }
 /**
@@ -8360,6 +8371,11 @@ export interface Connectors {
 export interface TestConnector {
   url: Url6;
   token?: Token;
+  headers?: Headers1;
+  transport?: Transport2;
+}
+export interface Headers1 {
+  [k: string]: string;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -8380,9 +8396,11 @@ export interface AddConnector {
   url: Url7;
   token?: Token1;
   audience: Audience1;
-  headers?: Headers1;
+  headers?: Headers2;
+  transport?: Transport3;
+  timeout_seconds?: TimeoutSeconds2;
 }
-export interface Headers1 {
+export interface Headers2 {
   [k: string]: string;
 }
 /**

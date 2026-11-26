@@ -1034,6 +1034,8 @@ class PluginServer(BaseModel):
     headers: dict[str, str] = Field(default_factory=dict)
     # The settings it asks the person for, such as an API key.
     needs: list[str] = Field(default_factory=list)
+    transport: Literal["http", "sse"] = "http"
+    timeout_seconds: int | None = None
 
 
 class InstalledPlugin(BaseModel):

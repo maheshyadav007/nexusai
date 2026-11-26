@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 import httpx2
 from mcp import Client
+from mcp.client.sse import sse_client
 from mcp.client.streamable_http import streamable_http_client
 
 HTTP_SCHEMES = {"http", "https"}
@@ -43,6 +44,7 @@ def _run[T](
     seconds: float,
     work: Callable[[Client], Awaitable[T]],
     headers: dict[str, str] | None = None,
+    transport: str = "http",
 ) -> T:
     """Agents run on plain threads, so each call gets its own short-lived event loop."""
 
@@ -51,6 +53,10 @@ def _run[T](
         sent = dict(headers or {})
         if token:
             sent["Authorization"] = f"Bearer {token}"
+        if transport == "sse":
+            # The older MCP transport: server-sent events, which some servers still use.
+            async with Client(sse_client(url, headers=sent, timeout=seconds)) as client:
+                return await asyncio.wait_for(work(client), seconds)
         async with (
             httpx2.AsyncClient(headers=sent, timeout=seconds) as http,
             Client(streamable_http_client(url, http_client=http)) as client,
@@ -66,7 +72,11 @@ def _run[T](
 
 
 def list_tools(
-    url: str, token: str | None, seconds: float, headers: dict[str, str] | None = None
+    url: str,
+    token: str | None,
+    seconds: float,
+    headers: dict[str, str] | None = None,
+    transport: str = "http",
 ) -> list[Listed]:
     async def work(client: Client) -> list[Listed]:
         found = await client.list_tools()
@@ -75,7 +85,7 @@ def list_tools(
             for tool in found.tools
         ]
 
-    return _run(url, token, seconds, work, headers)
+    return _run(url, token, seconds, work, headers, transport)
 
 
 def call_tool(
@@ -85,10 +95,11 @@ def call_tool(
     arguments: dict[str, Any],
     seconds: float,
     headers: dict[str, str] | None = None,
+    transport: str = "http",
 ) -> tuple[str, bool]:
     async def work(client: Client) -> tuple[str, bool]:
         result = await client.call_tool(name, arguments)
         words = [getattr(block, "text", "") for block in result.content]
         return "\n".join(word for word in words if word), bool(result.is_error)
 
-    return _run(url, token, seconds, work, headers)
+    return _run(url, token, seconds, work, headers, transport)

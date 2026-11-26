@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from fake_mcp import URL, FakeMcp, running
+from fake_mcp import SSE_URL, URL, FakeMcp, running
 from test_agent_work import (
     app_config,  # noqa: F401
     client,  # noqa: F401
@@ -234,3 +234,88 @@ def test_posty_adds_an_mcp_server_by_its_address_alone(client: TestClient, scrip
         assert said.startswith("Not added") and "Connectors page" in said
     finally:
         next(server, None)
+
+
+def _ask_posty(client: TestClient, script: Any, arguments: dict[str, Any]) -> str:
+    from nexusai.modules.agent.providers import TextChunk, ToolCall
+    from test_agent_work import wait
+    from test_chat_engine_tools import approve_one, chat_in_background, last_result, new_session
+
+    script.replies = [[ToolCall("a", "add_mcp_server", arguments)], [TextChunk("Done.")]]
+    done = chat_in_background(client, new_session(client), "Add this MCP server")
+    approve_one(client)
+    wait(lambda: done, "finish")
+    return str(last_result(script))
+
+
+def test_posty_adds_a_server_with_its_headers_and_timeout(client: TestClient, script: Any) -> None:
+    state = FakeMcp(required_header=("X-Api-Key", "k-77"))
+    server = running(state)
+    next(server)
+    try:
+        said = _ask_posty(
+            client,
+            script,
+            {"name": "Keyed", "url": URL, "headers": {"X-Api-Key": "k-77"}, "timeout_seconds": 30},
+        )
+        assert said.startswith("Added Keyed"), said
+        row = {
+            c["name"]: c for c in client.post("/api/queries/connectors.list").json()["connectors"]
+        }["Keyed"]
+        assert (row["header_names"], row["timeout_seconds"], row["transport"]) == (
+            ["X-Api-Key"],
+            30,
+            "http",
+        )
+        assert "k-77" not in json.dumps(row)
+    finally:
+        next(server, None)
+
+
+def test_posty_adds_servers_from_pasted_standard_settings(client: TestClient, script: Any) -> None:
+    state = FakeMcp(sse=True, required_token="tok-5")
+    server = running(state)
+    next(server)
+    try:
+        settings = {
+            "mcpServers": {
+                "events": {
+                    "type": "sse",
+                    "url": SSE_URL,
+                    "headers": {"Authorization": "Bearer tok-5"},
+                    "timeout": 20000,
+                },
+                "local": {"command": "npx", "args": ["-y", "some-mcp"], "env": {"KEY": "x"}},
+            }
+        }
+        said = _ask_posty(client, script, {"settings": json.dumps(settings)})
+        assert said.startswith("Added events"), said
+        assert "local: it runs a program on this computer" in said
+        row = {
+            c["name"]: c for c in client.post("/api/queries/connectors.list").json()["connectors"]
+        }["events"]
+        # The bearer header became the token, kept as a secret; SSE is how it's reached.
+        assert row["has_token"] and row["transport"] == "sse" and row["timeout_seconds"] == 20
+        assert row["tools"] and "tok-5" not in json.dumps(row)
+    finally:
+        next(server, None)
+
+
+def test_settings_that_ask_for_a_value_are_not_guessed(client: TestClient, script: Any) -> None:
+    from nexusai.modules.agent.providers import TextChunk, ToolCall
+    from test_chat_engine_tools import chat, last_result, new_session
+
+    settings = {
+        "wiki": {
+            "type": "http",
+            "url": "https://wiki.example/mcp",
+            "headers": {"X-Key": "${WIKI_KEY}"},
+        }
+    }
+    script.replies = [
+        [ToolCall("a", "add_mcp_server", {"settings": json.dumps(settings)})],
+        [TextChunk("ok")],
+    ]
+    chat(client, new_session(client), "Add it")
+    said = last_result(script)
+    assert said.startswith("Not added") and "WIKI_KEY" in said

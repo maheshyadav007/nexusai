@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 ConnectorState = Literal["ok", "failed", "changed", "off"]
 Audience = Literal["internal", "public"]
+Transport = Literal["http", "sse"]
 
 
 class GetConnectors(BaseModel):
@@ -33,6 +34,8 @@ class Connector(BaseModel):
     has_token: bool = False
     # The names of the headers it sends, never their values.
     header_names: list[str] = Field(default_factory=list)
+    transport: Transport = "http"
+    timeout_seconds: int | None = None
 
 
 class Connectors(BaseModel):
@@ -44,6 +47,8 @@ class TestConnector(BaseModel):
 
     url: str = Field(min_length=1, max_length=2000)
     token: str | None = Field(default=None, max_length=8000)
+    headers: dict[str, str] = Field(default_factory=dict, max_length=10)
+    transport: Transport = "http"
 
 
 class ConnectorTest(BaseModel):
@@ -62,6 +67,10 @@ class AddConnector(BaseModel):
     # Headers the server needs, such as an API key or a tenant id. Every value is kept as a
     # secret, never in the database, and never shown again or given to an agent.
     headers: dict[str, str] = Field(default_factory=dict, max_length=10)
+    # How it's reached: streamable HTTP (the standard now) or the older server-sent events.
+    transport: Transport = "http"
+    # How long a tool call may take before it's given up, in seconds. None is the app's default.
+    timeout_seconds: int | None = Field(default=None, ge=1, le=600)
 
 
 class ConnectorAction(BaseModel):

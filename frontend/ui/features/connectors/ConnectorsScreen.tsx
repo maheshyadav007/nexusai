@@ -117,11 +117,18 @@ function AddServer() {
   const [url, setUrl] = useState("");
   const [token, setToken] = useState("");
   const [audience, setAudience] = useState<Audience>("internal");
-  const input = { url: url.trim(), ...(token ? { token } : {}) };
+  const [transport, setTransport] = useState<"http" | "sse">("http");
+  // Headers such as an API key or a tenant id. Values are kept as secrets once added.
+  const [headers, setHeaders] = useState<{ name: string; value: string }[]>([]);
+  const sent = Object.fromEntries(headers.filter((row) => row.name.trim() && row.value).map((row) => [row.name.trim(), row.value]));
+  const input = { url: url.trim(), transport, headers: sent, ...(token ? { token } : {}) };
+  const setHeader = (index: number, change: Partial<{ name: string; value: string }>) => setHeaders(headers.map((row, at) => (at === index ? { ...row, ...change } : row)));
   const reset = () => {
     setName("");
     setUrl("");
     setToken("");
+    setHeaders([]);
+    setTransport("http");
     test.reset();
     add.reset();
   };
@@ -146,6 +153,19 @@ function AddServer() {
         <Field label={t("connectors.name")}>{({ invalid, ...control }) => <Input invalid={invalid} value={name} onChange={(event) => setName(event.target.value)} {...control} />}</Field>
         <Field label={t("connectors.url")} {...(url.startsWith(INSECURE) ? { hint: t("connectors.url.insecure") } : {})}>{({ invalid, ...control }) => <Input spellCheck={false} placeholder={t("connectors.url.placeholder")} invalid={invalid} value={url} onChange={(event) => setUrl(event.target.value)} {...control} />}</Field>
         <Field label={t("connectors.token")} hint={t("connectors.token.hint")}>{({ invalid, ...control }) => <Input type="password" autoComplete="off" invalid={invalid} value={token} onChange={(event) => setToken(event.target.value)} {...control} />}</Field>
+        <Segmented label={t("connectors.transport")} value={transport} options={[{ value: "http", label: t("connectors.transport.http") }, { value: "sse", label: t("connectors.transport.sse") }]} onChange={setTransport} />
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-1 text-sm font-medium text-ink-muted">{t("connectors.headers")}</legend>
+          {headers.map((row, index) => (
+            <div key={index} className="grid grid-cols-1 gap-2 sm:grid-cols-5">
+              <div className="sm:col-span-2"><Field label={t("connectors.header.name")}>{({ invalid, ...control }) => <Input spellCheck={false} placeholder={t("connectors.header.name.placeholder")} invalid={invalid} value={row.name} onChange={(event) => setHeader(index, { name: event.target.value })} {...control} />}</Field></div>
+              <div className="sm:col-span-2"><Field label={t("connectors.header.value")}>{({ invalid, ...control }) => <Input type="password" autoComplete="off" invalid={invalid} value={row.value} onChange={(event) => setHeader(index, { value: event.target.value })} {...control} />}</Field></div>
+              <div className="flex items-end"><Button variant="quiet" onClick={() => setHeaders(headers.filter((_, at) => at !== index))}>{t("connectors.header.remove")}</Button></div>
+            </div>
+          ))}
+          <div><Button variant="quiet" onClick={() => setHeaders([...headers, { name: "", value: "" }])}>{t("connectors.header.add")}</Button></div>
+          <p className="text-sm text-ink-muted">{t("connectors.headers.hint")}</p>
+        </fieldset>
         <Segmented label={t("connectors.audience")} value={audience} options={[{ value: "internal", label: t("connectors.audience.internal") }, { value: "public", label: t("connectors.audience.public") }]} onChange={setAudience} />
         <p className="text-sm text-ink-muted">{t("connectors.realValues")}</p>
         {test.data && !test.data.ok ? <ErrorState title={t("connectors.test.failed")} description={test.data.error ?? ""} /> : null}
