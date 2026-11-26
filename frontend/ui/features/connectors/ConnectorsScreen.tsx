@@ -192,7 +192,8 @@ function AddServer() {
   );
 }
 
-function OtherConnectors() {
+/** The MCP servers list, also the Servers tab on Add-ons. */
+export function OtherConnectors() {
   const connectors = useConnectors();
   const servers = (connectors.data?.connectors ?? []).filter((row) => row.kind === "mcp");
   return (

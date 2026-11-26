@@ -653,3 +653,37 @@ test("a check and a trigger for some mail are set up from Routines, and runs are
   await trigger.click();
   await expect(drawer.getByRole("textbox", { name: "Subject has" })).toHaveValue("invoice");
 });
+
+test("Add-ons installs a plugin from a folder in one step, lists it in its tabs, and removes it", async ({ page }) => {
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const folder = mkdtempSync(join(tmpdir(), "nexusai-plugin-"));
+  mkdirSync(join(folder, ".claude-plugin"));
+  mkdirSync(join(folder, "skills", "release-notes"), { recursive: true });
+  mkdirSync(join(folder, "hooks"));
+  writeFileSync(join(folder, ".claude-plugin", "plugin.json"), JSON.stringify({ name: "e2e-notes", description: "Release notes the team's way." }));
+  writeFileSync(join(folder, "skills", "release-notes", "SKILL.md"), "---\nname: release-notes\ndescription: Writing release notes from merged changes.\n---\n\nList what changed for the person, newest first.\n");
+  writeFileSync(join(folder, "hooks", "hooks.json"), "{}");
+
+  await page.goto("/addons");
+  await expect(page.getByRole("heading", { level: 1, name: "Add-ons" })).toBeVisible();
+  await noViolations(page);
+  await page.getByRole("textbox", { name: /Install from a link/ }).fill(folder);
+  await page.getByRole("button", { name: "Install", exact: true }).click();
+  await expect(page.getByTestId("install-result")).toContainText("Installed e2e-notes.");
+  await expect(page.getByTestId("install-result")).toContainText("On now: release-notes.");
+  const row = page.getByTestId("plugin").filter({ hasText: "e2e-notes" });
+  await expect(row).toContainText("Skill: release-notes");
+  await expect(row).toContainText("1 part not used here");
+
+  await page.getByRole("tab", { name: /Skills/ }).click();
+  await expect(page.getByText("release-notes").first()).toBeVisible();
+  await page.getByRole("tab", { name: /Servers/ }).click();
+  await expect(page.getByRole("heading", { name: "MCP servers" })).toBeVisible();
+  await noViolations(page);
+
+  await page.getByRole("tab", { name: /Plugins/ }).click();
+  await row.getByRole("button", { name: "Remove" }).click();
+  await expect(row).toHaveCount(0);
+});
