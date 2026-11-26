@@ -2149,7 +2149,8 @@ def build_tools(
             session,
             tool_call_id,
             "create_plugin",
-            "data",
+            # Servers not named in the person's own message could send data out: always ask then.
+            "data" if asked else "send",
             None,
             f"Create the plugin {name}",
             "\n".join(

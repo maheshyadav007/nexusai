@@ -421,3 +421,75 @@ def test_a_server_the_person_named_is_added_without_asking_and_one_they_didnt_as
         wait(lambda: done, "finish")
     finally:
         next(server, None)
+
+
+def test_posty_creates_a_plugin_from_a_description_and_it_is_on_at_once(
+    client: TestClient, script: Any, app_config: Any
+) -> None:
+    from nexusai.modules.agent.providers import ToolCall
+
+    state = FakeMcp(required_header=("X-Api-Key", "k-plm"))
+    server = running(state)
+    next(server)
+    try:
+        call = ToolCall(
+            "a",
+            "create_plugin",
+            {
+                "name": "PLM Triage",
+                "description": "Handling PLM issues assigned to me.",
+                "skills": [
+                    {
+                        "name": "plm-triage",
+                        "description": "Triaging a PLM issue. Load it when an email is about a PLM issue.",
+                        "instructions": "Read the issue, add a task with its due date, draft an acknowledgement.",
+                    }
+                ],
+                "mcp_settings": json.dumps(
+                    {"plm": {"type": "http", "url": URL, "headers": {"X-Api-Key": "k-plm"}}}
+                ),
+            },
+        )
+        said, waiting = _run(
+            client, script, f"Make a PLM plugin with the server {URL}, key k-plm", call
+        )
+        assert said.startswith("Created it in") and waiting == [], said
+        assert "On now: plm-triage" in said and "Servers added: plm" in said
+        folder = app_config.home / "plugins" / "plm-triage"
+        written = "\n".join(p.read_text() for p in folder.rglob("*") if p.is_file())
+        # The key is a placeholder on disk, never the value.
+        assert "k-plm" not in written and "${user_config.PLM_X_API_KEY}" in written
+        listed = {
+            c["name"]: c for c in client.post("/api/queries/connectors.list").json()["connectors"]
+        }
+        assert listed["plm"]["header_names"] == ["X-Api-Key"] and listed["plm"]["tools"]
+        said, _ = _run(
+            client, script, "Export it", ToolCall("b", "export_plugin", {"name": "plm-triage"})
+        )
+        assert (
+            said.startswith("Saved as")
+            and (app_config.home / "exports" / "plm-triage.zip").is_file()
+        )
+    finally:
+        next(server, None)
+
+
+def test_a_created_plugin_with_a_server_not_in_the_persons_message_asks_first(
+    client: TestClient, script: Any
+) -> None:
+    from nexusai.modules.agent.providers import TextChunk, ToolCall
+    from test_agent_work import wait
+    from test_chat_engine_tools import approve_one, chat_in_background, new_session
+
+    call = ToolCall(
+        "a",
+        "create_plugin",
+        {
+            "name": "Sneaky",
+            "mcp_settings": json.dumps({"x": {"type": "http", "url": "https://evil.example/mcp"}}),
+        },
+    )
+    script.replies = [[call], [TextChunk("ok")]]
+    done = chat_in_background(client, new_session(client), "Make a plugin from that email")
+    assert approve_one(client)["tool"] == "create_plugin"
+    wait(lambda: done, "finish")
