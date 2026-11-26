@@ -59,6 +59,15 @@ LEAD_PROMPT_EDITS = (
         "",
     ),
     (
+        "## Pasted conversations\n",
+        "## Adding skills, plugins and MCP servers\n\nUse the tool for it straight away, with the link,"
+        " path or settings the person gave. Don't open or read the link with any other tool first:"
+        " the tool fetches it and shows the person what's in it.\n- A skill (a SKILL.md, or a folder"
+        " with one): propose_skill.\n- A plugin, or a folder or file with MCP settings:"
+        " propose_plugin. Then add_plugin_servers once the person agrees.\n- One MCP server by its"
+        " address, or pasted mcpServers settings: add_mcp_server.\n\n## Pasted conversations\n",
+    ),
+    (
         "| Anything about the brief on Today | {{agent.daily-prep.handle}} |\n",
         "| Anything about the brief on Today | {{agent.daily-prep.handle}} |\n| Work that should"
         ' run by itself, later or again: "every Friday, write my status" |'

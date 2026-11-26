@@ -1834,7 +1834,10 @@ def build_tools(
                 found = skills.propose(ctx, files, source, _speaker())
             except CommandError as error:
                 return f"Not proposed: {error.message}"
-            warned = f" It has {len(found.flags)} things to check." if found.flags else ""
+            count = len(found.flags)
+            warned = (
+                f" It has {count} {'thing' if count == 1 else 'things'} to check." if count else ""
+            )
             return (
                 f"Proposed skill {found.name}.{warned} It does nothing until the person reads it "
                 "and approves it on the Agent channel page, under Skills. Tell them so."
