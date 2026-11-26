@@ -374,9 +374,15 @@ test("agent screens open cleanly and what Posty learned is kept without asking",
 
 test("the new settings sections save, and the guard masks a sample", async ({ page }) => {
   await page.goto("/settings?section=permissions");
+  // One setting per section; a section opens to set its tools one by one.
+  await expect(page.getByTestId("permission-section")).toHaveCount(9);
+  await page.getByRole("button", { name: "Set Your computer tool by tool" }).click();
+  await page.getByRole("button", { name: "Set Sending tool by tool" }).click();
   await page.getByRole("combobox", { name: "Run commands" }).click();
   await page.getByRole("option", { name: "Off" }).click();
   await page.reload();
+  await page.getByRole("button", { name: "Set Your computer tool by tool" }).click();
+  await page.getByRole("button", { name: "Set Sending tool by tool" }).click();
   await expect(page.getByRole("combobox", { name: "Run commands" })).toHaveText(/Off/);
   await page.getByRole("combobox", { name: "Run commands" }).click();
   await page.getByRole("option", { name: "Ask first" }).click();
@@ -384,6 +390,13 @@ test("the new settings sections save, and the guard masks a sample", async ({ pa
   await page.getByRole("combobox", { name: "Send mail" }).click();
   await expect(page.getByRole("option", { name: "Allow" })).toHaveCount(0);
   await page.keyboard.press("Escape");
+  // A section's setting sets its tools, leaving trash asking.
+  const mail = page.getByTestId("permission-section").filter({ hasText: "File, mark and draft" });
+  await mail.getByRole("radio", { name: "Approve" }).click();
+  await page.reload();
+  await page.getByRole("button", { name: "Set Mail tool by tool" }).click();
+  await expect(page.getByRole("combobox", { name: "Delete mail" })).toHaveText(/Ask first/);
+  await expect(page.getByRole("combobox", { name: "Write drafts" })).toHaveText(/Approve/);
   await noViolations(page);
 
   await page.goto("/settings?section=guard");

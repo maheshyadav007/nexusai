@@ -2681,5 +2681,9 @@
   "chat.install.added": "Added",
   "chat.install.needs": "Needs a value first",
   "chat.install.notUsed": "Not used here",
-  "chat.install.open": "Open in Add-ons"
+  "chat.install.open": "Open in Add-ons",
+  "permissions.section.open": "Set {name} tool by tool",
+  "permissions.section.differs.one": "1 tool set differently.",
+  "permissions.section.differs.other": "{count} tools set differently.",
+  "permissions.section.always": "Always asks"
 }

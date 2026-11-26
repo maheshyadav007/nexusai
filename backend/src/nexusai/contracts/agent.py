@@ -302,6 +302,15 @@ class ToolInfo(BaseModel):
     level: Permission
     # Sending always asks, so "allow" isn't offered.
     can_allow: bool = True
+    # Which of the permission page's sections it's set with, and whether it has its own safer
+    # default (such as trash asking) that the section's setting leaves alone.
+    section: str = ""
+    own_default: bool = False
+
+
+class ToolSection(BaseModel):
+    name: str
+    note: str
 
 
 class GetToolCatalog(BaseModel):
@@ -310,6 +319,7 @@ class GetToolCatalog(BaseModel):
 
 class ToolCatalog(BaseModel):
     tools: list[ToolInfo]
+    sections: list[ToolSection] = Field(default_factory=list)
 
 
 class AnswerSession(BaseModel):

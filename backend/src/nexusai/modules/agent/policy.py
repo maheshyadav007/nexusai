@@ -315,6 +315,39 @@ UNDOABLE_AFTER_READING = frozenset(
 CONNECTOR_DEFAULT: Literal["off", "ask", "allow"] = "allow"
 
 
+SECTIONS: tuple[tuple[str, str], ...] = (
+    ("Reading", "Search and read mail, documents, tasks and memory."),
+    ("Mail", "File, mark and draft. Trash asks."),
+    ("Sending", "Every email that leaves, every time."),
+    ("Tasks and reminders", "Add, change and finish."),
+    ("Folders and rules", "Folders, and the rules that file mail."),
+    ("Documents and memory", "Tags, notes, panels and your prompts. Deleting a document asks."),
+    ("Routines", "Things that run by themselves."),
+    ("Add-ons", "Installing plugins, servers and skills."),
+    ("Your computer", "Files outside your Home, and commands."),
+)
+
+
+def section_of(entry: ToolEntry) -> str:
+    """Where a tool is set on the permissions page: by what it does to the person, so reading is
+    one switch and sending stands alone."""
+    if entry.name == "send_mail":
+        return "Sending"
+    if entry.action == "read":
+        return "Reading"
+    if entry.group in (FILES, COMMANDS):
+        return "Your computer"
+    if entry.group == AGENTS:
+        if "schedule" in entry.name:
+            return "Routines"
+        return "Documents and memory" if entry.name == "save_personal_prompt" else "Add-ons"
+    return {
+        MAIL: "Mail",
+        CATEGORIES: "Folders and rules",
+        PLANNER: "Tasks and reminders",
+    }.get(entry.group, "Documents and memory")
+
+
 def connector_level(permissions: Permissions, tool: str) -> Literal["off", "ask", "allow"]:
     return permissions.tools.get(tool) or CONNECTOR_DEFAULT
 

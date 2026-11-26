@@ -4,6 +4,11 @@ Newest first. Each entry says what changed for the person using the app, in plai
 
 ## 2026-11-26
 
+**Add-ons**
+- A new Add-ons page puts plugins, MCP servers and skills in one place. One box installs from a link, a folder or pasted MCP settings and says what it did. Your own plugins can be exported as a zip.
+- When Posty installs a plugin, the chat shows a card with what's on, what's waiting for a look, which servers were added and what isn't used here.
+- Permissions are set in nine sections, such as Reading, Mail, Sending and Your computer, with one setting each. Open a section to set a single tool. Sending always asks, and trash and deleting a document keep asking unless you change them one by one.
+
 **Fewer approvals**
 - After Posty has read an email, small changes that are easy to put back no longer ask: adding or changing tasks and reminders, filing or marking mail, saving a draft, folders, memory notes, panels and document tags. Sending, deleting, commands, files outside your Home, routines, rules and which senders the AI reads still ask.
 - Tools from MCP servers you added run without asking. Set one to ask or off on the Connectors page.
