@@ -27,15 +27,17 @@ SOURCE = Path(plugins.__file__).parent / "builtin_plugins"
 # What changed on purpose since the golden file was written: the Organizer folded into the lead
 # (docs/AGENT_OWNERS_PLAN.md), so the lead's card and prompt took over its work.
 FOLDED = "organizer"
+# Added since: the Routines agent, which owns setting up routines (To do 1).
+NEW_AGENT = "routines"
 LEAD_CAN_DO = "Adds, changes and clears your tasks and reminders, without duplicates"
 LEAD_PROMPT_EDITS = (
     (
         "Before you create a category, rule, schedule, panel, memory note or draft, view what"
         " exists with its list tool (list_categories, list_rules, list_schedules, list_panels,"
         " list_memory, list_drafts).",
-        "Before you create a task, reminder, category, rule, schedule, panel, memory note or draft,"
-        " view what exists with its list tool (list_tasks, list_reminders, list_categories,"
-        " list_rules, list_schedules, list_panels, list_memory, list_drafts).",
+        "Before you create a task, reminder, category, rule, panel, memory note or draft, view what"
+        " exists with its list tool (list_tasks, list_reminders, list_categories, list_rules,"
+        " list_panels, list_memory, list_drafts).",
     ),
     (
         "## Pasted conversations\n",
@@ -57,6 +59,12 @@ LEAD_PROMPT_EDITS = (
         "",
     ),
     (
+        "| Anything about the brief on Today | {{agent.daily-prep.handle}} |\n",
+        "| Anything about the brief on Today | {{agent.daily-prep.handle}} |\n| Work that should"
+        ' run by itself, later or again: "every Friday, write my status" |'
+        " {{agent.routines.handle}} |\n",
+    ),
+    (
         "If what's needed is unclear, such as when a reminder should go off, ask the person first,"
         " then hand over.",
         "If what's needed is unclear, ask the person first, then hand over.",
@@ -69,7 +77,7 @@ def _golden_cards() -> dict[str, object]:
     lead = dict(expected["session"])
     can_do = list(lead["can_do"])
     lead["can_do"] = [*can_do[:-1], LEAD_CAN_DO, can_do[-1]]
-    lead["may_assign_to"] = [a for a in lead["may_assign_to"] if a != FOLDED]
+    lead["may_assign_to"] = [*(a for a in lead["may_assign_to"] if a != FOLDED), NEW_AGENT]
     expected["session"] = lead
     return expected
 
@@ -80,9 +88,10 @@ def test_every_card_is_as_it_was() -> None:
         data = dataclasses.asdict(card)
         data.pop("version")
         loaded[card.id] = json.loads(json.dumps(data))
+    assert loaded.pop(NEW_AGENT)["default"] is False
     assert loaded == _golden_cards()
     # The team is listed in the same order as before.
-    assert list(cards._files()) == sorted(_golden_cards())
+    assert [c for c in cards._files() if c != NEW_AGENT] == sorted(_golden_cards())
 
 
 def test_every_agent_prompt_is_byte_for_byte_the_same() -> None:
@@ -126,7 +135,7 @@ def test_a_card_version_comes_from_its_agent_file() -> None:
 
 def test_built_in_plugins_follow_the_format() -> None:
     names = {plugin.name for plugin in plugins.built_in()}
-    assert names == {"nexusai", "mail", "brief", "meetings"}
+    assert names == {"nexusai", "mail", "brief", "meetings", "routines"}
     assert {p.name for p in plugins.built_in() if p.required} == {"nexusai", "mail"}
     for folder in SOURCE.iterdir():
         if not folder.is_dir():
@@ -160,6 +169,7 @@ def test_an_unknown_run_prompt_is_a_clear_error() -> None:
 TOOLS_GOLDEN = json.loads(
     (Path(__file__).parent / "fixtures" / "tools_golden.json").read_text("utf-8")
 )
+ROUTINE_TOOLS = {"create_schedule", "update_schedule", "remove_schedules", "run_schedule"}
 TASK_TOOLS = {
     "create_tasks", "update_tasks", "delete_tasks",
     "create_reminders", "update_reminders", "delete_reminders",
@@ -188,6 +198,8 @@ def test_every_agents_tools_are_as_they_were_but_for_the_organizer_fold() -> Non
                 expected -= TASK_TOOLS
             if agent == "scheduled":
                 expected |= {"propose_task", "propose_reminder"}
+            # Setting up routines is the Routines agent's job now.
+            expected |= ROUTINE_TOOLS
             assert kept_out == expected, key
         shown = tools.shown_for(agent, has_email == "True")
         expected_shown = old["shown"]
@@ -203,7 +215,7 @@ def test_every_owned_job_has_one_owner_that_exists() -> None:
     owned = jobs.owned_tools()
     assert set(owned) == {
         "record_triage", "save_what_i_learned", "propose_task", "propose_reminder",
-        "read_plate", "update_brief",
+        "read_plate", "update_brief", *ROUTINE_TOOLS,
     }  # fmt: skip
     for job in jobs.OWNED:
         assert job.owner in cards._files(), job.name
@@ -216,6 +228,7 @@ def test_a_tool_of_another_agents_job_names_who_to_hand_it_to() -> None:
     assert jobs.handed_over_tools("session") == {
         "record_triage": "mail", "save_what_i_learned": "mail",
         "read_plate": "daily-prep", "update_brief": "daily-prep",
+        **{tool: "routines" for tool in ROUTINE_TOOLS},
     }  # fmt: skip
     # Suggestions aren't handed over: the lead makes the task itself.
     assert not TASK_TOOLS & set(jobs.handed_over_tools("session"))
@@ -223,6 +236,7 @@ def test_a_tool_of_another_agents_job_names_who_to_hand_it_to() -> None:
     assert jobs.handed_over_tools("mail") == {
         "read_plate": "daily-prep",
         "update_brief": "daily-prep",
+        **{tool: "routines" for tool in ROUTINE_TOOLS},
     }
 
 

@@ -42,6 +42,12 @@ OWNED = (
         frozenset({"read_plate", "update_brief"}),
         "the brief on Today",
     ),
+    Job(
+        "routines",
+        "routines",
+        frozenset({"create_schedule", "update_schedule", "remove_schedules", "run_schedule"}),
+        "setting up work that runs by itself",
+    ),
 )
 JOBS = {job.name: job for job in OWNED}
 

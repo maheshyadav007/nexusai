@@ -9,8 +9,8 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from fake_mail import FakeMail, make_mail
+from nexusai.modules.agent import cards, tools
 from nexusai.modules.agent import module as agent_module
-from nexusai.modules.agent import tools
 from nexusai.modules.agent.providers import TextChunk, ToolCall
 from test_agent_work import (
     Script,
@@ -56,8 +56,17 @@ def last_result(script: Script) -> str:
 def use_tool(client: TestClient, script: Script, call: ToolCall) -> str:
     session = new_session(client)
     script.replies = [[call], [TextChunk("Done.")]]
-    chat(client, session, "Do it")
+    chat(client, session, f"{owner_of(call.name)}Do it")
     return last_result(script)
+
+
+def owner_of(name: str) -> str:
+    """The @handle a tool belongs to when it isn't the lead's, with a space, so the message goes to it."""
+    from nexusai.modules.agent import jobs
+
+    owner = jobs.handed_over_tools("session").get(name)
+    found = cards.card(agent_module.current().db, owner) if owner else None
+    return f"{found.at} " if found else ""
 
 
 def pending(client: TestClient, count: int) -> list[dict[str, Any]]:
@@ -449,14 +458,14 @@ def test_a_schedule_can_be_changed_paused_and_removed(client: TestClient, script
     session = new_session(client)
     change = {"schedule_id": row["id"], "enabled": False, "instructions": "Say bye"}
     script.replies = [[ToolCall("u", "update_schedule", change)], [TextChunk("Paused.")]]
-    done = chat_in_background(client, session, "Pause it")
+    done = chat_in_background(client, session, "@routines Pause it")
     approve_one(client)
     wait(lambda: done, "finish")
     changed = client.post("/api/queries/schedules.list").json()["schedules"][0]
     assert (changed["enabled"], changed["prompt"], changed["title"]) == (False, "Say bye", "Note")
     gone = {"schedule_ids": [row["id"]]}
     script.replies = [[ToolCall("r", "remove_schedules", gone)], [TextChunk("Gone.")]]
-    done = chat_in_background(client, session, "Remove it")
+    done = chat_in_background(client, session, "@routines Remove it")
     approve_one(client)
     wait(lambda: done, "removed")
     assert client.post("/api/queries/schedules.list").json()["schedules"] == []

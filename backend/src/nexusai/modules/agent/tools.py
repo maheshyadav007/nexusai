@@ -1028,6 +1028,34 @@ BRIEF_TOOLS = frozenset(
 BRIEF_AGENT_ONLY = jobs.JOBS["brief"].tools
 
 
+# The Routines agent sets up, changes, runs and removes routines, reading enough to write them well.
+ROUTINES_TOOLS = frozenset(
+    {
+        "list_schedules",
+        "create_schedule",
+        "update_schedule",
+        "remove_schedules",
+        "run_schedule",
+        "search_mail",
+        "read_thread",
+        "open_item",
+        "find_matters",
+        "list_mail",
+        "list_tasks",
+        "list_reminders",
+        "list_categories",
+        "remember",
+        "list_memory",
+        "load_skill",
+        "read_skill_file",
+        "team_roster",
+        "team_inbox",
+        "team_message",
+        "team_close",
+    }
+)
+
+
 INTERVIEW_TOOLS = frozenset(
     {
         "ask_user",
@@ -1074,7 +1102,7 @@ def shown_for(agent: str, has_email: bool) -> frozenset[str] | None:
     if agent == "mail":
         return None if has_email else MAIL_SHOWN
     # Their whole sets are small enough to show.
-    return None if agent == "daily-prep" else LEAD_SHOWN
+    return None if agent in {"daily-prep", "routines"} else LEAD_SHOWN
 
 
 def other_tools(all_names: list[str], shown: frozenset[str] | None) -> str:
@@ -1158,6 +1186,8 @@ def allowed_for(agent: str, origin: str, has_email: bool) -> frozenset[str] | No
         return INTERVIEW_TOOLS
     if agent == "daily-prep":
         return BRIEF_TOOLS | {"ask_user"} if origin == "person" else BRIEF_TOOLS
+    if agent == "routines":
+        return ROUTINES_TOOLS | {"ask_user"} if origin == "person" else ROUTINES_TOOLS
     if agent != "mail":
         return None
     if has_email:

@@ -1,0 +1,12 @@
+{
+  "name": "routines",
+  "displayName": "Routines",
+  "version": "2026.11.26",
+  "description": "The Routines agent: sets up work that runs by itself at the times you choose.",
+  "author": {
+    "name": "NexusAI"
+  },
+  "nexusai": {
+    "required": false
+  }
+}
