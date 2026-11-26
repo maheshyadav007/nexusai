@@ -31,6 +31,7 @@ Set 2026-11-25. Item numbers below stay as they are; this is the order to take t
 
 | # | Item | What it is |
 |---|---|---|
+| 0 | **One format: everything is a plugin (15)** | Agents, skills, connectors and routines as files in Anthropic's plugin format and names; the built-in ones ship as plugins. `docs/PLUGIN_FORMAT_PLAN.md`. Its step 1 (the loader, same behaviour) comes first, so 10, 7, 11 and 1 are each built once, on it |
 | 1 | **Who does what (10)** | One owner per job. Posty does the small jobs directly (mail actions, tasks, reminders, folders, drafts; the Organizer folds into it); specialists keep jobs that need their own instructions (Mail agent, Brief writer, a new Routines agent, First meeting). `docs/AGENT_OWNERS_PLAN.md`. First, since 2 and 3 build on it |
 | 2 | **Personalization (7)** | One tool to save what the person wants; their instructions outrank defaults. `docs/PREFERENCES_PLAN.md` |
 | 3 | **Routines (1), with the Routines agent and repeating reminders (13)** | A routine is a condition and an action: on a time, on an email, on a check. The brief writer is the only default routine. Fixes the drink-water reminder and updates the prompts in the same iteration |
@@ -39,6 +40,7 @@ Set 2026-11-25. Item numbers below stay as they are; this is the order to take t
 | 6 | **Plugins (11)** | Headers on MCP servers first, then skills and their tools as one install. `docs/PLUGINS_PLAN.md` |
 | 7 | **Labels (8)** | The Mail agent tags mail by the person's rules, across folders |
 | 8 | **Form filling from mail** | `docs/FORM_FILLING_PLAN.md`; may become an action a routine runs |
+| 9 | **The NexusAI guide (14)** | Docs the agents search, like Claude Code's docs: foundations, concepts, how the app is built. Shipped as the `nexusai-guide` skill |
 
 **Alongside, one mockup round for the screens:**
 - Update progress in the status bar (4e), with time left. Raised again 2026-11-25, so first.
@@ -432,6 +434,32 @@ Added 2026-11-25 from the landscape review (`docs/reference/LANDSCAPE_2026-11-25
 - **On screen:** the reminder shows its rule in words ("Every hour, 10:00–20:00, Mon–Fri"), and can be paused or stopped as one. Any form change needs a mockup.
 
 **Done when:** the drink-water request, said to Posty in those words, makes one reminder (no schedule) that fires hourly 10:00–20:00 on weekdays and not at weekends, with no model run per firing; and a "remind me" asked as a schedule is turned to a reminder. Fake-model tests; a real-model check only after asking.
+
+## 14. The NexusAI guide: docs the agents can search
+
+Added 2026-11-26.
+
+**What:** a set of short pages, like Claude Code's docs, that say what NexusAI is and how it works: the foundations (local-first, nothing leaves without a yes, undo), the concepts (matters, folders and Priority, the brief, agents and jobs, skills, connectors, plugins, routines, instructions and memory), how to do things ("make a routine", "add a connector", "why was this marked important"), and how the app is built (modules, events, the plugin format). Posty and the other agents search it to answer "how do I…", "why did you…" and "what can you do", instead of guessing.
+
+**Why:** today an agent explaining the app answers from its prompt, which is either too long or out of date. Claude Code answers questions about itself the same way: a docs site and a guide agent that reads it.
+
+**Approach:**
+- Pages in `docs/guide/*.md`, one topic each, with frontmatter `title` and `description` (the same two-step shape as skills). Written for end users first; a "How it's built" section for the agents and for people extending it with plugins.
+- Shipped as the skill `nexusai-guide` in the built-in `nexusai` plugin (`docs/PLUGIN_FORMAT_PLAN.md`): its `SKILL.md` lists the pages by title and description, and pages come with `read_skill_file`. Searched with the same local search the documents use, so it costs no model call to find the right page.
+- Kept true by a test: every agent, skill, job, routine trigger and setting named in the code has a page or a line on one, and every page's names exist in the code.
+- The plans in `docs/*_PLAN.md` stay for us; the guide says only what's built.
+
+**Done when:** asked "how do I make a routine?", "what does the Mail agent do?" or "why is this in Priority?", Posty loads the guide, cites the page, and answers right, on the fake model in tests; and on the real model after asking.
+
+## 15. One format: everything is a plugin
+
+Added 2026-11-26. Plan: `docs/PLUGIN_FORMAT_PLAN.md`.
+
+**What:** agents, skills, connectors and routines are files in Anthropic's Claude Code plugin format, with Anthropic's file and field names (`agents/<name>.md`, `skills/<name>/SKILL.md`, `.mcp.json`, `plugin.json`, `name`, `description`, `tools`, `skills`, `mcpServers`, …); what only NexusAI has sits under `nexusai`. The agents, skills and routines that ship with the app are plugins too (`nexusai`, `mail`, `brief`, `routines`, `meetings`). The person's own things are a plugin, `yours`, kept in the encrypted database. A company layer sits on top.
+
+**Why:** the person, 2026-11-26: one file per agent in Markdown with frontmatter, skills the same, plugins that can be installed, all in the same form, the only difference being which ones ship with the app; use the names Anthropic uses; and build it once. Items 10, 7, 11 and 1 each touch these shapes, so the format comes first.
+
+**Steps:** see the plan's §13. Step 1, the loader with no change in behaviour, before item 10.
 
 ## To try
 
