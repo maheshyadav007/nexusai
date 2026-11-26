@@ -505,6 +505,7 @@ Updated 2026-11-07. Everything below is merged into `main`, tested with a script
 | Evals on the real model | Built and run on 2026-11-07: corporate mail judging on 6 models and 2 efforts, and the whole team on 6.1 Sol, 6.1 Terra and 6 Luna. See [EVALS.md](EVALS.md). Not yet: repeated tries for pass^k, the no-tool-calling mode, an answer-quality judge |
 | Trying it all on the real Gmail account | Not done. Needs the person's go-ahead |
 | Telegram, WhatsApp, phone approvals, other messengers, A2A, tool search | Later, as decided |
+| One owner per job, a Routines agent, plugins | Planned 2026-11-25: `docs/TODO.md` items 10, 1 and 11, and `docs/PLUGINS_PLAN.md` |
 
 ## Order of work
 

@@ -4,6 +4,8 @@
 
 Status: direction agreed on 2026-11-25. Not built. A mockup comes before any UI is built (house rule).
 
+> **Proposed change, 2026-11-25** (`docs/AGENT_OWNERS_PLAN.md` §5): key each row by **job** from the owner table (`everyone`, `mail-judging`, `drafts`, `tasks`, `brief`, `routines`, …) instead of by agent, so whoever does a job reads its instructions, and moving a job between agents moves nothing here. Built after the owner table.
+
 ---
 
 ## 1. Why
