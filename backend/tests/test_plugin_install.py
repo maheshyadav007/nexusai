@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from fake_mcp import SSE_URL, URL, FakeMcp, running
+from nexusai.modules.agent import installs
 from test_agent_work import (
     app_config,  # noqa: F401
     client,  # noqa: F401
@@ -542,3 +543,28 @@ def test_your_own_plugin_exports_as_a_zip(client: TestClient, app_config: Any) -
         "mine/skills/a/SKILL.md",
     ]
     assert post(client, "plugins.export", {"name": "nope"}).status_code == 404
+
+
+def test_an_optional_value_in_a_header_installs_without_asking_and_is_left_out() -> None:
+    # Context7's own settings: the key only raises its limits, so it's optional.
+    server, why = installs.standard_server(
+        "context7",
+        {"type": "http", "url": URL, "headers": {"Authorization": "${CONTEXT7_API_KEY:-}"}},
+        secrets_allowed=False,
+    )
+    assert why is None and server is not None and server.needs == []
+    assert installs.connector_for(server, {}).headers == {}
+    assert installs.connector_for(server, {}).token is None
+    # Given, it's used.
+    assert installs.connector_for(server, {"CONTEXT7_API_KEY": "Bearer k1"}).token == "k1"
+
+
+def test_a_value_asked_for_inside_a_header_is_filled_in() -> None:
+    server, _ = installs.standard_server(
+        "w",
+        {"url": URL, "headers": {"Authorization": "Bearer ${API_KEY}", "X-Team": "${TEAM:-docs}"}},
+        secrets_allowed=False,
+    )
+    assert server is not None and server.needs == ["API_KEY"]
+    added = installs.connector_for(server, {"API_KEY": "k2"})
+    assert (added.token, added.headers) == ("k2", {"X-Team": "docs"})
