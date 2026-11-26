@@ -1986,6 +1986,9 @@ export type TokenLimit = number;
 export type ContextMode = ("trim" | "auto_compact") | null;
 export type KeepMessages = number | null;
 export type Session7 = string | null;
+export type MatchFrom = string;
+export type MatchSubject = string;
+export type MatchWords = string;
 export type Event1 = string;
 export type Label8 = string;
 export type Triggers = Trigger[];
@@ -1998,6 +2001,9 @@ export type Enabled3 = boolean;
 export type TokenLimit1 = number;
 export type ContextMode1 = ("trim" | "auto_compact") | null;
 export type KeepMessages1 = number | null;
+export type MatchFrom1 = string;
+export type MatchSubject1 = string;
+export type MatchWords1 = string;
 export type Id52 = string;
 export type Jobs = Job[];
 export type Upcoming = UpcomingRun[];
@@ -6147,6 +6153,9 @@ export interface Trigger {
   context_mode?: ContextMode;
   keep_messages?: KeepMessages;
   session?: Session7;
+  match_from?: MatchFrom;
+  match_subject?: MatchSubject;
+  match_words?: MatchWords;
   [k: string]: unknown;
 }
 /**
@@ -6187,6 +6196,9 @@ export interface SaveTrigger {
   token_limit?: TokenLimit1;
   context_mode?: ContextMode1;
   keep_messages?: KeepMessages1;
+  match_from?: MatchFrom1;
+  match_subject?: MatchSubject1;
+  match_words?: MatchWords1;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema

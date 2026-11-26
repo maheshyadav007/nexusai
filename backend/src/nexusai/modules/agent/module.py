@@ -295,6 +295,7 @@ agent_module = Module(
         scheduler.TIMES_MIGRATION,
         scheduler.CONTEXT_MIGRATION,
         triggers.MIGRATION,
+        triggers.MATCH_MIGRATION,
         scheduler.BUILT_IN_MIGRATION,
         feedback.MIGRATION,
         feedback.BRIEF_MIGRATION,

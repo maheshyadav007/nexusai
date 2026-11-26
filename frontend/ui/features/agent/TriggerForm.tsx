@@ -23,6 +23,10 @@ export const triggerSaved = (trigger: Trigger, enabled = trigger.enabled ?? true
   token_limit: trigger.token_limit ?? 0,
   context_mode: trigger.context_mode ?? null,
   keep_messages: trigger.keep_messages ?? null,
+  // Which mail it's for goes back with every save, so switching it off and on keeps it.
+  match_from: trigger.match_from ?? "",
+  match_subject: trigger.match_subject ?? "",
+  match_words: trigger.match_words ?? "",
 });
 
 /** What starts an agent when something happens, as a schedule does when a time comes. */
@@ -36,6 +40,9 @@ export function TriggerForm({ initial, onSaved }: { initial?: Trigger; onSaved: 
   const [event, setEvent] = useState<string>(initial?.event ?? events[0]?.event ?? "mail.urgent");
   const [prompt, setPrompt] = useState(initial?.prompt ?? "");
   const [options, setOptions] = useState(runOptions(initial));
+  const [from, setFrom] = useState(initial?.match_from ?? "");
+  const [subject, setSubject] = useState(initial?.match_subject ?? "");
+  const [words, setWords] = useState(initial?.match_words ?? "");
   return (
     <form
       className="flex flex-col gap-4"
@@ -47,6 +54,7 @@ export function TriggerForm({ initial, onSaved }: { initial?: Trigger; onSaved: 
             title: title.trim(),
             ...(builtIn ? {} : { event: event as Event }),
             prompt,
+            ...(builtIn ? {} : { match_from: from.trim(), match_subject: subject.trim(), match_words: words.trim() }),
             ...savedRunOptions(options),
           },
           { onSuccess: onSaved },
@@ -58,6 +66,12 @@ export function TriggerForm({ initial, onSaved }: { initial?: Trigger; onSaved: 
         <>
           <Field label={t("triggers.name")}>{({ invalid, ...control }) => <Input invalid={invalid} value={title} onChange={(change) => setTitle(change.target.value)} {...control} />}</Field>
           <Field label={t("triggers.event")}>{({ invalid, id }) => <Select id={id} invalid={invalid} value={event} options={events.map((row) => ({ value: row.event, label: row.label }))} onChange={setEvent} />}</Field>
+          <fieldset className="flex flex-col gap-3">
+            <legend className="mb-2 text-sm font-medium text-ink-muted">{t("triggers.match.title")}</legend>
+            <Field label={t("triggers.match.from")} hint={t("triggers.match.from.hint")}>{({ invalid, ...control }) => <Input invalid={invalid} value={from} onChange={(change) => setFrom(change.target.value)} {...control} />}</Field>
+            <Field label={t("triggers.match.subject")} hint={t("triggers.match.subject.hint")}>{({ invalid, ...control }) => <Input invalid={invalid} value={subject} onChange={(change) => setSubject(change.target.value)} {...control} />}</Field>
+            <Field label={t("triggers.match.words")} hint={t("triggers.match.words.hint")}>{({ invalid, ...control }) => <Input invalid={invalid} value={words} onChange={(change) => setWords(change.target.value)} {...control} />}</Field>
+          </fieldset>
           <Field label={t("triggers.prompt")} hint={t("triggers.prompt.hint")}>{({ invalid, ...control }) => <Textarea invalid={invalid} rows={3} value={prompt} onChange={(change) => setPrompt(change.target.value)} {...control} />}</Field>
         </>
       )}

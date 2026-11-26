@@ -44,6 +44,15 @@ INSERT INTO agent_triggers (id, title, kind, agent, event, enabled) VALUES
 DELETE FROM agent_defaults WHERE key = 'live_mail_enabled';
 """,
 )
+MATCH_MIGRATION = Migration(
+    "agent_triggers_match_001",
+    # A routine on mail can say which mail: from whom, a subject, words in it.
+    """
+ALTER TABLE agent_triggers ADD COLUMN match_from TEXT NOT NULL DEFAULT '';
+ALTER TABLE agent_triggers ADD COLUMN match_subject TEXT NOT NULL DEFAULT '';
+ALTER TABLE agent_triggers ADD COLUMN match_words TEXT NOT NULL DEFAULT '';
+""",
+)
 EVENT_CHOICES = {
     "mail.received": "Any new mail arrives",
     "mail.urgent": "Important mail arrives",
@@ -176,11 +185,17 @@ class Triggers:
         self.wake.set()
 
     def on_event(self, event: AppEvent) -> None:
-        """Whichever triggers people have set up for this event. Each event counts once."""
-        rows = self.ctx.bus.db.fetch_all(
-            "SELECT id FROM agent_triggers WHERE kind = ? AND enabled = 1 AND event = ?",
-            (CUSTOM, event.type),
-        )
+        """Whichever triggers people have set up for this event. Each event counts once, and one
+        that names which mail starts only for mail that matches."""
+        rows = [
+            row
+            for row in self.ctx.bus.db.fetch_all(
+                "SELECT id, match_from, match_subject, match_words FROM agent_triggers"
+                " WHERE kind = ? AND enabled = 1 AND event = ?",
+                (CUSTOM, event.type),
+            )
+            if mail_matches(self.ctx.bus.db, row, event.payload)
+        ]
         if not rows:
             return
         with self.ctx.bus.db.transaction() as tx:
@@ -1082,6 +1097,46 @@ class Triggers:
         self.wake.set()
 
 
+def _words(text: str) -> list[str]:
+    return [word for word in text.casefold().replace(",", " ").split() if word]
+
+
+def mail_matches(db: Any, trigger: Any, payload: dict[str, Any]) -> bool:
+    """Whether the email that set the event off is what the trigger asks for: that message when
+    the event names it, else its thread's newest. No model: the words are looked for as given. A
+    trigger that names nothing matches everything, as before."""
+    wanted = {
+        key: str(trigger[key] or "").strip()
+        for key in ("match_from", "match_subject", "match_words")
+    }
+    if not any(wanted.values()):
+        return True
+    message, thread = payload.get("message_id"), payload.get("thread_id")
+    columns = "SELECT from_addr, from_name, subject, clean_text FROM messages"
+    if isinstance(message, int):
+        rows = db.fetch_all(f"{columns} WHERE id = ?", (message,))  # noqa: S608
+    elif isinstance(thread, int):
+        rows = db.fetch_all(
+            f"{columns} WHERE thread_id = ? ORDER BY date DESC, id DESC LIMIT 1",  # noqa: S608
+            (thread,),
+        )
+    else:
+        return False
+    if not rows:
+        return False
+    mail = rows[0]
+    sender = f"{mail['from_addr']} {mail['from_name']}".casefold()
+    subject = str(mail["subject"]).casefold()
+    body = f"{subject} {mail['clean_text']}".casefold()
+    if wanted["match_from"] and not any(word in sender for word in _words(wanted["match_from"])):
+        return False
+    if wanted["match_subject"] and not all(
+        word in subject for word in _words(wanted["match_subject"])
+    ):
+        return False
+    return not wanted["match_words"] or any(word in body for word in _words(wanted["match_words"]))
+
+
 def _row_to_trigger(row: Any) -> Trigger:
     return Trigger(
         id=row["id"],
@@ -1094,6 +1149,9 @@ def _row_to_trigger(row: Any) -> Trigger:
         context_mode=row["context_mode"],
         keep_messages=row["keep_messages"],
         session=mail_agent.SESSION_ID if row["kind"] == "mail" else row["session"],
+        match_from=row["match_from"],
+        match_subject=row["match_subject"],
+        match_words=row["match_words"],
     )
 
 
@@ -1107,6 +1165,11 @@ def list_triggers(ctx: Context) -> TriggerList:
 
 def save_trigger(ctx: Context, command: SaveTrigger) -> TriggerList:
     values = (command.enabled, command.token_limit, command.context_mode, command.keep_messages)
+    matching = (
+        command.match_from.strip(),
+        command.match_subject.strip(),
+        command.match_words.strip(),
+    )
     with ctx.bus.unit_of_work() as work:
         if command.id == mail_agent.MAIL_TRIGGER:
             # What sets it off and what it's told are built in. How it runs is the person's.
@@ -1116,14 +1179,22 @@ def save_trigger(ctx: Context, command: SaveTrigger) -> TriggerList:
             )
         elif command.id:
             work.tx.execute(
-                "UPDATE agent_triggers SET title = ?, event = ?, prompt = ?, enabled = ?, token_limit = ?, context_mode = ?, keep_messages = ?"
-                " WHERE id = ? AND kind = ?",
-                (command.title, command.event, command.prompt, *values, command.id, CUSTOM),
+                "UPDATE agent_triggers SET title = ?, event = ?, prompt = ?, enabled = ?, token_limit = ?, context_mode = ?, keep_messages = ?,"
+                " match_from = ?, match_subject = ?, match_words = ? WHERE id = ? AND kind = ?",
+                (
+                    command.title,
+                    command.event,
+                    command.prompt,
+                    *values,
+                    *matching,
+                    command.id,
+                    CUSTOM,
+                ),
             )
         else:
             work.tx.execute(
-                "INSERT INTO agent_triggers (id, title, kind, agent, event, prompt, enabled, token_limit, context_mode, keep_messages, created)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO agent_triggers (id, title, kind, agent, event, prompt, enabled, token_limit, context_mode, keep_messages, created,"
+                " match_from, match_subject, match_words) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     f"{CUSTOM}-{uuid.uuid4().hex[:12]}",
                     command.title,
@@ -1133,6 +1204,7 @@ def save_trigger(ctx: Context, command: SaveTrigger) -> TriggerList:
                     command.prompt,
                     *values,
                     mail_agent._now(),
+                    *matching,
                 ),
             )
         work.emit("triggers.changed", {}, source="agent", trace_id=ctx.trace_id)

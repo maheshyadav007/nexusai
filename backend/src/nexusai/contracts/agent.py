@@ -718,6 +718,11 @@ class Trigger(BaseModel):
     context_mode: ContextMode | None = None
     keep_messages: int | None = None
     session: str | None = None
+    # Only for mail like this, checked with no model: from an address or domain, words in the
+    # subject, words anywhere in it. Empty means any. A run starts only for mail that matches all.
+    match_from: str = Field(default="", max_length=200)
+    match_subject: str = Field(default="", max_length=200)
+    match_words: str = Field(default="", max_length=500)
 
 
 class TriggerChoice(BaseModel):
@@ -746,6 +751,11 @@ class SaveTrigger(BaseModel):
     token_limit: int = Field(default=0, ge=0)
     context_mode: ContextMode | None = None
     keep_messages: int | None = Field(default=None, ge=0, le=1000)
+    # Only for mail like this, checked with no model: from an address or domain, words in the
+    # subject, words anywhere in it. Empty means any. A run starts only for mail that matches all.
+    match_from: str = Field(default="", max_length=200)
+    match_subject: str = Field(default="", max_length=200)
+    match_words: str = Field(default="", max_length=500)
 
 
 class RemoveTrigger(BaseModel):
