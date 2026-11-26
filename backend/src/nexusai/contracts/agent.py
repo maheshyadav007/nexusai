@@ -998,6 +998,34 @@ class CheckId(BaseModel):
     id: int
 
 
+class RoutineRun(BaseModel):
+    """One run of a routine: when, how it ended, and the chat it ran in."""
+
+    id: int
+    time: str
+    status: str
+    error: str | None = None
+    session: str | None = None
+    manual: bool = False
+
+
+class ListRoutineRuns(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schedule: int | None = None
+    trigger: str | None = Field(default=None, max_length=64)
+
+
+class RoutineRuns(BaseModel):
+    runs: list[RoutineRun]
+
+
+class RunAgain(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run: int
+
+
 class BuiltInRoutine(BaseModel):
     """A routine that comes with the app: its plugin's routine file, and the row that runs it."""
 

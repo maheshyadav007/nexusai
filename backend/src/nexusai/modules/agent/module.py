@@ -94,6 +94,7 @@ from nexusai.contracts.agent import (
     ListMemory,
     ListPipelines,
     ListPrompts,
+    ListRoutineRuns,
     ListRuns,
     ListSchedules,
     ListSessions,
@@ -152,6 +153,9 @@ from nexusai.contracts.agent import (
     RestorePreference,
     RestorePrompt,
     RetryTeamTask,
+    RoutineRun,
+    RoutineRuns,
+    RunAgain,
     RunList,
     RunMailAgent,
     RunPipeline,
@@ -1330,6 +1334,66 @@ def remove_check(command: CheckId, ctx: Context) -> CheckList:
 def run_check(command: CheckId, ctx: Context) -> CheckList:
     checks.run(ctx, command.id)
     return checks.listing(ctx)
+
+
+RUNS_SHOWN = 10
+
+
+@agent_module.query("routines.runs")
+def routine_runs(query: ListRoutineRuns, ctx: Context) -> RoutineRuns:
+    """A routine's latest runs, newest first."""
+    if query.schedule is not None:
+        where, value = "schedule = ?", str(query.schedule)
+    elif query.trigger:
+        where, value = "trigger = ?", query.trigger
+    else:
+        return RoutineRuns(runs=[])
+    rows = ctx.bus.db.fetch_all(
+        f"SELECT id, time, status, error, session, manual FROM trigger_runs WHERE {where}"  # noqa: S608
+        " ORDER BY id DESC LIMIT ?",
+        (value, RUNS_SHOWN),
+    )
+    return RoutineRuns(
+        runs=[
+            RoutineRun(
+                id=row["id"],
+                time=row["time"],
+                status=row["status"],
+                error=row["error"],
+                session=row["session"],
+                manual=bool(row["manual"]),
+            )
+            for row in rows
+        ]
+    )
+
+
+@agent_module.command("routines.runAgain")
+def run_again(command: RunAgain, ctx: Context) -> AgentDone:
+    """A failed run, tried again: a schedule runs now; a trigger's run goes back in the queue with
+    the same email, so it's done once, as if it had worked the first time."""
+    rows = ctx.bus.db.fetch_all("SELECT * FROM trigger_runs WHERE id = ?", (command.run,))
+    if not rows:
+        raise CommandError("run.not_found", "That run is no longer kept.", 404)
+    row = rows[0]
+    if row["status"] != "failed":
+        raise CommandError("run.not_failed", "Only a run that failed can be tried again.", 409)
+    if row["schedule"] is not None:
+        run_schedule_now(RunSchedule(id=int(row["schedule"])), ctx)
+        return AgentDone()
+    if row["trigger"] == mail_agent.MAIL_TRIGGER:
+        raise CommandError(
+            "run.built_in", "New mail is read again from the Mail agent's settings.", 409
+        )
+    with ctx.bus.unit_of_work() as work:
+        work.tx.execute(
+            "UPDATE trigger_runs SET status = 'pending', error = NULL WHERE id = ? AND status = 'failed'",
+            (command.run,),
+        )
+        work.emit("triggers.changed", {}, source="agent", trace_id=ctx.trace_id)
+    if _triggers:
+        _triggers.wake.set()
+    return AgentDone()
 
 
 @agent_module.command("schedules.setBuiltIn")

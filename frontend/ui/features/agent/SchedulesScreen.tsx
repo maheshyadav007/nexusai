@@ -26,6 +26,7 @@ import { Switch } from "@/ui/primitives/Switch";
 import { MoreOptions, runOptions, savedRunOptions } from "./RunOptions";
 import { TriggerForm, triggerSaved } from "./TriggerForm";
 import { CheckForm, CheckItem } from "./CheckForm";
+import { RoutineRuns } from "./RoutineRuns";
 import { t, type StringKey } from "@/ui/strings";
 
 type Every = NonNullable<Schedule["every"]>;
@@ -183,6 +184,7 @@ function ScheduleDetails({ row, onDone }: { row: ScheduleRow; onDone: () => void
         </div>
         <SessionGeneration session={row.last_session} />
       </div>
+      {row.id != null ? <RoutineRuns schedule={row.id} /> : null}
       <ScheduleForm key={row.updated ?? row.id} initial={row} onSaved={onDone} />
     </div>
   );

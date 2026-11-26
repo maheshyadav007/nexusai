@@ -136,3 +136,39 @@ def test_a_check_tells_the_person_once_when_it_goes_down_and_once_when_it_is_bac
     assert bad.status_code == 422 and "web address" in bad.text
     client.post("/api/commands/checks.remove", json={"id": check})
     assert client.post("/api/queries/checks.list").json()["checks"] == []
+
+
+def test_a_routines_runs_are_listed_and_a_failed_one_can_be_tried_again(client: TestClient) -> None:
+    from nexusai.modules.agent import module as agent
+
+    saved = client.post(
+        "/api/commands/triggers.save",
+        json={"title": "Watch", "event": "mail.received", "prompt": "Note it."},
+    ).json()
+    trigger = next(t for t in saved["triggers"] if t["title"] == "Watch")["id"]
+    db = agent.current().db
+    with db.transaction() as tx:
+        tx.execute(
+            "INSERT INTO trigger_runs (trigger, event, time, status, error) VALUES (?, 'e1', ?, 'failed', 'The model was busy')",
+            (trigger, "2031-06-02T10:00:00+00:00"),
+        )
+        tx.execute(
+            "INSERT INTO trigger_runs (trigger, event, time, status) VALUES (?, 'e2', ?, 'done')",
+            (trigger, "2031-06-02T11:00:00+00:00"),
+        )
+    runs = client.post("/api/queries/routines.runs", json={"trigger": trigger}).json()["runs"]
+    assert [r["status"] for r in runs] == ["done", "failed"] and runs[1][
+        "error"
+    ] == "The model was busy"
+    done = client.post("/api/commands/routines.runAgain", json={"run": runs[0]["id"]})
+    assert done.status_code == 409
+    again = client.post("/api/commands/routines.runAgain", json={"run": runs[1]["id"]})
+    assert again.status_code == 200
+    status = db.fetch_all("SELECT status, error FROM trigger_runs WHERE id = ?", (runs[1]["id"],))[
+        0
+    ]
+    # Back in the queue with the same email, or already picked up again.
+    assert (
+        status["status"] in {"pending", "running", "done", "failed"}
+        and status["error"] != "The model was busy"
+    )

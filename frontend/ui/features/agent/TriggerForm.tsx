@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { RoutineRuns } from "./RoutineRuns";
 import type { SaveTrigger, Trigger } from "@/ui/client/contracts.generated";
 import { useRemoveTrigger, useSaveTrigger, useTriggers } from "@/ui/client/work";
 import { Button } from "@/ui/primitives/Button";
@@ -62,6 +63,7 @@ export function TriggerForm({ initial, onSaved }: { initial?: Trigger; onSaved: 
       }}
     >
       {initial?.session ? <div><SessionLink className="text-sm" session={initial.session}>{t("triggers.chat")}</SessionLink></div> : null}
+      {initial && !builtIn ? <RoutineRuns trigger={initial.id} /> : null}
       {builtIn ? null : (
         <>
           <Field label={t("triggers.name")}>{({ invalid, ...control }) => <Input invalid={invalid} value={title} onChange={(change) => setTitle(change.target.value)} {...control} />}</Field>

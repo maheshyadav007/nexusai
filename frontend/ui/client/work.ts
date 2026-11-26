@@ -1,6 +1,6 @@
 "use client";
 
-import type { ExpireLearnedNote, PreviewPreference, PromptHistory, QueueAction, RecordInteraction, RestorePreference, RestorePrompt, SaveCheck, SavePreference, SimulatePreference } from "./contracts.generated";
+import type { ExpireLearnedNote, ListRoutineRuns, PreviewPreference, PromptHistory, QueueAction, RecordInteraction, RestorePreference, RestorePrompt, SaveCheck, SavePreference, SimulatePreference } from "./contracts.generated";
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { command, query } from "./api";
@@ -92,6 +92,8 @@ export const useSchedules = () => useReady(["schedules"], () => query("schedules
 export const useSaveSchedule = () => useCommand(["schedules"], (input: Schedule) => command("schedules.save", input));
 export const useRemoveSchedule = () => useCommand(["schedules"], (id: number) => command("schedules.remove", { id }));
 export const useRunSchedule = () => useCommand(["schedules"], (id: number) => command("schedules.runNow", { id }));
+export const useRoutineRuns = (input: ListRoutineRuns) => useReady(["routine-runs", input], () => query("routines.runs", input));
+export const useRunAgain = () => useCommand(["routine-runs", "schedules", "triggers"], (run: number) => command("routines.runAgain", { run }));
 export const useChecks = () => useReady(["checks"], () => query("checks.list", {}));
 export const useSaveCheck = () => useCommand(["checks"], (input: SaveCheck) => command("checks.save", input));
 export const useRemoveCheck = () => useCommand(["checks"], (id: number) => command("checks.remove", { id }));
