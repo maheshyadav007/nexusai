@@ -263,10 +263,47 @@ def who_you_are(db: Database, agent: str, skills: list[str] | None = None) -> st
             f"You don't talk to the person directly unless they write to you. "
             f"{default_card.name} ({default_card.at}) tells them what matters."
         )
+    lines += _jobs_lines(cards, me)
     if skills:
         lines.append("Skills you can load with load_skill when one fits the work:")
         lines += [f"- {line}" for line in skills]
     return "\n".join(lines)
+
+
+def _jobs_lines(cards: dict[str, Card], me: Card) -> list[str]:
+    """Which jobs are this agent's alone, and whose the others are, from jobs.py."""
+    from nexusai.modules.agent import jobs
+
+    engine = me.engine or me.id
+    lines = []
+    mine = [job.label for job in jobs.jobs_of(engine)]
+    if mine:
+        lines.append(f"Yours alone: {'; '.join(mine)}.")
+    theirs = [
+        f"{job.label} is {cards[job.owner].at}'s"
+        for job in jobs.OWNED
+        if job.owner != engine and job.handed_over and job.owner in cards
+    ]
+    if theirs and me.accepts:
+        lines.append(f"Not yours: {'; '.join(theirs)}.")
+    return lines
+
+
+def handovers(db: Database, agent: str) -> str:
+    """The lead's hand-over table, one row per agent it may give work to, from each agent's
+    description, so adding or changing an agent changes the table with it."""
+    cards = all_cards(db)
+    me = cards.get(agent)
+    if me is None:
+        return ""
+    rows = ["| Work | Who |", "|---|---|"]
+    for other in me.may_assign_to:
+        found = cards.get(other)
+        file = plugins.agent_files().get(found.engine or other) if found else None
+        if found is None or file is None:
+            continue
+        rows.append(f"| {' '.join(file.description.split())} | {found.at} |")
+    return "\n".join(rows) if len(rows) > 2 else ""
 
 
 def to_contract(found: Card, tools: list[str] | None = None) -> AgentCard:

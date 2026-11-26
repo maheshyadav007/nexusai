@@ -152,6 +152,11 @@ def agent_files() -> dict[str, AgentFile]:
     return found
 
 
+def plugin_of(name: str) -> str | None:
+    found = agent_files().get(name)
+    return found.plugin if found else None
+
+
 def agent_body(name: str) -> str | None:
     found = agent_files().get(name)
     return found.body if found else None

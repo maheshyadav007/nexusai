@@ -1094,3 +1094,30 @@ def test_a_task_shows_the_steps_of_the_agent_doing_it(
     steps = post(client, "team.task", {"id": 1})["steps"]
     assert [s["tool"] for s in steps] == ["team_inbox", "team_close"]
     assert steps[1]["input"]["action"] == "report"
+
+
+def test_a_report_from_a_run_that_changed_nothing_says_so(
+    client: TestClient, script: TeamScript
+) -> None:
+    """A weak model can report work it never did. The giver is told the run changed nothing, so
+    the claim isn't verified on its word."""
+    session = post(client, "session.create")["id"]
+    report = {"task": 1, "action": "report", "outcome": "Filed every PLM thread."}
+    script.say(
+        mail(),
+        [ToolCall("l", "list_categories", {})],
+        [ToolCall("r", "team_close", report)],
+        [TextChunk("Reported.")],
+    )
+    script.say(lead(), [ToolCall("a", "team_assign", ASSIGN)], [TextChunk("Given.")])
+    chat(client, session, "File last week's PLM mail")
+    woken = wait(
+        lambda: [t for t in script.told(lead()) if "reported task 1" in t] or None, "report", 20
+    )[0]
+    assert "Its run changed nothing" in woken
+    turns = agent.current().db.fetch_all(
+        "SELECT versions FROM agent_turns WHERE versions IS NOT NULL ORDER BY id"
+    )
+    plugins_used = {json.loads(t["versions"]).get("plugin") for t in turns}
+    # Each run records which plugin its agent came from.
+    assert {"nexusai", "mail"} <= plugins_used

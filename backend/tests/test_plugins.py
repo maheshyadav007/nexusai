@@ -65,6 +65,14 @@ LEAD_PROMPT_EDITS = (
         " {{agent.routines.handle}} |\n",
     ),
     (
+        # The hand-over table is generated from the agents' descriptions now (cards.handovers).
+        "| Work | Who |\n|---|---|\n| Filing or re-sorting many emails, or judging mail again |"
+        " {{agent.mail.handle}} |\n| Anything about the brief on Today | {{agent.daily-prep.handle}}"
+        ' |\n| Work that should run by itself, later or again: "every Friday, write my status" |'
+        " {{agent.routines.handle}} |\n",
+        "{{handovers}}\n",
+    ),
+    (
         "If what's needed is unclear, such as when a reminder should go off, ask the person first,"
         " then hand over.",
         "If what's needed is unclear, ask the person first, then hand over.",
@@ -273,3 +281,45 @@ def test_the_organizers_chats_tasks_and_messages_become_the_leads(client: TestCl
     assert {r["owner"] for r in db.fetch_all("SELECT owner FROM team_tasks")} == {"session"}
     row = db.fetch_all("SELECT sender, sender_agent FROM agent_channel")[0]
     assert (row["sender"], row["sender_agent"]) == ("session", "session")
+
+
+def test_the_leads_hand_overs_come_from_the_agents_descriptions(client: TestClient) -> None:
+    from nexusai.modules.agent import module as agent
+
+    db = agent.current().db
+    table = cards.handovers(db, "session")
+    lines = table.splitlines()
+    assert lines[:2] == ["| Work | Who |", "|---|---|"]
+    for other in ("mail", "daily-prep", "routines"):
+        found = cards.card(db, other)
+        assert found is not None
+        row = next(line for line in lines if line.endswith(f"| {found.at} |"))
+        assert " ".join(plugins.agent_files()[other].description.split()) in row
+    built = prompts_builder.build_layers(agent.current().ctx.config, "session", db=db)
+    prompt = next(layer.text for layer in built if layer.name == "Agent prompt")
+    assert "{{handovers}}" not in prompt and "{{agent." not in prompt
+    assert "re-sorting a folder or a month of mail" in prompt
+    # Renaming an agent renames it in the table.
+    client.post(
+        "/api/commands/agent.rename",
+        json={"id": "mail", "name": "Postmaster", "handle": "postmaster"},
+    )
+    assert "| @postmaster |" in cards.handovers(db, "session")
+
+
+def test_each_agent_is_told_which_jobs_are_its_alone_and_whose_the_rest_are(
+    client: TestClient,
+) -> None:
+    from nexusai.modules.agent import module as agent
+
+    db = agent.current().db
+    mail_block = cards.who_you_are(db, "mail")
+    assert "Yours alone: reading each email and recording what it holds;" in mail_block
+    assert (
+        "Not yours: the brief on Today is @brief's; setting up work that runs by itself is @routines's."
+        in mail_block
+    )
+    lead_block = cards.who_you_are(db, "session")
+    assert "Yours alone" not in lead_block and "reading each email" in lead_block
+    # Suggestions aren't handed over, so the lead isn't told to send them anywhere.
+    assert "suggesting tasks and reminders" not in lead_block

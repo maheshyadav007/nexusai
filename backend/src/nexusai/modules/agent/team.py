@@ -781,10 +781,36 @@ def report_text(db: Database, row: Any) -> str:
             f"Outcome: {row['outcome'] or 'none yet'}",
             f"Evidence: {', '.join(_as_markers(json.loads(row['evidence']))) or 'none'}",
             _done_before_stopping(db, row) if row["state"] in {"blocked", "failed"} else "",
+            _changed_nothing(db, row) if row["state"] == "reported" else "",
             _thread(db, row["id"]),
         ]
     ).strip()
     return head + "\n" + (untrusted(body) if row["untrusted"] else body)
+
+
+# Tools that talk or take notes. Calling them isn't doing the task.
+NOT_THE_WORK = frozenset({"remember", "team_message", "team_close", "team_assign", "ask_user"})
+
+
+def _changed_nothing(db: Database, row: Any) -> str:
+    """Said when the owner's run made no change at all, so a report that only claims work done
+    isn't verified on its word. A task that only asked to find or check something needs none."""
+    from nexusai.modules.agent import policy
+
+    if not row["owner_session"]:
+        return ""
+    calls = db.fetch_all(
+        "SELECT tool FROM tool_calls WHERE session = ? AND status = 'done' AND started >= ?",
+        (row["owner_session"], row["created"]),
+    )
+    for call in calls:
+        entry = policy.TOOLS_BY_NAME.get(call["tool"])
+        if call["tool"] not in NOT_THE_WORK and entry is not None and entry.action != "read":
+            return ""
+    return (
+        "Its run changed nothing. If the task asked for a change, it isn't done: reject it and say"
+        " what's missing. If it only asked to find or check something, check what it found."
+    )
 
 
 def _done_before_stopping(db: Database, row: Any) -> str:

@@ -43,6 +43,7 @@ from nexusai.modules.agent import (
     guard,
     knowledge,
     personalization,
+    plugins,
     policy,
     prompts_builder,
     providers,
@@ -811,6 +812,8 @@ class SessionRuntime:
         versions = {
             "agent": agent,
             "card": card.version if card else None,
+            # Which plugin the agent's file came from, so a run is traced to the exact text used.
+            "plugin": plugins.plugin_of(card.engine or agent) if card else None,
             "prompt": prompt,
             "model": model or "default",
             "harness": HARNESS_VERSION,

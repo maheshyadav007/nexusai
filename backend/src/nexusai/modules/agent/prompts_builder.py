@@ -114,6 +114,8 @@ def build_layers(
     for name, value in values.items():
         text = text.replace(f"{{{name}}}", value)
     if db is not None:
+        # The lead's hand-over table comes from the other agents' descriptions (cards.handovers).
+        text = text.replace("{{handovers}}", cards.handovers(db, agent))
         text = cards.fill(db, text, agent)
     text = for_tools(text, tools)
     system = for_tools(packaged("system.md"), tools)
