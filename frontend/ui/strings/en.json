@@ -2671,5 +2671,15 @@
   "addons.done.on": "On now: {names}.",
   "addons.done.waiting": "Waiting for your review: {names}.",
   "addons.done.needs": "Needs {names} before its servers can be added: ask {lead}, or paste the settings with them filled in.",
-  "addons.done.skipped": "Not used here: {names}."
+  "addons.done.skipped": "Not used here: {names}.",
+  "chat.install.label": "Installed",
+  "chat.install.removed": "Installed, then removed",
+  "chat.install.on": "On",
+  "chat.install.off": "Off",
+  "chat.install.check.one": "Waiting: 1 thing to check",
+  "chat.install.check.other": "Waiting: {count} things to check",
+  "chat.install.added": "Added",
+  "chat.install.needs": "Needs a value first",
+  "chat.install.notUsed": "Not used here",
+  "chat.install.open": "Open in Add-ons"
 }

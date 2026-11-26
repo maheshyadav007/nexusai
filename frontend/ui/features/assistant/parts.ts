@@ -14,6 +14,17 @@ export interface ToolPart {
 export const CARD_TOOLS = new Set(["ask_user", "send_mail", "record_triage", "create_reminders", "create_tasks", "create_categories", "create_schedule", "propose_task", "propose_reminder", "draft_reply", "save_draft", "team_assign"]);
 
 export const toolName = (part: ToolPart) => part.type.slice("tool-".length);
+
+// Tools that install a plugin get their own card once they say they did. Asking first, or failing,
+// stays in the trace and the approval card as before.
+const INSTALL_TOOLS = new Set(["propose_plugin", "create_plugin", "add_plugin_servers"]);
+const INSTALLED = /(?:^|\. )Installed plugin (.+?)\. /;
+/** The plugin a finished install tool says it installed, if it did. */
+export function installedName(part: ToolPart): string | null {
+  if (!INSTALL_TOOLS.has(toolName(part)) || part.state !== "output-available") return null;
+  const output = typeof part.output === "string" ? part.output : "";
+  return INSTALLED.exec(`${output} `)?.[1] ?? null;
+}
 export const isFinished = (part: ToolPart) => part.state === "output-available" || part.state === "output-denied" || part.state === "output-error";
 
 export type Block = { kind: "text"; text: string; key: string } | { kind: "trace"; steps: (ToolPart | { type: "reasoning"; text: string })[]; key: string } | { kind: "card"; part: ToolPart; key: string };
@@ -31,7 +42,7 @@ export function toBlocks(message: UIMessage, pending: ReadonlySet<string>): Bloc
     if (isTool) {
       const tool = raw as unknown as ToolPart;
       // A decision being waited on can't be folded away.
-      if (CARD_TOOLS.has(toolName(tool)) || pending.has(tool.toolCallId)) {
+      if (CARD_TOOLS.has(toolName(tool)) || pending.has(tool.toolCallId) || installedName(tool)) {
         blocks.push({ kind: "card", part: tool, key: tool.toolCallId });
         return;
       }
@@ -58,7 +69,7 @@ export function showsItsWork(message: UIMessage | undefined): boolean {
 
 export type Shown = Block | { kind: "results"; parts: ToolPart[]; key: string };
 
-const WITH_OWN_CARD = new Set(["ask_user", "send_mail", "record_triage", "team_assign"]);
+const WITH_OWN_CARD = new Set(["ask_user", "send_mail", "record_triage", "team_assign", "propose_plugin", "create_plugin", "add_plugin_servers"]);
 
 /** Side by side, results of the same kind become one card. What's still being decided stays out. */
 export function mergeResults(blocks: readonly Block[], pending: ReadonlyMap<string, unknown>): Shown[] {

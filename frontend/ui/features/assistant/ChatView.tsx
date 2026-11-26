@@ -27,13 +27,14 @@ import { useToast } from "@/ui/primitives/Toast";
 import { Tooltip } from "@/ui/primitives/Tooltip";
 import { t, type StringKey } from "@/ui/strings";
 import { AnsweredQuestion, ApprovalGroupCard, MailCard, QuestionCard, ResultCard, TriageCard } from "./Cards";
+import { InstallCard } from "./InstallCard";
 import { HandoffCard, TeamWorkingLine } from "./Handoff";
 import { AttachedChips, AttachMenu, ModelPicker, useAttachedReading, type Attached } from "./ChatControls";
 import { Composer } from "./Composer";
 import { Markdown } from "./Markdown";
 import { useAgentCards } from "@/ui/client/work";
 import { Mascot } from "@/ui/primitives/Mascot";
-import { factsOf, failureOf, followUpsOf, sourcesOf, isFinished, mergeResults, showsItsWork, splitQuote, textOf, timeOf, toBlocks, toolName, type ToolPart, type Versions } from "./parts";
+import { factsOf, failureOf, followUpsOf, sourcesOf, isFinished, mergeResults, showsItsWork, splitQuote, textOf, timeOf, toBlocks, toolName, type ToolPart, type Versions, installedName } from "./parts";
 import { ThinkingTrace } from "./ThinkingTrace";
 
 const COPIED_MS = 1500;
@@ -242,6 +243,7 @@ function AssistantMessage({ message, session, ownAgent, running, isLast, onFollo
         if (name === "send_mail") return <MailCard key={block.key} part={part} approval={pending.get(part.toolCallId)} />;
         if (name === "record_triage") return <TriageCard key={block.key} part={part} thread={thread} />;
         if (name === "team_assign") return <HandoffCard key={block.key} part={part} />;
+        if (installedName(part)) return <InstallCard key={block.key} part={part} />;
         // The first of a group speaks for the rest.
         const group = groups.find((items) => items.some((item) => item.tool_call_id === part.toolCallId));
         return group?.[0]?.tool_call_id === part.toolCallId ? <ApprovalGroupCard key={block.key} approvals={group} /> : null;
