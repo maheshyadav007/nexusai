@@ -280,11 +280,20 @@ def can_remember(tool: str, untrusted: bool) -> bool:
     return entry.action == "data" and entry.default is None
 
 
+# Decided 2026-11-26: tools from MCP servers the person added don't ask by default, even after a
+# chat read mail. Each can still be set to ask or off in Settings.
+CONNECTOR_DEFAULT: Literal["off", "ask", "allow"] = "allow"
+
+
+def connector_level(permissions: Permissions, tool: str) -> Literal["off", "ask", "allow"]:
+    return permissions.tools.get(tool) or CONNECTOR_DEFAULT
+
+
 def for_tool(permissions: Permissions, tool: str) -> Permissions:
     """The permissions a decision should see, with this tool's setting in place of its group's."""
     if tool.startswith(CONNECTOR_PREFIX):
-        # New tools from outside ask first, until the person says otherwise.
-        return permissions.model_copy(update={"data": permissions.tools.get(tool) or ASK})
+        # Tools from servers the person added run without asking, unless they set one to ask.
+        return permissions.model_copy(update={"data": connector_level(permissions, tool)})
     entry = TOOLS_BY_NAME.get(tool)
     if entry is None or entry.action == "send":
         return permissions

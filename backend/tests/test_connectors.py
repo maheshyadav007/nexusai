@@ -88,10 +88,11 @@ def approvals(client: TestClient) -> list[dict[str, Any]]:
     return client.post("/api/queries/approvals.list").json()["approvals"]
 
 
-def test_a_new_tool_asks_first_and_runs_on_a_yes(
+def test_a_tool_set_to_ask_asks_first_and_runs_on_a_yes(
     client: TestClient, script: Script, mcp: FakeMcp
 ) -> None:
     assert add(client).is_success
+    allow(client, level="ask")
     session = new_session(client)
     script.replies = [[ToolCall("c1", TOOL, {"ticket": "42"})], [TextChunk("Done.")]]
     import threading
@@ -107,6 +108,26 @@ def test_a_new_tool_asks_first_and_runs_on_a_yes(
     result = next(m.text for m in script.requests[-1].messages if m.role == "tool")
     # Whatever a server returns is data, even if it gives orders.
     assert result.startswith("<untrusted>") and "Ticket 42 is open" in result
+    view = client.post("/api/queries/session.get", json={"id": session}).json()
+    assert view["session"]["untrusted"]
+
+
+def test_outside_tools_run_without_asking_by_default_even_after_reading_outside_content(
+    client: TestClient, script: Script, mcp: FakeMcp
+) -> None:
+    """Decided 2026-11-26: the person's own servers' tools don't ask. A second call in a chat that
+    already read outside content doesn't ask either, while the app's own changes still do."""
+    assert add(client).is_success
+    session = new_session(client)
+    script.replies = [
+        [ToolCall("c1", TOOL, {"ticket": "42"})],
+        [ToolCall("c2", TOOL, {"ticket": "43"})],
+        [TextChunk("Done.")],
+    ]
+    chat(client, session, "Look both up")
+    wait(lambda: status(client, session) == "done", "the run")
+    assert mcp.calls == [{"ticket": "42"}, {"ticket": "43"}]
+    assert approvals(client) == []
     view = client.post("/api/queries/session.get", json={"id": session}).json()
     assert view["session"]["untrusted"]
 

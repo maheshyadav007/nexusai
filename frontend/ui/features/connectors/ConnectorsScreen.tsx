@@ -59,7 +59,8 @@ function ToolRow({ tool }: { tool: ConnectorTool }) {
     { value: "allow", label: t("permissions.allow") },
     { value: "off", label: t("permissions.off") },
   ];
-  const value = (permissions.data?.tools?.[tool.id] ?? "ask") as Level;
+  // A server's tools run without asking unless set otherwise (decided 2026-11-26).
+  const value = (permissions.data?.tools?.[tool.id] ?? "allow") as Level;
   return (
     <li data-testid="connector-tool" className="flex items-center justify-between gap-4 border-b border-line-subtle py-2 last:border-b-0">
       <span className="flex min-w-0 flex-col">

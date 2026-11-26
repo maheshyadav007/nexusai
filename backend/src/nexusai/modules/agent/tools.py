@@ -287,6 +287,12 @@ def _guarded(
         return f"Not allowed: {reason}"
     untrusted = _is_untrusted(ctx, session)
     granted = policy.allowed_for_session(db, session, kind)
+    if (
+        tool.startswith(policy.CONNECTOR_PREFIX)
+        and policy.connector_level(permissions, tool) == "allow"
+    ):
+        # The person's own servers' tools run without asking, as they chose (2026-11-26).
+        untrusted = False
     decision = policy.decide(
         action,
         path=path,
