@@ -312,6 +312,7 @@ agent_module = Module(
         scheduler.CONTEXT_MIGRATION,
         triggers.MIGRATION,
         triggers.MATCH_MIGRATION,
+        triggers.MATCH_ME_MIGRATION,
         checks.MIGRATION,
         installs.MIGRATION,
         scheduler.BUILT_IN_MIGRATION,

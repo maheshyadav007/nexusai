@@ -12,6 +12,7 @@ import structlog
 
 from nexusai.contracts.agent import SaveTrigger, Trigger, TriggerChoice, TriggerList
 from nexusai.contracts.events import AppEvent
+from nexusai.contracts.mail import MailMe
 from nexusai.kernel.database import Migration
 from nexusai.kernel.module import CommandError, Context
 from nexusai.modules.agent import (
@@ -29,7 +30,7 @@ from nexusai.modules.agent import (
 )
 from nexusai.modules.agent.context import TurnRequest
 from nexusai.modules.agent.prompt_data import untrusted
-from nexusai.modules.mail import accounts, sorting
+from nexusai.modules.mail import accounts, mentions, sorting
 
 log = structlog.get_logger()
 MIGRATION = Migration(
@@ -52,6 +53,11 @@ ALTER TABLE agent_triggers ADD COLUMN match_from TEXT NOT NULL DEFAULT '';
 ALTER TABLE agent_triggers ADD COLUMN match_subject TEXT NOT NULL DEFAULT '';
 ALTER TABLE agent_triggers ADD COLUMN match_words TEXT NOT NULL DEFAULT '';
 """,
+)
+MATCH_ME_MIGRATION = Migration(
+    "agent_triggers_match_me_001",
+    # "When an email mentions me": the person's own names, from who they said they are.
+    "ALTER TABLE agent_triggers ADD COLUMN match_me INTEGER NOT NULL DEFAULT 0;",
 )
 EVENT_CHOICES = {
     "mail.received": "Any new mail arrives",
@@ -190,11 +196,13 @@ class Triggers:
         rows = [
             row
             for row in self.ctx.bus.db.fetch_all(
-                "SELECT id, match_from, match_subject, match_words FROM agent_triggers"
+                "SELECT id, match_from, match_subject, match_words, match_me FROM agent_triggers"
                 " WHERE kind = ? AND enabled = 1 AND event = ?",
                 (CUSTOM, event.type),
             )
-            if mail_matches(self.ctx.bus.db, row, event.payload)
+            if mail_matches(
+                self.ctx.bus.db, row, event.payload, mentions.load(self.ctx.config.home)
+            )
         ]
         if not rows:
             return
@@ -1101,7 +1109,7 @@ def _words(text: str) -> list[str]:
     return [word for word in text.casefold().replace(",", " ").split() if word]
 
 
-def mail_matches(db: Any, trigger: Any, payload: dict[str, Any]) -> bool:
+def mail_matches(db: Any, trigger: Any, payload: dict[str, Any], me: MailMe | None = None) -> bool:
     """Whether the email that set the event off is what the trigger asks for: that message when
     the event names it, else its thread's newest. No model: the words are looked for as given. A
     trigger that names nothing matches everything, as before."""
@@ -1109,7 +1117,9 @@ def mail_matches(db: Any, trigger: Any, payload: dict[str, Any]) -> bool:
         key: str(trigger[key] or "").strip()
         for key in ("match_from", "match_subject", "match_words")
     }
-    if not any(wanted.values()):
+    keys = trigger.keys() if hasattr(trigger, "keys") else trigger
+    about_me = bool(trigger["match_me"]) if "match_me" in keys else False
+    if not any(wanted.values()) and not about_me:
         return True
     message, thread = payload.get("message_id"), payload.get("thread_id")
     columns = "SELECT from_addr, from_name, subject, clean_text FROM messages"
@@ -1134,7 +1144,17 @@ def mail_matches(db: Any, trigger: Any, payload: dict[str, Any]) -> bool:
         word in subject for word in _words(wanted["match_subject"])
     ):
         return False
-    return not wanted["match_words"] or any(word in body for word in _words(wanted["match_words"]))
+    if wanted["match_words"] and not any(word in body for word in _words(wanted["match_words"])):
+        return False
+    if about_me:
+        # Their own names in the email's own words (not quoted mail or a signature), or a tool
+        # saying someone mentioned them. With no names set, nothing is about them yet.
+        if me is None:
+            return False
+        if mentions.TOLD.search(str(mail["subject"])):
+            return True
+        return bool(mentions.named_in(str(mail["clean_text"]), str(mail["from_addr"]), me))
+    return True
 
 
 def _row_to_trigger(row: Any) -> Trigger:
@@ -1152,6 +1172,7 @@ def _row_to_trigger(row: Any) -> Trigger:
         match_from=row["match_from"],
         match_subject=row["match_subject"],
         match_words=row["match_words"],
+        match_me=bool(row["match_me"]),
     )
 
 
@@ -1169,6 +1190,7 @@ def save_trigger(ctx: Context, command: SaveTrigger) -> TriggerList:
         command.match_from.strip(),
         command.match_subject.strip(),
         command.match_words.strip(),
+        int(command.match_me),
     )
     with ctx.bus.unit_of_work() as work:
         if command.id == mail_agent.MAIL_TRIGGER:
@@ -1180,7 +1202,7 @@ def save_trigger(ctx: Context, command: SaveTrigger) -> TriggerList:
         elif command.id:
             work.tx.execute(
                 "UPDATE agent_triggers SET title = ?, event = ?, prompt = ?, enabled = ?, token_limit = ?, context_mode = ?, keep_messages = ?,"
-                " match_from = ?, match_subject = ?, match_words = ? WHERE id = ? AND kind = ?",
+                " match_from = ?, match_subject = ?, match_words = ?, match_me = ? WHERE id = ? AND kind = ?",
                 (
                     command.title,
                     command.event,
@@ -1194,7 +1216,7 @@ def save_trigger(ctx: Context, command: SaveTrigger) -> TriggerList:
         else:
             work.tx.execute(
                 "INSERT INTO agent_triggers (id, title, kind, agent, event, prompt, enabled, token_limit, context_mode, keep_messages, created,"
-                " match_from, match_subject, match_words) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " match_from, match_subject, match_words, match_me) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     f"{CUSTOM}-{uuid.uuid4().hex[:12]}",
                     command.title,

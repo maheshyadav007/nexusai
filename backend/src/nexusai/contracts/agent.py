@@ -723,6 +723,8 @@ class Trigger(BaseModel):
     match_from: str = Field(default="", max_length=200)
     match_subject: str = Field(default="", max_length=200)
     match_words: str = Field(default="", max_length=500)
+    # Only mail that names the person, by the names they set for who they are, with no model.
+    match_me: bool = False
 
 
 class TriggerChoice(BaseModel):
@@ -756,6 +758,8 @@ class SaveTrigger(BaseModel):
     match_from: str = Field(default="", max_length=200)
     match_subject: str = Field(default="", max_length=200)
     match_words: str = Field(default="", max_length=500)
+    # Only mail that names the person, by the names they set for who they are, with no model.
+    match_me: bool = False
 
 
 class RemoveTrigger(BaseModel):

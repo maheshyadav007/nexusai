@@ -1989,6 +1989,7 @@ export type Session7 = string | null;
 export type MatchFrom = string;
 export type MatchSubject = string;
 export type MatchWords = string;
+export type MatchMe = boolean;
 export type Event1 = string;
 export type Label8 = string;
 export type Triggers = Trigger[];
@@ -2004,6 +2005,7 @@ export type KeepMessages1 = number | null;
 export type MatchFrom1 = string;
 export type MatchSubject1 = string;
 export type MatchWords1 = string;
+export type MatchMe1 = boolean;
 export type Id52 = string;
 export type Jobs = Job[];
 export type Upcoming = UpcomingRun[];
@@ -6225,6 +6227,7 @@ export interface Trigger {
   match_from?: MatchFrom;
   match_subject?: MatchSubject;
   match_words?: MatchWords;
+  match_me?: MatchMe;
   [k: string]: unknown;
 }
 /**
@@ -6268,6 +6271,7 @@ export interface SaveTrigger {
   match_from?: MatchFrom1;
   match_subject?: MatchSubject1;
   match_words?: MatchWords1;
+  match_me?: MatchMe1;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
