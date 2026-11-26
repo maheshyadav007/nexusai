@@ -801,45 +801,26 @@ def test_a_task_lets_the_mail_agent_file_mail_through_approval() -> None:
     assert "send_mail" not in (tools.allowed_for("mail", "task", False) or set())
 
 
-def test_tasks_and_reminders_are_the_organizers_and_come_back_in_the_same_turn(
-    config: Config, script: TeamScript
+def test_tasks_and_reminders_are_the_leads_own_and_done_in_one_run(
+    client: TestClient, script: TeamScript
 ) -> None:
-    waiting = replace(config, team=replace(config.team, assign_wait_seconds=20))
-    with TestClient(create_app(waiting), base_url="http://127.0.0.1:4100") as client:
-        session = post(client, "session.create")["id"]
-        organizer = cards.name(agent.current().db, "organizer")
-        task = {"tasks": [{"title": "Send the budget ask", "due": "2030-01-03"}]}
-        script.say(
-            organizer,
-            [ToolCall("l", "list_tasks", {})],
-            [ToolCall("c", "create_tasks", task)],
-            [
-                ToolCall(
-                    "r", "team_close", {"task": 1, "action": "report", "outcome": "Added task 1."}
-                )
-            ],
-            [TextChunk("Reported.")],
-        )
-        script.say(
-            lead(),
-            [ToolCall("x", "create_tasks", task)],
-            [ToolCall("a", "team_assign", {"to": "@organizer", "objective": "Add a task"})],
-            [ToolCall("v", "team_close", {"task": 1, "action": "verify", "outcome": "Seen."})],
-            [TextChunk("Added it.")],
-        )
-        chat(client, session, "Add a task to send the budget ask by 3 January 2030")
-        told = script.told(lead())
-        # The lead can't make tasks itself, and is pointed at who can.
-        assert "is @organizer's work" in told[1]
-        # The report came back inside the lead's own turn, ready to check.
-        assert "reported task 1" in told[2] and "Added task 1." in told[2]
-        assert "verified" in told[3]
-        db = agent.current().db
-        assert [r["title"] for r in db.fetch_all("SELECT title FROM tasks")] == [
-            "Send the budget ask"
-        ]
-        offered = {t.name for t in script.requests[0][1].tools}
-        assert "create_tasks" not in offered and "team_assign" in offered
+    """The Organizer folded into the lead: a task is made in the lead's own run, no hand-over."""
+    session = post(client, "session.create")["id"]
+    task = {"tasks": [{"title": "Send the budget ask", "due": "2030-01-03"}]}
+    script.say(
+        lead(),
+        [ToolCall("l", "list_tasks", {})],
+        [ToolCall("c", "create_tasks", task)],
+        [TextChunk("Added it.")],
+    )
+    chat(client, session, "Add a task to send the budget ask by 3 January 2030")
+    db = agent.current().db
+    assert [r["title"] for r in db.fetch_all("SELECT title FROM tasks")] == ["Send the budget ask"]
+    assert not db.fetch_all("SELECT id FROM team_tasks")
+    offered = {t.name for t in script.requests[0][1].tools}
+    # Making tasks and reminders is shown up front; changing them is one find_tools away.
+    assert {"create_tasks", "create_reminders", "list_tasks", "team_assign"} <= offered
+    assert "organizer" not in {c.id for c in cards.all_cards(db).values()}
 
 
 def test_a_blocked_task_tells_the_giver_what_was_done_before_it_stopped(
@@ -862,7 +843,7 @@ def test_stop_ends_the_wait_for_a_hand_over_at_once() -> None:
     import time
     from types import SimpleNamespace
 
-    row = {"state": "working", "wake": None, "owner": "organizer"}
+    row = {"state": "working", "wake": None, "owner": "mail"}
 
     class Db:
         def fetch_all(self, sql: str, args: tuple[Any, ...] = ()) -> list[Any]:
@@ -872,7 +853,7 @@ def test_stop_ends_the_wait_for_a_hand_over_at_once() -> None:
     stopped = threading.Event()
     stopped.set()
     began = time.monotonic()
-    told = team.await_result(ctx, "Task 7 given to @organizer.", 60, stopped)  # type: ignore[arg-type]
+    told = team.await_result(ctx, "Task 7 given to @mail.", 60, stopped)  # type: ignore[arg-type]
     assert time.monotonic() - began < 1
     assert told.startswith("Task 7 is still being worked on")
 
@@ -1087,14 +1068,15 @@ def test_a_call_for_another_agents_tool_shows_why_it_didnt_run(
     client: TestClient, script: TeamScript
 ) -> None:
     session = post(client, "session.create")["id"]
-    remind = {"reminders": [{"title": "Call the vendor", "when": "2031-05-01T09:00"}]}
-    script.say(lead(), [ToolCall("r", "create_reminders", remind)], [TextChunk("Handing it on.")])
-    chat(client, session, "Remind me to call")
+    brief = {"sections": []}
+    script.say(lead(), [ToolCall("r", "update_brief", brief)], [TextChunk("Handing it on.")])
+    chat(client, session, "Put the budget first in my brief")
     shown = post(client, "session.get", {"id": session})["messages"][-1]["parts"]
-    call = next(p for p in shown if p["type"] == "tool-create_reminders")
+    call = next(p for p in shown if p["type"] == "tool-update_brief")
     # Turned away before it ran, it still says why, instead of looking like it's working.
     assert call["state"] == "output-available"
-    assert call["output"].startswith("Not run") and "organizer" in call["output"]
+    brief_at = cards.card(agent.current().db, "daily-prep").at  # type: ignore[union-attr]
+    assert call["output"].startswith("Not run") and brief_at in call["output"]
 
 
 def test_a_task_shows_the_steps_of_the_agent_doing_it(

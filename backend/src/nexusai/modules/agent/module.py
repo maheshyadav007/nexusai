@@ -257,7 +257,7 @@ PERSONAL_PROMPTS = (
     ("topics", "Instructions for specific topics"),
 )
 # Agents whose prompt the person can add to, titled by their cards.
-AGENT_PROMPTS = ("session", "mail", "organizer", "daily-prep")
+AGENT_PROMPTS = ("session", "mail", "daily-prep")
 
 agent_module = Module(
     name="agent",
@@ -336,6 +336,18 @@ agent_module = Module(
             "DELETE FROM mail_categories WHERE proposed=1;",
         ),
         scheduler.TASK_OVERDUE_MIGRATION,
+        Migration(
+            "agent_organizer_folded_001",
+            # The Organizer folded into the lead, which now keeps tasks and reminders itself. Its
+            # chats, team tasks and messages become the lead's, so nothing is left with no agent.
+            "UPDATE agent_sessions SET agent='session' WHERE agent='organizer';"
+            "UPDATE team_tasks SET owner='session' WHERE owner='organizer';"
+            "UPDATE team_tasks SET assigner='session' WHERE assigner='organizer';"
+            "UPDATE agent_channel SET sender_agent='session' WHERE sender_agent='organizer';"
+            "UPDATE agent_channel SET sender='session' WHERE sender='organizer';"
+            "UPDATE agent_channel SET recipient='session' WHERE recipient='organizer';"
+            "DELETE FROM agent_card_overrides WHERE id='organizer';",
+        ),
     ],
 )
 _runtime: runtime.SessionRuntime | None = None
