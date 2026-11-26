@@ -1,5 +1,7 @@
 # Schedules and monitors: plan
 
+> **Direction since 2026-11-25:** schedules, monitors and mail-started jobs become one feature, Routines (To do item 1), owned by a new Routines agent (To do item 10), with repeating reminders (To do item 13) staying a reminder job, done by Posty (the Organizer folds into Posty, `docs/AGENT_OWNERS_PLAN.md`). The checks, alert life cycle and "nothing leaves without a yes" rules below still apply. See `docs/TODO.md`, Order of work.
+
 Written 2026-11-18, revised the same day after a second round of research. Turns Schedules from "run a prompt on a clock" into watchers a team head can rely on: check something on a schedule or when something happens, decide by a clear rule, and tell the right people once.
 
 The revision changes three things. It **builds on the scheduler we have** instead of starting a second system. It adds a **proper alert life cycle**, so a monitor doesn't flap, spam or cry wolf when the laptop is asleep or offline. And it makes **testing before saving** part of the flow.

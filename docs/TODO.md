@@ -15,7 +15,7 @@ Items are grouped so each group is built once, as a general piece, and every lat
 
 House rules that apply to every item: show a mockup and get approval before any UI change; no real-model evals without asking first (they spend the ChatGPT allowance); test on the real Gmail account before calling a mail feature done; nothing hard-coded in the UI (theme files and the shared primitives in `ui/primitives`).
 
-Last reviewed 2026-11-25. Removed as done that day: the compact hand-over in the chat panel (built in `8904a74`) and "Posty sees what the app shows" (built 2026-11-24, see `docs/AGENT_SYNC_PLAN.md`; trying it on the real account is under "To try").
+Last reviewed 2026-11-25 (order of work rewritten after that day's fixes were merged). Removed as done that day: the compact hand-over in the chat panel (built in `8904a74`) and "Posty sees what the app shows" (built 2026-11-24, see `docs/AGENT_SYNC_PLAN.md`; trying it on the real account is under "To try").
 
 Added 2026-11-25 from a review list of nine points: reading in parts (already item 2), the Q&A card (already in 4d, widened), labels (8), the size bar beside folders (4d), the morning password (9, a bug: look at it first), the triage card (4d), the Routines number leaving out built-ins (1), Done and Dismiss on brief lines (4f) and which agent owns what, starting from reminders (10).
 
@@ -23,35 +23,36 @@ Added 2026-11-25 from a review list of nine points: reading in parts (already it
 
 Set 2026-11-25. Item numbers below stay as they are; this is the order to take them in. Mail is the product, and the agents must work on a weak model, so what breaks mail or wastes the model comes first.
 
-**Decided 2026-11-25:** small fixes and tasks first, then the three big pieces in this order: who does what (10), personalization (7), routines (1). Routines comes with a new Routines agent, and repeating reminders (13) are fixed in that same iteration. Plugins (11), tool-call optimization (2) and zip through matters (4d with 4f) follow.
+**Done 2026-11-25** (merged in `16ec004`): mail signs in again by itself after a refusal (9, still to confirm on the company machine for a week), Notifications "Clear all", no `.ics` invites in Documents, no size bar beside folders.
 
-**P0: broken today, fix first**
-1. **Mail stays connected overnight (9).** People on the company setup type their password every morning. First read the morning log on the company machine for the server's exact reply; the fix (retry a refused sign-in instead of stopping for good) is right either way. Backend only, small. Built on `mail-sign-in-retry`; confirm on the company machine.
-2. **Reading in parts (2).** The agent re-read the same first part nine times. One paging rule for every reading tool, plus the "same call, same answer" safety net. Backend only, small, and it saves tokens on every long read.
+**Small, still open:** nothing internal on screen (3): one naming helper for approval text and trace chips, plus a test that no raw key reaches the screen. Wording only.
 
-**P1: the agents' foundation, before more agent features**
+**The big items, in order** (agreed 2026-11-25):
 
-3. **Who does what (10), then Preferences (7).** Agree the owner table first. Then the preferences plan's first step (the person's instructions outrank defaults) and its one `save_preference` tool, whose `for` values come from the same table.
-4. **Nothing internal on screen (3).** One naming helper for approval text and trace chips, plus a test that no raw key reaches the screen.
+| # | Item | What it is |
+|---|---|---|
+| 1 | **Who does what (10)** | One owner per job. Posty does the small jobs directly (mail actions, tasks, reminders, folders, drafts; the Organizer folds into it); specialists keep jobs that need their own instructions (Mail agent, Brief writer, a new Routines agent, First meeting). `docs/AGENT_OWNERS_PLAN.md`. First, since 2 and 3 build on it |
+| 2 | **Personalization (7)** | One tool to save what the person wants; their instructions outrank defaults. `docs/PREFERENCES_PLAN.md` |
+| 3 | **Routines (1), with the Routines agent and repeating reminders (13)** | A routine is a condition and an action: on a time, on an email, on a check. The brief writer is the only default routine. Fixes the drink-water reminder and updates the prompts in the same iteration |
+| 4 | **Tool-call optimization (2)** | One paging rule for every reading tool, and the "same call, same answer" guard. Small and helps every agent, so it may move first |
+| 5 | **Zip through matters (4d) with brief Done and Dismiss (4f)** | List and matter scroll on their own, ↑↓ through matters, a pinned decision bar, one way to close a matter everywhere. Mockup first |
+| 6 | **Plugins (11)** | Headers on MCP servers first, then skills and their tools as one install. `docs/PLUGINS_PLAN.md` |
+| 7 | **Labels (8)** | The Mail agent tags mail by the person's rules, across folders |
+| 8 | **Form filling from mail** | `docs/FORM_FILLING_PLAN.md`; may become an action a routine runs |
 
-**P2: the screens, in two batches**
-- **Small, no new design:** size bar removed, Notifications "Clear all", no `.ics` invites in Documents: built 2026-11-25. The Routines number waits for Routines (1), as decided.
-- **One mockup round, then build:**
-  - Update progress in the status bar (4e), with time left. Raised again 2026-11-25, so first in this batch.
-  - Brief lines Done and Dismiss (4f) together with the Matters tab's decision bar (4d), since they share one way to close a matter.
-  - The triage card (4d) and the Q&A card (4d), since both are chat cards.
-  - Grouped by state (4b).
-  - The shared waiting state (4a).
+**Alongside, one mockup round for the screens:**
+- Update progress in the status bar (4e), with time left. Raised again 2026-11-25, so first.
+- The triage card (4d) and the Q&A card (4d), since both are chat cards.
+- Grouped by state (4b).
+- The shared waiting state (4a).
 
-**P3: larger pieces and research, once the above is steady**
-- Routines as one model (1): a condition and an action ("on an email like this, do this"; "monitor this endpoint, email these people when X"). The brief writer is the only default routine.
-- Labels (8): mail labelling, done by the Mail agent. Its own track; it doesn't wait on 7 or 10.
-- Double-tap to open Posty (4c): a native module, signing, and Mac permissions.
-- Vectorize only mail the AI reads (6): only checks left.
-- Learn from Littlebird (5): research.
-- Plugins (11): the agent harness, skills and the tools they need installed as one. Its own track.
-- Later: Meeting prep from mail (12), once Routines (1) is built.
-- Later, not yet an item: NexusAI as an MCP server for company coding assistants (needs a security review first). See `docs/reference/LANDSCAPE_2026-11-25.md`.
+**Later:**
+- Meeting prep from mail (12), once Routines (1) is built.
+- Reaching Posty outside the app: Telegram, WhatsApp, or Teams at work (`docs/AGENT_HARNESS_PLAN.md`).
+- NexusAI as an MCP server for company coding assistants, after a security review. See `docs/reference/LANDSCAPE_2026-11-25.md`.
+- Name and identity (`docs/IDENTITY_PLAN.md`).
+- Rollout on company machines (`docs/WINDOWS_RELEASE_PLAN.md`).
+- Double-tap to open Posty (4c), vectorize only mail the AI reads (6, checks left), learn from Littlebird (5, hands-on).
 - "To try" at the end: on the real account, when the model allowance allows.
 
 ---
@@ -316,6 +317,8 @@ Shared behaviour first, so every list gets it. Then the page-by-page fixes.
 
 ## 10. Who does what: one owner for each job
 
+**Plan:** `docs/AGENT_OWNERS_PLAN.md` (2026-11-25), written with personalization (7) in mind. **Reorganised the same day:** small jobs that need few instructions go to Posty directly; only jobs needing their own instructions, running without the person, or reading untrusted mail at scale get a specialist. The Organizer folds into Posty. The table and questions below are the first draft; the plan supersedes them.
+
 **What:** Write down which agent owns each kind of work (tasks and reminders, judging mail, drafts, the brief, matters, folders and rules, routines, preferences), and make the tools match: the owner makes and changes it, others read it, suggest it, or hand the work to the owner. Then every agent's prompt says the same split.
 
 **Why:** Noted 2026-11-25. Asked first as "reminders with Posty only?", then widened: setting and managing reminders is the Organizer's job today, and responsibilities need planning properly across agents, not reminder by reminder. Today the split has grown one tool at a time and has gaps and overlaps (below), so it's unclear who made something, a weak model can pick the wrong path, and two agents can make the same thing.
@@ -362,7 +365,7 @@ Gaps and overlaps found:
 - A test that walks the table: each job's tools are allowed for its owner, withheld from the rest, and named in the owner's prompt.
 
 **Open questions:**
-- **A separate Routines agent** (the person's proposal, 2026-11-25): one agent that sets up every kind of routine, so the difference is clear: "remind me" goes to the Organizer, "do this when…" or "every hour, check…" goes to the Routines agent. Its card, prompt and tools (`create_schedule` and the routine tools from item 1) are made in the same iteration as Routines.
+- **A separate Routines agent** (the person's proposal, 2026-11-25): one agent that sets up every kind of routine, so the difference is clear: "remind me" goes to Posty, "do this when…" or "every hour, check…" goes to the Routines agent. Its card, prompt and tools (`create_schedule` and the routine tools from item 1) are made in the same iteration as Routines.
 - Should reminders stay separate from tasks, or become a task with a "remind me" time, so the Organizer keeps one list?
 - Should the Mail agent still suggest tasks and reminders while judging mail, or only mark deadlines and leave making them to the Organizer?
 - Drafting: only the Mail agent, or Posty too when the person is talking to it?
@@ -422,7 +425,7 @@ Added 2026-11-25 from the landscape review (`docs/reference/LANDSCAPE_2026-11-25
 - So neither tool can say what was asked. The model tries one, gets refused, tries the other, and ends up with a schedule that wakes an agent every hour to "remind" (spending the model allowance) or with nothing.
 
 **Approach:**
-- **One rule:** a reminder only tells the person something at a time, with no model, and belongs to the Organizer. A routine (item 1) makes an agent do work, and belongs to the new Routines agent. "Remind me" is always a reminder. Written into the owner table (item 10), the tool descriptions and the prompts.
+- **One rule:** a reminder only tells the person something at a time, with no model, and is Posty's (the Organizer folds into Posty, `docs/AGENT_OWNERS_PLAN.md`). A routine (item 1) makes an agent do work, and belongs to the new Routines agent. "Remind me" is always a reminder. Written into the owner table (item 10), the tool descriptions and the prompts.
 - **Reminders repeat richly:** every N minutes or hours, on chosen weekdays, between a start and end time, with an optional end date. "Hourly, 10:00–20:00, Mon–Fri" is one reminder that fires 11 times a day. Daily, weekly, monthly and yearly stay as they are.
 - **Firing:** each time it goes off is a notification; one that wasn't seen isn't repeated, and the next time is worked out from the rule, as `next_due` does now.
 - **Guard:** a schedule whose prompt is only "remind me to …" is refused with a message pointing to the reminder tool, so a weak model can't take the wrong path.

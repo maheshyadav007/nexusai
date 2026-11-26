@@ -501,7 +501,7 @@ The main focus space on Today is a two-way channel between the agents and the us
 |---|---|---|
 | NTF-1 | Important-mail alert: browser notification on the web, small pop-up window in Electron (sender, summary, why urgent, Open / Draft / Snooze) | MVP |
 | NTF-2 | Quiet hours | MVP |
-| NTF-5 | Notification center: history of everything the app raised, unread count, filter by type, act from the list | MVP |
+| NTF-5 | Notification center: history of everything the app raised, unread count, filter by type, act from the list, Clear all with Undo | MVP |
 | NTF-6 | Focus mode and focus batches: holds non-urgent mail and delivers it at set times; urgent mail still gets through | Next |
 
 ## E3. Panels
@@ -538,7 +538,7 @@ A panel is a saved live view over any data in the app: emails from a person, a t
 
 | ID | Feature | Pri |
 |---|---|---|
-| DOC-1 | Documents library across uploads, email attachments and what agents made, filtered by where it came from, with a Home folder view: preview, full-page reader, search, open the source message; attachments hide signature images | MVP |
+| DOC-1 | Documents library across uploads, email attachments and what agents made, filtered by where it came from, with a Home folder view: preview, full-page reader, search, open the source message; attachments hide signature images and calendar invites (the agent can still read an invite) | MVP |
 | DOC-5 | Reads PDF, Office (including macro-enabled and old formats, best effort), HWP and HWPX, OpenDocument, RTF, Outlook and mail files, CSV and TSV, notebooks, and source code and text of any kind. Scans and pictures aren't read yet | MVP |
 | DOC-2 | Upload by drag and drop: copied to `documents/`, text extracted and indexed, usable by the agent | MVP |
 | DOC-4 | User folders and tags for documents, draggable like other folders | MVP |
