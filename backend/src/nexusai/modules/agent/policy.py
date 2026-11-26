@@ -230,6 +230,14 @@ TOOL_ENTRIES = (
     ),
     ToolEntry("list_plugins", AGENTS, "List plugins", "See the installed plugins.", "read"),
     ToolEntry(
+        "create_plugin",
+        AGENTS,
+        "Create plugins",
+        "Make your own plugin from what you describe, saved in your Home.",
+        "data",
+    ),
+    ToolEntry("export_plugin", AGENTS, "Export plugins", "Save your plugin as a zip.", "data"),
+    ToolEntry(
         "remove_plugin",
         AGENTS,
         "Remove plugins",

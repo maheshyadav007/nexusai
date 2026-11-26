@@ -747,6 +747,23 @@ class _ProposePlugin(BaseModel):
     tool_call_id: Annotated[str, InjectedToolCallId]
 
 
+class _NewSkill(BaseModel):
+    name: str = Field(description="Lowercase with hyphens, such as plm-triage.")
+    description: str = Field(description="One sentence: what it's for and when to load it.")
+    instructions: str = Field(description="The skill itself, as steps the agent follows.")
+
+
+class _CreatePlugin(BaseModel):
+    name: str = Field(description="What the person called it.")
+    description: str = Field(default="", description="One sentence on what it's for.")
+    skills: list[_NewSkill] = Field(default_factory=list, description="The skills it brings.")
+    mcp_settings: str | None = Field(
+        default=None,
+        description="Its MCP servers as JSON (an mcpServers block, servers by name, or one server).",
+    )
+    tool_call_id: Annotated[str, InjectedToolCallId]
+
+
 class _AddMcpServer(BaseModel):
     name: str | None = Field(default=None, description="A short name for it, such as Jira.")
     url: str | None = Field(
@@ -1963,13 +1980,16 @@ def build_tools(
             asked_by_person=asked,
         )
 
-    def _installed_in_one_step(found: Any) -> str:
-        """The person asked for it: skills with no warnings on, servers that need nothing added."""
+    def _installed_in_one_step(found: Any, values: dict[str, str] | None = None) -> str:
+        """The person asked for it: skills with no warnings on, servers that need nothing more
+        added (with the values given for them)."""
+        given = values or {}
         on, waiting = installs.switch_on(ctx, found.name)
         added: list[str] = []
-        if found.servers and not any(s.needs for s in found.servers):
+        missing = sorted({k for s in found.servers for k in s.needs if not given.get(k)})
+        if found.servers and not missing:
             try:
-                added = installs.add_servers(ctx, found.name, {}).connector_ids
+                added = installs.add_servers(ctx, found.name, given).connector_ids
             except CommandError as error:
                 added = []
                 waiting.append(f"its servers ({error.message})")
@@ -1978,10 +1998,9 @@ def build_tools(
             parts.append(f"On now: {', '.join(on)}.")
         if added:
             parts.append(f"Servers added: {', '.join(s.name for s in found.servers)}.")
-        if any(s.needs for s in found.servers):
-            needs = sorted({k for s in found.servers for k in s.needs})
+        if missing:
             parts.append(
-                f"Its servers need {', '.join(needs)}: ask the person, then add_plugin_servers."
+                f"Its servers need {', '.join(missing)}: ask the person, then add_plugin_servers."
             )
         if waiting:
             parts.append(
@@ -2096,6 +2115,63 @@ def build_tools(
             work,
             asked_by_person=asked,
         )
+
+    def create_plugin(
+        name: str,
+        tool_call_id: str,
+        description: str = "",
+        skills: list[_NewSkill] | None = None,
+        mcp_settings: str | None = None,
+    ) -> str:
+        new_skills = [skill.model_dump() for skill in skills or []]
+        try:
+            given = installs.servers_in(mcp_settings) if mcp_settings else {}
+            addresses = []
+            for server_name, raw in given.items():
+                server, _why = installs.standard_server(str(server_name), raw, secrets_allowed=True)
+                if server is not None:
+                    addresses.append(server.url)
+        except CommandError as error:
+            return f"Not created: {error.message}"
+        # Servers from somewhere other than the person's own message could send their data out.
+        asked = not addresses or person_asked_for(ctx, session, addresses)
+
+        def work() -> str:
+            try:
+                folder, values = installs.create(ctx, name, description, new_skills, mcp_settings)
+                found = installs.propose(ctx, str(folder), _speaker())
+            except CommandError as error:
+                return f"Not created: {error.message}"
+            return f"Created it in {folder}. " + _installed_in_one_step(found, values)
+
+        return _guarded(
+            ctx,
+            session,
+            tool_call_id,
+            "create_plugin",
+            "data",
+            None,
+            f"Create the plugin {name}",
+            "\n".join(
+                [f"Skill: {s['name']}: {s['description']}" for s in new_skills]
+                + [f"Server: {address}" for address in addresses]
+            ),
+            False,
+            work,
+            asked_by_person=asked,
+        )
+
+    def export_plugin(name: str, tool_call_id: str) -> str:
+        def work() -> str:
+            try:
+                return f"Saved as {installs.export(ctx, name)}. The person can share that file."
+            except CommandError as error:
+                return f"Not exported: {error.message}"
+
+        return _guarded(
+            ctx, session, tool_call_id, "export_plugin", "data", None,
+            f"Save the plugin {name} as a zip", "", False, work,
+        )  # fmt: skip
 
     def list_plugins(tool_call_id: str) -> str:
         found = installs.listing(ctx).plugins
@@ -2621,6 +2697,13 @@ def build_tools(
             _Nothing,
             "See the installed plugins: their skills, servers and connectors.",
         ),
+        (
+            create_plugin,
+            _CreatePlugin,
+            "Make a plugin from what the person described: its skills and MCP servers. It's saved"
+            " as a folder in their Home and installed at once.",
+        ),
+        (export_plugin, _PluginName, "Save one of the person's own plugins as a zip to share."),
         (remove_plugin, _PluginName, "Remove a plugin with its skills and connectors."),
         (
             propose_skill,

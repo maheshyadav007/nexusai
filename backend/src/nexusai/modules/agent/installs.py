@@ -476,3 +476,94 @@ def remove(ctx: Context, name: str) -> PluginList:
         work.tx.execute("DELETE FROM plugin_installs WHERE name = ?", (name,))
         work.emit("plugins.changed", {"name": name}, source="agent", trace_id=ctx.trace_id)
     return listing(ctx)
+
+
+# The person's own plugins, as folders in Home they can open, change and share.
+OWN_FOLDER = "plugins"
+
+
+def create(
+    ctx: Context,
+    name: str,
+    description: str,
+    new_skills: list[dict[str, str]],
+    settings: str | None,
+) -> tuple[Path, dict[str, str]]:
+    """Writes a plugin folder in the person's Home from what they described: its skills and its
+    MCP settings. A key given for a server is never written: its header becomes a placeholder and
+    the value comes back to be kept as a secret when the servers are added."""
+    slug = _slug(name)
+    if not NAME.match(slug):
+        raise CommandError("plugin.invalid", "Give the plugin a name.", 422)
+    folder = ctx.config.home / OWN_FOLDER / slug
+    if folder.exists():
+        raise CommandError(
+            "plugin.exists",
+            f"You already have a plugin folder called {slug}. Pick another name.",
+            409,
+        )
+    files: dict[str, str] = {
+        "plugin.json": json.dumps(
+            {
+                "name": slug,
+                "displayName": name.strip(),
+                "version": "1.0.0",
+                "description": description.strip(),
+            },
+            indent=2,
+        )
+        + "\n"
+    }
+    for skill in new_skills:
+        skill_name = _slug(skill.get("name", ""))
+        body = skill.get("instructions", "").strip()
+        about = " ".join(skill.get("description", "").split())
+        if not body or not about:
+            raise CommandError(
+                "plugin.skill", f"The skill {skill_name} needs a description and instructions.", 422
+            )
+        files[f"skills/{skill_name}/SKILL.md"] = (
+            f"---\nname: {skill_name}\ndescription: {json.dumps(about)}\n---\n{body}\n"
+        )
+    values: dict[str, str] = {}
+    if settings:
+        servers: dict[str, Any] = {}
+        for server_name, raw in servers_in(settings).items():
+            if not isinstance(raw, dict):
+                continue
+            clean = dict(raw)
+            found_headers = clean.get("headers")
+            given: dict[str, Any] = found_headers if isinstance(found_headers, dict) else {}
+            kept: dict[str, str] = {}
+            for header, value in given.items():
+                text = str(value).strip()
+                if SETTING.match(text):
+                    kept[header] = text
+                    continue
+                key = re.sub(r"[^A-Z0-9]+", "_", f"{server_name}_{header}".upper()).strip("_")
+                kept[header] = f"${{user_config.{key}}}"
+                values[key] = text
+            clean["headers"] = kept
+            servers[str(server_name)] = clean
+        files[".mcp.json"] = json.dumps({"mcpServers": servers}, indent=2) + "\n"
+    if len(files) == 1:
+        raise CommandError("plugin.empty", "A plugin needs at least one skill or one server.", 422)
+    for path, text in files.items():
+        target = folder / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, "utf-8")
+    return folder, values
+
+
+def export(ctx: Context, name: str) -> Path:
+    """The person's own plugin as a zip in Home's exports, to share."""
+    folder = ctx.config.home / OWN_FOLDER / _slug(name)
+    if not folder.is_dir():
+        raise CommandError("plugin.not_found", f"You have no plugin folder called {name}.", 404)
+    out = ctx.config.home / "exports" / f"{folder.name}.zip"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted(folder.rglob("*")):
+            if path.is_file():
+                archive.write(path, f"{folder.name}/{path.relative_to(folder).as_posix()}")
+    return out

@@ -45,7 +45,7 @@ DATA_TOOLS = {
     "save_personal_prompt", "delete_documents", "remove_panels", "remove_schedules", "run_schedule",
     "suggest", "tell", "notify_person", "use", "update_category", "save_rule", "move_sender",
     "update_documents", "save_panel", "create_schedule", "update_schedule", "apply_mail_learning_answers",
-    "propose_skill", "update_brief", "propose_plugin", "add_plugin_servers", "remove_plugin", "add_mcp_server",
+    "propose_skill", "update_brief", "propose_plugin", "add_plugin_servers", "remove_plugin", "add_mcp_server", "create_plugin", "export_plugin",
 }  # fmt: skip
 # Tools that only read never reach a person, unless their permission was set to ask.
 READ_TOOLS = {
