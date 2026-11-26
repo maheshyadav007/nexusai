@@ -61,6 +61,8 @@ Set 2026-11-25. Item numbers below stay as they are; this is the order to take t
 
 ## 1. Routines: one model for everything that runs by itself
 
+**Partly built 2026-11-26** on `plugins-loader`: the Routines agent (`@routines`) owns setting up routines and Posty hands that work over; the Schedules page is Routines, with the person's own first and the built-ins folded away; the sidebar number counts only routines that need a look; repeating reminders are their own thing (13). Not yet: starters on an email or a check, the run-history card with Resume and Run again, cost limits per routine, Save as routine, and the person's schedules running with Posty's prompt.
+
 **What:** Schedules, the morning brief, monitors and jobs started by an email become one feature, "routines". A routine is: *something starts it → it does some steps → it tells someone.* Build that once; every kind of automation after it is a new starter, step or channel, not a new system.
 
 **Why:** Noted 2026-11-17 as "monitoring schedules", widened 2026-11-25. Three asks turned out to be the same shape:
