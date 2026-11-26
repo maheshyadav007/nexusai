@@ -467,6 +467,10 @@ Added 2026-11-26. Plan: `docs/PLUGIN_FORMAT_PLAN.md`.
 
 **Steps:** see the plan's §13. Step 1, the loader with no change in behaviour, before item 10.
 
+## 16. Installing a plugin shouldn't ask to write a file
+
+Added 2026-11-26. **What:** asked to install a plugin or add an MCP server from instructions, Posty asked for permission to write a file every time. **Likely cause:** before `add_mcp_server` took pasted settings (built 2026-11-26), Posty's only way to add a server from instructions was to write them to a file with `write_file` (which always asks) and install that with `propose_plugin`. **Approach:** check on the real model that "add this MCP server" with an address or pasted settings goes straight to `add_mcp_server` (one approval, no file); if it still writes a file, steer it in the tool descriptions and Posty's prompt ("never write a file to install a plugin or add a server"), and add a test where the fake model is given settings and must not call `write_file`. **Done when:** adding a server or a plugin from an address, a folder or pasted settings asks once, for the connection, and never to write a file.
+
 ## To try
 
 - **Posty sees what the app shows** (built 2026-11-24, `docs/AGENT_SYNC_PLAN.md`): on the real account with the real model, ask "What needs me today?" and "what things have been completed". Check that answers cite matters and tasks as numbered chips with real titles, that nothing done shows as overdue (the RCA case), and that the Agents page shows no detour alert for a day question. Ask first, since it spends the ChatGPT allowance. Remember to restart the backend and rebuild the frontend first: a running backend doesn't pick up code changes (on 2026-11-24 an old backend made it look as if the change hadn't worked).
