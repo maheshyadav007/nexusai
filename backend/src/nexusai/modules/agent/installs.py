@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from nexusai.contracts.agent import InstalledPlugin, PluginList, PluginServer
+from nexusai.contracts.agent import InstalledPlugin, InstallResult, PluginList, PluginServer
 from nexusai.contracts.connectors import AddConnector, ConnectorAction, Connectors, GetConnectors
 from nexusai.kernel.database import Migration
 from nexusai.kernel.module import CommandError, Context
@@ -373,7 +373,11 @@ def listing(ctx: Context) -> PluginList:
 def propose(ctx: Context, source: str, by: str) -> InstalledPlugin:
     """Reads a plugin and proposes each of its skills for the person to review. Nothing is used
     until they approve each one; its servers wait until they're added."""
-    files = fetch(source)
+    return propose_files(ctx, fetch(source), source, by)
+
+
+def propose_files(ctx: Context, files: dict[str, str], source: str, by: str) -> InstalledPlugin:
+    """As propose, for files already fetched."""
     manifest, found_skills, servers, skipped = read(files, _name_of(source))
     name = str(manifest["name"])
     if ctx.bus.db.fetch_all("SELECT 1 FROM plugin_installs WHERE name = ?", (name,)):
@@ -567,3 +571,79 @@ def export(ctx: Context, name: str) -> Path:
             if path.is_file():
                 archive.write(path, f"{folder.name}/{path.relative_to(folder).as_posix()}")
     return out
+
+
+def one_step(
+    ctx: Context, found: InstalledPlugin, values: dict[str, str] | None = None
+) -> InstallResult:
+    """A plugin the person asked for themselves: skills with no warnings on, servers that need
+    nothing more added (with the values given for them)."""
+    given = values or {}
+    on, waiting = switch_on(ctx, found.name)
+    needs = sorted({k for s in found.servers for k in s.needs if not given.get(k)})
+    servers: list[str] = []
+    if found.servers and not needs:
+        try:
+            add_servers(ctx, found.name, given)
+            servers = [s.name for s in found.servers]
+        except CommandError as error:
+            waiting.append(f"its servers ({error.message})")
+    return InstallResult(
+        kind="plugin",
+        name=found.name,
+        on=on,
+        waiting=waiting,
+        servers=servers,
+        needs=needs,
+        skipped=found.skipped,
+    )
+
+
+def _servers_from_settings(ctx: Context, text: str) -> InstallResult:
+    found, skipped, added = [], [], []
+    for server_name, raw in servers_in(text).items():
+        server, why = standard_server(str(server_name), raw, secrets_allowed=True)
+        if server is not None:
+            found.append(server)
+        if why:
+            skipped.append(why)
+    needs = sorted({key for s in found for key in s.needs})
+    if needs:
+        return InstallResult(
+            kind="servers", name=", ".join(s.name for s in found), needs=needs, skipped=skipped
+        )
+    for server in found:
+        connectors.add_connector(connector_for(server, {}), ctx)
+        added.append(server.name)
+    if not found:
+        raise CommandError(
+            "mcp.settings", "There's no server in those settings that can be used here.", 422
+        )
+    return InstallResult(kind="servers", name=", ".join(added), servers=added, skipped=skipped)
+
+
+def _looks_like_one_skill(files: dict[str, str]) -> bool:
+    return (
+        skills.ENTRY in files
+        and not any(path in files for path in (*MANIFESTS, *MCP_FILES))
+        and not any(PurePosixPath(p).parts[:1] == ("skills",) for p in files)
+    )
+
+
+def install(ctx: Context, source: str, by: str) -> InstallResult:
+    """What the person gave, worked out and installed in one step: pasted MCP settings become
+    servers, a single skill becomes a skill, anything else is read as a plugin."""
+    text = source.strip()
+    if text.startswith("{"):
+        return _servers_from_settings(ctx, text)
+    if text.lower().endswith(skills.ENTRY.lower()) and "://" in text:
+        files = skills.fetch(text)
+    else:
+        files = fetch(text)
+    if _looks_like_one_skill(files):
+        proposal = skills.propose(ctx, files, text, by)
+        if proposal.flags:
+            return InstallResult(kind="skill", name=proposal.name, waiting=[proposal.name])
+        skills.decide(ctx, proposal.id, True)
+        return InstallResult(kind="skill", name=proposal.name, on=[proposal.name])
+    return one_step(ctx, propose_files(ctx, files, text, by))

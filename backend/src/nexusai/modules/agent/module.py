@@ -51,6 +51,7 @@ from nexusai.contracts.agent import (
     DraftThreadReply,
     DueItem,
     ExpireLearnedNote,
+    ExportedPlugin,
     GenerationState,
     GetAgentKnowledge,
     GetAgentMap,
@@ -81,6 +82,8 @@ from nexusai.contracts.agent import (
     GuardTestResult,
     HealthItem,
     InstalledPlugin,
+    InstallResult,
+    InstallSomething,
     Job,
     JobList,
     ListActivity,
@@ -1420,6 +1423,17 @@ def propose_plugin(command: ProposePlugin, ctx: Context) -> InstalledPlugin:
 @agent_module.command("plugins.addServers")
 def add_plugin_servers(command: AddPluginServers, ctx: Context) -> InstalledPlugin:
     return installs.add_servers(ctx, command.name, command.values)
+
+
+@agent_module.command("plugins.install")
+def install_something(command: InstallSomething, ctx: Context) -> InstallResult:
+    """The Add-ons page's one box. The person typed it, so it's installed in one step."""
+    return installs.install(ctx, command.source, "person")
+
+
+@agent_module.command("plugins.export")
+def export_plugin(command: PluginName, ctx: Context) -> ExportedPlugin:
+    return ExportedPlugin(path=str(installs.export(ctx, command.name)))
 
 
 @agent_module.command("plugins.remove")

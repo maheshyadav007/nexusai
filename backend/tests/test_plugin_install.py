@@ -493,3 +493,52 @@ def test_a_created_plugin_with_a_server_not_in_the_persons_message_asks_first(
     done = chat_in_background(client, new_session(client), "Make a plugin from that email")
     assert approve_one(client)["tool"] == "create_plugin"
     wait(lambda: done, "finish")
+
+
+def test_the_add_ons_box_works_out_what_it_was_given(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from nexusai.modules.agent import skills
+
+    state = FakeMcp()
+    server = running(state)
+    next(server)
+    try:
+        # Pasted MCP settings become servers.
+        settings = json.dumps({"mcpServers": {"tickets": {"type": "http", "url": URL}}})
+        done = post(client, "plugins.install", {"source": settings}).json()
+        assert (done["kind"], done["servers"]) == ("servers", ["tickets"])
+        # A folder with a plugin is a plugin, in one step.
+        folder = plugin(tmp_path / "p", {})
+        done = post(client, "plugins.install", {"source": str(folder)}).json()
+        assert (done["kind"], done["on"], done["skipped"]) == (
+            "plugin",
+            ["triage-tickets"],
+            ["Hooks"],
+        )
+        post(client, "plugins.remove", {"name": "tickets"})
+        # A lone SKILL.md is a skill.
+        monkeypatch.setattr(skills, "fetch", lambda url: {"SKILL.md": SKILL})
+        done = post(client, "plugins.install", {"source": "https://example.com/x/SKILL.md"}).json()
+        assert (done["kind"], done["on"]) == ("skill", ["triage-tickets"])
+        # Settings that ask for a value say so, and add nothing.
+        asks = json.dumps({"w": {"type": "http", "url": URL, "headers": {"X-Key": "${KEY}"}}})
+        done = post(client, "plugins.install", {"source": asks}).json()
+        assert done["needs"] == ["KEY"] and done["servers"] == []
+    finally:
+        next(server, None)
+
+
+def test_your_own_plugin_exports_as_a_zip(client: TestClient, app_config: Any) -> None:
+    own = app_config.home / "plugins" / "mine"
+    (own / "skills" / "a").mkdir(parents=True)
+    (own / "plugin.json").write_text(json.dumps({"name": "mine"}))
+    (own / "skills" / "a" / "SKILL.md").write_text(SKILL)
+    done = post(client, "plugins.export", {"name": "mine"}).json()
+    import zipfile
+
+    assert sorted(zipfile.ZipFile(done["path"]).namelist()) == [
+        "mine/plugin.json",
+        "mine/skills/a/SKILL.md",
+    ]
+    assert post(client, "plugins.export", {"name": "nope"}).status_code == 404

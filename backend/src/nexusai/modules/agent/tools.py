@@ -1981,33 +1981,25 @@ def build_tools(
         )
 
     def _installed_in_one_step(found: Any, values: dict[str, str] | None = None) -> str:
-        """The person asked for it: skills with no warnings on, servers that need nothing more
-        added (with the values given for them)."""
-        given = values or {}
-        on, waiting = installs.switch_on(ctx, found.name)
-        added: list[str] = []
-        missing = sorted({k for s in found.servers for k in s.needs if not given.get(k)})
-        if found.servers and not missing:
-            try:
-                added = installs.add_servers(ctx, found.name, given).connector_ids
-            except CommandError as error:
-                added = []
-                waiting.append(f"its servers ({error.message})")
-        parts = [f"Installed plugin {found.name}."]
-        if on:
-            parts.append(f"On now: {', '.join(on)}.")
-        if added:
-            parts.append(f"Servers added: {', '.join(s.name for s in found.servers)}.")
-        if missing:
+        """The person asked for it: the same one step the Add-ons page takes."""
+        return _said_installed(installs.one_step(ctx, found, values))
+
+    def _said_installed(done: Any) -> str:
+        parts = [f"Installed plugin {done.name}."]
+        if done.on:
+            parts.append(f"On now: {', '.join(done.on)}.")
+        if done.servers:
+            parts.append(f"Servers added: {', '.join(done.servers)}.")
+        if done.needs:
             parts.append(
-                f"Its servers need {', '.join(missing)}: ask the person, then add_plugin_servers."
+                f"Its servers need {', '.join(done.needs)}: ask the person, then add_plugin_servers."
             )
-        if waiting:
+        if done.waiting:
             parts.append(
-                f"Waiting for the person's review on the Skills page: {', '.join(waiting)}."
+                f"Waiting for the person's review on the Skills page: {', '.join(done.waiting)}."
             )
-        if found.skipped:
-            parts.append(f"Not used here: {', '.join(found.skipped)}.")
+        if done.skipped:
+            parts.append(f"Not used here: {', '.join(done.skipped)}.")
         return " ".join(parts) + " Tell the person in a sentence."
 
     def add_plugin_servers(
