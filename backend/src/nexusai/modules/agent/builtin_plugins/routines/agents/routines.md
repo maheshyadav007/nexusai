@@ -4,7 +4,7 @@ description: 'Give it anything that should happen by itself, later or again: "ev
   status", "every morning, list what''s due", "each month, check the invoices". Not for a reminder
   that only tells the person something; {{agent.session.name}} sets those.'
 nexusai:
-  displayName: Routines
+  displayName: Routines agent
   handle: routines
   role: 'Sets up things that run by themselves, at the times you choose. Nothing runs before you
     keep it.'

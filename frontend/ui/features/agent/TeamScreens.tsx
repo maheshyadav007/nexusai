@@ -3,8 +3,8 @@
 import NextLink from "next/link";
 import { useState } from "react";
 import type { AgentCard, TeamTask } from "@/ui/client/contracts.generated";
-import { useDateTime, useRelativeTime } from "@/ui/client/format";
-import { useAgentCards, useAgentName, useSchedules, useCancelTask, useNoteOnTask, useRenameAgent, useResetAgentName, useRetryTask, useSetMascot, useTeamTask, useTeamTasks } from "@/ui/client/work";
+import { useRelativeTime } from "@/ui/client/format";
+import { useAgentCards, useAgentName, useCancelTask, useNoteOnTask, useRenameAgent, useResetAgentName, useRetryTask, useSetMascot, useTeamTask, useTeamTasks } from "@/ui/client/work";
 import { useAssistant } from "@/ui/features/assistant/AssistantProvider";
 import { Badge } from "@/ui/primitives/Badge";
 import { Button } from "@/ui/primitives/Button";
@@ -138,6 +138,41 @@ function ProfileCard({ card, selected, onSelect }: { card: AgentCard; selected: 
   );
 }
 
+function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <>
+      <dt className="text-ink-muted sm:col-span-1">{label}</dt>
+      <dd className="mb-2 min-w-0 text-ink-primary sm:col-span-3 sm:mb-0">{children}</dd>
+    </>
+  );
+}
+
+const RECENT_SHOWN = 3;
+
+/** The last few things handed to this agent, newest first, with how each ended. */
+function RecentWork({ agent }: { agent: string }) {
+  const tasks = useTeamTasks(false);
+  const relative = useRelativeTime();
+  const mine = (tasks.data?.tasks ?? []).filter((task) => task.owner === agent).sort((a, b) => b.updated.localeCompare(a.updated)).slice(0, RECENT_SHOWN);
+  return (
+    <section className="flex flex-col gap-2">
+      <h4 className="text-sm font-medium text-ink-muted">{t("team.recent")}</h4>
+      {mine.length ? (
+        <ul className="flex flex-col">
+          {mine.map((task) => (
+            <li key={task.id} className="grid grid-cols-4 gap-3 border-t border-line-subtle py-2 text-md">
+              <span className="col-span-1 text-sm text-ink-muted">{relative(task.updated)}</span>
+              <span className="col-span-3 min-w-0 text-ink-secondary">{task.objective} · {t(`team.state.${task.state}` as StringKey)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-md text-ink-muted">{t("team.recent.none")}</p>
+      )}
+    </section>
+  );
+}
+
 /** Everything about the chosen agent, beside the cards, so the cards themselves stay calm. */
 function AgentDetail({ card }: { card: AgentCard }) {
   const name = useAgentName();
@@ -149,8 +184,9 @@ function AgentDetail({ card }: { card: AgentCard }) {
   const scheduled = card.may_assign_to.filter((id) => yours.has(id)).length;
   const gives = [...card.may_assign_to.filter((id) => !yours.has(id)).map((id) => name(id)).filter(Boolean), ...(scheduled ? [tn("team.schedules.count", scheduled)] : [])];
   const talkable = card.accepts.includes("person");
+  const lead = (useAgentCards().data?.cards ?? []).find((item) => item.default);
   return (
-    <aside aria-label={t("team.detail", { agent: card.name })} data-testid="agent-detail" className="flex flex-col gap-5 rounded-lg border border-line-subtle bg-surface-raised p-5">
+    <aside aria-label={t("team.detail", { agent: card.name })} data-testid="agent-detail" className="flex flex-col gap-6 rounded-lg border border-line-subtle bg-surface-raised p-6">
       <div className="flex items-center gap-4">
         <Mascot seed={card.mascot.seed} shape={card.mascot.style} name={card.name} size="lg" />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -165,64 +201,52 @@ function AgentDetail({ card }: { card: AgentCard }) {
         <RenameDialog card={card} />
         <Button variant="quiet" loading={mascot.isPending} onClick={() => mascot.mutate({ id: card.id, seed: freshSeed() })}>{t("team.newFace")}</Button>
       </div>
-      <dl className="grid grid-cols-3 gap-2">
-        {([
-          ["team.usage.today", usage.tokens_today],
-          ["team.usage.week", usage.tokens_week],
-          ["team.usage.messages", usage.messages_today],
-        ] as const).map(([label, value]) => (
-          <div key={label} className="flex flex-col gap-1 rounded-md bg-surface-sunken px-3 py-2">
-            <dt className="text-sm text-ink-muted">{t(label)}</dt>
-            <dd className="text-lg tabular-nums text-ink-primary">{compact.format(value)}</dd>
-          </div>
-        ))}
+      <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-md sm:grid-cols-4 sm:gap-y-3">
+        <DetailRow label={t("team.detail.job")}>{card.jobs?.length ? card.jobs.join(t("team.detail.joiner")) : card.can_do.join(t("team.detail.joiner"))}</DetailRow>
+        <DetailRow label={t("team.detail.starts")}>
+          <span className="flex flex-col gap-2">
+            {card.starts?.length ? (
+              <span className="flex flex-wrap gap-2">
+                {card.starts.map((start) => (
+                  <NextLink key={start.key} href="/agent/schedules" className="focus-ring rounded-full border border-line-subtle bg-surface-sunken px-2 py-1 text-sm text-ink-secondary transition-colors duration-fast hover:border-line-strong">
+                    {t(`team.start.${start.key}` as StringKey, { time: start.time ?? "" })}
+                  </NextLink>
+                ))}
+              </span>
+            ) : null}
+            <span className="text-ink-secondary">{card.default ? t("team.detail.talkedTo") : t("team.detail.handedWork", { lead: lead?.name ?? "" })}</span>
+          </span>
+        </DetailRow>
+        {card.reads_untrusted_mail ? <DetailRow label={t("team.detail.cannot")}>{t("team.detail.untrusted")}</DetailRow> : null}
+        <DetailRow label={t("team.detail.skills")}>
+          {card.skills?.length ? <span className="flex flex-wrap gap-2">{card.skills.map((skill) => <Badge key={skill}>{skill}</Badge>)}</span> : <span className="text-ink-muted">{t("team.detail.none")}</span>}
+        </DetailRow>
+        <DetailRow label={t("team.detail.from")}>{card.plugin ? t("team.detail.builtIn", { plugin: card.plugin }) : t("team.detail.yours")}</DetailRow>
       </dl>
-      {card.can_do.length ? (
+      <div className="grid gap-6 md:grid-cols-2">
         <section className="flex flex-col gap-2">
-          <h4 className="text-sm font-medium text-ink-muted">{t("team.whatItDoes")}</h4>
-          <ul aria-label={t("team.canDo", { agent: card.name })} className="flex list-disc flex-col gap-1 pl-5 text-md text-ink-secondary">
-            {card.can_do.map((line) => <li key={line}>{line}</li>)}
-          </ul>
+          <h4 className="text-sm font-medium text-ink-muted">{t("team.work")}</h4>
+          <p className="text-md text-ink-secondary">{t("team.usage.recordLine", { verified: usage.tasks_verified, rejected: usage.tasks_rejected, blocked: usage.tasks_blocked })}</p>
+          <p className="text-md text-ink-secondary">{gives.length ? t("team.givesTo", { agents: gives.join(", ") }) : t("team.givesNone")}</p>
+          {usage.tokens_usual_day ? <p className="text-sm text-ink-muted">{t("team.usage.usual", { count: usage.tokens_usual_day.toLocaleString() })}</p> : null}
         </section>
-      ) : null}
-      <section className="flex flex-col gap-2">
-        <h4 className="text-sm font-medium text-ink-muted">{t("team.work")}</h4>
-        <p className="text-md text-ink-secondary">{t("team.usage.recordLine", { verified: usage.tasks_verified, rejected: usage.tasks_rejected, blocked: usage.tasks_blocked })}</p>
-        <p className="text-md text-ink-secondary">{gives.length ? t("team.givesTo", { agents: gives.join(", ") }) : t("team.givesNone")}</p>
-        {usage.tokens_usual_day ? <p className="text-sm text-ink-muted">{t("team.usage.usual", { count: usage.tokens_usual_day.toLocaleString() })}</p> : null}
-      </section>
+        <section className="flex flex-col gap-2">
+          <h4 className="text-sm font-medium text-ink-muted">{t("team.detail.told")}</h4>
+          <p className="text-md text-ink-secondary">{t("team.detail.toldLine")}</p>
+          <TextLink href="/agent/memory">{t("team.detail.toldLink")}</TextLink>
+        </section>
+      </div>
+      <RecentWork agent={card.id} />
       <TextLink href="/agent/channel?tab=runs">{t("team.seeRuns")}</TextLink>
     </aside>
-  );
-}
-
-/** Every schedule the person made runs as an agent of its own. Here they're one card, so the
- * team stays the team however many there are. */
-function SchedulesCard({ count }: { count: number }) {
-  const schedules = useSchedules();
-  const format = useDateTime();
-  const next = (schedules.data?.schedules ?? []).flatMap((row) => (row.kind === "prompt" && row.enabled !== false && row.next_run ? [row.next_run] : [])).sort()[0];
-  return (
-    <li data-testid="schedules-card" className="flex flex-col overflow-hidden rounded-lg border border-line-subtle bg-surface-raised transition-colors duration-fast hover:border-line-strong">
-      <NextLink href="/agent/schedules" className="focus-ring flex flex-1 flex-col gap-3 rounded-lg p-4 text-left">
-        <span className="flex items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-surface-sunken text-ink-muted"><Icon name="schedules" className="h-5 w-5" /></span>
-          <span className="flex min-w-0 flex-1 flex-col gap-1">
-            <span className="truncate text-lg font-medium text-ink-primary">{t("team.schedules.title")}</span>
-            <span className="truncate text-sm tabular-nums text-ink-muted">{next ? tn("team.schedules.countNext", count, { when: format(next) }) : tn("team.schedules.count", count)}</span>
-          </span>
-        </span>
-        <span className="line-clamp-2 text-md text-ink-secondary">{t("team.schedules.role")}</span>
-      </NextLink>
-    </li>
   );
 }
 
 export function TeamCards() {
   const cards = useAgentCards();
   const all = cards.data?.cards ?? [];
+  // The person's schedules and triggers are routines, on the Routines page, not agents here.
   const rows = all.filter((card) => card.kind !== "yours");
-  const yours = all.length - rows.length;
   const [chosen, setChosen] = useState<string | null>(null);
   if (cards.isPending) return <Skeleton className="h-6 w-full" />;
   if (cards.isError) return <ErrorState title={t("team.error")} onRetry={() => void cards.refetch()} />;
@@ -237,7 +261,6 @@ export function TeamCards() {
       <div className="team-layout">
         <ul aria-label={t("team.title")} className="team-cards grid min-w-0 gap-3">
           {rows.map((card) => <ProfileCard key={card.id} card={card} selected={card.id === selected?.id} onSelect={() => setChosen(card.id)} />)}
-          {yours ? <SchedulesCard count={yours} /> : null}
         </ul>
         {selected ? <AgentDetail card={selected} /> : null}
       </div>

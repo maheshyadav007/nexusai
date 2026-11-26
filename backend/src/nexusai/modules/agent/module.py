@@ -1251,10 +1251,16 @@ def _schedule_list(ctx: Context) -> ScheduleList:
         f"SELECT * FROM schedules WHERE kind NOT IN ({','.join('?' * len(scheduler.BUILT_IN_KINDS))}) ORDER BY id",  # noqa: S608
         scheduler.BUILT_IN_KINDS,
     )
+    brief = ctx.bus.db.fetch_all(
+        "SELECT enabled, time, next_run FROM schedules WHERE kind = ?", (scheduler.BRIEF_KIND,)
+    )
     return ScheduleList(
         schedules=[scheduler.row_to_schedule(row) for row in rows],
         time_check_enabled=scheduler.time_check_enabled(ctx),
         live_mail_enabled=mail_agent.enabled(ctx),
+        morning_brief_enabled=bool(brief and brief[0]["enabled"]),
+        morning_brief_time=brief[0]["time"] if brief else None,
+        morning_brief_next=brief[0]["next_run"] if brief and brief[0]["enabled"] else None,
     )
 
 
@@ -1541,8 +1547,16 @@ def set_defaults(command: SetDefaults, ctx: Context) -> ScheduleList:
             )
         if _triggers:
             _triggers.wake.set()
+    if command.morning_brief_enabled is not None:
+        # The same switch as the Mail agent's settings: one place decides whether it runs.
+        scheduler.set_built_in(ctx, scheduler.BRIEF_KIND, command.morning_brief_enabled)
+        if _scheduler:
+            _scheduler.poke()
     with ctx.bus.unit_of_work() as work:
         work.emit("schedule.changed", {}, source="agent", trace_id=ctx.trace_id)
+        if command.morning_brief_enabled is not None:
+            # The Mail agent's settings show the same switch.
+            work.emit("mailAgent.changed", {}, source="agent", trace_id=ctx.trace_id)
     return _schedule_list(ctx)
 
 

@@ -2217,10 +2217,14 @@ export type Updated4 = string | null;
 export type Schedules = ScheduleRow[];
 export type TimeCheckEnabled = boolean;
 export type LiveMailEnabled = boolean;
+export type MorningBriefEnabled = boolean;
+export type MorningBriefTime = string | null;
+export type MorningBriefNext = string | null;
 export type Id56 = number;
 export type Id57 = number;
 export type TimeCheckEnabled1 = boolean | null;
 export type LiveMailEnabled1 = boolean | null;
+export type MorningBriefEnabled1 = boolean | null;
 export type Id58 = number;
 export type Subject13 = string;
 export type People1 = string[];
@@ -2278,6 +2282,8 @@ export type MessagesToday = number;
 export type TasksVerified = number;
 export type TasksRejected = number;
 export type TasksBlocked = number;
+export type Key8 = "on-new-mail" | "every-hour" | "every-morning";
+export type Time11 = string | null;
 export type Id60 = string;
 export type Name36 = string;
 export type Handle = string;
@@ -2291,6 +2297,11 @@ export type Version = string;
 export type Renamed = boolean;
 export type Kind14 = "built_in" | "yours";
 export type Tools2 = string[];
+export type Plugin = string | null;
+export type Jobs2 = string[];
+export type Skills = string[];
+export type Starts = AgentStart[];
+export type ReadsUntrustedMail = boolean;
 export type Cards = AgentCard[];
 export type Id61 = string;
 export type Name37 = string;
@@ -2327,7 +2338,7 @@ export type Kind15 = string;
 export type Sender18 = string;
 export type Recipient3 = string | null;
 export type Text10 = string;
-export type Time11 = string;
+export type Time12 = string;
 export type Untrusted3 = boolean;
 export type OpenOnly = boolean;
 export type Tasks = TeamTask[];
@@ -2447,7 +2458,7 @@ export type Evidence3 = string[];
 export type ExpiresAt2 = string | null;
 export type Preferences = Preference[];
 export type Id74 = number;
-export type Time12 = string;
+export type Time13 = string;
 export type Action2 = string;
 export type Artifact1 = string;
 export type ArtifactId = string;
@@ -2465,7 +2476,7 @@ export type Kind16 = "personal" | "agent";
 export type Name39 = string;
 export type Id77 = number;
 export type Content5 = string;
-export type Time13 = string;
+export type Time14 = string;
 export type Versions1 = PromptVersion[];
 export type Kind17 = "personal" | "agent";
 export type Name40 = string;
@@ -2491,7 +2502,7 @@ export type Explanation = string;
 export type Id79 = number;
 export type Title16 = string;
 export type Status17 = string;
-export type Time14 = string;
+export type Time15 = string;
 export type Error5 = string | null;
 export type Session10 = string | null;
 export type Pending = number;
@@ -2547,7 +2558,7 @@ export type Flags = string[];
 export type Status19 = "waiting" | "approved" | "rejected";
 export type ProposedBy = string;
 export type Created5 = string;
-export type Skills = Skill[];
+export type Skills1 = Skill[];
 export type Proposals1 = SkillProposal[];
 export type Url1 = string | null;
 export type Text17 = string | null;
@@ -2559,7 +2570,7 @@ export type Kind18 = string;
 export type Agent9 = string | null;
 export type TaskId3 = number | null;
 export type Detail5 = string;
-export type Time15 = string;
+export type Time16 = string;
 export type Seen = boolean;
 export type TaskId4 = number;
 export type Source9 = string;
@@ -2577,7 +2588,7 @@ export type Kind19 = "run" | "model" | "tool" | "skill" | "message";
 export type Id85 = string;
 export type Name44 = string;
 export type Agent10 = string | null;
-export type Time16 = string;
+export type Time17 = string;
 export type Status20 = string | null;
 export type Detail6 = string | null;
 export type Tokens1 = number;
@@ -2608,7 +2619,7 @@ export type Started1 = string | null;
 export type Id88 = number;
 export type Matter2 = number;
 export type Title19 = string;
-export type Time17 = string;
+export type Time18 = string;
 export type Kind21 =
   | "started"
   | "joined"
@@ -2641,7 +2652,7 @@ export type Waiting2 = MatterRow[];
 export type Fyi = MatterRow[];
 export type Suggested1 = MatterRow[];
 export type Next1 = MatterDue[];
-export type Time18 = string;
+export type Time19 = string;
 export type Kind23 = "in" | "sent" | "due" | "reminder" | "closed" | "reopened" | "step";
 export type Label10 = string;
 export type Marks = MatterMark[];
@@ -2839,7 +2850,7 @@ export type Id109 = string;
 export type Seq1 = number;
 export type Type2 = string;
 export type Version2 = number;
-export type Time19 = string;
+export type Time20 = string;
 export type Source12 = string;
 export type TraceId3 = string;
 export type CauseId = string | null;
@@ -2849,7 +2860,7 @@ export type Listener = string;
 export type EventSeq = number;
 export type EventType = string;
 export type Error8 = string;
-export type Time20 = string;
+export type Time21 = string;
 export type Failed2 = FailedEvent[];
 export type Since2 = number;
 export type Theme = string;
@@ -2922,7 +2933,7 @@ export type FreeBytes1 = number | null;
 export type IsExistingHome = boolean;
 export type Name49 = string;
 export type Reason8 = string;
-export type Time21 = string;
+export type Time22 = string;
 export type Size8 = number;
 export type Backups = BackupRow[];
 export type Pending1 = string | null;
@@ -2953,7 +2964,7 @@ export type Kind29 = string | null;
 export type Kind30 = string | null;
 export type Id111 = number | null;
 export type Id112 = number;
-export type Time22 = string;
+export type Time23 = string;
 export type Kind31 = string;
 export type Title29 = string;
 export type Detail8 = string;
@@ -3310,6 +3321,7 @@ export interface Contracts {
   AgentMascot?: AgentMascot;
   AgentNow?: AgentNow;
   AgentUsage?: AgentUsage;
+  AgentStart?: AgentStart;
   AgentCard?: AgentCard;
   ListCards?: ListCards;
   CardList?: CardList;
@@ -6426,6 +6438,9 @@ export interface ScheduleList {
   schedules: Schedules;
   time_check_enabled: TimeCheckEnabled;
   live_mail_enabled: LiveMailEnabled;
+  morning_brief_enabled?: MorningBriefEnabled;
+  morning_brief_time?: MorningBriefTime;
+  morning_brief_next?: MorningBriefNext;
   [k: string]: unknown;
 }
 /**
@@ -6449,6 +6464,7 @@ export interface RunSchedule {
 export interface SetDefaults {
   time_check_enabled?: TimeCheckEnabled1;
   live_mail_enabled?: LiveMailEnabled1;
+  morning_brief_enabled?: MorningBriefEnabled1;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -6596,6 +6612,17 @@ export interface AgentUsage {
   [k: string]: unknown;
 }
 /**
+ * Something that starts an agent by itself: a built-in routine, by key, and its time if any.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "AgentStart".
+ */
+export interface AgentStart {
+  key: Key8;
+  time?: Time11;
+  [k: string]: unknown;
+}
+/**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "AgentCard".
  */
@@ -6616,6 +6643,11 @@ export interface AgentCard {
   tools?: Tools2;
   now?: AgentNow;
   usage?: AgentUsage;
+  plugin?: Plugin;
+  jobs?: Jobs2;
+  skills?: Skills;
+  starts?: Starts;
+  reads_untrusted_mail?: ReadsUntrustedMail;
   [k: string]: unknown;
 }
 /**
@@ -6697,7 +6729,7 @@ export interface TeamMessage {
   sender: Sender18;
   recipient: Recipient3;
   text: Text10;
-  time: Time11;
+  time: Time12;
   untrusted: Untrusted3;
   [k: string]: unknown;
 }
@@ -7062,7 +7094,7 @@ export interface PreferenceHistory {
  * via the `definition` "PreferenceEvidence".
  */
 export interface PreferenceEvidence {
-  time: Time12;
+  time: Time13;
   action: Action2;
   artifact: Artifact1;
   artifact_id: ArtifactId;
@@ -7114,7 +7146,7 @@ export interface PromptHistory {
 export interface PromptVersion {
   id: Id77;
   content: Content5;
-  time: Time13;
+  time: Time14;
   [k: string]: unknown;
 }
 /**
@@ -7171,7 +7203,7 @@ export interface AgentQueueItem {
   id: Id79;
   title: Title16;
   status: Status17;
-  time: Time14;
+  time: Time15;
   error?: Error5;
   session?: Session10;
   [k: string]: unknown;
@@ -7307,7 +7339,7 @@ export interface ListSkills {
  * via the `definition` "SkillList".
  */
 export interface SkillList {
-  skills: Skills;
+  skills: Skills1;
   proposals: Proposals1;
   [k: string]: unknown;
 }
@@ -7346,7 +7378,7 @@ export interface MonitorAlert {
   agent?: Agent9;
   task_id?: TaskId3;
   detail: Detail5;
-  time: Time15;
+  time: Time16;
   seen?: Seen;
   [k: string]: unknown;
 }
@@ -7396,7 +7428,7 @@ export interface RunSpan {
   id: Id85;
   name: Name44;
   agent?: Agent10;
-  time: Time16;
+  time: Time17;
   status?: Status20;
   detail?: Detail6;
   tokens?: Tokens1;
@@ -7475,7 +7507,7 @@ export interface MatterChange {
   id: Id88;
   matter: Matter2;
   title: Title19;
-  time: Time17;
+  time: Time18;
   kind: Kind21;
   text: Text18;
   why?: Why5;
@@ -7513,7 +7545,7 @@ export interface MattersBrief {
  * via the `definition` "MatterMark".
  */
 export interface MatterMark {
-  time: Time18;
+  time: Time19;
   kind: Kind23;
   label: Label10;
   [k: string]: unknown;
@@ -8107,7 +8139,7 @@ export interface AppEvent {
   seq: Seq1;
   type: Type2;
   version: Version2;
-  time: Time19;
+  time: Time20;
   source: Source12;
   trace_id: TraceId3;
   cause_id?: CauseId;
@@ -8136,7 +8168,7 @@ export interface FailedEvent {
   event_seq: EventSeq;
   event_type: EventType;
   error: Error8;
-  time: Time20;
+  time: Time21;
   [k: string]: unknown;
 }
 /**
@@ -8421,7 +8453,7 @@ export interface BackupList {
 export interface BackupRow {
   name: Name49;
   reason: Reason8;
-  time: Time21;
+  time: Time22;
   size: Size8;
   [k: string]: unknown;
 }
@@ -8579,7 +8611,7 @@ export interface MarkNotificationsRead {
  */
 export interface Notification {
   id: Id112;
-  time: Time22;
+  time: Time23;
   kind: Kind31;
   title: Title29;
   detail: Detail8;

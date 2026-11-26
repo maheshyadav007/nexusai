@@ -951,6 +951,10 @@ class ScheduleList(BaseModel):
     schedules: list[ScheduleRow]
     time_check_enabled: bool
     live_mail_enabled: bool
+    # The built-in morning brief, shown with the other built-in routines.
+    morning_brief_enabled: bool = False
+    morning_brief_time: str | None = None
+    morning_brief_next: str | None = None
 
 
 class RemoveSchedule(BaseModel):
@@ -970,6 +974,7 @@ class SetDefaults(BaseModel):
 
     time_check_enabled: bool | None = None
     live_mail_enabled: bool | None = None
+    morning_brief_enabled: bool | None = None
 
 
 class TodayThread(BaseModel):
@@ -1094,6 +1099,13 @@ class AgentUsage(BaseModel):
     tasks_blocked: int = 0
 
 
+class AgentStart(BaseModel):
+    """Something that starts an agent by itself: a built-in routine, by key, and its time if any."""
+
+    key: Literal["on-new-mail", "every-hour", "every-morning"]
+    time: str | None = None
+
+
 class AgentCard(BaseModel):
     id: str
     name: str
@@ -1112,6 +1124,14 @@ class AgentCard(BaseModel):
     tools: list[str] = Field(default_factory=list)
     now: AgentNow = Field(default_factory=lambda: AgentNow(state="idle"))
     usage: AgentUsage = Field(default_factory=AgentUsage)
+    # The plugin its file came from, by its display name. None for the person's own.
+    plugin: str | None = None
+    # The jobs that are this agent's alone (jobs.py), in a few words each.
+    jobs: list[str] = Field(default_factory=list)
+    skills: list[str] = Field(default_factory=list)
+    starts: list[AgentStart] = Field(default_factory=list)
+    # It reads mail from anyone, so it never gets tools that send, delete or change settings.
+    reads_untrusted_mail: bool = False
 
 
 class ListCards(BaseModel):

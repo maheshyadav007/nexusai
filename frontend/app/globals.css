@@ -342,12 +342,12 @@ body[data-scroll-locked] .assistant-pill {
 /* The team: cards and the chosen agent's details, by the room left beside the chat. */
 .team-container { container: team / inline-size; }
 .team-layout { display: grid; gap: theme(spacing.4); align-items: start; grid-template-columns: minmax(0, 1fr); }
+/* The agents in one column on the left, everything about the chosen one on the right. */
 @container team (min-width: 40rem) {
-  .team-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); }
+  .team-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); }
 }
 @container team (min-width: 64rem) {
-  .team-layout { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
-  .team-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .team-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
 }
 
 .today-container { container: today / inline-size; }

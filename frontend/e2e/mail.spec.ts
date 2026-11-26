@@ -198,7 +198,7 @@ test("the sidebar runs from mail to planner, and every folder shows what's unrea
   expect(first("Archive")).toBeLessThan(first("Trash"));
   expect(first("Trash")).toBeLessThan(first("Documents"));
   expect(first("Documents")).toBeLessThan(first("Sessions"));
-  expect(first("Tasks")).toBeLessThan(first("Schedules"));
+  expect(first("Tasks")).toBeLessThan(first("Routines"));
   await expect(nav.getByTestId("account-menu-trigger")).toBeVisible();
   await expect(nav.getByRole("heading", { name: "Mail" })).toHaveCount(0);
   await noViolations(page);

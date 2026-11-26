@@ -92,7 +92,7 @@ export const useSchedules = () => useReady(["schedules"], () => query("schedules
 export const useSaveSchedule = () => useCommand(["schedules"], (input: Schedule) => command("schedules.save", input));
 export const useRemoveSchedule = () => useCommand(["schedules"], (id: number) => command("schedules.remove", { id }));
 export const useRunSchedule = () => useCommand(["schedules"], (id: number) => command("schedules.runNow", { id }));
-export const useSetDefaults = () => useCommand(["schedules"], (input: { time_check_enabled?: boolean; live_mail_enabled?: boolean }) => command("schedules.setDefaults", input));
+export const useSetDefaults = () => useCommand(["schedules"], (input: { time_check_enabled?: boolean; live_mail_enabled?: boolean; morning_brief_enabled?: boolean }) => command("schedules.setDefaults", input));
 
 export const useMailAgent = () => useReady(["mail-agent"], () => query("mailAgent.get", {}));
 export const useSaveMailAgent = () => useCommand(["mail-agent"], (input: MailAgentSettings) => command("mailAgent.save", input));
@@ -224,8 +224,9 @@ export function usePlannerCounts(): Readonly<Record<string, number>> {
   const agents = useAgents();
   const open = (tasks.data?.tasks ?? []).filter((task) => !task.proposed).length;
   const coming = (reminders.data?.reminders ?? []).filter((reminder) => !reminder.proposed).length;
-  const scheduled = (agents.data?.agents ?? []).filter((agent) => agent.next_run).length;
-  return { tasks: open, reminders: coming, schedules: scheduled };
+  // Routines only count when one needs a look, so the number means something: none when all's well.
+  const needsLook = (agents.data?.agents ?? []).filter((agent) => agent.state === "failed").length;
+  return { tasks: open, reminders: coming, schedules: needsLook };
 }
 
 export function useWaitingCount(): number {

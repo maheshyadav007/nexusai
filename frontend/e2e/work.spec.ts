@@ -319,8 +319,12 @@ test("a schedule is created and runs on demand", async ({ page }) => {
   await expect(drawer.getByRole("spinbutton", { name: "Token limit for each run" })).toHaveValue("20000");
   await page.keyboard.press("Escape");
 
+  // What comes with the app is folded away until asked for.
+  await expect(page.getByRole("switch", { name: "Time check for reminders and deadlines" })).toHaveCount(0);
+  await page.getByRole("button", { name: /^Built in/ }).click();
   await page.getByRole("switch", { name: "Time check for reminders and deadlines" }).click();
   await page.reload();
+  await page.getByRole("button", { name: /^Built in/ }).click();
   await expect(page.getByRole("switch", { name: "Time check for reminders and deadlines" })).not.toBeChecked();
   await page.getByRole("switch", { name: "Time check for reminders and deadlines" }).click();
 });
@@ -503,7 +507,7 @@ test("switches animate from one place and keep their state", async ({ page }) =>
 
 test("the agent list says what each one runs on and when it runs next", async ({ page }) => {
   await page.goto("/agent/channel");
-  await page.getByRole("tab", { name: "Schedules" }).click();
+  await page.getByRole("tab", { name: "Routines" }).click();
   const rows = page.getByTestId("agent-entry");
   await expect(rows.filter({ hasText: "Judges your mail" })).toBeVisible();
   await expect(rows.filter({ hasText: "Writes your morning brief" }).getByTestId("agent-next")).toBeVisible();
@@ -596,14 +600,19 @@ test("the team shows calm cards, and the chosen agent's details beside them", as
   await page.goto("/agent/channel?tab=team");
   const cards = page.getByTestId("agent-card");
   await expect(cards.first()).toBeVisible();
-  const organizer = cards.filter({ hasText: "@organizer" });
-  await organizer.locator("[aria-pressed]").click();
+  const routines = cards.filter({ hasText: "@routines" });
+  await routines.locator("[aria-pressed]").click();
   const detail = page.getByTestId("agent-detail");
-  await expect(detail).toContainText("@organizer");
+  await expect(detail).toContainText("@routines");
   await expect(detail.getByRole("button", { name: "Rename" })).toBeVisible();
+  await expect(detail).toContainText("Its job");
+  await expect(detail).toContainText("Built in, part of Routines");
+  // The Mail agent says what it can't do, and what starts it.
+  await cards.filter({ hasText: "@mail" }).locator("[aria-pressed]").click();
+  await expect(detail).toContainText("It reads mail from anyone");
   // Talk sits in the card's footer, inside the card, whatever the agent's name.
-  const talk = organizer.getByRole("button", { name: /^Talk to / });
-  const card = await organizer.boundingBox();
+  const talk = routines.getByRole("button", { name: /^Talk to / });
+  const card = await routines.boundingBox();
   const button = await talk.boundingBox();
   expect(card && button && button.x + button.width <= card.x + card.width).toBeTruthy();
   await noViolations(page);

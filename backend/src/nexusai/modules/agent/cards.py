@@ -61,6 +61,8 @@ class Card:
     instructions: str = ""
     # A template for the person's own agents, not a member of the team.
     hidden: bool = False
+    # It reads mail from anyone, so it may never send, delete or change settings.
+    untrusted_mail: bool = False
 
     @property
     def at(self) -> str:
@@ -92,6 +94,7 @@ def _files() -> dict[str, Card]:
             version=file.hash,
             engine=file.name,
             hidden=bool(raw.get("hidden", False)),
+            untrusted_mail=bool(raw.get("readsUntrustedMail", False)),
         )
         if not HANDLE.match(card.handle):
             raise ValueError(f"Card {card.id} has a handle that isn't allowed: {card.handle}")

@@ -95,6 +95,8 @@ def test_every_card_is_as_it_was() -> None:
     for card in cards._files().values():
         data = dataclasses.asdict(card)
         data.pop("version")
+        # Added since: whether it reads mail from anyone. Only the Mail agent does.
+        assert data.pop("untrusted_mail") is (card.id == "mail")
         loaded[card.id] = json.loads(json.dumps(data))
     assert loaded.pop(NEW_AGENT)["default"] is False
     assert loaded == _golden_cards()
