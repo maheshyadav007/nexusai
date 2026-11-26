@@ -129,3 +129,73 @@ def test_what_isnt_a_plugin_says_so(client: TestClient, tmp_path: Path) -> None:
     assert "plugin.json" in post(client, "plugins.propose", {"source": str(tmp_path / "x")}).text
     assert "https" in post(client, "plugins.propose", {"source": "ftp://example.com/p.zip"}).text
     assert post(client, "plugins.propose", {"source": str(tmp_path / "missing")}).status_code == 422
+
+
+def test_every_tool_that_takes_a_call_id_declares_it_so_the_model_never_has_to_send_it(
+    client: TestClient,
+) -> None:
+    """A tool whose function takes tool_call_id without the injected field in its schema fails
+    every call with "missing tool_call_id" (it happened to propose_plugin)."""
+    import inspect
+
+    from nexusai.modules.agent import module as agent
+    from nexusai.modules.agent import tools
+
+    built = tools.build_tools(agent.current().ctx, "s", tools.RunControl())
+    missing = [
+        tool.name
+        for tool in built
+        if "tool_call_id" in inspect.signature(tool.func).parameters  # type: ignore[arg-type]
+        and "tool_call_id" not in tool.args_schema.model_fields  # type: ignore[union-attr]
+    ]
+    assert missing == []
+    names = {tool.name for tool in built}
+    assert {"propose_plugin", "add_plugin_servers", "list_plugins", "remove_plugin"} <= names
+
+
+def test_posty_proposes_a_plugin_from_a_folder_through_its_tool(
+    client: TestClient, script: Any, tmp_path: Path
+) -> None:
+    from nexusai.modules.agent.providers import TextChunk, ToolCall
+    from test_agent_work import wait
+    from test_chat_engine_tools import approve_one, chat_in_background, last_result, new_session
+
+    folder = tmp_path / "jira"
+    folder.mkdir()
+    (folder / ".mcp.json").write_text(
+        json.dumps({"mcpServers": {"jira": {"type": "http", "url": "https://jira.example/mcp"}}})
+    )
+    script.replies = [
+        [ToolCall("a", "propose_plugin", {"source": str(folder)})],
+        [TextChunk("Proposed.")],
+    ]
+    done = chat_in_background(client, new_session(client), "Add the MCP in my jira folder")
+    approve_one(client)
+    wait(lambda: done, "finish")
+    said = last_result(script)
+    assert said.startswith("Proposed plugin jira"), said
+    listed = client.post("/api/queries/plugins.list").json()["plugins"]
+    assert [p["name"] for p in listed] == ["jira"] and listed[0]["servers"][0][
+        "url"
+    ] == "https://jira.example/mcp"
+
+
+def test_mcp_settings_alone_install_from_a_folder_or_a_single_file(
+    client: TestClient, tmp_path: Path
+) -> None:
+    settings = {"mcpServers": {"wiki": {"type": "http", "url": "https://wiki.example/mcp"}}}
+    folder = tmp_path / "Company Wiki"
+    folder.mkdir()
+    (folder / "mcp.json").write_text(json.dumps(settings))
+    made = post(client, "plugins.propose", {"source": str(folder)})
+    assert made.status_code == 200, made.text
+    assert made.json()["name"] == "company-wiki" and made.json()["display_name"] == "Company Wiki"
+    post(client, "plugins.remove", {"name": "company-wiki"})
+    single = tmp_path / "tools" / ".mcp.json"
+    single.parent.mkdir()
+    single.write_text(json.dumps(settings))
+    made = post(client, "plugins.propose", {"source": str(single)})
+    assert made.status_code == 200, made.text
+    assert made.json()["name"] == "tools" and [s["name"] for s in made.json()["servers"]] == [
+        "wiki"
+    ]

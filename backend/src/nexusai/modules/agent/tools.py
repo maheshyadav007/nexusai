@@ -712,6 +712,7 @@ class _ProposePlugin(BaseModel):
         description="The https link the person gave (a GitHub folder or a zip), or a folder path on"
         " this computer."
     )
+    tool_call_id: Annotated[str, InjectedToolCallId]
 
 
 class _AddPluginServers(BaseModel):
@@ -720,10 +721,12 @@ class _AddPluginServers(BaseModel):
         default_factory=dict,
         description="The settings its servers ask for, by name, such as an API key the person gave.",
     )
+    tool_call_id: Annotated[str, InjectedToolCallId]
 
 
 class _PluginName(BaseModel):
     name: str = Field(description="The plugin's name, from list_plugins.")
+    tool_call_id: Annotated[str, InjectedToolCallId]
 
 
 class _ProposeSkill(BaseModel):

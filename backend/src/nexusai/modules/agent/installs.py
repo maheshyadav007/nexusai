@@ -127,12 +127,20 @@ def _from_folder(folder: Path) -> dict[str, str]:
 
 
 def fetch(source: str) -> dict[str, str]:
-    """A plugin's text files from a GitHub folder, a zip address, or a folder on this computer."""
+    """A plugin's text files from a GitHub folder, a zip address, a folder on this computer, or a
+    single MCP settings file (.mcp.json or mcp.json, as other apps write them)."""
     text = source.strip()
     local = Path(text).expanduser()
     if text.startswith(("/", "~")) or (len(text) > 2 and text[1] == ":"):
+        if local.is_file() and local.suffix.lower() == ".json":
+            try:
+                return {MCP_FILES[0]: local.read_text("utf-8")}
+            except (UnicodeDecodeError, OSError) as error:
+                raise CommandError("plugin.fetch", f"{text} can't be read.", 422) from error
         if not local.is_dir():
-            raise CommandError("plugin.fetch", f"There's no folder at {text}.", 422)
+            raise CommandError(
+                "plugin.fetch", f"There's no folder or settings file at {text}.", 422
+            )
         return _from_folder(local)
     parsed = urlparse(text)
     if parsed.scheme != "https":
@@ -155,7 +163,12 @@ def fetch(source: str) -> dict[str, str]:
         return _from_zip(response.content)
 
 
-def _manifest(files: dict[str, str]) -> dict[str, Any]:
+def _slug(text: str) -> str:
+    words = re.sub(r"[^a-z0-9]+", "-", text.casefold()).strip("-")
+    return words[:64].strip("-") or "plugin"
+
+
+def _manifest(files: dict[str, str], fallback: str = "") -> dict[str, Any]:
     for path in MANIFESTS:
         if path in files:
             try:
@@ -165,9 +178,15 @@ def _manifest(files: dict[str, str]) -> dict[str, Any]:
             if not isinstance(found, dict):
                 raise CommandError("plugin.invalid", f"{path} isn't a JSON object.", 422)
             return found
+    has_servers = any(path in files for path in MCP_FILES)
+    has_skills = any(PurePosixPath(p).parts[:1] == ("skills",) for p in files)
+    if (has_servers or has_skills) and fallback:
+        # MCP settings or skills without a manifest, as many folders are: named after the folder.
+        return {"name": _slug(fallback), "displayName": fallback}
     raise CommandError(
         "plugin.invalid",
-        "It has no plugin.json, so it isn't a plugin. A skill alone is added as a skill.",
+        "It has no plugin.json, MCP settings (.mcp.json) or skills folder, so there's nothing to"
+        " install. A skill alone is added as a skill.",
         422,
     )
 
@@ -213,10 +232,10 @@ def _server(name: str, raw: Any) -> tuple[PluginServer | None, str | None]:
 
 
 def read(
-    files: dict[str, str],
+    files: dict[str, str], fallback: str = ""
 ) -> tuple[dict[str, Any], dict[str, dict[str, str]], list[PluginServer], list[str]]:
     """What's in a plugin: its manifest, its skills' files, its remote servers, and what isn't used."""
-    manifest = _manifest(files)
+    manifest = _manifest(files, fallback)
     name = str(manifest.get("name", ""))
     if not NAME.match(name):
         raise CommandError("plugin.invalid", f"Its name, {name!r}, isn't a plugin name.", 422)
@@ -238,6 +257,17 @@ def read(
     if not found_skills and not servers:
         raise CommandError("plugin.empty", "It has no skills or remote MCP servers to add.", 422)
     return manifest, found_skills, servers, skipped
+
+
+def _name_of(source: str) -> str:
+    """What to call a plugin with no manifest: its folder, or the folder its settings file is in."""
+    text = source.strip().rstrip("/")
+    path = PurePosixPath(urlparse(text).path if "://" in text else text)
+    if path.suffix.lower() == ".json":
+        path = path.parent
+    elif path.suffix.lower() == ".zip":
+        path = path.with_suffix("")
+    return path.name
 
 
 def _row(row: Any) -> InstalledPlugin:
@@ -263,7 +293,7 @@ def propose(ctx: Context, source: str, by: str) -> InstalledPlugin:
     """Reads a plugin and proposes each of its skills for the person to review. Nothing is used
     until they approve each one; its servers wait until they're added."""
     files = fetch(source)
-    manifest, found_skills, servers, skipped = read(files)
+    manifest, found_skills, servers, skipped = read(files, _name_of(source))
     name = str(manifest["name"])
     if ctx.bus.db.fetch_all("SELECT 1 FROM plugin_installs WHERE name = ?", (name,)):
         raise CommandError(

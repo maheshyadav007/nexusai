@@ -17,7 +17,7 @@ export function RoutineRuns({ schedule, trigger }: { schedule?: number; trigger?
   const rows = runs.data?.runs ?? [];
   return (
     <section className="flex flex-col gap-2">
-      <h4 className="text-sm font-medium text-ink-muted">{t("routines.runs")}</h4>
+      <h3 className="text-sm font-medium text-ink-muted">{t("routines.runs")}</h3>
       {rows.length ? (
         <ul data-testid="routine-runs" className="flex flex-col">
           {rows.map((run) => (
