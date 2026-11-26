@@ -48,6 +48,13 @@ def _run[T](
 ) -> T:
     """Agents run on plain threads, so each call gets its own short-lived event loop."""
 
+    # What the server answered over HTTP, read only for its status: a 401 or 403 means it wants a
+    # sign-in or a key, which its own words (never passed on) don't always say.
+    statuses: list[int] = []
+
+    async def record(response: Any) -> None:
+        statuses.append(response.status_code)
+
     async def session() -> T:
         # The person's own headers, such as an API key, then the bearer token as a shortcut.
         sent = dict(headers or {})
@@ -58,7 +65,9 @@ def _run[T](
             async with Client(sse_client(url, headers=sent, timeout=seconds)) as client:
                 return await asyncio.wait_for(work(client), seconds)
         async with (
-            httpx2.AsyncClient(headers=sent, timeout=seconds) as http,
+            httpx2.AsyncClient(
+                headers=sent, timeout=seconds, event_hooks={"response": [record]}
+            ) as http,
             Client(streamable_http_client(url, http_client=http)) as client,
         ):
             return await asyncio.wait_for(work(client), seconds)
@@ -66,9 +75,22 @@ def _run[T](
     try:
         return asyncio.run(session())
     except Exception as error:
-        kind = type(_flatten(error)).__name__
-        # A server's own words could hold anything, so only what kind of failure it was is kept.
+        cause = _flatten(error)
+        kind = type(cause).__name__
+        # A server's own words could hold anything, so they're never passed on. Only whether it
+        # asked for a sign-in is read from them, to say what the person can do.
+        if _asks_to_sign_in(cause) or any(code in {401, 403} for code in statuses):
+            raise ConnectorUnavailable(
+                "The server was reached, but it wants you to sign in to it first (OAuth), which"
+                " NexusAI can't do yet. If it also takes an API key or token, add that instead."
+            ) from error
         raise ConnectorUnavailable(f"Couldn't reach that server ({kind}).") from error
+
+
+def _asks_to_sign_in(cause: BaseException) -> bool:
+    status = getattr(getattr(cause, "response", None), "status_code", None)
+    words = str(cause).casefold()
+    return status == 401 or "authenticat" in words or "unauthorized" in words
 
 
 def list_tools(

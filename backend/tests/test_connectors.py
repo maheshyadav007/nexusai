@@ -508,3 +508,14 @@ def test_headers_are_sent_on_every_call_and_kept_only_as_secrets(
     for name in ("Authorization", "Host", "Content-Type", "bad name"):
         refused = add(client, headers={name: "x"})
         assert refused.status_code == 422, name
+
+
+def test_a_server_that_wants_a_sign_in_says_so(client: TestClient, script: Script) -> None:
+    state = FakeMcp(required_token="needs-sign-in")
+    server = running(state)
+    next(server)
+    try:
+        refused = add(client)
+        assert refused.status_code == 422 and "sign in" in refused.text
+    finally:
+        next(server, None)
