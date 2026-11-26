@@ -91,6 +91,8 @@ test("a mail account can be tested, and a wrong password says so", async ({ page
 
 test("mail sync shows on the Schedules page and the Cockpit, and can be paused from each", async ({ page }) => {
   await page.goto("/agent/schedules");
+  // What comes with the app is folded away on Routines until asked for.
+  await page.getByRole("button", { name: /^Built in/ }).click();
   const row = page.getByTestId("pipeline").filter({ hasText: "Mail sync" });
   await expect(row).toContainText("Every minute");
   await expect(row).toContainText("Last checked");

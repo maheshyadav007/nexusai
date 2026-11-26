@@ -399,6 +399,9 @@ test("a trigger can be added from the Schedules page, and runs in its own chat",
   await drawer.getByRole("button", { name: "Add trigger" }).click();
   const row = page.getByTestId("trigger").filter({ hasText: title });
   await expect(row).toBeVisible();
+  // The Mail agent's own trigger comes with the app, so it's folded under Built in.
+  await expect(page.getByTestId("trigger").filter({ hasText: "Mail agent, on new mail" })).toHaveCount(0);
+  await page.getByRole("button", { name: /^Built in/ }).click();
   await expect(page.getByTestId("trigger").filter({ hasText: "Mail agent, on new mail" })).toBeVisible();
   await noViolations(page);
   await row.getByRole("switch").click();
