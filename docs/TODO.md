@@ -471,6 +471,26 @@ Added 2026-11-26. Plan: `docs/PLUGIN_FORMAT_PLAN.md`.
 
 Added 2026-11-26. **What:** asked to install a plugin or add an MCP server from instructions, Posty asked for permission to write a file every time. **Likely cause:** before `add_mcp_server` took pasted settings (built 2026-11-26), Posty's only way to add a server from instructions was to write them to a file with `write_file` (which always asks) and install that with `propose_plugin`. **Approach:** check on the real model that "add this MCP server" with an address or pasted settings goes straight to `add_mcp_server` (one approval, no file); if it still writes a file, steer it in the tool descriptions and Posty's prompt ("never write a file to install a plugin or add a server"), and add a test where the fake model is given settings and must not call `write_file`. **Done when:** adding a server or a plugin from an address, a folder or pasted settings asks once, for the connection, and never to write a file.
 
+## 17. Fewer approvals (items 20 and 23 of the 2026-11-26 corp run)
+
+Added 2026-11-26. **Found:** most clutter comes from the untrusted-content rule (`policy.decide`): once a chat has read any mail, document or outside-tool result, every data change asks, and at work almost every chat reads mail. Installs also take three steps (fetch, skill review, server add). **Proposed:** ask only for what can't be undone or reaches outside (send and forward, permanent delete, commands, files outside Home, outside tools that change things); undoable changes to the person's own data stop asking even after reading mail, and show "Done · Undo" in chat instead; a link or settings in the person's own message need no fetch approval; MCP tools ask by default per server, tools marked `readOnlyHint` don't; Settings › Permissions grouped into about eight switches. **Open:** the person to confirm loosening the untrusted rule for undoable changes, and the reading of item 20.
+
+## 18. One Add-ons page: plugins, MCP servers and skills (items 21 and the plugin page)
+
+Added 2026-11-26. Connectors and the Skills tab become one page with Plugins, Servers and Skills, each item's source, state, switch, contents and Remove, and one box that takes a link, a folder path or pasted MCP settings and installs it as one step with one card. Also the person's own plugin: create skills, agents, routines and servers from chat into it, export it as a folder or zip to share. Mockup first.
+
+## 19. Tool review: merge overlaps, page every read
+
+Added 2026-11-26. 63 tools to about 40: one `install`/`uninstall`/`list_installed` for skills, plugins and servers; one `manage_categories`; search by words or meaning as a parameter, not a separate tool; routine tools including checks and mail conditions; `remember`/`forget`. Every reading tool says "showing 1–20 of N" and takes a page or part (`search_mail`, `list_mail`, `read_document`, `read_file`, `list_documents` have none today). Folds in item 2. Skills found when needed: no skill list up front, `find_tools` finds skills too, and local search offers the top two or three for each message.
+
+## 20. Changelog
+
+Added 2026-11-26. `CHANGELOG.md` updated with each merge, a "What's new" note after an update, and the NexusAI guide (item 14) reads it so agents know what changed.
+
+## 21. A routine when an email mentions me
+
+Added 2026-11-26. A fourth mail condition for routines, "mentions me", using the person's names from the Reach step (full, first, @-name), with no model.
+
 ## To try
 
 - **Posty sees what the app shows** (built 2026-11-24, `docs/AGENT_SYNC_PLAN.md`): on the real account with the real model, ask "What needs me today?" and "what things have been completed". Check that answers cite matters and tasks as numbered chips with real titles, that nothing done shows as overdue (the RCA case), and that the Agents page shows no detour alert for a day question. Ask first, since it spends the ChatGPT allowance. Remember to restart the backend and rebuild the frontend first: a running backend doesn't pick up code changes (on 2026-11-24 an old backend made it look as if the change hadn't worked).
