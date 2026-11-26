@@ -249,7 +249,7 @@ def _row(row: Any) -> InstalledPlugin:
         source=row["source"],
         skills=json.loads(row["skills"]),
         servers=[PluginServer(**s) for s in json.loads(row["servers"])],
-        connectors=json.loads(row["connectors"]),
+        connector_ids=json.loads(row["connectors"]),
         skipped=json.loads(row["skipped"]),
     )
 
@@ -311,7 +311,7 @@ def add_servers(ctx: Context, name: str, values: dict[str, str]) -> InstalledPlu
         raise CommandError(
             "plugin.needs", f"Its servers need {', '.join(missing)}. Ask the person for them.", 422
         )
-    added = list(plugin.connectors)
+    added = list(plugin.connector_ids)
     for server in plugin.servers:
         headers = {}
         for header, value in server.headers.items():
@@ -349,7 +349,7 @@ def remove(ctx: Context, name: str) -> PluginList:
     for skill in plugin.skills:
         if skill in installed and installed[skill].origin == "yours":
             skills.remove(ctx, skill)
-    for connector in plugin.connectors:
+    for connector in plugin.connector_ids:
         try:
             connectors.remove_connector(ConnectorAction(id=connector), ctx)
         except CommandError:

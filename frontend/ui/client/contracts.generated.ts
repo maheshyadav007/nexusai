@@ -2259,7 +2259,7 @@ export type Description4 = string;
 export type Source8 = string;
 export type Skills = string[];
 export type Servers = PluginServer[];
-export type Connectors = string[];
+export type ConnectorIds = string[];
 export type Skipped = string[];
 export type Plugins = InstalledPlugin[];
 export type Source9 = string;
@@ -2893,7 +2893,7 @@ export type Detail7 = string | null;
 export type Tools3 = ConnectorTool[];
 export type HasToken = boolean;
 export type HeaderNames = string[];
-export type Connectors2 = Connector[];
+export type Connectors1 = Connector[];
 export type Url6 = string;
 export type Token = string | null;
 export type Ok6 = boolean;
@@ -3536,7 +3536,7 @@ export interface Contracts {
   GetConnectors?: GetConnectors;
   ConnectorTool?: ConnectorTool;
   Connector?: Connector;
-  Connectors?: Connectors1;
+  Connectors?: Connectors;
   TestConnector?: TestConnector;
   ConnectorTest?: ConnectorTest;
   AddConnector?: AddConnector;
@@ -6637,7 +6637,7 @@ export interface InstalledPlugin {
   source: Source8;
   skills?: Skills;
   servers?: Servers;
-  connectors?: Connectors;
+  connector_ids?: ConnectorIds;
   skipped?: Skipped;
   [k: string]: unknown;
 }
@@ -8349,8 +8349,8 @@ export interface Connector {
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "Connectors".
  */
-export interface Connectors1 {
-  connectors: Connectors2;
+export interface Connectors {
+  connectors: Connectors1;
   [k: string]: unknown;
 }
 /**

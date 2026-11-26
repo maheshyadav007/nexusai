@@ -1045,7 +1045,7 @@ class InstalledPlugin(BaseModel):
     skills: list[str] = Field(default_factory=list)
     servers: list[PluginServer] = Field(default_factory=list)
     # The connectors added for its servers.
-    connectors: list[str] = Field(default_factory=list)
+    connector_ids: list[str] = Field(default_factory=list)
     # What it has that isn't used here, such as hooks or servers that run on this computer.
     skipped: list[str] = Field(default_factory=list)
 

@@ -78,7 +78,7 @@ def test_a_plugin_s_skills_are_proposed_its_servers_added_and_all_removed_as_one
             client, "plugins.addServers", {"name": "tickets", "values": {"TICKETS_KEY": "key-41"}}
         )
         assert added.status_code == 200, added.text
-        connector = added.json()["connectors"][0]
+        connector = added.json()["connector_ids"][0]
         listed = {
             c["id"]: c for c in client.post("/api/queries/connectors.list").json()["connectors"]
         }

@@ -1848,7 +1848,7 @@ def build_tools(
         )
         return (
             f"{plugin.name}: skills {', '.join(plugin.skills) or 'none'}; servers {servers or 'none'};"
-            f" connectors added {', '.join(plugin.connectors) or 'none'}"
+            f" connectors added {', '.join(plugin.connector_ids) or 'none'}"
             + (f"; not used here: {', '.join(plugin.skipped)}" if plugin.skipped else "")
         )
 
