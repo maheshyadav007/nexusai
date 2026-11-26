@@ -21,6 +21,8 @@ class FakeMcp:
     calls: list[dict[str, Any]] = field(default_factory=list)
     server: MCPServer = field(default_factory=lambda: MCPServer("fake"))
     seen_headers: list[str] = field(default_factory=list)
+    # A header the server demands, as (name, value), like an API key.
+    required_header: tuple[str, str] | None = None
 
 
 def start_fake_mcp(state: FakeMcp) -> tuple[uvicorn.Server, threading.Thread]:
@@ -38,6 +40,10 @@ def start_fake_mcp(state: FakeMcp) -> tuple[uvicorn.Server, threading.Thread]:
             f"Bearer {state.required_token}"
         ):
             return JSONResponse({"error": "no"}, status_code=401)
+        if state.required_header and (
+            request.headers.get(state.required_header[0]) != state.required_header[1]
+        ):
+            return JSONResponse({"error": "no key"}, status_code=401)
         return await call_next(request)
 
     app.add_middleware(BaseHTTPMiddleware, dispatch=check)

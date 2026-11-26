@@ -38,14 +38,21 @@ def _flatten(error: BaseException) -> BaseException:
 
 
 def _run[T](
-    url: str, token: str | None, seconds: float, work: Callable[[Client], Awaitable[T]]
+    url: str,
+    token: str | None,
+    seconds: float,
+    work: Callable[[Client], Awaitable[T]],
+    headers: dict[str, str] | None = None,
 ) -> T:
     """Agents run on plain threads, so each call gets its own short-lived event loop."""
 
     async def session() -> T:
-        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        # The person's own headers, such as an API key, then the bearer token as a shortcut.
+        sent = dict(headers or {})
+        if token:
+            sent["Authorization"] = f"Bearer {token}"
         async with (
-            httpx2.AsyncClient(headers=headers, timeout=seconds) as http,
+            httpx2.AsyncClient(headers=sent, timeout=seconds) as http,
             Client(streamable_http_client(url, http_client=http)) as client,
         ):
             return await asyncio.wait_for(work(client), seconds)
@@ -58,7 +65,9 @@ def _run[T](
         raise ConnectorUnavailable(f"Couldn't reach that server ({kind}).") from error
 
 
-def list_tools(url: str, token: str | None, seconds: float) -> list[Listed]:
+def list_tools(
+    url: str, token: str | None, seconds: float, headers: dict[str, str] | None = None
+) -> list[Listed]:
     async def work(client: Client) -> list[Listed]:
         found = await client.list_tools()
         return [
@@ -66,15 +75,20 @@ def list_tools(url: str, token: str | None, seconds: float) -> list[Listed]:
             for tool in found.tools
         ]
 
-    return _run(url, token, seconds, work)
+    return _run(url, token, seconds, work, headers)
 
 
 def call_tool(
-    url: str, token: str | None, name: str, arguments: dict[str, Any], seconds: float
+    url: str,
+    token: str | None,
+    name: str,
+    arguments: dict[str, Any],
+    seconds: float,
+    headers: dict[str, str] | None = None,
 ) -> tuple[str, bool]:
     async def work(client: Client) -> tuple[str, bool]:
         result = await client.call_tool(name, arguments)
         words = [getattr(block, "text", "") for block in result.content]
         return "\n".join(word for word in words if word), bool(result.is_error)
 
-    return _run(url, token, seconds, work)
+    return _run(url, token, seconds, work, headers)

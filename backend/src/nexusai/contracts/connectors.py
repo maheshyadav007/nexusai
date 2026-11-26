@@ -31,6 +31,8 @@ class Connector(BaseModel):
     detail: str | None = None
     tools: list[ConnectorTool] = Field(default_factory=list)
     has_token: bool = False
+    # The names of the headers it sends, never their values.
+    header_names: list[str] = Field(default_factory=list)
 
 
 class Connectors(BaseModel):
@@ -57,6 +59,9 @@ class AddConnector(BaseModel):
     url: str = Field(min_length=1, max_length=2000)
     token: str | None = Field(default=None, max_length=8000)
     audience: Audience
+    # Headers the server needs, such as an API key or a tenant id. Every value is kept as a
+    # secret, never in the database, and never shown again or given to an agent.
+    headers: dict[str, str] = Field(default_factory=dict, max_length=10)
 
 
 class ConnectorAction(BaseModel):

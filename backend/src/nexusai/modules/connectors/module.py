@@ -41,10 +41,30 @@ CREATE TABLE connectors (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, url TEXT NOT NULL, audience TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
   state TEXT NOT NULL, detail TEXT, tools TEXT NOT NULL DEFAULT '[]', tools_hash TEXT NOT NULL, new_tools TEXT, created TEXT NOT NULL);
 """,
-        )
+        ),
+        Migration(
+            "connectors_headers_001",
+            # Which headers a server is sent. Their values are secrets, kept in the system's
+            # secure store, never here.
+            "ALTER TABLE connectors ADD COLUMN header_names TEXT NOT NULL DEFAULT '[]';",
+        ),
     ],
 )
 EMAIL = "email"
+HEADER_NAME = re.compile(r"^[A-Za-z0-9-]{1,64}$")
+# The MCP client sets these itself, and a server mustn't be told something else.
+RESERVED_HEADERS = frozenset(
+    {
+        "host",
+        "content-length",
+        "content-type",
+        "accept",
+        "connection",
+        "mcp-session-id",
+        "authorization",
+    }
+)
+MOST_HEADER_CHARS = 4000
 PREFIX = "mcp_"
 # The model API only takes this much of a name, in these characters.
 NAME_LIMIT = 64
@@ -105,6 +125,39 @@ def _token(ctx: Context, identifier: str) -> str | None:
     return secret_store(ctx.config.secrets_test_file).get(_token_key(identifier))
 
 
+def _headers_key(identifier: str) -> str:
+    return f"connector-headers:{identifier}"
+
+
+def _headers(ctx: Context, identifier: str) -> dict[str, str]:
+    stored = secret_store(ctx.config.secrets_test_file).get(_headers_key(identifier))
+    if not stored:
+        return {}
+    found = json.loads(stored)
+    return {str(k): str(v) for k, v in found.items()} if isinstance(found, dict) else {}
+
+
+def checked_headers(headers: dict[str, str]) -> dict[str, str]:
+    """Headers as given, or a plain error saying which one can't be sent and why."""
+    clean: dict[str, str] = {}
+    for name, value in headers.items():
+        name = name.strip()
+        if not HEADER_NAME.match(name):
+            raise CommandError(
+                "connector.header", f"{name!r} isn't a header name. Use letters, digits and -.", 422
+            )
+        if name.lower() in RESERVED_HEADERS:
+            raise CommandError(
+                "connector.header",
+                f"{name} is set by the app itself. For a bearer token, use the token field.",
+                422,
+            )
+        if not value.strip() or len(value) > MOST_HEADER_CHARS or "\n" in value or "\r" in value:
+            raise CommandError("connector.header", f"The value for {name} can't be used.", 422)
+        clean[name] = value.strip()
+    return clean
+
+
 def _announce(ctx: Context, identifier: str, state: str) -> None:
     with ctx.bus.unit_of_work() as work:
         work.emit(
@@ -142,6 +195,7 @@ def _row(ctx: Context, row: Any) -> Connector:
         detail=row["detail"],
         tools=[ConnectorTool(**tool) for tool in tools],
         has_token=_token(ctx, row["id"]) is not None,
+        header_names=json.loads(row["header_names"] or "[]"),
     )
 
 
@@ -180,18 +234,23 @@ def _free_id(ctx: Context, name: str) -> str:
 @connectors_module.command("connectors.add")
 def add_connector(command: AddConnector, ctx: Context) -> Connectors:
     identifier = _free_id(ctx, command.name)
+    headers = checked_headers(command.headers)
     try:
         client.check_url(command.url)
-        listed = client.list_tools(command.url, command.token, LIST_SECONDS)
+        listed = client.list_tools(command.url, command.token, LIST_SECONDS, headers)
     except ConnectorUnavailable as error:
         raise CommandError("connector.unreachable", str(error), 422) from error
     tools = _tools_from(identifier, listed)
     if command.token:
         secret_store(ctx.config.secrets_test_file).set(_token_key(identifier), command.token)
+    if headers:
+        secret_store(ctx.config.secrets_test_file).set(
+            _headers_key(identifier), json.dumps(headers)
+        )
     with ctx.bus.db.transaction() as tx:
         tx.execute(
-            "INSERT INTO connectors (id, name, url, audience, state, tools, tools_hash, created)"
-            " VALUES (?, ?, ?, ?, 'ok', ?, ?, ?)",
+            "INSERT INTO connectors (id, name, url, audience, state, tools, tools_hash, created,"
+            " header_names) VALUES (?, ?, ?, ?, 'ok', ?, ?, ?, ?)",
             (
                 identifier,
                 command.name,
@@ -200,6 +259,7 @@ def add_connector(command: AddConnector, ctx: Context) -> Connectors:
                 json.dumps(tools),
                 _hash(tools),
                 datetime.now(UTC).isoformat(),
+                json.dumps(sorted(headers)),
             ),
         )
     _announce(ctx, identifier, "ok")
@@ -217,7 +277,9 @@ def _refresh(ctx: Context, row: Any) -> str:
     identifier = row["id"]
     detail: str | None
     try:
-        listed = client.list_tools(row["url"], _token(ctx, identifier), LIST_SECONDS)
+        listed = client.list_tools(
+            row["url"], _token(ctx, identifier), LIST_SECONDS, _headers(ctx, identifier)
+        )
     except ConnectorUnavailable as error:
         state, detail, new_tools = "failed", str(error), row["new_tools"]
     else:
@@ -275,6 +337,7 @@ def set_enabled(command: SetConnectorEnabled, ctx: Context) -> Connectors:
 def remove_connector(command: ConnectorAction, ctx: Context) -> Connectors:
     _found(ctx, command.id)
     secret_store(ctx.config.secrets_test_file).delete(_token_key(command.id))
+    secret_store(ctx.config.secrets_test_file).delete(_headers_key(command.id))
     with ctx.bus.db.transaction() as tx:
         tx.execute("DELETE FROM connectors WHERE id = ?", (command.id,))
     _announce(ctx, command.id, "removed")
@@ -310,7 +373,12 @@ def call(ctx: Context, tool: AgentTool, arguments: dict[str, Any]) -> str:
     """Words for the agent, whatever happens. A server being down shouldn't stop the run."""
     try:
         text, failed = client.call_tool(
-            tool.url, _token(ctx, tool.connector), tool.name, arguments, CALL_SECONDS
+            tool.url,
+            _token(ctx, tool.connector),
+            tool.name,
+            arguments,
+            CALL_SECONDS,
+            _headers(ctx, tool.connector),
         )
     except ConnectorUnavailable as error:
         return f"That didn't work: {error}"

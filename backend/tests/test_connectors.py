@@ -478,3 +478,33 @@ def test_only_a_server_name_is_needed_to_find_the_rest(
     assert found == {"imap_port": 993, "smtp_host": "mail.corp.example", "smtp_port": 465}
     refused = client.post("/api/commands/mail.accounts.probe", json={"server": "http://x/y"})
     assert refused.status_code == 422
+
+
+def test_headers_are_sent_on_every_call_and_kept_only_as_secrets(
+    client: TestClient, script: Script, app_config: Config
+) -> None:
+    state = FakeMcp(required_header=("X-Api-Key", "key-value-9f3"))
+    server = running(state)
+    next(server)
+    try:
+        assert not add(client).is_success
+        assert add(client, headers={"X-Api-Key": "key-value-9f3"}).is_success
+        row = connectors(client)["tickets"]
+        assert row["header_names"] == ["X-Api-Key"]
+        assert "key-value-9f3" not in json.dumps(connectors(client))
+        rows = client.app.state.bus.db.fetch_all("SELECT * FROM connectors")  # type: ignore[attr-defined]
+        assert "key-value-9f3" not in json.dumps([dict(r) for r in rows])
+        allow(client)
+        session = use_it(client, script)
+        wait(lambda: status(client, session) == "done", "the run")
+        # The call itself carried the header, not only the listing.
+        assert state.calls == [{"ticket": "42"}]
+        assert client.post("/api/commands/connectors.refresh", json={"id": "tickets"}).is_success
+        assert connectors(client)["tickets"]["state"] == "ok"
+    finally:
+        next(server, None)
+    client.post("/api/commands/connectors.remove", json={"id": "tickets"})
+    # Headers the client sets itself can't be overridden.
+    for name in ("Authorization", "Host", "Content-Type", "bad name"):
+        refused = add(client, headers={name: "x"})
+        assert refused.status_code == 422, name
