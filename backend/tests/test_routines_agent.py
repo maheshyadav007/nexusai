@@ -114,3 +114,31 @@ def test_an_answer_says_which_agent_and_plugin_it_was_built_from(
     messages = client.post("/api/queries/session.get", json={"id": session}).json()["messages"]
     built = messages[-1]["metadata"]["built"]
     assert built["agent"] == "session" and built["plugin"] == "NexusAI" and built["card"]
+
+
+def test_built_in_routines_come_from_their_files_and_switch_through_their_rows(
+    client: TestClient,
+) -> None:
+    from nexusai.modules.agent import plugins
+
+    files = {f.name: f for f in plugins.routine_files()}
+    assert set(files) == {"on-new-mail", "every-morning"}
+    assert (files["on-new-mail"].agent, files["every-morning"].agent) == ("mail", "daily-prep")
+    listed = {r["name"]: r for r in client.post("/api/queries/schedules.list").json()["built_in"]}
+    assert listed["on-new-mail"]["title"] == "On new mail" and listed["on-new-mail"]["enabled"]
+    assert (
+        listed["every-morning"]["time"] == "08:30" and listed["every-morning"]["plugin"] == "Brief"
+    )
+    for name in ("on-new-mail", "every-morning"):
+        off = client.post(
+            "/api/commands/schedules.setBuiltIn", json={"name": name, "enabled": False}
+        )
+        row = next(r for r in off.json()["built_in"] if r["name"] == name)
+        assert row["enabled"] is False
+    # The same rows the older switches use, so they agree.
+    listed = client.post("/api/queries/schedules.list").json()
+    assert listed["live_mail_enabled"] is False and listed["morning_brief_enabled"] is False
+    for name in ("on-new-mail", "every-morning"):
+        client.post("/api/commands/schedules.setBuiltIn", json={"name": name, "enabled": True})
+    gone = client.post("/api/commands/schedules.setBuiltIn", json={"name": "nope", "enabled": True})
+    assert gone.status_code == 404

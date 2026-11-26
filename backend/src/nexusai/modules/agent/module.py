@@ -24,6 +24,7 @@ from nexusai.contracts.agent import (
     BriefLine,
     BriefReacted,
     BriefSections,
+    BuiltInRoutine,
     CancelTeamTask,
     CardList,
     ChangeLearnedNote,
@@ -165,6 +166,7 @@ from nexusai.contracts.agent import (
     SessionList,
     SessionRow,
     SessionView,
+    SetBuiltInRoutine,
     SetDailyCap,
     SetDefaults,
     SetMascot,
@@ -227,6 +229,7 @@ from nexusai.modules.agent import (
     monitor,
     personalization,
     pipelines,
+    plugins,
     policy,
     prompts_builder,
     providers,
@@ -1256,12 +1259,71 @@ def _schedule_list(ctx: Context) -> ScheduleList:
     )
     return ScheduleList(
         schedules=[scheduler.row_to_schedule(row) for row in rows],
+        built_in=_built_in_routines(ctx),
         time_check_enabled=scheduler.time_check_enabled(ctx),
         live_mail_enabled=mail_agent.enabled(ctx),
         morning_brief_enabled=bool(brief and brief[0]["enabled"]),
         morning_brief_time=brief[0]["time"] if brief else None,
         morning_brief_next=brief[0]["next_run"] if brief and brief[0]["enabled"] else None,
     )
+
+
+def _built_in_routines(ctx: Context) -> list[BuiltInRoutine]:
+    """The routines that come with the app, from their files, with the state of the row that runs
+    each one. A file whose row is missing is left out rather than shown as something it isn't."""
+    db = ctx.bus.db
+    found = []
+    for file in plugins.routine_files():
+        if file.table == "agent_triggers":
+            rows = db.fetch_all("SELECT enabled FROM agent_triggers WHERE id = ?", (file.key,))
+            time = next_run = None
+        else:
+            rows = db.fetch_all(
+                "SELECT enabled, time, next_run FROM schedules WHERE kind = ?", (file.key,)
+            )
+            time = rows[0]["time"] if rows else None
+            next_run = rows[0]["next_run"] if rows and rows[0]["enabled"] else None
+        if not rows:
+            continue
+        plugin = next((p for p in plugins.built_in() if p.name == file.plugin), None)
+        found.append(
+            BuiltInRoutine(
+                name=file.name,
+                title=file.title,
+                description=file.description,
+                agent=file.agent,
+                plugin=plugin.display_name if plugin else file.plugin,
+                enabled=bool(rows[0]["enabled"]),
+                time=time,
+                next_run=next_run,
+            )
+        )
+    return found
+
+
+@agent_module.command("schedules.setBuiltIn")
+def set_built_in_routine(command: SetBuiltInRoutine, ctx: Context) -> ScheduleList:
+    """Turns a built-in routine on or off, through the row that runs it."""
+    file = next((f for f in plugins.routine_files() if f.name == command.name), None)
+    if file is None:
+        raise CommandError("routine.not_found", "There's no built-in routine with that name.", 404)
+    if file.table == "agent_triggers":
+        with ctx.bus.db.transaction() as tx:
+            tx.execute(
+                "UPDATE agent_triggers SET enabled = ? WHERE id = ?",
+                (int(command.enabled), file.key),
+            )
+        if _triggers:
+            _triggers.wake.set()
+    else:
+        scheduler.set_built_in(ctx, file.key, command.enabled)
+        if _scheduler:
+            _scheduler.poke()
+    with ctx.bus.unit_of_work() as work:
+        work.emit("schedule.changed", {}, source="agent", trace_id=ctx.trace_id)
+        # The Mail agent's settings show the same switches.
+        work.emit("mailAgent.changed", {}, source="agent", trace_id=ctx.trace_id)
+    return _schedule_list(ctx)
 
 
 @agent_module.query("schedules.list")

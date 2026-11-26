@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { Schedule, ScheduleList, ScheduleRow, Trigger } from "@/ui/client/contracts.generated";
 import { useLeadName } from "@/ui/client/home";
 import { useDateOnly, useDateTime, useRelativeTime, useTimeOnly } from "@/ui/client/format";
-import { useAgentName, usePausePipeline, usePipelines, useRemoveSchedule, useRunSchedule, useSaveSchedule, useSaveTrigger, useSchedules, useSetDefaults, useTriggers } from "@/ui/client/work";
+import { useAgentName, usePausePipeline, usePipelines, useRemoveSchedule, useRunSchedule, useSaveSchedule, useSaveTrigger, useSchedules, useSetBuiltIn, useSetDefaults, useTriggers } from "@/ui/client/work";
 import { SessionGeneration } from "@/ui/features/agent/SessionGeneration";
 import { AskAgent } from "@/ui/features/agent/AskAgent";
 import { SessionLink } from "@/ui/features/assistant/SessionLink";
@@ -254,10 +254,10 @@ function BuiltIn({ list, triggers }: { list: ScheduleList; triggers: React.React
   const defaults = useSetDefaults();
   const relative = useRelativeTime();
   const [open, setOpen] = useState(false);
-  const liveMail = list.live_mail_enabled;
+  const builtIn = useSetBuiltIn();
+  const name = useAgentName();
   const timeCheck = list.time_check_enabled;
-  const brief = list.morning_brief_enabled ?? false;
-  const count = (pipelines.data?.pipelines.length ?? 0) + 3;
+  const count = (pipelines.data?.pipelines.length ?? 0) + (list.built_in?.length ?? 0) + 1;
   return (
     <div className="flex flex-col gap-3">
       <Pressable aria-expanded={open} onClick={() => setOpen(!open)} className="flex min-h-11 items-center justify-between gap-4 rounded-lg border border-dashed border-line-subtle px-4 py-3 text-left transition-colors duration-fast hover:border-line-strong">
@@ -269,7 +269,16 @@ function BuiltIn({ list, triggers }: { list: ScheduleList; triggers: React.React
       </Pressable>
       {open ? (
     <ListGroup title={t("schedules.group.builtIn")}>
-      <ListRow testid="built-in-brief" lead={<StatusDot tone={brief ? "done" : "idle"} />} title={t("routines.brief")} meta={brief && list.morning_brief_time ? [t("routines.brief.when", { time: list.morning_brief_time }), list.morning_brief_next ? t("schedules.nextIn", { when: relative(list.morning_brief_next) }) : null].filter(Boolean).join(" · ") : t("schedules.paused")} trailing={<Switch label={t("routines.brief")} hideLabel checked={brief} onChange={(morning_brief_enabled) => defaults.mutate({ morning_brief_enabled })} />} />
+      {(list.built_in ?? []).map((routine) => (
+        <ListRow
+          key={routine.name}
+          testid="built-in-routine"
+          lead={<StatusDot tone={routine.enabled ? "done" : "idle"} />}
+          title={routine.title}
+          meta={[routine.time ? t("routines.brief.when", { time: routine.time }) : routine.description, t("routines.doneBy", { agent: name(routine.agent) }), routine.enabled ? (routine.next_run ? t("schedules.nextIn", { when: relative(routine.next_run) }) : null) : t("schedules.paused")].filter(Boolean).join(" · ")}
+          trailing={<Switch label={routine.title} hideLabel checked={routine.enabled} onChange={(enabled) => builtIn.mutate({ name: routine.name, enabled })} />}
+        />
+      ))}
       {pipelines.data?.pipelines.map((row) => {
         const stopped = row.state === "stopped";
         return (
@@ -283,7 +292,6 @@ function BuiltIn({ list, triggers }: { list: ScheduleList; triggers: React.React
           />
         );
       })}
-      <ListRow lead={<StatusDot tone={liveMail ? "done" : "idle"} />} title={t("schedules.liveMail")} trailing={<Switch label={t("schedules.liveMail")} hideLabel checked={liveMail} onChange={(live_mail_enabled) => defaults.mutate({ live_mail_enabled })} />} />
       <ListRow lead={<StatusDot tone={timeCheck ? "done" : "idle"} />} title={t("schedules.timeCheck")} trailing={<Switch label={t("schedules.timeCheck")} hideLabel checked={timeCheck} onChange={(time_check_enabled) => defaults.mutate({ time_check_enabled })} />} />
       {triggers}
     </ListGroup>

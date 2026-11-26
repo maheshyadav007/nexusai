@@ -200,3 +200,63 @@ def prompt(name: str) -> str:
 
 def prompt_names() -> set[str]:
     return set(_prompts())
+
+
+# Where a built-in routine's state lives today: the row that already runs it.
+ROUTINE_ROWS = {"agent_triggers": "id", "schedules": "kind"}
+
+
+@dataclass(frozen=True)
+class RoutineFile:
+    """A built-in routine: what starts it, which agent does it, and the row that runs it."""
+
+    plugin: str
+    name: str
+    title: str
+    description: str
+    agent: str
+    triggers: tuple[dict[str, Any], ...]
+    table: str
+    key: str
+    body: str
+
+
+@cache
+def routine_files() -> tuple[RoutineFile, ...]:
+    found: list[RoutineFile] = []
+    for plugin in built_in():
+        for entry in _entries(plugin, "nexusai", "routines"):
+            if not entry.name.endswith(".md"):
+                continue
+            where = f"{plugin.name}/nexusai/routines/{entry.name}"
+            try:
+                front, body = split(entry.read_text("utf-8"))
+            except ValueError as error:
+                raise ValueError(f"{where} {error}") from error
+            extra = front.get("nexusai")
+            ours: dict[str, Any] = extra if isinstance(extra, dict) else {}
+            found_row = ours.get("row")
+            row: dict[str, Any] = found_row if isinstance(found_row, dict) else {}
+            table = str(row.get("table", ""))
+            if table not in ROUTINE_ROWS or not row.get(ROUTINE_ROWS[table]):
+                raise ValueError(f"{where} needs nexusai.row naming the row that runs it")
+            name = str(front.get("name", ""))
+            if entry.name != f"{name}.md":
+                raise ValueError(f"{where} must be named after its name field, {name}.md")
+            agent = str(front.get("agent", ""))
+            if agent not in agent_files():
+                raise ValueError(f"{where} names an agent that doesn't exist: {agent}")
+            found.append(
+                RoutineFile(
+                    plugin=plugin.name,
+                    name=name,
+                    title=str(ours.get("title") or name),
+                    description=str(front.get("description", "")).strip(),
+                    agent=agent,
+                    triggers=tuple(t for t in front.get("triggers") or [] if isinstance(t, dict)),
+                    table=table,
+                    key=str(row[ROUTINE_ROWS[table]]),
+                    body=body.strip(),
+                )
+            )
+    return tuple(found)

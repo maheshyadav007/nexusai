@@ -92,6 +92,7 @@ export const useSchedules = () => useReady(["schedules"], () => query("schedules
 export const useSaveSchedule = () => useCommand(["schedules"], (input: Schedule) => command("schedules.save", input));
 export const useRemoveSchedule = () => useCommand(["schedules"], (id: number) => command("schedules.remove", { id }));
 export const useRunSchedule = () => useCommand(["schedules"], (id: number) => command("schedules.runNow", { id }));
+export const useSetBuiltIn = () => useCommand(["schedules"], (input: { name: string; enabled: boolean }) => command("schedules.setBuiltIn", input));
 export const useSetDefaults = () => useCommand(["schedules"], (input: { time_check_enabled?: boolean; live_mail_enabled?: boolean; morning_brief_enabled?: boolean }) => command("schedules.setDefaults", input));
 
 export const useMailAgent = () => useReady(["mail-agent"], () => query("mailAgent.get", {}));

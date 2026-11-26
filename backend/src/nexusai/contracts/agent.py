@@ -947,8 +947,30 @@ class ListSchedules(BaseModel):
     pass
 
 
+class BuiltInRoutine(BaseModel):
+    """A routine that comes with the app: its plugin's routine file, and the row that runs it."""
+
+    name: str
+    title: str
+    description: str
+    agent: str
+    plugin: str
+    enabled: bool
+    # HH:MM for one that runs at a time; None for one an event starts.
+    time: str | None = None
+    next_run: str | None = None
+
+
+class SetBuiltInRoutine(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    enabled: bool
+
+
 class ScheduleList(BaseModel):
     schedules: list[ScheduleRow]
+    built_in: list[BuiltInRoutine] = Field(default_factory=list)
     time_check_enabled: bool
     live_mail_enabled: bool
     # The built-in morning brief, shown with the other built-in routines.
