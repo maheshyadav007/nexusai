@@ -86,3 +86,4 @@ Imports go one way, enforced by import-linter: `api → modules → kernel → c
 - Test mail features against the real Gmail account and the real model when the user asks for that. Never delete anything on Google's server.
 - Finish features fully, so the natural next step happens by itself. Work in small steps and keep updates short.
 - Plans and feature specs live in `docs/` (`FEATURES.md`, `TODO.md`, `*_PLAN.md`). Read the relevant plan before working on an area.
+- Add what changed for the person to `CHANGELOG.md` with every merge into `main`, newest first, in plain words.
