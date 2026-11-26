@@ -2,6 +2,10 @@
 
 Newest first. Each entry says what changed for the person using the app, in plain words. Updated with every merge into `main`.
 
+## 2026-11-27
+
+- Plugins whose server key is optional, such as Context7, install without asking for it. A key asked for inside a header ("Bearer ${KEY}") is filled in.
+
 ## 2026-11-26
 
 **Add-ons**

@@ -40,7 +40,17 @@ CREATE TABLE plugin_installs (
 MANIFESTS = ("plugin.json", ".claude-plugin/plugin.json", ".codex-plugin/plugin.json")
 MCP_FILES = (".mcp.json", "mcp.json")
 NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
-SETTING = re.compile(r"^\$\{(?:user_config\.)?([A-Za-z_][A-Za-z0-9_]*)\}$")
+# A value the plugin asks for, as Claude Code writes it: ${KEY}, ${user_config.KEY}, or with a
+# default after ":-" (${KEY:-}), which makes it optional. It may sit inside a value ("Bearer ${KEY}").
+SETTING = re.compile(r"\$\{(?:user_config\.)?([A-Za-z_][A-Za-z0-9_]*)(:-[^}]*)?\}")
+
+
+def _filled(value: str, values: dict[str, str]) -> str:
+    """A header value with what the person gave put in, and an optional value's default where they
+    gave nothing."""
+    return SETTING.sub(lambda m: values.get(m.group(1)) or (m.group(2) or ":-")[2:], value).strip()
+
+
 # The transports in standard MCP settings, as NexusAI reaches them.
 TRANSPORTS = {"http": "http", "streamable-http": "http", "streamablehttp": "http", "sse": "sse"}
 MOST_TIMEOUT_SECONDS = 600
@@ -236,10 +246,10 @@ def standard_server(
         str(k): str(v) for k, v in (given if isinstance(given, dict) else {}).items()
     }
     for header, value in headers.items():
-        match = SETTING.match(value.strip())
-        if match:
-            needs.append(match.group(1))
-        elif not secrets_allowed:
+        asked = list(SETTING.finditer(value))
+        # Only a value with no default has to be given before the server is added.
+        needs.extend(m.group(1) for m in asked if m.group(2) is None)
+        if not asked and not secrets_allowed:
             raise CommandError(
                 "plugin.secret",
                 f"MCP server {name} has a value written into its {header} header. A plugin must"
@@ -290,8 +300,10 @@ def connector_for(server: PluginServer, values: dict[str, str]) -> AddConnector:
     headers: dict[str, str] = {}
     token = None
     for header, value in server.headers.items():
-        match = SETTING.match(value.strip())
-        actual = values.get(match.group(1), "") if match else value
+        actual = _filled(value, values)
+        # An optional value left out leaves nothing worth sending.
+        if not actual or actual == "Bearer":
+            continue
         if header.casefold() == "authorization" and actual.startswith("Bearer "):
             token = actual.removeprefix("Bearer ").strip()
         else:
@@ -541,7 +553,7 @@ def create(
             kept: dict[str, str] = {}
             for header, value in given.items():
                 text = str(value).strip()
-                if SETTING.match(text):
+                if SETTING.search(text):
                     kept[header] = text
                     continue
                 key = re.sub(r"[^A-Z0-9]+", "_", f"{server_name}_{header}".upper()).strip("_")
