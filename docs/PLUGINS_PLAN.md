@@ -1,5 +1,7 @@
 # Plugins plan
 
+> **Since 2026-11-26:** the format, layers and what wins are in `docs/PLUGIN_FORMAT_PLAN.md`: built-in agents and skills ship as plugins too. The research, review card, secrets and headers here still apply.
+
 One thing to install that brings skills and the outside tools they need together, with one review, one switch and one place to remove it. Researched 2026-11-25 against Claude Code plugins, Codex plugins, Agent Plugins 1.0 (VS Code and Copilot), Gemini CLI extensions and MCP Bundles. Plan only; nothing is built.
 
 ## Contents

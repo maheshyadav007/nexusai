@@ -1,5 +1,7 @@
 # Agent files: mockup
 
+> **Since 2026-11-26:** the fields are Anthropic's (`docs/PLUGIN_FORMAT_PLAN.md` §5): `name`, `description`, `tools`, `skills`, ours under `nexusai`; routines are files in `nexusai/routines/`. The prompt bodies and the whole-prompt section still apply.
+
 A mockup of one file per agent (`docs/AGENT_OWNERS_PLAN.md` §6b), written out in full for every agent, and how a routine differs from an agent. Nothing is built. Prompt bodies are cut to their first lines; the real ones move over unchanged.
 
 Written 2026-11-25. Open decisions are marked **(open)**.

@@ -1,5 +1,7 @@
 # Who does what: one owner for each job
 
+> **Since 2026-11-26:** the file shape in §6b is replaced by `docs/PLUGIN_FORMAT_PLAN.md` (Anthropic's field names; `owns` becomes jobs listed in `tools`). The owner rule, clusters and steps here still apply.
+
 > **The idea.** Posty does every small job that needs few instructions, directly, with no hand-over. A specialist agent exists only where a job needs a lot of its own instructions, runs without the person, or reads untrusted mail at scale. A single table in code says who owns each job; tools, prompts, Posty's hand-over list and the roster are read from it. Preferences (`docs/PREFERENCES_PLAN.md`) are keyed by the same jobs.
 
 Status: plan, 2026-11-25, reorganised the same day on the person's direction ("small tasks that don't need much instruction go to Posty; those that need special instructions go to other agents"). To do item 10. Nothing built. Written with personalization (To do item 7) in mind.
