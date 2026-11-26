@@ -220,7 +220,7 @@ test("a reminder asked for is set, and shows as a card that links to it", async 
   await expect(card).toContainText("Call the vendor");
   await card.getByRole("link", { name: "Open reminders" }).click();
   await expect(page.getByTestId("reminder").filter({ hasText: "Call the vendor" })).toBeVisible();
-  await expect(page.getByTestId("reminder").filter({ hasText: "Call the vendor" }).getByRole("button", { name: "Accept" })).toHaveCount(0);
+  await expect(page.getByTestId("reminder").filter({ hasText: "Call the vendor" }).getByRole("button", { name: "Keep" })).toHaveCount(0);
 });
 
 test("a hand-over is one quiet line that opens to what it's doing", async ({ page }) => {

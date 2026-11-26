@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { Task } from "@/ui/client/contracts.generated";
 import { useDateOnly, useRelativeTime, useShortDate } from "@/ui/client/format";
 import { AddBar, DuePicker } from "./AddBar";
-import { useRemoveTask, useSaveTask, useTasks } from "@/ui/client/work";
+import { useAgentName, useRemoveTask, useSaveTask, useTasks } from "@/ui/client/work";
 import { AskAgent } from "@/ui/features/agent/AskAgent";
 import { Icon } from "@/ui/icons";
 import { useLeadName } from "@/ui/client/home";
@@ -56,6 +56,8 @@ function Check({ task, onChange }: { task: Task; onChange: (done: boolean) => vo
 
 function TaskRow({ task }: { task: Task }) {
   const lead = useLeadName();
+  // Suggestions come from the Mail agent, while it reads mail, so it is named, not the lead.
+  const suggester = useAgentName()("mail") || lead;
   const save = useSaveTask();
   const remove = useRemoveTask();
   const formatDay = useDateOnly();
@@ -81,7 +83,7 @@ function TaskRow({ task }: { task: Task }) {
         meta={
           <span className="flex min-w-0 items-center gap-2">
             {[
-              task.proposed ? <span key="proposed" className="text-ink-secondary">{t("tasks.proposed", { name: lead })}</span> : null,
+              task.proposed ? <span key="proposed" className="text-ink-secondary">{t("tasks.proposed", { name: suggester })}</span> : null,
               task.due ? <span key="due" className={overdue ? "font-medium text-status-danger" : ""}>{formatDay(task.due)}</span> : null,
               task.source_ref ? <SourceChip key="source" source={task.source_ref} look="inline" /> : null,
               task.source === "agent" && !task.proposed ? <span key="agent">{t("tasks.byAgent")}</span> : null,
@@ -94,10 +96,10 @@ function TaskRow({ task }: { task: Task }) {
           task.proposed ? (
             <span className="flex shrink-0 items-center gap-1">
               <Button variant="quiet" onClick={() => remove.mutate(task.id)}>
-                {t("memory.decline")}
+                {t("tasks.dismiss")}
               </Button>
               <Button variant="primary" onClick={() => update({ proposed: false })}>
-                {t("tasks.accept")}
+                {t("tasks.keep")}
               </Button>
             </span>
           ) : null

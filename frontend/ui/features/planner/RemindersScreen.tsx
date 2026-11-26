@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import type { Reminder } from "@/ui/client/contracts.generated";
 import { useRelativeTime, useShortDate, useTimeOnly } from "@/ui/client/format";
 import { AddBar, dayAt, localMoment, QUICK_TIMES, REPEATS, WhenPicker } from "./AddBar";
-import { useReminders, useRemoveReminder, useSaveReminder, useSnooze } from "@/ui/client/work";
+import { useAgentName, useReminders, useRemoveReminder, useSaveReminder, useSnooze } from "@/ui/client/work";
 import { Icon } from "@/ui/icons";
 import { Button } from "@/ui/primitives/Button";
 import { DoneGroup, DoneRow } from "@/ui/primitives/DoneGroup";
@@ -45,6 +45,8 @@ function ReminderRow({ reminder }: { reminder: Reminder }) {
   const snooze = useSnooze();
   const remove = useRemoveReminder();
   const lead = useLeadName();
+  // Suggestions come from the Mail agent, while it reads mail, so it is named, not the lead.
+  const suggester = useAgentName()("mail") || lead;
   const clock = useTimeOnly();
   const day = useShortDate();
   const relative = useRelativeTime();
@@ -72,7 +74,7 @@ function ReminderRow({ reminder }: { reminder: Reminder }) {
         title={reminder.title}
         meta={(() => {
           const bits = [
-            reminder.proposed ? <span key="proposed" className="text-ink-secondary">{t("tasks.proposed", { name: lead })}</span> : null,
+            reminder.proposed ? <span key="proposed" className="text-ink-secondary">{t("tasks.proposed", { name: suggester })}</span> : null,
             reminder.repeat !== "none" ? <span key="repeat" className="flex items-center gap-1"><Icon name="repeat" className="h-3 w-3" />{repeats}</span> : null,
             reminder.source_ref ? <SourceChip key="source" source={reminder.source_ref} look="inline" /> : null,
             reminder.source === "agent" && !reminder.proposed ? <span key="agent">{t("reminders.byAgent")}</span> : null,
@@ -83,10 +85,10 @@ function ReminderRow({ reminder }: { reminder: Reminder }) {
           reminder.proposed ? (
             <span className="flex shrink-0 items-center gap-1">
               <Button variant="quiet" onClick={() => remove.mutate(reminder.id)}>
-                {t("memory.decline")}
+                {t("tasks.dismiss")}
               </Button>
               <Button variant="primary" onClick={() => update({ proposed: false })}>
-                {t("tasks.accept")}
+                {t("tasks.keep")}
               </Button>
             </span>
           ) : (

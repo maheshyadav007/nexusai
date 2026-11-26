@@ -312,6 +312,7 @@ def assemble_messages(turns: list[dict[str, Any]]) -> list[dict[str, Any]]:
                         "turn": turn["id"],
                         "feedback": turn.get("feedback"),
                         "versions": turn.get("versions"),
+                        "built": turn.get("built"),
                         "thread": turn.get("thread"),
                     },
                 }

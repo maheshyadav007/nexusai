@@ -103,3 +103,14 @@ def test_the_agents_page_says_what_each_agent_does_and_what_starts_it(client: Te
     brief = listed["daily-prep"]
     assert brief["starts"] == [{"key": "every-morning", "time": "08:30"}]
     assert listed["routines"]["plugin"] == "Routines" and listed["session"]["jobs"] == []
+
+
+def test_an_answer_says_which_agent_and_plugin_it_was_built_from(
+    client: TestClient, script: Script
+) -> None:
+    session = new_session(client)
+    script.replies = [[TextChunk("Hello.")]]
+    chat(client, session, "Hi")
+    messages = client.post("/api/queries/session.get", json={"id": session}).json()["messages"]
+    built = messages[-1]["metadata"]["built"]
+    assert built["agent"] == "session" and built["plugin"] == "NexusAI" and built["card"]

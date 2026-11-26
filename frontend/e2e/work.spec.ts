@@ -207,9 +207,9 @@ test("a proposed task is accepted, finished, and removed", async ({ page }) => {
   await noViolations(page);
   // Accepting one takes it out of Suggested. Others from earlier tests are accepted too, so
   // the tests after this start with none waiting.
-  const accept = page.getByRole("button", { name: "Accept" });
+  const accept = page.getByRole("button", { name: "Keep" });
   const waiting = await accept.count();
-  await proposed.getByRole("button", { name: "Accept" }).click();
+  await proposed.getByRole("button", { name: "Keep" }).click();
   await expect(accept).toHaveCount(waiting - 1);
   while ((await accept.count()) > 0) {
     const left = await accept.count();

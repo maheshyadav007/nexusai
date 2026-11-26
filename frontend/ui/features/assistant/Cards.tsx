@@ -4,17 +4,18 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { ApiRequestError } from "@/ui/client/api";
 import type { ToolApproval } from "@/ui/client/contracts.generated";
-import { useDateTime } from "@/ui/client/format";
+import { useDateOnly, useDateTime } from "@/ui/client/format";
 import { useDecideApproval, useDecideApprovals } from "@/ui/client/sessions";
 import { Icon, type IconName } from "@/ui/icons";
+import { Badge } from "@/ui/primitives/Badge";
 import { Button } from "@/ui/primitives/Button";
 import { Checkbox } from "@/ui/primitives/Checkbox";
 import { TextView } from "@/ui/primitives/TextView";
 import { Rise } from "@/ui/primitives/Motion";
 import { BareInput, Pressable } from "@/ui/primitives/Pressable";
-import { t, tn } from "@/ui/strings";
+import { t, tn, type StringKey } from "@/ui/strings";
 import { ApprovalPreviewView } from "@/ui/shell/ApprovalPreviewView";
-import { useAgentCards } from "@/ui/client/work";
+import { useAgentCards, useReminders, useRemoveReminder, useRemoveTask, useSaveReminder, useSaveTask, useTasks } from "@/ui/client/work";
 import { Mascot } from "@/ui/primitives/Mascot";
 import { isFinished, toolName, type ToolPart } from "./parts";
 import { SourceChip } from "@/ui/features/sources/SourceChip";
@@ -240,18 +241,119 @@ export function MailCard({ part, approval }: { part: ToolPart; approval?: ToolAp
 }
 
 /** What the Mail agent decided about a conversation, and why. */
+type TriageItem = Record<string, unknown>;
+const list = (value: unknown): TriageItem[] => (Array.isArray(value) ? (value.filter((item) => item && typeof item === "object") as TriageItem[]) : []);
+const text = (value: unknown): string => (typeof value === "string" ? value : "");
+const words = (value: unknown): string[] => (Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim() !== "") : []);
+
+function TriageRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <>
+      <dt className="text-ink-muted sm:col-span-1">{label}</dt>
+      <dd className="mb-2 min-w-0 break-words text-ink-primary sm:col-span-3 sm:mb-0">{children}</dd>
+    </>
+  );
+}
+
+/** A suggestion the Mail agent saved, kept or dismissed here. Found by its title on this email. */
+function Suggestion({ kind, title, detail, thread }: { kind: "task" | "reminder"; title: string; detail: string; thread: number | null | undefined }) {
+  const tasks = useTasks(false);
+  const reminders = useReminders();
+  const saveTask = useSaveTask();
+  const removeTask = useRemoveTask();
+  const saveReminder = useSaveReminder();
+  const removeReminder = useRemoveReminder();
+  const task = kind === "task" ? (tasks.data?.tasks ?? []).find((item) => item.title === title && item.thread === thread) : undefined;
+  const reminder = kind === "reminder" ? (reminders.data?.reminders ?? []).find((item) => item.title === title && item.thread === thread) : undefined;
+  const item = task ?? reminder;
+  const pending = Boolean(item?.proposed);
+  const keep = () => {
+    if (task) saveTask.mutate({ id: task.id, title: task.title, notes: task.notes, status: task.status, due: task.due ?? null, thread: task.thread ?? null, proposed: false });
+    if (reminder) saveReminder.mutate({ id: reminder.id, title: reminder.title, when: reminder.when, repeat: reminder.repeat, thread: reminder.thread ?? null, task: reminder.task ?? null, proposed: false, every_minutes: reminder.every_minutes ?? null, days: reminder.days ?? null, window_start: reminder.window_start ?? null, window_end: reminder.window_end ?? null, until: reminder.until ?? null });
+  };
+  const dismiss = () => {
+    if (task) removeTask.mutate(task.id);
+    if (reminder) removeReminder.mutate(reminder.id);
+  };
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <span className="flex min-w-0 flex-col gap-1">
+        <span className="break-words text-md text-ink-primary">{t(kind === "task" ? "chat.triage.task" : "chat.triage.reminder", { title })}</span>
+        {detail ? <span className="text-sm text-ink-muted">{detail}</span> : null}
+      </span>
+      {pending ? (
+        <span className="flex shrink-0 items-center gap-1">
+          <Button variant="quiet" onClick={dismiss}>{t("tasks.dismiss")}</Button>
+          <Button variant="primary" onClick={keep}>{t("tasks.keep")}</Button>
+        </span>
+      ) : item ? (
+        <span className="shrink-0 text-sm text-ink-muted">{t("chat.triage.kept")}</span>
+      ) : null}
+    </div>
+  );
+}
+
+/** Everything the Mail agent recorded about one email. Only what's set is shown, so a newsletter
+ * stays one line and an invoice shows its deadline, matter and suggestions. What it only suggests
+ * sits apart from what it decided, and waits for Keep. */
 export function TriageCard({ part, thread }: { part: ToolPart; thread: number | null | undefined }) {
   const input = part.input ?? {};
-  const category = typeof input.category === "string" ? input.category : null;
+  const day = useDateOnly();
+  const moment = useDateTime();
+  const category = text(input.category) || null;
   const importance = String(input.importance ?? "normal");
+  const status = text(input.status);
+  const next = text(input.next_action);
+  const deadlines = list(input.deadlines);
+  const tasks = list(input.tasks).filter((item) => text(item.title));
+  const reminders = list(input.reminders).filter((item) => text(item.title));
+  const draft = text(input.draft);
+  const learned = words(input.learned);
+  const finished = words(input.finished);
+  const matter = typeof input.matter === "number" ? input.matter : null;
+  const unsure = input.confidence === "low" ? text(input.review_reason) : "";
+  const hasRows = deadlines.length > 0 || Boolean(text(input.follow_up_on)) || matter !== null || finished.length > 0;
   return (
     <Shell testid="triage-card">
-      <p className="flex flex-wrap items-center gap-2 text-md font-medium text-ink-primary">
-        {category ?? t("chat.triage.noCategory")}
-        {importance === "high" ? <span className="text-sm font-normal text-accent-default">{t("today.important")}</span> : null}
-      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge>{category ?? t("chat.triage.noCategory")}</Badge>
+        {status && status !== "fyi" ? <Badge tone="neutral">{t(`chat.triage.status.${status}` as StringKey)}{next && next !== "none" ? ` · ${t(`chat.triage.next.${next}` as StringKey)}` : ""}</Badge> : status === "fyi" ? <Badge>{t("chat.triage.status.fyi")}</Badge> : null}
+        {importance === "high" ? <Badge tone="accent">{t("today.important")}</Badge> : null}
+      </div>
       {input.summary ? <p className="break-words text-md text-ink-primary">{String(input.summary)}</p> : null}
-      {input.reason ? <p className="break-words text-sm text-ink-muted">{String(input.reason)}</p> : null}
+      {input.reason ? <p className="break-words text-sm text-ink-muted">{t("chat.triage.why", { reason: String(input.reason) })}</p> : null}
+      {unsure ? <p className="text-sm text-status-warning">{t("chat.triage.unsure", { why: unsure })}</p> : null}
+      {hasRows ? (
+        <dl className="grid grid-cols-1 gap-x-4 gap-y-1 border-t border-line-subtle pt-3 text-md sm:grid-cols-4 sm:gap-y-2">
+          {deadlines.map((item, index) => <TriageRow key={`d${index}`} label={t("chat.triage.deadline")}>{[text(item.what), text(item.due) ? day(text(item.due)) : ""].filter(Boolean).join(" · ")}</TriageRow>)}
+          {text(input.follow_up_on) ? <TriageRow label={t("chat.triage.followUp")}>{day(text(input.follow_up_on))}</TriageRow> : null}
+          {matter !== null ? <TriageRow label={t("chat.triage.matter")}><Link className="focus-ring rounded-sm text-accent-default hover:text-accent-hover" href={`/today?view=matters&matter=${matter}`}>{t("chat.triage.openMatter")}</Link></TriageRow> : null}
+          {finished.map((line, index) => <TriageRow key={`f${index}`} label={t("chat.triage.finished")}>{line}</TriageRow>)}
+        </dl>
+      ) : null}
+      {tasks.length || reminders.length || draft ? (
+        <div aria-label={t("chat.triage.suggested")} className="flex flex-col gap-3 rounded-md border border-line-subtle bg-surface-sunken p-3">
+          <span className="text-sm font-medium text-ink-secondary">{t("chat.triage.suggested")}</span>
+          {tasks.map((item, index) => <Suggestion key={`t${index}`} kind="task" title={text(item.title)} detail={text(item.due) ? day(text(item.due)) : ""} thread={thread} />)}
+          {reminders.map((item, index) => <Suggestion key={`r${index}`} kind="reminder" title={text(item.title)} detail={text(item.when) ? moment(text(item.when)) : ""} thread={thread} />)}
+          {draft ? (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="flex min-w-0 flex-col gap-1">
+                <span className="text-md text-ink-primary">{t("chat.triage.draft")}</span>
+                <span className="line-clamp-2 break-words text-sm text-ink-muted">{draft}</span>
+              </span>
+              <Link className="focus-ring shrink-0 rounded-sm text-md text-accent-default hover:text-accent-hover" href="/mail/drafts">{t("chat.triage.openDraft")}</Link>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {text(input.question) ? (
+        <div className="flex flex-col gap-1 rounded-md border border-line-strong p-3">
+          <span className="text-sm font-medium text-ink-secondary">{t("chat.triage.question")}</span>
+          <span className="break-words text-md text-ink-primary">{text(input.question)}</span>
+        </div>
+      ) : null}
+      {learned.map((fact, index) => <p key={`l${index}`} className="break-words text-sm text-ink-muted">{t("chat.triage.learned", { fact })}</p>)}
       {!isFinished(part) ? <p className="text-sm text-ink-muted">{t("chat.result.working")}</p> : null}
       {thread ? <div><SourceChip source={mailSource(Number(thread))} label={t("chat.result.openMail")} /></div> : null}
     </Shell>
