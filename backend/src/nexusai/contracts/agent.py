@@ -1026,6 +1026,57 @@ class RunAgain(BaseModel):
     run: int
 
 
+class PluginServer(BaseModel):
+    """A remote MCP server a plugin brings. Headers hold only ${user_config.KEY} placeholders."""
+
+    name: str
+    url: str
+    headers: dict[str, str] = Field(default_factory=dict)
+    # The settings it asks the person for, such as an API key.
+    needs: list[str] = Field(default_factory=list)
+
+
+class InstalledPlugin(BaseModel):
+    name: str
+    display_name: str
+    version: str = ""
+    description: str = ""
+    source: str
+    skills: list[str] = Field(default_factory=list)
+    servers: list[PluginServer] = Field(default_factory=list)
+    # The connectors added for its servers.
+    connectors: list[str] = Field(default_factory=list)
+    # What it has that isn't used here, such as hooks or servers that run on this computer.
+    skipped: list[str] = Field(default_factory=list)
+
+
+class PluginList(BaseModel):
+    plugins: list[InstalledPlugin]
+
+
+class ListPlugins(BaseModel):
+    pass
+
+
+class ProposePlugin(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source: str = Field(min_length=1, max_length=2000)
+
+
+class AddPluginServers(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=64)
+    values: dict[str, str] = Field(default_factory=dict, max_length=20)
+
+
+class PluginName(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=64)
+
+
 class BuiltInRoutine(BaseModel):
     """A routine that comes with the app: its plugin's routine file, and the row that runs it."""
 

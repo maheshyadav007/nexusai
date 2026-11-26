@@ -42,6 +42,7 @@ from nexusai.modules.agent import (
     cards,
     channel,
     citations,
+    installs,
     jobs,
     kinds,
     mail_agent,
@@ -704,6 +705,25 @@ class _ReadSkillFile(BaseModel):
     name: str = Field(description="The skill.")
     path: str = Field(description="One of the files load_skill listed, such as examples.md.")
     tool_call_id: Annotated[str, InjectedToolCallId]
+
+
+class _ProposePlugin(BaseModel):
+    source: str = Field(
+        description="The https link the person gave (a GitHub folder or a zip), or a folder path on"
+        " this computer."
+    )
+
+
+class _AddPluginServers(BaseModel):
+    name: str = Field(description="The plugin's name, from list_plugins.")
+    values: dict[str, str] = Field(
+        default_factory=dict,
+        description="The settings its servers ask for, by name, such as an API key the person gave.",
+    )
+
+
+class _PluginName(BaseModel):
+    name: str = Field(description="The plugin's name, from list_plugins.")
 
 
 class _ProposeSkill(BaseModel):
@@ -1821,6 +1841,105 @@ def build_tools(
             work,
         )
 
+    def _plugin_line(plugin: Any) -> str:
+        servers = ", ".join(
+            f"{s.name}" + (f" (needs {', '.join(s.needs)})" if s.needs else "")
+            for s in plugin.servers
+        )
+        return (
+            f"{plugin.name}: skills {', '.join(plugin.skills) or 'none'}; servers {servers or 'none'};"
+            f" connectors added {', '.join(plugin.connectors) or 'none'}"
+            + (f"; not used here: {', '.join(plugin.skipped)}" if plugin.skipped else "")
+        )
+
+    def propose_plugin(source: str, tool_call_id: str) -> str:
+        def work() -> str:
+            try:
+                found = installs.propose(ctx, source, _speaker())
+            except CommandError as error:
+                return f"Not proposed: {error.message}"
+            except httpx.HTTPError as error:
+                return f"Not fetched: {type(error).__name__}. Check the link and the network."
+            servers = (
+                " Its servers aren't added yet: once the person agrees, add them with"
+                " add_plugin_servers"
+                + (
+                    ", asking first for what they need"
+                    if any(s.needs for s in found.servers)
+                    else ""
+                )
+                + "."
+                if found.servers
+                else ""
+            )
+            return (
+                f"Proposed plugin {found.name}. {_plugin_line(found)}. Its skills do nothing until the"
+                f" person reads and approves each on the Agent channel page, under Skills.{servers}"
+            )
+
+        return _guarded(
+            ctx,
+            session,
+            tool_call_id,
+            "propose_plugin",
+            "send",
+            None,
+            f"Fetch a plugin from {source}",
+            f"{source}\n\nIts skills come back only as proposals you review. Its servers are added"
+            " only when you agree, and nothing in it runs on this computer.",
+            False,
+            work,
+        )
+
+    def add_plugin_servers(
+        name: str, tool_call_id: str, values: dict[str, str] | None = None
+    ) -> str:
+        def work() -> str:
+            try:
+                found = installs.add_servers(ctx, name, values or {})
+            except CommandError as error:
+                return f"Not added: {error.message}"
+            return f"Added. {_plugin_line(found)}. New tools wait for the person's yes before use."
+
+        return _guarded(
+            ctx,
+            session,
+            tool_call_id,
+            "add_plugin_servers",
+            "data",
+            None,
+            f"Add the servers of the plugin {name}",
+            f"Connects to the MCP servers the plugin {name} brings. Their tools are listed and"
+            " checked like any connector's.",
+            False,
+            work,
+        )
+
+    def list_plugins(tool_call_id: str) -> str:
+        found = installs.listing(ctx).plugins
+        return "\n".join(_plugin_line(p) for p in found) or "No plugins are installed."
+
+    def remove_plugin(name: str, tool_call_id: str) -> str:
+        def work() -> str:
+            try:
+                installs.remove(ctx, name)
+            except CommandError as error:
+                return f"Not removed: {error.message}"
+            return f"Removed the plugin {name}, with its skills and connectors."
+
+        return _guarded(
+            ctx,
+            session,
+            tool_call_id,
+            "remove_plugin",
+            "data",
+            None,
+            f"Remove the plugin {name}",
+            f"Takes out the plugin {name}: its skills and the connectors it added.",
+            False,
+            work,
+        )
+
     def team_roster(tool_call_id: str) -> str:
         return team.roster(ctx, lambda _session: True)
 
@@ -2298,6 +2417,23 @@ def build_tools(
             _ReadSkillFile,
             "Read one more file from a loaded skill, when a step of it says to.",
         ),
+        (
+            propose_plugin,
+            _ProposePlugin,
+            "Install a plugin from a link or folder the person gave: its skills come back as proposals"
+            " they review, and its MCP servers are added later with add_plugin_servers.",
+        ),
+        (
+            add_plugin_servers,
+            _AddPluginServers,
+            "Add the MCP servers a proposed plugin brings, with any settings they need from the person.",
+        ),
+        (
+            list_plugins,
+            _Nothing,
+            "See the installed plugins: their skills, servers and connectors.",
+        ),
+        (remove_plugin, _PluginName, "Remove a plugin with its skills and connectors."),
         (
             propose_skill,
             _ProposeSkill,

@@ -10,6 +10,7 @@ import httpx
 from nexusai.contracts.agent import (
     ActivityList,
     ActivityRow,
+    AddPluginServers,
     AddSkill,
     AgentChannelList,
     AgentDone,
@@ -79,6 +80,7 @@ from nexusai.contracts.agent import (
     GuardRules,
     GuardTestResult,
     HealthItem,
+    InstalledPlugin,
     Job,
     JobList,
     ListActivity,
@@ -93,6 +95,7 @@ from nexusai.contracts.agent import (
     ListMatters,
     ListMemory,
     ListPipelines,
+    ListPlugins,
     ListPrompts,
     ListRoutineRuns,
     ListRuns,
@@ -121,6 +124,8 @@ from nexusai.contracts.agent import (
     Permissions,
     PipelineList,
     PipelineMore,
+    PluginList,
+    PluginName,
     PreferenceDecision,
     PreferenceHistory,
     PreferenceList,
@@ -136,6 +141,7 @@ from nexusai.contracts.agent import (
     PromptList,
     PromptVersion,
     PromptVersions,
+    ProposePlugin,
     QueueAction,
     QuietHours,
     RateMessage,
@@ -230,6 +236,7 @@ from nexusai.modules.agent import (
     feedback,
     gateway,
     guard,
+    installs,
     knowledge,
     links,
     mail_agent,
@@ -306,6 +313,7 @@ agent_module = Module(
         triggers.MIGRATION,
         triggers.MATCH_MIGRATION,
         checks.MIGRATION,
+        installs.MIGRATION,
         scheduler.BUILT_IN_MIGRATION,
         feedback.MIGRATION,
         feedback.BRIEF_MIGRATION,
@@ -1394,6 +1402,26 @@ def run_again(command: RunAgain, ctx: Context) -> AgentDone:
     if _triggers:
         _triggers.wake.set()
     return AgentDone()
+
+
+@agent_module.query("plugins.list")
+def list_plugins(query: ListPlugins, ctx: Context) -> PluginList:
+    return installs.listing(ctx)
+
+
+@agent_module.command("plugins.propose")
+def propose_plugin(command: ProposePlugin, ctx: Context) -> InstalledPlugin:
+    return installs.propose(ctx, command.source, "person")
+
+
+@agent_module.command("plugins.addServers")
+def add_plugin_servers(command: AddPluginServers, ctx: Context) -> InstalledPlugin:
+    return installs.add_servers(ctx, command.name, command.values)
+
+
+@agent_module.command("plugins.remove")
+def remove_plugin(command: PluginName, ctx: Context) -> PluginList:
+    return installs.remove(ctx, command.name)
 
 
 @agent_module.command("schedules.setBuiltIn")

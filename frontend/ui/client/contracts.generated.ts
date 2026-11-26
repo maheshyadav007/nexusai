@@ -2250,14 +2250,30 @@ export type Trigger1 = string | null;
 export type Runs1 = RoutineRun[];
 export type Run = number;
 export type Name35 = string;
-export type Title16 = string;
+export type Url3 = string;
+export type Needs = string[];
+export type Name36 = string;
+export type DisplayName = string;
+export type Version = string;
 export type Description4 = string;
+export type Source8 = string;
+export type Skills = string[];
+export type Servers = PluginServer[];
+export type Connectors = string[];
+export type Skipped = string[];
+export type Plugins = InstalledPlugin[];
+export type Source9 = string;
+export type Name37 = string;
+export type Name38 = string;
+export type Name39 = string;
+export type Title16 = string;
+export type Description5 = string;
 export type Agent8 = string;
 export type Plugin = string;
 export type Enabled9 = boolean;
 export type Time12 = string | null;
 export type NextRun2 = string | null;
-export type Name36 = string;
+export type Name40 = string;
 export type Enabled10 = boolean;
 export type Schedules = ScheduleRow[];
 export type BuiltIn = BuiltInRoutine[];
@@ -2304,7 +2320,7 @@ export type Comment1 = string;
 export type Rating2 = string | null;
 export type Comment2 = string;
 export type Id63 = string;
-export type Name37 = string;
+export type Name41 = string;
 export type Does = string;
 export type State9 = "running" | "active" | "finished" | "off" | "past" | "failed";
 export type When4 = string;
@@ -2331,7 +2347,7 @@ export type TasksBlocked = number;
 export type Key8 = "on-new-mail" | "every-hour" | "every-morning";
 export type Time13 = string | null;
 export type Id64 = string;
-export type Name38 = string;
+export type Name42 = string;
 export type Handle = string;
 export type Role3 = string;
 export type CanDo = string[];
@@ -2339,18 +2355,18 @@ export type Default = boolean;
 export type MayAssignTo = string[];
 export type TalksToPerson = boolean;
 export type Accepts = string[];
-export type Version = string;
+export type Version1 = string;
 export type Renamed = boolean;
 export type Kind14 = "built_in" | "yours";
 export type Tools2 = string[];
 export type Plugin1 = string | null;
 export type Jobs2 = string[];
-export type Skills = string[];
+export type Skills1 = string[];
 export type Starts = AgentStart[];
 export type ReadsUntrustedMail = boolean;
 export type Cards = AgentCard[];
 export type Id65 = string;
-export type Name39 = string;
+export type Name43 = string;
 export type Handle1 = string;
 export type Id66 = string;
 export type Id67 = string;
@@ -2455,7 +2471,7 @@ export type Text13 = string;
 export type Section = string;
 export type Thread9 = number | null;
 export type Confirmed = boolean;
-export type Name40 = string;
+export type Name44 = string;
 export type Text14 = string;
 export type Trust = string;
 export type BriefReactions = BriefReaction[];
@@ -2519,14 +2535,14 @@ export type Id80 = string;
 export type Thread11 = number;
 export type Action3 = "opened";
 export type Kind16 = "personal" | "agent";
-export type Name41 = string;
+export type Name45 = string;
 export type Id81 = number;
 export type Content5 = string;
 export type Time16 = string;
 export type Versions1 = PromptVersion[];
 export type Kind17 = "personal" | "agent";
-export type Name42 = string;
-export type Version1 = number;
+export type Name46 = string;
+export type Version2 = number;
 export type Id82 = number | null;
 export type Revision4 = number | null;
 export type Purpose3 = "all" | "mail" | "draft" | "brief";
@@ -2582,8 +2598,8 @@ export type Reason6 = string;
 export type Decisions = PreferenceDecision[];
 export type Path11 = string;
 export type Text16 = string;
-export type Name43 = string;
-export type Description5 = string;
+export type Name47 = string;
+export type Description6 = string;
 export type Origin = "built_in" | "yours";
 export type Active2 = boolean;
 export type Problem1 = string | null;
@@ -2594,23 +2610,23 @@ export type Body2 = string;
 export type Loads = number;
 export type LastLoaded = string | null;
 export type Id86 = number;
-export type Name44 = string;
-export type Description6 = string;
+export type Name48 = string;
+export type Description7 = string;
 export type Agents2 = string[];
 export type NeedsTools1 = string[];
-export type Source8 = string;
+export type Source10 = string;
 export type Files2 = SkillFile[];
 export type Flags = string[];
 export type Status20 = "waiting" | "approved" | "rejected";
 export type ProposedBy = string;
 export type Created5 = string;
-export type Skills1 = Skill[];
+export type Skills2 = Skill[];
 export type Proposals1 = SkillProposal[];
-export type Url3 = string | null;
+export type Url4 = string | null;
 export type Text17 = string | null;
 export type Id87 = number;
 export type Approve = boolean;
-export type Name45 = string;
+export type Name49 = string;
 export type Id88 = number;
 export type Kind18 = string;
 export type Agent10 = string | null;
@@ -2619,7 +2635,7 @@ export type Detail5 = string;
 export type Time18 = string;
 export type Seen = boolean;
 export type TaskId4 = number;
-export type Source9 = string;
+export type Source11 = string;
 export type Target = string;
 export type State12 = string;
 export type Objective1 = string;
@@ -2632,7 +2648,7 @@ export type Cycles = string[][];
 export type Alerts = MonitorAlert[];
 export type Kind19 = "run" | "model" | "tool" | "skill" | "message";
 export type Id89 = string;
-export type Name46 = string;
+export type Name50 = string;
 export type Agent11 = string | null;
 export type Time19 = string;
 export type Status21 = string | null;
@@ -2771,7 +2787,7 @@ export type Notes1 = string;
 export type Status23 = "todo" | "in_progress" | "done";
 export type Due3 = string | null;
 export type Thread15 = number | null;
-export type Source10 = "user" | "agent";
+export type Source12 = "user" | "agent";
 export type Proposed4 = boolean;
 export type Created6 = string;
 export type Updated7 = string | null;
@@ -2793,7 +2809,7 @@ export type When9 = string;
 export type Repeat = "none" | "interval" | "day" | "week" | "month" | "year";
 export type Thread17 = number | null;
 export type Task1 = number | null;
-export type Source11 = "user" | "agent";
+export type Source13 = "user" | "agent";
 export type Proposed6 = boolean;
 export type Fired = boolean;
 export type Created7 = string | null;
@@ -2824,7 +2840,7 @@ export type Id104 = number;
 export type Ok5 = boolean;
 export type Id105 = string;
 export type Label11 = string;
-export type Description7 = string;
+export type Description8 = string;
 export type SizeBytes = number;
 export type State15 = "missing" | "downloading" | "ready" | "failed";
 export type DownloadedBytes = number;
@@ -2864,26 +2880,27 @@ export type Score1 = number;
 export type Excerpt1 = string;
 export type Place2 = string | null;
 export type Id109 = string;
-export type Name47 = string;
-export type Description8 = string;
+export type Name51 = string;
+export type Description9 = string;
 export type Id110 = string;
-export type Name48 = string;
+export type Name52 = string;
 export type Kind28 = "email" | "mcp";
-export type Url4 = string | null;
+export type Url5 = string | null;
 export type Audience = ("internal" | "public") | null;
 export type Enabled11 = boolean;
 export type State17 = "ok" | "failed" | "changed" | "off";
 export type Detail7 = string | null;
 export type Tools3 = ConnectorTool[];
 export type HasToken = boolean;
-export type Connectors1 = Connector[];
-export type Url5 = string;
+export type HeaderNames = string[];
+export type Connectors2 = Connector[];
+export type Url6 = string;
 export type Token = string | null;
 export type Ok6 = boolean;
 export type Error8 = string | null;
 export type Tools4 = ConnectorTool[];
-export type Name49 = string;
-export type Url6 = string;
+export type Name53 = string;
+export type Url7 = string;
 export type Token1 = string | null;
 export type Audience1 = "internal" | "public";
 export type Id111 = string;
@@ -2895,9 +2912,9 @@ export type TraceId2 = string | null;
 export type Id113 = string;
 export type Seq1 = number;
 export type Type2 = string;
-export type Version2 = number;
+export type Version3 = number;
 export type Time22 = string;
-export type Source12 = string;
+export type Source14 = string;
 export type TraceId3 = string;
 export type CauseId = string | null;
 export type Depth = number;
@@ -2932,7 +2949,7 @@ export type SoundMuted1 = boolean | null;
 export type SoundOff1 = string[] | null;
 export type PriorityShows1 = ("waiting_on_you" | "waiting_on_others" | "important" | "folders" | "unfiled")[] | null;
 export type Id114 = string;
-export type Name50 = string;
+export type Name54 = string;
 export type Models1 = AvailableModel[];
 export type BaseUrl = string;
 export type ApiKey = string | null;
@@ -2977,7 +2994,7 @@ export type Problems1 = string[];
 export type Warnings = string[];
 export type FreeBytes1 = number | null;
 export type IsExistingHome = boolean;
-export type Name51 = string;
+export type Name55 = string;
 export type Reason8 = string;
 export type Time24 = string;
 export type Size8 = number;
@@ -2985,7 +3002,7 @@ export type Backups = BackupRow[];
 export type Pending1 = string | null;
 export type Confirm2 = string;
 export type KeepModels = boolean;
-export type Name52 = string;
+export type Name56 = string;
 export type RecoveryKey = string;
 export type State19 = "ready" | "unset" | "missing" | "locked" | "damaged";
 export type Path17 = string | null;
@@ -2999,7 +3016,7 @@ export type CurrentStep = string | null;
 export type ChecklistDismissed = boolean;
 export type Back = boolean;
 export type Step2 = string;
-export type Name53 = string;
+export type Name57 = string;
 export type Role4 = string;
 export type Signature = string;
 export type Tone = "formal" | "friendly" | "brief";
@@ -3039,7 +3056,7 @@ export type Sections = string[];
  * @maxItems 256
  */
 export type Hidden = string[];
-export type Version3 = string;
+export type Version4 = string;
 export type Platform = string;
 export type Python = string;
 export type Home = string;
@@ -3053,7 +3070,7 @@ export type TraceId4 = string;
 export type Lines = {
   [k: string]: unknown;
 }[];
-export type Name54 = string;
+export type Name58 = string;
 export type Host1 = string;
 export type Ok8 = boolean;
 export type Detail10 = string;
@@ -3360,6 +3377,13 @@ export interface Contracts {
   ListRoutineRuns?: ListRoutineRuns;
   RoutineRuns?: RoutineRuns;
   RunAgain?: RunAgain;
+  PluginServer?: PluginServer;
+  InstalledPlugin?: InstalledPlugin;
+  PluginList?: PluginList;
+  ListPlugins?: ListPlugins;
+  ProposePlugin?: ProposePlugin;
+  AddPluginServers?: AddPluginServers;
+  PluginName?: PluginName;
   BuiltInRoutine?: BuiltInRoutine;
   SetBuiltInRoutine?: SetBuiltInRoutine;
   ScheduleList?: ScheduleList;
@@ -3512,7 +3536,7 @@ export interface Contracts {
   GetConnectors?: GetConnectors;
   ConnectorTool?: ConnectorTool;
   Connector?: Connector;
-  Connectors?: Connectors;
+  Connectors?: Connectors1;
   TestConnector?: TestConnector;
   ConnectorTest?: ConnectorTest;
   AddConnector?: AddConnector;
@@ -6586,15 +6610,87 @@ export interface RunAgain {
   run: Run;
 }
 /**
+ * A remote MCP server a plugin brings. Headers hold only ${user_config.KEY} placeholders.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "PluginServer".
+ */
+export interface PluginServer {
+  name: Name35;
+  url: Url3;
+  headers?: Headers;
+  needs?: Needs;
+  [k: string]: unknown;
+}
+export interface Headers {
+  [k: string]: string;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "InstalledPlugin".
+ */
+export interface InstalledPlugin {
+  name: Name36;
+  display_name: DisplayName;
+  version?: Version;
+  description?: Description4;
+  source: Source8;
+  skills?: Skills;
+  servers?: Servers;
+  connectors?: Connectors;
+  skipped?: Skipped;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "PluginList".
+ */
+export interface PluginList {
+  plugins: Plugins;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ListPlugins".
+ */
+export interface ListPlugins {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProposePlugin".
+ */
+export interface ProposePlugin {
+  source: Source9;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "AddPluginServers".
+ */
+export interface AddPluginServers {
+  name: Name37;
+  values?: Values;
+}
+export interface Values {
+  [k: string]: string;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "PluginName".
+ */
+export interface PluginName {
+  name: Name38;
+}
+/**
  * A routine that comes with the app: its plugin's routine file, and the row that runs it.
  *
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "BuiltInRoutine".
  */
 export interface BuiltInRoutine {
-  name: Name35;
+  name: Name39;
   title: Title16;
-  description: Description4;
+  description: Description5;
   agent: Agent8;
   plugin: Plugin;
   enabled: Enabled9;
@@ -6607,7 +6703,7 @@ export interface BuiltInRoutine {
  * via the `definition` "SetBuiltInRoutine".
  */
 export interface SetBuiltInRoutine {
-  name: Name36;
+  name: Name40;
   enabled: Enabled10;
 }
 /**
@@ -6729,7 +6825,7 @@ export interface BriefReacted {
  */
 export interface AgentEntry {
   id: Id63;
-  name: Name37;
+  name: Name41;
   does: Does;
   state: State9;
   when: When4;
@@ -6809,7 +6905,7 @@ export interface AgentStart {
  */
 export interface AgentCard {
   id: Id64;
-  name: Name38;
+  name: Name42;
   handle: Handle;
   role: Role3;
   can_do: CanDo;
@@ -6818,7 +6914,7 @@ export interface AgentCard {
   talks_to_person: TalksToPerson;
   accepts: Accepts;
   mascot: AgentMascot;
-  version: Version;
+  version: Version1;
   renamed?: Renamed;
   kind?: Kind14;
   tools?: Tools2;
@@ -6826,7 +6922,7 @@ export interface AgentCard {
   usage?: AgentUsage;
   plugin?: Plugin1;
   jobs?: Jobs2;
-  skills?: Skills;
+  skills?: Skills1;
   starts?: Starts;
   reads_untrusted_mail?: ReadsUntrustedMail;
   [k: string]: unknown;
@@ -6852,7 +6948,7 @@ export interface CardList {
  */
 export interface RenameAgent {
   id: Id65;
-  name: Name39;
+  name: Name43;
   handle: Handle1;
 }
 /**
@@ -7134,7 +7230,7 @@ export interface LearnedNote {
  * via the `definition` "KnowledgeLayer".
  */
 export interface KnowledgeLayer {
-  name: Name40;
+  name: Name44;
   text: Text14;
   trust: Trust;
   [k: string]: unknown;
@@ -7317,7 +7413,7 @@ export interface RecordInteraction {
  */
 export interface PromptHistory {
   kind: Kind16;
-  name: Name41;
+  name: Name45;
   [k: string]: unknown;
 }
 /**
@@ -7344,8 +7440,8 @@ export interface PromptVersions {
  */
 export interface RestorePrompt {
   kind: Kind17;
-  name: Name42;
-  version: Version1;
+  name: Name46;
+  version: Version2;
   [k: string]: unknown;
 }
 /**
@@ -7477,8 +7573,8 @@ export interface SkillFile {
  * via the `definition` "Skill".
  */
 export interface Skill {
-  name: Name43;
-  description: Description5;
+  name: Name47;
+  description: Description6;
   origin: Origin;
   active: Active2;
   problem?: Problem1;
@@ -7496,11 +7592,11 @@ export interface Skill {
  */
 export interface SkillProposal {
   id: Id86;
-  name: Name44;
-  description: Description6;
+  name: Name48;
+  description: Description7;
   agents: Agents2;
   needs_tools: NeedsTools1;
-  source: Source8;
+  source: Source10;
   files: Files2;
   flags: Flags;
   status: Status20;
@@ -7520,7 +7616,7 @@ export interface ListSkills {
  * via the `definition` "SkillList".
  */
 export interface SkillList {
-  skills: Skills1;
+  skills: Skills2;
   proposals: Proposals1;
   [k: string]: unknown;
 }
@@ -7531,7 +7627,7 @@ export interface SkillList {
  * via the `definition` "AddSkill".
  */
 export interface AddSkill {
-  url?: Url3;
+  url?: Url4;
   text?: Text17;
 }
 /**
@@ -7547,7 +7643,7 @@ export interface DecideSkill {
  * via the `definition` "SkillName".
  */
 export interface SkillName {
-  name: Name45;
+  name: Name49;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -7571,7 +7667,7 @@ export interface MonitorAlert {
  */
 export interface MapEdge {
   task_id: TaskId4;
-  source: Source9;
+  source: Source11;
   target: Target;
   state: State12;
   objective: Objective1;
@@ -7607,7 +7703,7 @@ export interface AgentMap {
 export interface RunSpan {
   kind: Kind19;
   id: Id89;
-  name: Name46;
+  name: Name50;
   agent?: Agent11;
   time: Time19;
   status?: Status21;
@@ -7952,7 +8048,7 @@ export interface Task {
   status: Status23;
   due: Due3;
   thread: Thread15;
-  source: Source10;
+  source: Source12;
   proposed: Proposed4;
   created: Created6;
   updated?: Updated7;
@@ -8007,7 +8103,7 @@ export interface Reminder {
   repeat: Repeat;
   thread: Thread17;
   task: Task1;
-  source: Source11;
+  source: Source13;
   proposed: Proposed6;
   fired: Fired;
   created?: Created7;
@@ -8085,7 +8181,7 @@ export interface PlannerDone {
 export interface LocalModel {
   id: Id105;
   label: Label11;
-  description: Description7;
+  description: Description8;
   size_bytes: SizeBytes;
   state: State15;
   downloaded_bytes?: DownloadedBytes;
@@ -8221,8 +8317,8 @@ export interface GetConnectors {
  */
 export interface ConnectorTool {
   id: Id109;
-  name: Name47;
-  description: Description8;
+  name: Name51;
+  description: Description9;
   parameters?: Parameters;
   [k: string]: unknown;
 }
@@ -8237,23 +8333,24 @@ export interface Parameters {
  */
 export interface Connector {
   id: Id110;
-  name: Name48;
+  name: Name52;
   kind: Kind28;
-  url?: Url4;
+  url?: Url5;
   audience?: Audience;
   enabled?: Enabled11;
   state: State17;
   detail?: Detail7;
   tools?: Tools3;
   has_token?: HasToken;
+  header_names?: HeaderNames;
   [k: string]: unknown;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "Connectors".
  */
-export interface Connectors {
-  connectors: Connectors1;
+export interface Connectors1 {
+  connectors: Connectors2;
   [k: string]: unknown;
 }
 /**
@@ -8261,7 +8358,7 @@ export interface Connectors {
  * via the `definition` "TestConnector".
  */
 export interface TestConnector {
-  url: Url5;
+  url: Url6;
   token?: Token;
 }
 /**
@@ -8279,10 +8376,14 @@ export interface ConnectorTest {
  * via the `definition` "AddConnector".
  */
 export interface AddConnector {
-  name: Name49;
-  url: Url6;
+  name: Name53;
+  url: Url7;
   token?: Token1;
   audience: Audience1;
+  headers?: Headers1;
+}
+export interface Headers1 {
+  [k: string]: string;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -8319,9 +8420,9 @@ export interface AppEvent {
   id: Id113;
   seq: Seq1;
   type: Type2;
-  version: Version2;
+  version: Version3;
   time: Time22;
-  source: Source12;
+  source: Source14;
   trace_id: TraceId3;
   cause_id?: CauseId;
   depth?: Depth;
@@ -8421,7 +8522,7 @@ export interface UpdateSettings {
  */
 export interface AvailableModel {
   id: Id114;
-  name: Name50;
+  name: Name54;
   [k: string]: unknown;
 }
 /**
@@ -8632,7 +8733,7 @@ export interface BackupList {
  * via the `definition` "BackupRow".
  */
 export interface BackupRow {
-  name: Name51;
+  name: Name55;
   reason: Reason8;
   time: Time24;
   size: Size8;
@@ -8661,7 +8762,7 @@ export interface ResetHome {
  * via the `definition` "RestoreBackup".
  */
 export interface RestoreBackup {
-  name: Name52;
+  name: Name56;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -8743,7 +8844,7 @@ export interface GetProfile {
  * via the `definition` "Profile".
  */
 export interface Profile {
-  name?: Name53;
+  name?: Name57;
   role?: Role4;
   signature?: Signature;
   tone?: Tone;
@@ -8897,7 +8998,7 @@ export interface CheckNetwork {
  * via the `definition` "Diagnostics".
  */
 export interface Diagnostics {
-  version: Version3;
+  version: Version4;
   platform: Platform;
   python: Python;
   home: Home;
@@ -8936,7 +9037,7 @@ export interface LogLines {
  * via the `definition` "NetworkCheck".
  */
 export interface NetworkCheck {
-  name: Name54;
+  name: Name58;
   host: Host1;
   ok: Ok8;
   detail: Detail10;
