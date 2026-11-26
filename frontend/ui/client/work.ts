@@ -137,6 +137,11 @@ export const useAddSkill = () => useCommand(["skills"], (input: { url?: string; 
 export const useDecideSkill = () => useCommand(["skills", "agent-cards"], (input: { id: number; approve: boolean }) => command("skills.decide", input));
 export const useReapproveSkill = () => useCommand(["skills"], (input: { name: string }) => command("skills.reapprove", input));
 export const useRemoveSkill = () => useCommand(["skills"], (input: { name: string }) => command("skills.remove", input));
+export const usePlugins = () => useReady(["plugins"], () => query("plugins.list", {}));
+// One box for a link, a folder or pasted MCP settings: what it is gets worked out on the server.
+export const useInstall = () => useCommand(["plugins", "skills", "connectors"], (input: { source: string }) => command("plugins.install", input));
+export const useExportPlugin = () => useCommand([], (input: { name: string }) => command("plugins.export", input));
+export const useRemovePlugin = () => useCommand(["plugins", "skills", "connectors"], (input: { name: string }) => command("plugins.remove", input));
 
 /** A name for an agent id, from its card. Ids are never shown, so a missing card shows nothing. */
 export function useAgentName(): (id: string | null | undefined) => string {

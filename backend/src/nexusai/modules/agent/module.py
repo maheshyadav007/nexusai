@@ -205,6 +205,7 @@ from nexusai.contracts.agent import (
     TodayView,
     ToolCatalog,
     ToolInfo,
+    ToolSection,
     TriageEstimate,
     TriageExisting,
     TriggerList,
@@ -2365,9 +2366,12 @@ def tool_catalog(query: GetToolCatalog, ctx: Context) -> ToolCatalog:
                 description=entry.description,
                 level=policy.tool_level(permissions, entry),
                 can_allow=entry.action != "send",
+                section=policy.section_of(entry),
+                own_default=entry.default is not None,
             )
             for entry in policy.TOOL_ENTRIES
-        ]
+        ],
+        sections=[ToolSection(name=name, note=note) for name, note in policy.SECTIONS],
     )
 
 

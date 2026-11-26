@@ -133,6 +133,12 @@
           "labelKey": "nav.schedules",
           "icon": "schedules",
           "href": "/agent/schedules"
+        },
+        {
+          "id": "addons",
+          "labelKey": "nav.addons",
+          "icon": "connectors",
+          "href": "/addons"
         }
       ]
     }

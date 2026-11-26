@@ -1,6 +1,7 @@
 import type { AgentMap, CheckId, CheckList, GetAgentMap, GetRunTree, ListChecks, ListRoutineRuns, ListRuns, RoutineRuns, RunAgain, RunList, RunSpan, SaveCheck, SeeAlerts, SetBuiltInRoutine } from "./contracts.generated";
 import type { HiddenFromAi, HideFromAi, HideFromAiPreview, HidePreview, UndoHide } from "./contracts.generated";
 import type { AddSkill, DecideSkill, ListSkills, SkillList, SkillName } from "./contracts.generated";
+import type { ExportedPlugin, InstallResult, InstallSomething, ListPlugins, PluginList, PluginName } from "./contracts.generated";
 import type { CancelTeamTask, CardList, GetTeamTask, ListCards, ListTeamTasks, NoteOnTeamTask, RenameAgent, ResetAgentName, RetryTeamTask, SetMascot, TeamTaskList, TeamTaskView } from "./contracts.generated";
 import type { MarkFolderRead } from "./contracts.generated";
 import type { GetMailMe, GetNamedYou, MailMe, MePreview, NamedYouList, NotAboutMe, PreviewMe, PreviewRule, RulePreview } from "./contracts.generated";
@@ -364,6 +365,9 @@ interface Commands {
   "skills.decide": [DecideSkill, SkillList];
   "skills.reapprove": [SkillName, SkillList];
   "skills.remove": [SkillName, SkillList];
+  "plugins.install": [InstallSomething, InstallResult];
+  "plugins.export": [PluginName, ExportedPlugin];
+  "plugins.remove": [PluginName, PluginList];
   "monitor.seen": [SeeAlerts, AgentDone];
   "tasks.save": [SaveTask, PlannerDone];
   "tasks.remove": [TaskAction, PlannerDone];
@@ -514,6 +518,7 @@ interface Queries {
   "team.tasks": [ListTeamTasks, TeamTaskList];
   "team.task": [GetTeamTask, TeamTaskView];
   "skills.list": [ListSkills, SkillList];
+  "plugins.list": [ListPlugins, PluginList];
   "agents.map": [GetAgentMap, AgentMap];
   "runs.list": [ListRuns, RunList];
   "run.tree": [GetRunTree, RunSpan];

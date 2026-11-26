@@ -3,7 +3,7 @@
 import { useLeadName } from "@/ui/client/home";
 import { useEffect, useState } from "react";
 import { ApiRequestError } from "@/ui/client/api";
-import type { GuardRule, Permissions, QuietHours, SendCheckSettings } from "@/ui/client/contracts.generated";
+import type { GuardRule, Permissions, QuietHours, SendCheckSettings, ToolInfo, ToolSection } from "@/ui/client/contracts.generated";
 import { usePermissions, useSavePermissions } from "@/ui/client/sessions";
 import { useGuardRules, useQuietHours, useSaveGuardRules, useSaveQuietHours, useSaveSendChecks, useSendChecks, useSetCap, useTestGuard, useToolCatalog, useUsage } from "@/ui/client/work";
 import { useSettings, useUpdateSettings } from "@/ui/client/settings";
@@ -11,10 +11,12 @@ import { desktopApi } from "@/ui/client/desktop";
 import { playChime } from "@/ui/client/sound";
 import { Button } from "@/ui/primitives/Button";
 import { Card } from "@/ui/primitives/Card";
+import { ExpandRow } from "@/ui/primitives/ExpandRow";
 import { ErrorState } from "@/ui/primitives/ErrorState";
 import { Field } from "@/ui/primitives/Field";
 import { IconButton } from "@/ui/primitives/IconButton";
 import { Input, Textarea } from "@/ui/primitives/Input";
+import { Segmented } from "@/ui/primitives/Segmented";
 import { Select } from "@/ui/primitives/Select";
 import { SettingRow } from "@/ui/primitives/SettingRow";
 import { Skeleton } from "@/ui/primitives/Skeleton";
@@ -68,6 +70,32 @@ export function AgentPresets() {
   );
 }
 
+/** One setting for a section's tools, and each tool inside for the odd one out. Tools with their own
+ * safer default (trash, deleting a document) and sending keep theirs unless set one by one. */
+function PermissionSection({ section, tools, value, update }: { section: ToolSection; tools: readonly ToolInfo[]; value: Permissions; update: (changes: Partial<Permissions>) => void }) {
+  const settable = tools.filter((tool) => tool.can_allow && !tool.own_default);
+  const levels = new Set(settable.map((tool) => tool.level));
+  const common = levels.size === 1 ? (settable[0]?.level as Level) : undefined;
+  const differ = common ? tools.filter((tool) => tool.can_allow && tool.level !== common).length : 0;
+  const meta = differ ? `${section.note} ${tn("permissions.section.differs", differ)}` : section.note;
+  return (
+    <ExpandRow
+      variant="plain"
+      testid="permission-section"
+      label={t("permissions.section.open", { name: section.name })}
+      title={section.name}
+      meta={meta}
+      aside={settable.length ? <Segmented label={section.name} hideLabel value={common} options={LEVEL_OPTIONS as { value: Level; label: string }[]} onChange={(level) => update({ tools: { ...value.tools, ...Object.fromEntries(settable.map((tool) => [tool.name, level])) } })} /> : <span className="text-sm text-status-warning">{t("permissions.section.always")}</span>}
+    >
+      {tools.map((tool) => (
+        <SettingRow key={tool.name} label={tool.label} description={tool.description}>
+          <Select compact label={tool.label} value={tool.level} options={tool.can_allow ? LEVEL_OPTIONS : ALWAYS_ASKS} onChange={(level) => update({ tools: { ...value.tools, [tool.name]: level as Level } })} />
+        </SettingRow>
+      ))}
+    </ExpandRow>
+  );
+}
+
 export function PermissionsSettings() {
   const lead = useLeadName();
   const permissions = usePermissions();
@@ -79,25 +107,16 @@ export function PermissionsSettings() {
   const value = permissions.data;
   const update = (changes: Partial<Permissions>) => save.mutate({ ...value, ...changes });
   const folders = value.folders ?? [];
-  const groups = [...new Set(catalog.data.tools.map((tool) => tool.group))];
+  const sections = (catalog.data.sections ?? []).filter((section) => catalog.data.tools.some((tool) => tool.section === section.name));
   return (
     <div className="flex flex-col gap-5">
       <Card title={t("presets.label", { name: lead })} description={t("presets.note")}>
         <AgentPresets />
       </Card>
       <Card title={t("permissions.title")} description={t("permissions.description")}>
-        <div className="flex flex-col gap-5">
-          {groups.map((group) => (
-            <div key={group}>
-              <h3 className="mb-2 text-sm text-ink-muted">{group}</h3>
-              {catalog.data.tools
-                .filter((tool) => tool.group === group)
-                .map((tool) => (
-                  <SettingRow key={tool.name} label={tool.label} description={tool.description}>
-                    <Select compact label={tool.label} value={tool.level} options={tool.can_allow ? LEVEL_OPTIONS : ALWAYS_ASKS} onChange={(level) => update({ tools: { ...value.tools, [tool.name]: level as Level } })} />
-                  </SettingRow>
-                ))}
-            </div>
+        <div className="flex flex-col">
+          {sections.map((section) => (
+            <PermissionSection key={section.name} section={section} tools={catalog.data.tools.filter((tool) => tool.section === section.name)} value={value} update={update} />
           ))}
         </div>
       </Card>
