@@ -319,6 +319,8 @@ Shared behaviour first, so every list gets it. Then the page-by-page fixes.
 
 ## 10. Who does what: one owner for each job
 
+**Steps 1–3 built 2026-11-26** on `plugins-loader`: `jobs.py` names the owned jobs (triage and suggestions for the Mail agent, the brief for the Brief writer) and every refusal names the owner; the Organizer is folded into Posty, which keeps tasks and reminders in its own run; its chats and team tasks moved to Posty by migration. Not yet: the Mail agent losing drafting and suggestions in chat (open question 2–3), and agents the person makes losing specialists' tools (with Routines).
+
 **Plan:** `docs/AGENT_OWNERS_PLAN.md` (2026-11-25), written with personalization (7) in mind. **Reorganised the same day:** small jobs that need few instructions go to Posty directly; only jobs needing their own instructions, running without the person, or reading untrusted mail at scale get a specialist. The Organizer folds into Posty. The table and questions below are the first draft; the plan supersedes them.
 
 **What:** Write down which agent owns each kind of work (tasks and reminders, judging mail, drafts, the brief, matters, folders and rules, routines, preferences), and make the tools match: the owner makes and changes it, others read it, suggest it, or hand the work to the owner. Then every agent's prompt says the same split.
@@ -414,6 +416,8 @@ Added 2026-11-25 from the landscape review (`docs/reference/LANDSCAPE_2026-11-25
 **Done when:** an invite in a test mailbox gets a prep card before its time, linked to the right matter, with open items and the last emails. Approved from a mockup first.
 
 ## 13. Repeating reminders, and reminders vs schedules (bug)
+
+**Built 2026-11-26** on `plugins-loader`: reminders repeat every N minutes (`interval`), on chosen days, between two times, until a date; the tool takes `hourly` or `every 2 hours` too; a missed firing isn't repeated; a schedule whose instructions only remind is turned to `create_reminders`; Posty's prompt says "remind me" is always a reminder; the Reminders page shows the rule in words and keeps it when a reminder is edited. Tests: `tests/test_reminder_rules.py`. To try on the real model: the drink-water request, said to Posty in those words (ask first).
 
 **When:** decided 2026-11-25: built together with Routines (1) and who does what (10), in one iteration, since the fix is the reminder/routine split plus the prompts. Not a separate quick fix.
 

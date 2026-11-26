@@ -285,3 +285,5 @@ E. **Repeating reminders (To do 13).** Every N minutes or hours, chosen weekdays
 F. **Screens, after mockups are approved:** the Agents page, "who made it", the trace's sources, the Routines page and the Routines agent's setup card. Until then the existing screens stay and read the same contracts.
 
 The NexusAI guide (To do 14) and plugin installing follow this iteration.
+
+**Status, 2026-11-26:** A built and committed (`706a2af`), B built and committed (`a7a6c1a`), E built (repeating reminders). Changed from the text above while building: the Organizer's lines went into Posty's prompt directly rather than a `tasks-and-reminders` skill, since a weak model reads a prompt every time but must choose to load a skill; restricted agents' tool lists stay in code for now (a test compares them with the old ones), and `tools` in agent files is for plugin agents later; the weekly Inbox review isn't a built-in routine (it was removed in `agent_no_mail_suggestions_001`). C and D next.

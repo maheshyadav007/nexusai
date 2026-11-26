@@ -336,7 +336,7 @@ def test_reminders_repeat_monthly_and_yearly_and_an_unknown_repeat_is_refused_ou
     assert said.startswith("Not done") and "month" in said
     titles = {r["title"] for r in client.post("/api/queries/reminders.list").json()["reminders"]}
     assert "Odd" not in titles
-    change = {"changes": [{"reminder_id": rows["Rent"]["id"], "repeat": "hourly"}]}
+    change = {"changes": [{"reminder_id": rows["Rent"]["id"], "repeat": "fortnightly"}]}
     said = use_tool(client, script, ToolCall("c", "update_reminders", change))
     assert said.startswith("Not done")
 

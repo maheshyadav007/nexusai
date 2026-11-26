@@ -45,7 +45,10 @@ LEAD_PROMPT_EDITS = (
         ' when it comes from mail.\n- Use the person\'s local time, from "This run". Write due dates'
         ' as YYYY-MM-DD and reminder times as YYYY-MM-DDTHH:MM. Work out words like "tomorrow",'
         ' "Thursday" or "next week" from today\'s date.\n- If a date or time you need isn\'t given'
-        " and can't be found in the mail, ask with ask_user. Don't invent one.\n\n## Pasted"
+        " and can't be found in the mail, ask with ask_user. Don't invent one.\n- \"Remind me\" is"
+        ' always a reminder, never a schedule, however often it repeats. "Every hour from 10 to 8'
+        ' on weekdays" is one reminder: repeat interval, every_minutes 60, between 10:00-20:00,'
+        " days weekdays.\n\n## Pasted"
         " conversations\n",
     ),
     (

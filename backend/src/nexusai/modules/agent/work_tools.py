@@ -131,10 +131,28 @@ class _ListTasks(_Call):
     )
 
 
+REPEAT_HELP = (
+    "none, interval, day, week, month or year. For more than once a day use interval with"
+    " every_minutes, or words like hourly or every 2 hours."
+)
+
+
 class _ReminderItem(BaseModel):
     title: str = Field(description="What to remind the person about.")
-    when: str = Field(description="YYYY-MM-DDTHH:MM, in the person's local time.")
-    repeat: str = Field(default="none", description="none, day, week, month or year.")
+    when: str = Field(description="YYYY-MM-DDTHH:MM, in the person's local time: the first time.")
+    repeat: str = Field(default="none", description=REPEAT_HELP)
+    every_minutes: int | None = Field(
+        default=None, description="For repeat interval: minutes apart, such as 60 for hourly."
+    )
+    days: list[str] | None = Field(
+        default=None,
+        description="Only on these days: monday to sunday, or weekdays or weekends. Leave out for every day.",
+    )
+    between: str | None = Field(
+        default=None,
+        description="Only between these local times, as HH:MM-HH:MM, such as 10:00-20:00.",
+    )
+    until: str | None = Field(default=None, description="The last day it goes off, YYYY-MM-DD.")
     thread_id: int | None = Field(default=None, description="The related conversation, if any.")
 
 
@@ -146,7 +164,19 @@ class _ReminderChange(BaseModel):
     reminder_id: int = Field(description="The number in its [reminder:N].")
     title: str | None = None
     when: str | None = Field(default=None, description="YYYY-MM-DDTHH:MM.")
-    repeat: str | None = Field(default=None, description="none, day, week, month or year.")
+    repeat: str | None = Field(default=None, description=REPEAT_HELP)
+    every_minutes: int | None = Field(
+        default=None, description="For repeat interval: minutes apart, such as 60 for hourly."
+    )
+    days: list[str] | None = Field(
+        default=None,
+        description="Only on these days: monday to sunday, or weekdays or weekends. Leave out for every day.",
+    )
+    between: str | None = Field(
+        default=None,
+        description="Only between these local times, as HH:MM-HH:MM, such as 10:00-20:00.",
+    )
+    until: str | None = Field(default=None, description="The last day it goes off, YYYY-MM-DD.")
     snooze_minutes: int | None = Field(default=None, description="Push it back this far from now.")
     accept: bool = Field(default=False, description="Accept a reminder that was only suggested.")
 
@@ -379,6 +409,23 @@ class _ChangeSchedule(_When):
     token_limit: int | None = Field(default=None, ge=0)
 
 
+# "Remind me to drink water", "reminder: stand up". Anything with more to do than telling the
+# person, such as "remind me what's due and draft the replies", is real work for a schedule.
+ONLY_REMINDER = re.compile(
+    r"^\s*(?:please\s+)?(?:remind(?:\s+(?:me|them|the person|him|her))?\s+(?:to|about|that)\b|reminder\s*:)",
+    re.IGNORECASE,
+)
+MORE_WORK = re.compile(
+    r"\b(?:draft|write|send|summari[sz]e|check|search|find|list|read|file|move|email|reply|prepare)\b",
+    re.IGNORECASE,
+)
+
+
+def _only_a_reminder(instructions: str) -> bool:
+    text = " ".join(instructions.split())
+    return bool(ONLY_REMINDER.match(text)) and not MORE_WORK.search(text) and len(text) <= 200
+
+
 class _ScheduleId(_Call):
     schedule_id: int = Field(description="From list_schedules.")
 
@@ -587,44 +634,106 @@ def specs(
 
     # Reminders
 
+    def _window(between: str | None) -> tuple[str | None, str | None]:
+        if not between:
+            return None, None
+        parts = re.split(r"\s*(?:-|–|to)\s*", between.strip())
+        if len(parts) != 2:
+            raise CommandError(
+                "reminder.window",
+                f"{between!r} isn't a span of hours. Use HH:MM-HH:MM, like 10:00-20:00.",
+                422,
+            )
+        return parts[0], parts[1]
+
+    def _rule_for(
+        repeat: str | None,
+        every_minutes: int | None,
+        days: list[str] | None,
+        between: str | None,
+        until: str | None,
+    ) -> tuple[str, planner.Rule]:
+        start, end = _window(between)
+        return planner.rule_of(
+            repeat, every_minutes, list(days) if days else None, start, end, until
+        )
+
     def create_reminders(reminders: list[_ReminderItem], tool_call_id: str) -> str:
+        def rule(item: _ReminderItem) -> tuple[str, planner.Rule]:
+            return _rule_for(item.repeat, item.every_minutes, item.days, item.between, item.until)
+
         refused = _refused(
-            [partial(planner.repeat_of, item.repeat) for item in reminders]
+            [partial(rule, item) for item in reminders]
             + [partial(planner.when_of, item.when) for item in reminders]
         )
         if refused:
             return refused
 
         def work() -> str:
+            lines = []
             for item in reminders:
-                planner.add_reminder(
+                repeat, found = rule(item)
+                made = planner.add_reminder(
                     ctx,
                     item.title,
                     planner.when_of(item.when),
-                    planner.repeat_of(item.repeat),
+                    repeat,
                     item.thread_id,
                     None,
                     "agent",
                     False,
+                    rule=found,
                 )
-            return "Reminders set:\n" + "\n".join(
-                f"{r.when[:16]}: {r.title}"
-                + (
-                    f", every {planner.repeat_of(r.repeat)}"
-                    if planner.repeat_of(r.repeat) != "none"
-                    else ""
-                )
-                for r in reminders
-            )
+                first = db.fetch_all("SELECT due_at FROM reminders WHERE id = ?", (made,))
+                when = first[0]["due_at"] if first else item.when[:16]
+                repeats = planner.describe_repeat(repeat, found)
+                lines.append(f"{when}: {item.title}" + ("" if repeat == "none" else f", {repeats}"))
+            return "Reminders set:\n" + "\n".join(lines)
 
         titles = [item.title for item in reminders]
         summary = f"Remind you: {_brief(titles)}"
         detail = _lines(f"{item.when[:16]}: {item.title}" for item in reminders)
         return guard(tool_call_id, "create_reminders", "data", summary, detail, work)
 
+    def _changes_rule(change: _ReminderChange) -> bool:
+        return any(
+            value is not None
+            for value in (
+                change.repeat,
+                change.every_minutes,
+                change.days,
+                change.between,
+                change.until,
+            )
+        )
+
+    def _rule_change(change: _ReminderChange) -> dict[str, Any]:
+        """The new repeat and rule, with what the change leaves out kept from the reminder."""
+        rows = _rows("reminders", [change.reminder_id])
+        if not rows:
+            raise CommandError("reminder.not_found", f"Reminder {change.reminder_id} is gone.", 404)
+        now = rows[0]
+        keys = now.keys()
+        kept_days = now["days"].split(",") if "days" in keys and now["days"] else None
+        between = change.between
+        if between is None and now["window_start"] and now["window_end"]:
+            between = f"{now['window_start']}-{now['window_end']}"
+        repeat, rule = _rule_for(
+            change.repeat if change.repeat is not None else now["repeat"],
+            change.every_minutes if change.every_minutes is not None else now["every_minutes"],
+            change.days if change.days is not None else kept_days,
+            between,
+            change.until if change.until is not None else now["until"],
+        )
+        every, days, start, end, until = planner.rule_columns(rule)
+        return {
+            "repeat": repeat, "every_minutes": every, "days": days,
+            "window_start": start, "window_end": end, "until": until,
+        }  # fmt: skip
+
     def update_reminders(changes: list[_ReminderChange], tool_call_id: str) -> str:
         refused = _refused(
-            [partial(planner.repeat_of, c.repeat) for c in changes if c.repeat is not None]
+            [partial(_rule_change, c) for c in changes if _changes_rule(c)]
             + [partial(planner.when_of, c.when) for c in changes if c.when is not None]
         )
         if refused:
@@ -638,8 +747,8 @@ def specs(
                 if change.when is not None:
                     values["due_at"] = change.when[:16]
                     values["fired"] = 0
-                if change.repeat is not None:
-                    values["repeat"] = change.repeat
+                if _changes_rule(change):
+                    values.update(_rule_change(change))
                 if change.snooze_minutes is not None:
                     later = datetime.now(UTC).astimezone() + timedelta(
                         minutes=change.snooze_minutes
@@ -673,7 +782,8 @@ def specs(
             )
             return wrap_untrusted(
                 "\n".join(
-                    f"{address('reminder', r['id'])} {r['title']} at {r['due_at']}, repeats {r['repeat']}"
+                    f"{address('reminder', r['id'])} {r['title']} at {r['due_at']},"
+                    f" repeats {planner.describe_repeat(r['repeat'], planner.rule_from_row(r))}"
                     f"{', went off' if r['fired'] else ''}"
                     f"{', suggested, not kept yet' if r['proposed'] else ''}"
                     f"{' from ' + citations.mark(citations.MAIL, r['thread']) if r['thread'] else ''}"
@@ -1234,6 +1344,13 @@ def specs(
     ) -> str:
         from nexusai.modules.agent.module import save_schedule
 
+        if _only_a_reminder(instructions):
+            return (
+                "Not created: this only reminds the person, which needs no agent run. Use"
+                " create_reminders instead. For more than once a day give repeat interval with"
+                " every_minutes, and days, between and until if asked, such as every 60 minutes,"
+                " between 10:00-20:00, days weekdays."
+            )
         existing = _same_name(name)
         if existing is not None:
             return (

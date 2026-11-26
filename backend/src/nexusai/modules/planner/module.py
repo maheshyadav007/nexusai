@@ -1,6 +1,8 @@
 """The person's own to-dos and reminders. The agent may only propose them."""
 
 import calendar
+import re
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, cast, get_args
 
@@ -91,6 +93,18 @@ UPDATE tasks SET status = CASE
 """,
         ),
         Migration(
+            "planner_repeat_rules_001",
+            # Reminders that repeat every so many minutes, on chosen days, between two times,
+            # until a date: "every hour, 10:00 to 20:00, Monday to Friday" is one reminder.
+            """
+ALTER TABLE reminders ADD COLUMN every_minutes INTEGER;
+ALTER TABLE reminders ADD COLUMN days TEXT;
+ALTER TABLE reminders ADD COLUMN window_start TEXT;
+ALTER TABLE reminders ADD COLUMN window_end TEXT;
+ALTER TABLE reminders ADD COLUMN until TEXT;
+""",
+        ),
+        Migration(
             "planner_looks_done_001",
             # A later email showed it done. Why, kept until the person closes it or keeps it.
             """
@@ -113,9 +127,48 @@ REPEAT_WORDS = {
 }  # fmt: skip
 
 
+INTERVAL = re.compile(r"^(?:every\s+)?(\d+\s*)?(minutes?|mins?|hours?|hrs?)$")
+# A reminder more often than this is noise, and one a day or rarer is a daily repeat.
+FEWEST_MINUTES = 5
+MOST_MINUTES = 1440
+DAY_WORDS = {
+    "monday": 0, "mon": 0, "tuesday": 1, "tue": 1, "tues": 1, "wednesday": 2, "wed": 2,
+    "thursday": 3, "thu": 3, "thurs": 3, "friday": 4, "fri": 4, "saturday": 5, "sat": 5,
+    "sunday": 6, "sun": 6,
+}  # fmt: skip
+DAY_GROUPS = {"weekdays": (0, 1, 2, 3, 4), "weekends": (5, 6), "every day": tuple(range(7))}
+DAY_SHORT = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+CLOCK = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
+
+
+@dataclass(frozen=True)
+class Rule:
+    """What narrows a repeat: how far apart, which days, which hours, until when."""
+
+    every_minutes: int | None = None
+    days: tuple[int, ...] | None = None
+    window_start: str | None = None
+    window_end: str | None = None
+    until: str | None = None
+
+
+def interval_of(value: str | None) -> int | None:
+    """Minutes apart, from words like "hourly", "every hour" or "every 30 minutes"."""
+    word = (value or "").strip().lower()
+    if word == "hourly":
+        return 60
+    match = INTERVAL.match(word)
+    if not match:
+        return None
+    count = int(match.group(1)) if match.group(1) else 1
+    return count * (60 if match.group(2).startswith("h") else 1)
+
+
 def repeat_of(value: str | None) -> Repeat:
     """How often it repeats, from the words used, or a plain error naming the choices."""
     word = (value or "none").strip().lower()
+    if interval_of(word) is not None:
+        return "interval"
     word = REPEAT_WORDS.get(word, word)
     if word not in KNOWN_REPEATS:
         raise CommandError(
@@ -173,13 +226,169 @@ def due_of(value: str | None) -> str | None:
         ) from None
 
 
+def _clock(value: str, what: str) -> str:
+    text = value.strip()
+    if len(text) == 4 and text[1] == ":":
+        text = f"0{text}"
+    if not CLOCK.match(text):
+        raise CommandError(
+            "reminder.window", f"{value!r} isn't a time for {what}. Use HH:MM, like 09:30.", 422
+        )
+    return text
+
+
+def days_of(values: list[str | int] | None) -> tuple[int, ...] | None:
+    """Days by name or number (Monday is 0), or "weekdays" and "weekends"."""
+    if not values:
+        return None
+    found: set[int] = set()
+    for value in values:
+        if isinstance(value, int) and 0 <= value <= 6:
+            found.add(value)
+            continue
+        word = str(value).strip().lower()
+        if word.isdigit() and 0 <= int(word) <= 6:
+            # As kept in the database: Monday is 0.
+            found.add(int(word))
+        elif word in DAY_GROUPS:
+            found.update(DAY_GROUPS[word])
+        elif word in DAY_WORDS:
+            found.add(DAY_WORDS[word])
+        else:
+            raise CommandError(
+                "reminder.days",
+                f"{value!r} isn't a day. Use day names like monday, or weekdays or weekends.",
+                422,
+            )
+    return None if len(found) == 7 else tuple(sorted(found))
+
+
+def rule_of(
+    repeat: str | None,
+    every_minutes: int | None = None,
+    days: list[str | int] | None = None,
+    window_start: str | None = None,
+    window_end: str | None = None,
+    until: str | None = None,
+) -> tuple[Repeat, Rule]:
+    """The repeat and its rule, checked, with an error that says how to fix it."""
+    kind = repeat_of(repeat)
+    minutes = every_minutes or (interval_of(repeat) if kind == "interval" else None)
+    if minutes is not None and kind == "none":
+        kind = "interval"
+    if kind == "interval":
+        if minutes is None or not FEWEST_MINUTES <= minutes <= MOST_MINUTES:
+            raise CommandError(
+                "reminder.every",
+                f"A reminder can repeat every {FEWEST_MINUTES} to {MOST_MINUTES} minutes. Give"
+                " every_minutes, such as 60 for hourly, or use day for once a day.",
+                422,
+            )
+    else:
+        minutes = None
+    if (window_start is None) != (window_end is None):
+        raise CommandError(
+            "reminder.window", "Give both ends of the hours it goes off, like 10:00 and 20:00.", 422
+        )
+    start = _clock(window_start, "the first one") if window_start else None
+    end = _clock(window_end, "the last one") if window_end else None
+    if start and end and start >= end:
+        raise CommandError(
+            "reminder.window",
+            f"The hours run from {start} to {end}: the start must come first.",
+            422,
+        )
+    last = due_of(until) if until else None
+    if (days or start or last) and kind == "none":
+        raise CommandError(
+            "reminder.repeat",
+            "Days, hours and an end date are for a repeating reminder. Set repeat too.",
+            422,
+        )
+    return kind, Rule(minutes, days_of(days), start, end, last)
+
+
+def rule_from_row(row: Any) -> Rule:
+    keys = row.keys() if hasattr(row, "keys") else ()
+    days = row["days"] if "days" in keys else None
+    return Rule(
+        every_minutes=row["every_minutes"] if "every_minutes" in keys else None,
+        days=tuple(int(d) for d in days.split(",")) if days else None,
+        window_start=row["window_start"] if "window_start" in keys else None,
+        window_end=row["window_end"] if "window_end" in keys else None,
+        until=row["until"] if "until" in keys else None,
+    )
+
+
+def rule_columns(rule: Rule) -> tuple[int | None, str | None, str | None, str | None, str | None]:
+    days = ",".join(str(d) for d in rule.days) if rule.days else None
+    return rule.every_minutes, days, rule.window_start, rule.window_end, rule.until
+
+
+def fit(when: datetime, rule: Rule) -> datetime | None:
+    """The first time at or after `when` the rule allows, or None once it's past its end date."""
+    at = when
+    # Enough for a year of skipped days; a rule that allows nothing ends the repeat.
+    for _ in range(800):
+        if rule.until and at.date().isoformat() > rule.until:
+            return None
+        clock = at.strftime("%H:%M")
+        if rule.window_start and rule.window_end:
+            start_h, start_m = (int(part) for part in rule.window_start.split(":"))
+            if clock < rule.window_start:
+                at = at.replace(hour=start_h, minute=start_m)
+                continue
+            if clock > rule.window_end:
+                at = (at + timedelta(days=1)).replace(hour=start_h, minute=start_m)
+                continue
+        if rule.days is not None and at.weekday() not in rule.days:
+            at = at + timedelta(days=1)
+            if rule.window_start:
+                start_h, start_m = (int(part) for part in rule.window_start.split(":"))
+                at = at.replace(hour=start_h, minute=start_m)
+            continue
+        return at
+    return None
+
+
+def describe_repeat(repeat: str, rule: Rule) -> str:
+    """The rule in words, such as "every 60 minutes, 10:00 to 20:00, Mon to Fri"."""
+    if repeat == "none":
+        return "once"
+    parts = [f"every {rule.every_minutes} minutes" if repeat == "interval" else f"every {repeat}"]
+    if rule.window_start and rule.window_end:
+        parts.append(f"{rule.window_start} to {rule.window_end}")
+    if rule.days:
+        days = list(rule.days)
+        consecutive = days == list(range(days[0], days[-1] + 1)) and len(days) > 2
+        parts.append(
+            f"{DAY_SHORT[days[0]]} to {DAY_SHORT[days[-1]]}"
+            if consecutive
+            else ", ".join(DAY_SHORT[d] for d in days)
+        )
+    if rule.until:
+        parts.append(f"until {rule.until}")
+    return ", ".join(parts)
+
+
 def _day_for(repeat: str, due_at: str) -> int | None:
     """The day of the month a monthly or yearly reminder keeps, so the 31st stays the 31st
     after a shorter month."""
     return int(due_at[8:10]) if repeat in {"month", "year"} and len(due_at) >= 10 else None
 
 
-def next_due(due: datetime, repeat: str, day: int | None) -> datetime:
+def next_due(
+    due: datetime, repeat: str, day: int | None, rule: Rule | None = None
+) -> datetime | None:
+    """The next time it goes off, or None when its rule has ended."""
+    rule = rule or Rule()
+    if repeat == "interval":
+        return fit(due + timedelta(minutes=rule.every_minutes or MOST_MINUTES), rule)
+    following = _next_plain(due, repeat, day)
+    return fit(following, rule) if rule != Rule() else following
+
+
+def _next_plain(due: datetime, repeat: str, day: int | None) -> datetime:
     step = REPEATS.get(repeat)
     if step:
         return due + step
@@ -228,6 +437,11 @@ def _reminder(db: Database, row: object) -> Reminder:
         looks_done=data["looks_done"],
         created=data["created"],
         updated=data["updated"] or data["created"],
+        every_minutes=data.get("every_minutes"),
+        days=[int(d) for d in data["days"].split(",")] if data.get("days") else None,
+        window_start=data.get("window_start"),
+        window_end=data.get("window_end"),
+        until=data.get("until"),
     )
 
 
@@ -236,7 +450,11 @@ def _now() -> str:
 
 
 TASK_FIELDS = {"title", "notes", "status", "due", "proposed", "looks_done"}
-REMINDER_FIELDS = {"title", "due_at", "repeat", "repeat_day", "proposed", "fired", "looks_done"}
+RULE_FIELDS = {"every_minutes", "days", "window_start", "window_end", "until"}
+REMINDER_FIELDS = {
+    "title", "due_at", "repeat", "repeat_day", "proposed", "fired", "looks_done",
+    "every_minutes", "days", "window_start", "window_end", "until",
+}  # fmt: skip
 
 
 def _change(ctx: Context, table: str, identifier: int, values: dict[str, Any], kind: str) -> None:
@@ -260,6 +478,10 @@ def _change(ctx: Context, table: str, identifier: int, values: dict[str, Any], k
             named["repeat_day"] = _day_for(
                 named.get("repeat", before["repeat"]), named.get("due_at", before["due_at"])
             )
+        if table == "reminders" and before and (RULE_FIELDS | {"due_at", "repeat"}) & named.keys():
+            # A new rule or time moves it into the rule, as a new reminder is.
+            merged = {**dict(before), **named}
+            named["due_at"] = _first_time(merged["due_at"], merged["repeat"], rule_from_row(merged))
         columns = ", ".join(f"{name} = ?" for name in named)
         changed = work.tx.execute(
             f"UPDATE {table} SET {columns} WHERE id = ?",  # noqa: S608
@@ -416,13 +638,16 @@ def add_reminder(
     source: str,
     proposed: bool,
     matter: int | None = None,
+    rule: Rule | None = None,
 ) -> int:
-    repeat = repeat_of(repeat)
-    when = when_of(when)
+    rule = rule or Rule()
+    repeat = "interval" if rule.every_minutes else repeat_of(repeat)
+    when = _first_time(when_of(when), repeat, rule)
     with ctx.bus.unit_of_work() as work:
         cursor = work.tx.execute(
             "INSERT INTO reminders (title, due_at, repeat, repeat_day, thread, task, source,"
-            " proposed, created, updated, matter) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " proposed, created, updated, matter, every_minutes, days, window_start, window_end,"
+            " until) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 title,
                 when,
@@ -435,10 +660,24 @@ def add_reminder(
                 _now(),
                 _now(),
                 None if task else matter,
+                *rule_columns(rule),
             ),
         )
         work.emit("reminders.changed", {}, source="planner", trace_id=ctx.trace_id)
     return int(cursor.lastrowid or 0)
+
+
+def _first_time(when: str, repeat: str, rule: Rule) -> str:
+    """A repeating reminder's first time moved into its rule, as "every hour from 10:00" asked
+    at 21:00 starts tomorrow at 10:00. One whose rule never allows a time is refused."""
+    if repeat == "none" or rule == Rule():
+        return when
+    first = fit(datetime.fromisoformat(when), rule)
+    if first is None:
+        raise CommandError(
+            "reminder.until", "With that end date it would never go off. Pick a later one.", 422
+        )
+    return first.strftime("%Y-%m-%dT%H:%M")
 
 
 @planner_module.query("tasks.list")
@@ -528,33 +767,44 @@ def list_reminders(query: ListReminders, ctx: Context) -> ReminderList:
 
 @planner_module.command("reminders.save")
 def save_reminder(command: SaveReminder, ctx: Context) -> PlannerDone:
+    repeat, rule = rule_of(
+        command.repeat,
+        command.every_minutes,
+        list(command.days) if command.days else None,
+        command.window_start,
+        command.window_end,
+        command.until,
+    )
     if command.id is None:
         add_reminder(
             ctx,
             command.title,
             command.when,
-            command.repeat,
+            repeat,
             command.thread,
             command.task,
             "user",
             False,
+            rule=rule,
         )
         return PlannerDone()
     # Seconds or an offset would make it come due a minute late, so it's stored like a new one.
-    when = when_of(command.when)
+    when = _first_time(when_of(command.when), repeat, rule)
     with ctx.bus.unit_of_work() as work:
         work.tx.execute(
             "UPDATE reminders SET title = ?, due_at = ?, repeat = ?, repeat_day = ?, thread = ?,"
-            " task = ?, proposed = ?, fired = 0, updated = ?, looks_done = NULL WHERE id = ?",
+            " task = ?, proposed = ?, fired = 0, updated = ?, looks_done = NULL,"
+            " every_minutes = ?, days = ?, window_start = ?, window_end = ?, until = ? WHERE id = ?",
             (
                 command.title,
                 when,
-                command.repeat,
-                _day_for(command.repeat, when),
+                repeat,
+                _day_for(repeat, when),
                 command.thread,
                 command.task,
                 int(command.proposed),
                 _now(),
+                *rule_columns(rule),
                 command.id,
             ),
         )
@@ -604,16 +854,23 @@ def fire_due_reminders(ctx: Context, now: datetime) -> int:
     for row in rows:
         link = f"/mail/thread/{row['thread']}" if row["thread"] else "/planner/reminders"
         with ctx.bus.unit_of_work() as work:
-            if row["repeat"] in REPEATS or row["repeat"] in {"month", "year"}:
-                # The next one still in the future, however long the computer was off.
-                due = datetime.fromisoformat(row["due_at"])
-                while due.replace(tzinfo=None) <= now.replace(tzinfo=None):
-                    due = next_due(due, row["repeat"], row["repeat_day"])
+            following: datetime | None = None
+            if row["repeat"] in REPEATS or row["repeat"] in {"month", "year", "interval"}:
+                # The next one still in the future, however long the computer was off. Those
+                # missed while it slept aren't repeated: this one notification stands for them.
+                rule = rule_from_row(row)
+                following = datetime.fromisoformat(row["due_at"])
+                while following is not None and following.replace(tzinfo=None) <= now.replace(
+                    tzinfo=None
+                ):
+                    following = next_due(following, row["repeat"], row["repeat_day"], rule)
+            if following is not None:
                 work.tx.execute(
                     "UPDATE reminders SET due_at = ? WHERE id = ?",
-                    (due.strftime("%Y-%m-%dT%H:%M"), row["id"]),
+                    (following.strftime("%Y-%m-%dT%H:%M"), row["id"]),
                 )
             else:
+                # Done for good: it didn't repeat, or its rule has passed its end date.
                 work.tx.execute("UPDATE reminders SET fired = 1 WHERE id = ?", (row["id"],))
             work.emit(
                 "notification.requested",

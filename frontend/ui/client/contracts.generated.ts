@@ -2733,7 +2733,7 @@ export type Id96 = number;
 export type Id97 = number;
 export type Title27 = string;
 export type When9 = string;
-export type Repeat = "none" | "day" | "week" | "month" | "year";
+export type Repeat = "none" | "interval" | "day" | "week" | "month" | "year";
 export type Thread17 = number | null;
 export type Task1 = number | null;
 export type Source11 = "user" | "agent";
@@ -2742,15 +2742,25 @@ export type Fired = boolean;
 export type Created7 = string | null;
 export type Updated8 = string | null;
 export type LooksDone1 = string | null;
+export type EveryMinutes = number | null;
+export type Days1 = (0 | 1 | 2 | 3 | 4 | 5 | 6)[] | null;
+export type WindowStart = string | null;
+export type WindowEnd = string | null;
+export type Until2 = string | null;
 export type IncludeDone2 = boolean;
 export type Reminders = Reminder[];
 export type Id98 = number | null;
 export type Title28 = string;
 export type When10 = string;
-export type Repeat1 = "none" | "day" | "week" | "month" | "year";
+export type Repeat1 = "none" | "interval" | "day" | "week" | "month" | "year";
 export type Thread18 = number | null;
 export type Task2 = number | null;
 export type Proposed7 = boolean;
+export type EveryMinutes1 = number | null;
+export type Days2 = (0 | 1 | 2 | 3 | 4 | 5 | 6)[] | null;
+export type WindowStart1 = string | null;
+export type WindowEnd1 = string | null;
+export type Until3 = string | null;
 export type Id99 = number;
 export type Minutes = number;
 export type Id100 = number;
@@ -7791,6 +7801,11 @@ export interface Reminder {
   source_ref?: SourceRef | null;
   updated?: Updated8;
   looks_done?: LooksDone1;
+  every_minutes?: EveryMinutes;
+  days?: Days1;
+  window_start?: WindowStart;
+  window_end?: WindowEnd;
+  until?: Until2;
   [k: string]: unknown;
 }
 /**
@@ -7821,6 +7836,11 @@ export interface SaveReminder {
   thread?: Thread18;
   task?: Task2;
   proposed?: Proposed7;
+  every_minutes?: EveryMinutes1;
+  days?: Days2;
+  window_start?: WindowStart1;
+  window_end?: WindowEnd1;
+  until?: Until3;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
