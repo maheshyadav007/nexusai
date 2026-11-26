@@ -342,3 +342,82 @@ def test_a_plugin_name_is_made_lowercase_with_hyphens_and_keeps_its_own_to_show(
     assert made.status_code == 200, made.text
     assert (made.json()["name"], made.json()["display_name"]) == (name, given)
     post(client, "plugins.remove", {"name": name})
+
+
+def _run(client: TestClient, script: Any, text: str, call: Any) -> tuple[str, list[Any]]:
+    from nexusai.modules.agent.providers import TextChunk
+    from test_chat_engine_tools import chat, last_result, new_session
+
+    script.replies = [[call], [TextChunk("Done.")]]
+    chat(client, new_session(client), text)
+    return str(last_result(script)), client.post("/api/queries/approvals.list").json()["approvals"]
+
+
+def test_a_skill_from_the_persons_own_link_is_on_in_one_step(
+    client: TestClient, script: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from nexusai.modules.agent import skills
+    from nexusai.modules.agent.providers import ToolCall
+
+    link = "https://github.com/acme/skills/tree/main/triage-tickets"
+    monkeypatch.setattr(skills, "fetch", lambda url: {"SKILL.md": SKILL})
+    said, waiting = _run(
+        client, script, f"Add this skill: {link}", ToolCall("a", "propose_skill", {"url": link})
+    )
+    assert said.startswith("Added skill triage-tickets") and waiting == []
+    listed = client.post("/api/queries/skills.list").json()
+    assert "triage-tickets" in {s["name"] for s in listed["skills"] if s["active"]}
+
+
+def test_a_plugin_from_the_persons_own_folder_installs_in_one_step(
+    client: TestClient, script: Any, tmp_path: Path
+) -> None:
+    from nexusai.modules.agent.providers import ToolCall
+
+    state = FakeMcp()
+    server = running(state)
+    next(server)
+    try:
+        folder = plugin(tmp_path / "tickets", {"tickets": {"type": "http", "url": URL}})
+        said, waiting = _run(
+            client,
+            script,
+            f"Install the plugin in {folder}",
+            ToolCall("a", "propose_plugin", {"source": str(folder)}),
+        )
+        assert said.startswith("Installed plugin tickets") and waiting == [], said
+        assert "On now: triage-tickets" in said and "Servers added: tickets" in said
+        listed = client.post("/api/queries/plugins.list").json()["plugins"][0]
+        assert listed["connector_ids"]
+    finally:
+        next(server, None)
+
+
+def test_a_server_the_person_named_is_added_without_asking_and_one_they_didnt_asks(
+    client: TestClient, script: Any
+) -> None:
+    from nexusai.modules.agent.providers import TextChunk, ToolCall
+    from test_agent_work import wait
+    from test_chat_engine_tools import approve_one, chat_in_background, new_session
+
+    state = FakeMcp()
+    server = running(state)
+    next(server)
+    try:
+        said, waiting = _run(
+            client,
+            script,
+            f"Add {URL} as Tickets",
+            ToolCall("a", "add_mcp_server", {"name": "Tickets", "url": URL}),
+        )
+        assert said.startswith("Added Tickets") and waiting == []
+        # An address Posty found somewhere else, such as in an email, still asks.
+        script.replies = [
+            [ToolCall("b", "add_mcp_server", {"name": "Other", "url": URL})],
+            [TextChunk("ok")],
+        ]
+        done = chat_in_background(client, new_session(client), "Add the server from that email")
+        assert approve_one(client)["tool"] == "add_mcp_server"
+        wait(lambda: done, "finish")
+    finally:
+        next(server, None)

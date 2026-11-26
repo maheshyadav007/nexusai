@@ -410,6 +410,23 @@ def _connector_ids(ctx: Context) -> set[str]:
     return {connector.id for connector in found.connectors}
 
 
+def switch_on(ctx: Context, name: str) -> tuple[list[str], list[str]]:
+    """Approves the plugin's waiting skills that raised no warnings, for when the person asked
+    for it themselves. Returns the skills now on, and those still waiting for their review."""
+    rows = ctx.bus.db.fetch_all("SELECT proposals FROM plugin_installs WHERE name = ?", (name,))
+    on, waiting = [], []
+    for identifier in json.loads(rows[0]["proposals"]) if rows else []:
+        found = skills.proposal(ctx.bus.db, identifier)
+        if found.status != "waiting":
+            continue
+        if found.flags:
+            waiting.append(found.name)
+        else:
+            skills.decide(ctx, identifier, True)
+            on.append(found.name)
+    return on, waiting
+
+
 def add_servers(ctx: Context, name: str, values: dict[str, str]) -> InstalledPlugin:
     """Adds the plugin's remote servers as connectors, with the secrets they ask for. Each one's
     tools are listed and checked as any connector's are."""

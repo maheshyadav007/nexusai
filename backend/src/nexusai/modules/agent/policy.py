@@ -280,6 +280,28 @@ def can_remember(tool: str, untrusted: bool) -> bool:
     return entry.action == "data" and entry.default is None
 
 
+# Decided 2026-11-26: changes to the person's own data that are small and easy to put back don't
+# ask, even after a chat read mail. What sends, deletes, runs, writes files, sets up something that
+# runs later, or changes which mail the AI or the person sees (rules, senders) still asks there.
+UNDOABLE_AFTER_READING = frozenset(
+    {
+        "create_tasks",
+        "update_tasks",
+        "create_reminders",
+        "update_reminders",
+        "update_mail",
+        "save_draft",
+        "create_categories",
+        "update_category",
+        "reorder_categories",
+        "update_memory",
+        "save_panel",
+        "update_documents",
+        "apply_mail_learning_answers",
+    }
+)
+
+
 # Decided 2026-11-26: tools from MCP servers the person added don't ask by default, even after a
 # chat read mail. Each can still be set to ask or off in Settings.
 CONNECTOR_DEFAULT: Literal["off", "ask", "allow"] = "allow"

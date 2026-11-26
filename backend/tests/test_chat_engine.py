@@ -331,7 +331,7 @@ def test_a_reminder_asked_for_is_set_straight_away(client: TestClient, script: S
     assert [(r["title"], r["proposed"]) for r in reminders] == [("Call Sam", False)]
 
 
-def test_a_session_that_read_mail_asks_before_changing_anything(
+def test_after_reading_mail_small_changes_run_and_what_hides_mail_asks(
     client: TestClient,
     script: Script,
     fake: FakeMail,
@@ -346,13 +346,21 @@ def test_a_session_that_read_mail_asks_before_changing_anything(
         [ToolCall("c2", "create_tasks", {"tasks": [{"title": "From the mail"}]})],
         [TextChunk("Done.")],
     ]
-    done = chat_in_background(client, session, "Read it, then act")
-    approval = approve_when_asked(client)
-    assert approval["tool"] == "create_tasks"
-    assert "read mail" in approval["reason"]
-    wait(lambda: done, "finish")
+    # A task is a small change that's easy to put back, so it no longer asks after reading mail.
+    chat(client, session, "Read it, then act")
+    assert client.post("/api/queries/approvals.list").json()["approvals"] == []
     tasks = client.post("/api/queries/tasks.list", json={}).json()["tasks"]
     assert [t["title"] for t in tasks] == ["From the mail"]
+    # What changes which mail the AI sees still asks there.
+    script.replies = [
+        [ToolCall("c3", "move_sender", {"sender": "someone@example.com", "side": "ignores"})],
+        [TextChunk("Done.")],
+    ]
+    done = chat_in_background(client, session, "Stop showing me them")
+    approval = approve_when_asked(client)
+    assert approval["tool"] == "move_sender"
+    assert "read mail" in approval["reason"]
+    wait(lambda: done, "finish")
 
 
 def test_a_tool_turned_off_is_refused_and_says_so(client: TestClient, script: Script) -> None:
@@ -466,8 +474,14 @@ def mail_session(client: TestClient, script: Script, fake: FakeMail) -> tuple[st
 
 
 def file_calls(thread: int, count: int, start: int = 0) -> list[ToolCall]:
+    """Changes that still ask after a chat read mail: which senders the AI reads. Filing mail and
+    other small changes that are easy to put back don't ask there since 2026-11-26."""
     return [
-        ToolCall(f"f{start + n}", "update_mail", {"thread_ids": [thread], "category": "Finance"})
+        ToolCall(
+            f"f{start + n}",
+            "move_sender",
+            {"sender": f"sender{start + n}@example.com", "side": "ignores"},
+        )
         for n in range(count)
     ]
 
@@ -480,7 +494,6 @@ def test_allowing_for_the_session_settles_everything_of_that_kind_waiting(
     done = chat_in_background(client, session, "File them")
     waiting = pending(client, 4)
     assert all(item["can_remember"] for item in waiting)
-    assert "“Quarterly numbers”" in waiting[0]["summary"]
     client.post(
         "/api/commands/approvals.decide", json={"id": waiting[0]["id"], "choice": "session"}
     )
@@ -503,7 +516,7 @@ def test_a_session_allowance_holds_for_later_calls_even_after_reading_mail(
     script.replies = [file_calls(thread, 1, 10), [TextChunk("Two.")]]
     chat(client, session, "File it again")
     assert client.post("/api/queries/approvals.list").json()["approvals"] == []
-    assert last_tool_result(script) == "Updated 1 conversations."
+    assert not last_tool_result(script).startswith(("Not run", "Not allowed"))
 
 
 def test_allowing_one_tool_does_not_allow_another(
@@ -518,11 +531,11 @@ def test_allowing_one_tool_does_not_allow_another(
     )
     wait(lambda: done, "first")
     script.replies = [
-        [ToolCall("t1", "create_tasks", {"tasks": [{"title": "Other"}]})],
+        [ToolCall("t1", "delete_tasks", {"task_ids": [1]})],
         [TextChunk("Ok.")],
     ]
-    done = chat_in_background(client, session, "Add a task")
-    assert pending(client, 1)[0]["tool"] == "create_tasks"
+    done = chat_in_background(client, session, "Remove a task")
+    assert pending(client, 1)[0]["tool"] == "delete_tasks"
     client.post(
         "/api/commands/approvals.decide",
         json={"id": pending(client, 1)[0]["id"], "choice": "deny"},

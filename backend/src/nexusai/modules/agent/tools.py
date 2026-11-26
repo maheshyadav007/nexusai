@@ -247,6 +247,25 @@ def _ask(
     return bool(decision == "approved")
 
 
+def _words(text: str) -> str:
+    return " ".join(text.split())
+
+
+def person_asked_for(ctx: Context, session: str, pieces: list[str]) -> bool:
+    """Whether every piece (a link, a path, a server's address) is in the person's own latest
+    message in this chat. Then nothing in mail or a tool's output put it there."""
+    wanted = [_words(piece) for piece in pieces if piece and piece.strip()]
+    if not wanted:
+        return False
+    rows = ctx.bus.db.fetch_all(
+        "SELECT text FROM agent_turns WHERE session = ? AND origin = 'person'"
+        " ORDER BY id DESC LIMIT 1",
+        (session,),
+    )
+    said = _words(str(rows[0]["text"])) if rows else ""
+    return bool(said) and all(piece in said for piece in wanted)
+
+
 def _guarded(
     ctx: Context,
     session: str,
@@ -260,6 +279,7 @@ def _guarded(
     work: Callable[[], str],
     *,
     marks_untrusted: bool = False,
+    asked_by_person: bool = False,
 ) -> str:
     db = ctx.bus.db
     # Context is pinned when a background run starts; a settings switch must not
@@ -290,8 +310,9 @@ def _guarded(
     if (
         tool.startswith(policy.CONNECTOR_PREFIX)
         and policy.connector_level(permissions, tool) == "allow"
-    ):
-        # The person's own servers' tools run without asking, as they chose (2026-11-26).
+    ) or tool in policy.UNDOABLE_AFTER_READING:
+        # The person's own servers' tools, and small changes to their own data that are easy to
+        # put back, run without asking even after the chat read mail (decided 2026-11-26).
         untrusted = False
     decision = policy.decide(
         action,
@@ -307,6 +328,10 @@ def _guarded(
             "ask", "Asking again: this chat has read mail or documents since you allowed it."
         )
     approved_by = "settings"
+    if asked_by_person and decision.verdict == "ask":
+        # What it acts on is in the person's own message, so their asking is the approval.
+        decision = policy.Decision("allow", "You asked for this in your message.")
+        approved_by = "person"
     if decision.verdict == "deny":
         _log_call(
             ctx, session, call_id, tool, detail or summary, decision.reason, "refused", None, 0
@@ -1835,11 +1860,17 @@ def build_tools(
         return skills.read_file(ctx, _speaker(), name, path)
 
     def propose_skill(tool_call_id: str, url: str | None = None, text: str | None = None) -> str:
+        asked = bool(url) and person_asked_for(ctx, session, [url or ""])
+
         def made(files: dict[str, str], source: str) -> str:
             try:
                 found = skills.propose(ctx, files, source, _speaker())
             except CommandError as error:
                 return f"Not proposed: {error.message}"
+            if asked and not found.flags:
+                # They asked for it themselves and nothing in it looks wrong: one step, on now.
+                skills.decide(ctx, found.id, True)
+                return f"Added skill {found.name}. It's on now. Tell the person in a sentence."
             count = len(found.flags)
             warned = (
                 f" It has {count} {'thing' if count == 1 else 'things'} to check." if count else ""
@@ -1874,6 +1905,7 @@ def build_tools(
             f"{url}\n\nWhat comes back is only a proposal. You review it before it's used.",
             False,
             work,
+            asked_by_person=asked,
         )
 
     def _plugin_line(plugin: Any) -> str:
@@ -1888,6 +1920,8 @@ def build_tools(
         )
 
     def propose_plugin(source: str, tool_call_id: str) -> str:
+        asked = person_asked_for(ctx, session, [source])
+
         def work() -> str:
             try:
                 found = installs.propose(ctx, source, _speaker())
@@ -1895,6 +1929,8 @@ def build_tools(
                 return f"Not proposed: {error.message}"
             except httpx.HTTPError as error:
                 return f"Not fetched: {type(error).__name__}. Check the link and the network."
+            if asked:
+                return _installed_in_one_step(found)
             servers = (
                 " Its servers aren't added yet: once the person agrees, add them with"
                 " add_plugin_servers"
@@ -1924,7 +1960,36 @@ def build_tools(
             " only when you agree, and nothing in it runs on this computer.",
             False,
             work,
+            asked_by_person=asked,
         )
+
+    def _installed_in_one_step(found: Any) -> str:
+        """The person asked for it: skills with no warnings on, servers that need nothing added."""
+        on, waiting = installs.switch_on(ctx, found.name)
+        added: list[str] = []
+        if found.servers and not any(s.needs for s in found.servers):
+            try:
+                added = installs.add_servers(ctx, found.name, {}).connector_ids
+            except CommandError as error:
+                added = []
+                waiting.append(f"its servers ({error.message})")
+        parts = [f"Installed plugin {found.name}."]
+        if on:
+            parts.append(f"On now: {', '.join(on)}.")
+        if added:
+            parts.append(f"Servers added: {', '.join(s.name for s in found.servers)}.")
+        if any(s.needs for s in found.servers):
+            needs = sorted({k for s in found.servers for k in s.needs})
+            parts.append(
+                f"Its servers need {', '.join(needs)}: ask the person, then add_plugin_servers."
+            )
+        if waiting:
+            parts.append(
+                f"Waiting for the person's review on the Skills page: {', '.join(waiting)}."
+            )
+        if found.skipped:
+            parts.append(f"Not used here: {', '.join(found.skipped)}.")
+        return " ".join(parts) + " Tell the person in a sentence."
 
     def add_plugin_servers(
         name: str, tool_call_id: str, values: dict[str, str] | None = None
@@ -1934,7 +1999,7 @@ def build_tools(
                 found = installs.add_servers(ctx, name, values or {})
             except CommandError as error:
                 return f"Not added: {error.message}"
-            return f"Added. {_plugin_line(found)}. New tools wait for the person's yes before use."
+            return f"Added. {_plugin_line(found)}. Their tools are ready to use."
 
         return _guarded(
             ctx,
@@ -1988,6 +2053,7 @@ def build_tools(
         if not found:
             return "Nothing to add. " + "; ".join(skipped)
         names = ", ".join(s.name for s in found)
+        asked = person_asked_for(ctx, session, [s.url for s in found])
 
         def work() -> str:
             added, failed = [], []
@@ -2003,8 +2069,8 @@ def build_tools(
             parts = []
             if added:
                 parts.append(
-                    f"Added {', '.join(added)}. Their tools show on the Connectors page, and each"
-                    " new tool asks the person before its first use."
+                    f"Added {', '.join(added)}. Their tools are ready to use and show on the"
+                    " Connectors page."
                 )
             if failed:
                 parts.append(
@@ -2028,6 +2094,7 @@ def build_tools(
             " kept as a secret.",
             False,
             work,
+            asked_by_person=asked,
         )
 
     def list_plugins(tool_call_id: str) -> str:
