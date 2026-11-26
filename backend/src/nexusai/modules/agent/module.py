@@ -1061,7 +1061,7 @@ def list_prompts(query: ListPrompts, ctx: Context) -> PromptList:
                 title=title,
                 kind="agent",
                 content=path.read_text("utf-8") if path.exists() else "",
-                base=prompts_builder.packaged(f"{name}.md"),
+                base=prompts_builder.agent_base(name),
                 layers=[PromptLayer(name=layer.name, text=layer.text) for layer in layers],
                 group="schedules" if name == triggers.CUSTOM_AGENT else "agents",
             )

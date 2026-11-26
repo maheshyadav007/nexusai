@@ -1,0 +1,12 @@
+{
+  "name": "nexusai",
+  "displayName": "NexusAI",
+  "version": "2026.11.26",
+  "description": "The lead, Posty, and what every agent shares: the team, the first meeting, tasks and reminders.",
+  "author": {
+    "name": "NexusAI"
+  },
+  "nexusai": {
+    "required": true
+  }
+}

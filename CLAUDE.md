@@ -65,7 +65,7 @@ Imports go one way, enforced by import-linter: `api → modules → kernel → c
 
 ### Agents (`modules/agent/`)
 
-- Agent definitions are TOML in `agents/` with prompts in `prompts/*.md` (trigger prompts in `prompts/triggers/`). Built-in skills are in `shipped_skills/`.
+- Agents, skills and the Mail agent's run prompts ship as built-in plugins in `builtin_plugins/<plugin>/`, in Claude Code's plugin layout and field names (`plugin.json`, `agents/<id>.md` with frontmatter then the prompt, `skills/<name>/SKILL.md`, ours under `nexusai`), loaded by `plugins.py`. Prompts that aren't an agent's (`system.md`, `compress.md`, `summary.md`, …) stay in `prompts/`. See `docs/PLUGIN_FORMAT_PLAN.md`.
 - Typed messages, events and schedules (`schedule.due`) all start runs through `SessionRuntime.dispatch` (`runtime.py`). Each emits `agent.triggered`, and `trigger_runs` prevents a replayed event from starting a run twice.
 - What the model is sent is decided per run in `context.py` (trim by default, compaction is config). Chat display comes from `agent_parts` and is never shortened. Trigger data (such as an email body) goes beside the message for that run only.
 - `knowledge.py` builds what the Mail agent knows (profile, corrections, `signals.py` counts, memory, scoped facts, approved preferences, the email last and least trusted). The "What it knows" page uses the same builder.

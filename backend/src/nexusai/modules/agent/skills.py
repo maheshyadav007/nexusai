@@ -15,7 +15,6 @@ import shutil
 import zipfile
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from importlib import resources
 from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.parse import urlparse
@@ -27,7 +26,7 @@ from nexusai.contracts.agent import Skill as SkillView
 from nexusai.contracts.agent import SkillFile, SkillList, SkillProposal
 from nexusai.kernel.database import Database, Migration
 from nexusai.kernel.module import CommandError, Context
-from nexusai.modules.agent import cards
+from nexusai.modules.agent import cards, plugins
 
 MIGRATION = Migration(
     "agent_skills_001",
@@ -175,11 +174,9 @@ def _home_folder(ctx: Context) -> Path:
 def all_skills(ctx: Context) -> dict[str, Skill]:
     """Shipped skills, then the person's. A shipped name can't be taken by another skill."""
     found: dict[str, Skill] = {}
-    shipped = resources.files(__package__).joinpath("shipped_skills")
-    for folder in sorted(shipped.iterdir(), key=lambda item: item.name):
-        if folder.is_dir():
-            skill = parse(_read_folder(folder), "built_in")
-            found[skill.name] = skill
+    for folder in plugins.skill_folders():
+        skill = parse(_read_folder(folder), "built_in")
+        found[skill.name] = skill
     approved = {
         row["name"]: row["hash"] for row in ctx.bus.db.fetch_all("SELECT * FROM skill_approvals")
     }

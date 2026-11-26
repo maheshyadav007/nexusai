@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 
 from nexusai.api.app import create_app
 from nexusai.kernel.config import Config
-from nexusai.modules.agent import cards, gateway, team
+from nexusai.modules.agent import cards, gateway, plugins, team
 from nexusai.modules.agent import module as agent
 from nexusai.modules.agent.providers import ModelRequest, TextChunk, ToolCall
 
@@ -157,13 +157,7 @@ def test_cards_have_one_default_and_unique_handles(client: TestClient) -> None:
 def test_no_agent_name_is_written_outside_the_cards() -> None:
     """Names live only in the card files. Code, prompts and seeds use ids or placeholders. Comments
     may talk about an agent, so only string values are checked, and old migrations are history."""
-    folder = SOURCE / "modules" / "agent" / "agents"
-    names = {
-        line.split("=", 1)[1].strip().strip('"')
-        for path in folder.glob("*.toml")
-        for line in path.read_text().splitlines()
-        if line.startswith("name =")
-    }
+    names = {card.name for card in cards._files().values()}
     found = []
     for path in SOURCE.rglob("*.py"):
         tree = ast.parse(path.read_text())
@@ -192,11 +186,15 @@ def test_no_agent_name_is_written_outside_the_cards() -> None:
     agent_folder = SOURCE / "modules" / "agent"
     texts = [
         *(agent_folder / "prompts").rglob("*.md"),
-        *(agent_folder / "shipped_skills").rglob("*.md"),
+        *(agent_folder / "builtin_plugins").rglob("*.md"),
     ]
     for path in texts:
+        text = path.read_text()
+        if path.parent.name == "agents":
+            # An agent file's frontmatter is its card, where names belong. Its prompt may not name one.
+            text = plugins.split(text)[1]
         for name in names:
-            if re.search(rf"\b{re.escape(name)}\b", path.read_text()):
+            if re.search(rf"\b{re.escape(name)}\b", text):
                 found.append(f"{path.relative_to(SOURCE)} says {name!r}")
     assert not found, "Use cards.name(db, id) or a {{agent.<id>.name}} placeholder:\n" + "\n".join(
         found

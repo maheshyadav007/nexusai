@@ -11,7 +11,7 @@ from pathlib import Path
 
 from nexusai.kernel.config import Config
 from nexusai.kernel.database import Database
-from nexusai.modules.agent import cards
+from nexusai.modules.agent import cards, plugins
 from nexusai.modules.agent.gateway import Layer
 
 SH_LIKE = frozenset({"bash", "zsh", "sh", "dash", "ksh"})
@@ -78,8 +78,15 @@ def for_tools(text: str, tools: Collection[str] | None) -> str:
     return "".join(kept).replace("\n\n\n", "\n\n")
 
 
+def agent_base(agent: str) -> str:
+    """An agent's own prompt: the body of its agent file. Prompts that aren't an agent's, such as
+    the summary writer's, are still plain files in prompts/."""
+    body = plugins.agent_body(agent)
+    return body if body is not None else packaged(f"{agent}.md")
+
+
 def agent_prompt(home: Path, agent: str) -> str:
-    base = packaged(f"{agent}.md")
+    base = agent_base(agent)
     added = home / "prompts" / "agents" / f"{agent}.md"
     return f"{base}\n\n{added.read_text('utf-8').strip()}" if added.exists() else base
 

@@ -1,18 +1,17 @@
-"""Who each agent is. Names, handles and mascots live in the card files and the person's renames,
-and nowhere else, so changing a name is a change in one place."""
+"""Who each agent is. Names, handles and mascots live in the agent files (`plugins.py`) and the
+person's renames, and nowhere else, so changing a name is a change in one place."""
 
 import hashlib
 import re
-import tomllib
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from functools import cache
-from importlib import resources
 from typing import Any
 
 from nexusai.contracts.agent import HANDLE_PATTERN, AgentCard, AgentMascot
 from nexusai.kernel.database import Database, Migration
 from nexusai.kernel.module import CommandError
+from nexusai.modules.agent import plugins
 
 MIGRATION = Migration(
     "agent_cards_001",
@@ -71,32 +70,29 @@ class Card:
 @cache
 def _files() -> dict[str, Card]:
     found: dict[str, Card] = {}
-    folder = resources.files(__package__).joinpath("agents")
-    for entry in sorted(folder.iterdir(), key=lambda item: item.name):
-        if not entry.name.endswith(".toml"):
-            continue
-        text = entry.read_text("utf-8")
-        raw: dict[str, Any] = tomllib.loads(text)
-        mascot = raw.get("mascot", {})
+    # Sorted by file name, as the card folder was, so the team is listed in the same order.
+    for file in sorted(plugins.agent_files().values(), key=lambda item: item.name):
+        raw: dict[str, Any] = file.ours
+        mascot = raw.get("mascot", {}) if isinstance(raw.get("mascot"), dict) else {}
+        for key in ("displayName", "handle", "role"):
+            if not str(raw.get(key, "")).strip():
+                raise ValueError(f"Agent {file.name} needs nexusai.{key}")
         card = Card(
-            id=raw["id"],
-            name=raw["name"],
-            handle=raw["handle"],
-            role=raw["role"],
-            can_do=tuple(raw.get("can_do", ())),
-            default=bool(raw.get("default", False)),
-            may_assign_to=tuple(raw.get("may_assign_to", ())),
-            talks_to_person=bool(raw.get("talks_to_person", False)),
-            accepts=tuple(raw.get("accepts", ())),
+            id=file.name,
+            name=str(raw["displayName"]),
+            handle=str(raw["handle"]),
+            role=str(raw["role"]),
+            can_do=tuple(str(item) for item in raw.get("canDo", ())),
+            default=bool(raw.get("lead", False)),
+            may_assign_to=tuple(str(item) for item in raw.get("mayAssignTo", ())),
+            talks_to_person=bool(raw.get("talksToPerson", False)),
+            accepts=tuple(str(item) for item in raw.get("accepts", ())),
             mascot_style=str(mascot.get("style", "round")),
-            mascot_seed=str(mascot.get("seed", raw["id"])),
-            # From the file itself, so it changes whenever the card does and is never forgotten.
-            version=hashlib.sha256(text.encode()).hexdigest()[:12],
-            engine=raw["id"],
+            mascot_seed=str(mascot.get("seed", file.name)),
+            version=file.hash,
+            engine=file.name,
             hidden=bool(raw.get("hidden", False)),
         )
-        if entry.name != f"{card.id}.toml":
-            raise ValueError(f"Card {entry.name} must be named after its id, {card.id}.toml")
         if not HANDLE.match(card.handle):
             raise ValueError(f"Card {card.id} has a handle that isn't allowed: {card.handle}")
         found[card.id] = card

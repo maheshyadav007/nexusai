@@ -1,0 +1,12 @@
+{
+  "name": "mail",
+  "displayName": "Mail",
+  "version": "2026.11.26",
+  "description": "The Mail agent and its know-how: reading every new email, drafting replies and chasing follow-ups.",
+  "author": {
+    "name": "NexusAI"
+  },
+  "nexusai": {
+    "required": true
+  }
+}

@@ -77,7 +77,7 @@ As found on 2026-11-07, before steps 1 to 3. Kept for the record; see [Where thi
 
 ### 1. Agent cards and names
 
-Each agent has a **card**: a file next to its prompt, `modules/agent/agents/<id>.toml`. Agents the person makes get the same fields in the database.
+Each agent has a **card**: since 2026-11-26 the frontmatter of its agent file, `modules/agent/builtin_plugins/<plugin>/agents/<id>.md`, whose body is its prompt (`docs/PLUGIN_FORMAT_PLAN.md`). Agents the person makes get the same fields in the database.
 
 #### Names live in one place
 
@@ -524,7 +524,7 @@ Each phase ends usable on its own, and is checked on the real Gmail account. Mod
 
 Built:
 
-- Cards in `modules/agent/agents/<id>.toml`, loaded by `cards.py`, with the person's renames on top. Names, handles and mascots exist nowhere else. `cards.sync` gives built-in chats, triggers and schedules their agent's name at startup and after each rename. A backend test and `check-no-hardcode` fail on any agent name outside the cards, and their messages say what to use instead.
+- Cards in the agent files of the built-in plugins (`builtin_plugins/<plugin>/agents/<id>.md`, read by `plugins.py`), loaded by `cards.py`, with the person's renames on top. Names, handles and mascots exist nowhere else. `cards.sync` gives built-in chats, triggers and schedules their agent's name at startup and after each rename. A backend test and `check-no-hardcode` fail on any agent name outside the cards, and their messages say what to use instead.
 - The card for the brief's agent is called **Brief writer**, so the brief itself keeps the name "Your brief". The brief's schedule is titled for the brief, not the agent.
 - `/api/home/status` returns the lead's name, so setup greets the person by it before a Home exists. The chat button reads "Ask {lead}".
 - The router: `@handle` in any chat goes to that agent for that turn, in the same conversation, and the reply carries its name and mascot. An unknown handle, or one for an agent that takes no messages, is refused with the team listed.
@@ -553,7 +553,7 @@ Phase 1 is done.
 
 **2026-11-07, phase 2: skills.**
 
-- `skills.py` loads skills in the open `SKILL.md` format: shipped ones from `modules/agent/shipped_skills/`, and the person's own from `skills/` in their Home. Fields of our own: `agents` (card ids, or `all`) and `needs_tools`.
+- `skills.py` loads skills in the open `SKILL.md` format: shipped ones from the built-in plugins' `skills/` folders, and the person's own from `skills/` in their Home. Fields of our own: `agents` (card ids, or `all`) and `needs_tools`.
 - Each agent's stable "Who you are" block lists the skills it may load, one line each. `load_skill` returns the body with agent names filled in from cards, and records the load. `read_skill_file` reads one more file of the skill, and refuses paths outside it.
 - The person's skills are proposed, by the person on the Skills tab or by the lead with `propose_skill`, from a link (a `SKILL.md`, a GitHub folder or file, or a zip), pasted text, or text the lead wrote. Only https is fetched, text files only, at most 1 MB and 50 files, and fetching always asks the person first. The review shows the whole skill, who may load it, the tools it needs, and warnings: instructions to ignore rules, sending to addresses, keys and passwords, downloading or encoding, hidden HTML comments, invisible characters, links and scripts.
 - An approved skill is pinned to the hash of its files. Any change on disk turns it off until the person approves it again. A shipped skill's name can't be taken. Agents can read the skills folder but never write to it.

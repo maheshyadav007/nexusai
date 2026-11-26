@@ -1,0 +1,12 @@
+{
+  "name": "meetings",
+  "displayName": "Meetings",
+  "version": "2026.11.26",
+  "description": "Know-how for getting ready for meetings from your mail.",
+  "author": {
+    "name": "NexusAI"
+  },
+  "nexusai": {
+    "required": false
+  }
+}

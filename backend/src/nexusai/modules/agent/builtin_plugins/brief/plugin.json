@@ -1,0 +1,12 @@
+{
+  "name": "brief",
+  "displayName": "Brief",
+  "version": "2026.11.26",
+  "description": "The Brief writer and the morning brief on Today.",
+  "author": {
+    "name": "NexusAI"
+  },
+  "nexusai": {
+    "required": false
+  }
+}
