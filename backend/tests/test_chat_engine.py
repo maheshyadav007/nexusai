@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from fake_mail import FakeMail, make_mail
 from nexusai.api.app import create_app
 from nexusai.kernel.config import Config
-from nexusai.modules.agent import gateway, mail_agent, tools
+from nexusai.modules.agent import gateway, mail_agent
 from nexusai.modules.agent import module as agent_module
 from nexusai.modules.agent.providers import (
     ModelNotConfigured,
@@ -86,9 +86,7 @@ def approve_when_asked(client: TestClient, choice: str = "once") -> dict[str, An
 def use_tool(client: TestClient, script: Script, call: ToolCall) -> str:
     session = new_session(client)
     script.replies = [[call], [TextChunk("Done.")]]
-    # Tasks and reminders are the Organizer's tools, so the call goes to it.
-    owner = "@organizer " if call.name in tools.ORGANIZER_ONLY else ""
-    chat(client, session, f"{owner}Do it")
+    chat(client, session, "Do it")
     return last_tool_result(script)
 
 
@@ -348,7 +346,7 @@ def test_a_session_that_read_mail_asks_before_changing_anything(
         [ToolCall("c2", "create_tasks", {"tasks": [{"title": "From the mail"}]})],
         [TextChunk("Done.")],
     ]
-    done = chat_in_background(client, session, "@organizer " + "Read it, then act")
+    done = chat_in_background(client, session, "Read it, then act")
     approval = approve_when_asked(client)
     assert approval["tool"] == "create_tasks"
     assert "read mail" in approval["reason"]
@@ -379,7 +377,7 @@ def test_one_tool_can_ask_while_its_group_allows(client: TestClient, script: Scr
         [ToolCall("c1", "create_tasks", {"tasks": [{"title": "Maybe"}]})],
         [TextChunk("Ok.")],
     ]
-    done = chat_in_background(client, session, "@organizer " + "Add it")
+    done = chat_in_background(client, session, "Add it")
     assert approve_when_asked(client)["tool"] == "create_tasks"
     wait(lambda: done, "finish")
 
@@ -430,7 +428,7 @@ def test_creating_a_schedule_asks_first_then_schedules_it(
         "weekday": "Friday",
     }
     script.replies = [[ToolCall("c1", "create_schedule", arguments)], [TextChunk("Made it.")]]
-    done = chat_in_background(client, session, "Make one")
+    done = chat_in_background(client, session, "@routines Make one")
     approval = approve_when_asked(client)
     assert "Draft my status." in approval["detail"]
     wait(lambda: done, "finish")
@@ -523,7 +521,7 @@ def test_allowing_one_tool_does_not_allow_another(
         [ToolCall("t1", "create_tasks", {"tasks": [{"title": "Other"}]})],
         [TextChunk("Ok.")],
     ]
-    done = chat_in_background(client, session, "@organizer " + "Add a task")
+    done = chat_in_background(client, session, "Add a task")
     assert pending(client, 1)[0]["tool"] == "create_tasks"
     client.post(
         "/api/commands/approvals.decide",
@@ -542,7 +540,8 @@ def test_mail_cannot_earn_a_session_allowance_for_risky_tools(
     }
     for name, arguments in calls.items():
         script.replies = [[ToolCall(f"x-{name}", name, arguments)], [TextChunk("Ok.")]]
-        done = chat_in_background(client, session, f"Use {name}")
+        to = "@routines " if name == "create_schedule" else ""
+        done = chat_in_background(client, session, f"{to}Use {name}")
         item = pending(client, 1)[0]
         assert item["can_remember"] is False
         # Even if asked for directly, nothing is remembered.
@@ -551,7 +550,7 @@ def test_mail_cannot_earn_a_session_allowance_for_risky_tools(
         # A second schedule needs its own name; the same one is refused as a duplicate.
         again = {**arguments, "name": "Sneaky again"} if name == "create_schedule" else arguments
         script.replies = [[ToolCall(f"y-{name}", name, again)], [TextChunk("Ok.")]]
-        done = chat_in_background(client, session, f"Use {name} again")
+        done = chat_in_background(client, session, f"{to}Use {name} again")
         again = pending(client, 1)[0]
         assert again["tool"] == name
         client.post("/api/commands/approvals.decide", json={"id": again["id"], "choice": "deny"})
@@ -570,7 +569,7 @@ def test_many_can_be_decided_together_with_some_declined(
         ToolCall(f"t{n}", "create_tasks", {"tasks": [{"title": f"Task {n}"}]}) for n in range(3)
     ]
     script.replies = [calls, [TextChunk("Done.")]]
-    done = chat_in_background(client, session, "@organizer " + "Add three")
+    done = chat_in_background(client, session, "Add three")
     by_title = {item["summary"].removeprefix("Add "): item["id"] for item in pending(client, 3)}
     client.post(
         "/api/commands/approvals.decideMany",
@@ -595,7 +594,7 @@ def test_declining_one_while_remembering_the_rest_is_respected(
         ToolCall(f"t{n}", "create_tasks", {"tasks": [{"title": f"Task {n}"}]}) for n in range(3)
     ]
     script.replies = [calls, [TextChunk("Done.")]]
-    done = chat_in_background(client, session, "@organizer " + "Add three")
+    done = chat_in_background(client, session, "Add three")
     by_title = {item["summary"].removeprefix("Add "): item["id"] for item in pending(client, 3)}
     client.post(
         "/api/commands/approvals.decideMany",

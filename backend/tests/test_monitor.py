@@ -60,8 +60,8 @@ def test_a_spike_raises_one_alert_and_only_notifies_when_asked(client: TestClien
     assert not any("80,000" in n["title"] for n in items)
     quiet = query(client, "quietHours.get")
     client.post("/api/commands/quietHours.save", json={**quiet, "token_alerts": True})
-    spend("organizer", 1000, now - timedelta(days=2))
-    spend("organizer", 90_000, now)
+    spend("daily-prep", 1000, now - timedelta(days=2))
+    spend("daily-prep", 90_000, now)
     monitor.check(ctx, agent.current())
     wait(
         lambda: any("90,000" in n["title"] for n in query(client, "notifications.list")["items"]),

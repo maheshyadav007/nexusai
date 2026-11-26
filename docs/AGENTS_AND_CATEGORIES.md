@@ -6,7 +6,7 @@ Settings named like `agent.learn_emails` are in `backend/src/nexusai/kernel/defa
 
 ## Agents
 
-There are **5 agents**, plus 3 helpers that make a single model call. All of them are one engine with different instructions and tools, and every model call goes through the gateway (`modules/agent/gateway.py`). Each agent has a card in `modules/agent/agents/<id>.toml` with its name, `@handle`, role and mascot, and names appear nowhere else (see the [agent harness plan](AGENT_HARNESS_PLAN.md)). The Agent channel page shows the cards, the tasks agents give each other, and what runs and when it runs next.
+There are **5 agents**, plus 3 helpers that make a single model call. All of them are one engine with different instructions and tools, and every model call goes through the gateway (`modules/agent/gateway.py`). Each agent has an agent file in a built-in plugin, `modules/agent/builtin_plugins/<plugin>/agents/<id>.md`, with its name, `@handle`, role and mascot, and names appear nowhere else (see the [agent harness plan](AGENT_HARNESS_PLAN.md)). The Agent channel page shows the cards, the tasks agents give each other, and what runs and when it runs next.
 
 | Agent | What it does | Prompt | Tools |
 |---|---|---|---|

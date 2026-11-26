@@ -7,6 +7,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { ApiRequestError, query } from "@/ui/client/api";
 import { useEvents } from "@/ui/client/events";
 import { useTimeOnly } from "@/ui/client/format";
+import { useAgentName } from "@/ui/client/work";
 import { isManagedSession, useChatDraft, groupApprovals, takeFirstMessage, useAnswerSession, useApprovals, useChooseVersion, useModelCall, useRateMessage, useSession, useSetSessionModel, useStopSession } from "@/ui/client/sessions";
 import { useChannel, useCompactSession, useDismissChannel, useSessionContext, useSetContext, useTeamTasks } from "@/ui/client/work";
 import { Icon } from "@/ui/icons";
@@ -77,6 +78,18 @@ function CopyAction({ text, label }: { text: string; label: string }) {
         <Icon name={copied ? "check" : "copy"} className="h-3 w-3" />
       </Swap>
     </ActionButton>
+  );
+}
+
+/** Which agent answered and the plugin its file came with, so a surprising answer can be traced. */
+function BuiltFrom({ built }: { built: NonNullable<ReturnType<typeof factsOf>["built"]> }) {
+  const name = useAgentName();
+  const agent = name(built.agent ?? "");
+  if (!agent) return null;
+  return (
+    <span data-testid="built-from" title={built.card ? t("chat.built.version", { version: built.card }) : undefined} className="text-sm text-ink-muted">
+      {built.plugin ? t("chat.built.withPlugin", { agent, plugin: built.plugin }) : agent}
+    </span>
   );
 }
 
@@ -210,7 +223,7 @@ function AssistantMessage({ message, session, ownAgent, running, isLast, onFollo
   const followUps = followUpsOf(message);
   const sources = sourcesOf(message);
   const settled = !running || !isLast;
-  const { turn, feedback, versions, thread, agent } = factsOf(message);
+  const { turn, feedback, versions, thread, agent, built } = factsOf(message);
   const menu: MenuItem[] = [
     ...(text ? [{ id: "copy", label: t("menu.copy"), onSelect: () => void copyText(text) }] : []),
     ...(canRetry ? [{ id: "retry", label: t("menu.retry"), icon: "retry" as const, onSelect: onRetry }] : []),
@@ -248,6 +261,7 @@ function AssistantMessage({ message, session, ownAgent, running, isLast, onFollo
           ) : null}
           {versions && isLast && canRetry ? <VersionSwitcher versions={versions} disabled={!canRetry} onChoose={onChooseVersion} /> : null}
           <MessageTime value={timeOf(message)} />
+          {built ? <BuiltFrom built={built} /> : null}
         </div>
         </div>
       ) : null}

@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from nexusai.api.app import create_app
 from nexusai.kernel.config import Config
-from nexusai.modules.agent import gateway
+from nexusai.modules.agent import gateway, plugins
 from nexusai.modules.agent import module as agent
 from nexusai.modules.agent.providers import TextChunk, ToolCall, Usage
 from test_team import TeamScript, lead, mail
@@ -40,7 +40,7 @@ def test_the_cases_name_only_real_skills_and_agents() -> None:
     import json
 
     cases = json.loads(skill_eval.CASES.read_text())["cases"]
-    shipped = {p.name for p in (Path(gateway.__file__).parent / "shipped_skills").iterdir()}
+    shipped = {folder.name for folder in plugins.skill_folders()}
     assert {c["expect"] for c in cases if c["expect"]} <= shipped
     assert {c["agent"] for c in cases} <= {"session", "mail"}
     assert sum(1 for c in cases if c["expect"] is None) >= 4, "should-not-load cases matter too"

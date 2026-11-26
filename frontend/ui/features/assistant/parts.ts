@@ -115,6 +115,8 @@ interface TurnFacts {
   thread?: number | null;
   /** Which agent's card answered: another agent when the person wrote "@handle". */
   agent?: string | null;
+  /** What the answer was built from: the agent's file and the plugin it came with. */
+  built?: { agent?: string | null; plugin?: string | null; card?: string | null } | null;
 }
 
 /** Which turn an answer came from, and how it's been rated and tried again. */

@@ -30,7 +30,8 @@ def approvals(client: TestClient) -> list[dict[str, Any]]:
 def call(client: TestClient, script: Script, name: str, arguments: dict[str, Any]) -> str:
     """A call that's refused before asking: it returns at once, with no approval."""
     script.replies = [[ToolCall("c1", name, arguments)], [TextChunk("Ok.")]]
-    chat(client, new_session(client), "Do it")
+    # Routines are the Routines agent's job, so the work goes to it.
+    chat(client, new_session(client), "@routines Do it")
     return last_tool_result(script)
 
 
@@ -38,7 +39,7 @@ def approved(
     client: TestClient, script: Script, name: str, arguments: dict[str, Any]
 ) -> tuple[dict[str, Any], str]:
     script.replies = [[ToolCall("c1", name, arguments)], [TextChunk("Ok.")]]
-    done = chat_in_background(client, new_session(client), "Do it")
+    done = chat_in_background(client, new_session(client), "@routines Do it")
     card = approve_when_asked(client)
     wait(lambda: done, "finish")
     return card, last_tool_result(script)

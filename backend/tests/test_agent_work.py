@@ -546,7 +546,7 @@ def test_memory_files_can_be_edited_searched_and_only_relevant_ones_load(
             "name": "mine",
             "level": "agent",
             "agent": "mail",
-            "content": "Budget reports are routine.",
+            "content": "Budget reports come from Halvorsen.",
         },
     )
     files = client.post("/api/queries/memory.list", json={"query": "priya"}).json()["files"]
@@ -558,7 +558,7 @@ def test_memory_files_can_be_edited_searched_and_only_relevant_ones_load(
     ) as response:
         list(response.iter_lines())
     prompt = script.requests[-1].instructions
-    assert "Priya" in prompt and "Roses" not in prompt and "routine" not in prompt
+    assert "Priya" in prompt and "Roses" not in prompt and "Halvorsen" not in prompt
     assert (
         client.post(
             "/api/commands/memory.save",

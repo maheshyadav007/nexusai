@@ -254,3 +254,44 @@ Recommended, and taken as the plan unless the person says otherwise:
 6. Hooks, local MCP servers and anything else that runs code: read and shown, not run.
 7. Ids stay as they are (`session`, `mail`, `daily-prep`, `interview`, plus `routines`).
 8. The Mail agent's job is `triage`: everything `record_triage` holds. Routines are named by what starts them.
+
+## 15. Build order for this iteration (2026-11-26)
+
+Agreed 2026-11-26: steps 1–3 and Routines (step 7, with repeating reminders) are built in this iteration. Installing plugins (step 6) and the person's own plugin (step 5) come next. Each phase is its own branch, merged only when `make check` passes; nothing a phase doesn't name changes behaviour.
+
+**What depends on what is changed** (inventory, 2026-11-26):
+
+| Changed | Read by |
+|---|---|
+| Agent cards (`agents/*.toml`) | `cards.py`, and through it `prompts_builder`, `knowledge`, `registry`, `team`, `runtime` (run trace keeps `card.version`), `tools`, `triggers`, `cockpit`, `monitor`, `context`, `trace`, `work_tools`, `api/app.py`; the Agents, Team and Map screens through `AgentCard` and `AgentEntry` |
+| Agent prompts (`prompts/<id>.md`) | `prompts_builder.agent_prompt` (also hashed into `knowledge.decision_context_version`, so a changed byte would re-judge mail: bodies move byte for byte), the Prompts tab (`module.py`, built-in text shown read-only, the person's extra text in `<Home>/prompts/agents/<id>.md`) |
+| `shipped_skills/` | `skills.py` (shipped skills are trusted; approvals keyed by name) |
+| `prompts/triggers/` | `mail_agent.py` (`resources.files`), and through it `triggers.py` |
+| `schedules`, `agent_triggers` | `scheduler.py`, `triggers.py`, `cards.py` (each person-made schedule or trigger is an agent `schedule-<id>` / `trigger-<id>`, and their chats were moved to those ids by `agent_cards_yours_001`), `registry.py`, `cockpit.py`, `mail_agent.py`, `work_tools.py`, `module.py`; Schedules screen, `TriggerForm`, `RunOptions`, `AgentRunSettings`, `usePlannerCounts` |
+| Reminders (`planner` module) | `work_tools.py`, Reminders screen, the time check in `scheduler.py` |
+
+**Phases:**
+
+A. **The loader, same behaviour.** `modules/agent/plugins.py` reads built-in plugins from `modules/agent/builtin_plugins/<plugin>/` (root `plugin.json`, no dot-folders, so packaging needs nothing new). Cards and prompts become `agents/<id>.md`; `shipped_skills/` and `prompts/triggers/` move in. Before anything moves, a golden snapshot of every card, prompt body, skill and trigger prompt is taken from today's code and committed as a test fixture; the new loader must reproduce it exactly. Load errors kept, not raised, for anything but a built-in (a broken built-in still fails start-up and CI, as a broken card does now).
+
+B. **Jobs and one owner.** `jobs.py`; each agent's `tools` lists jobs; `ORGANIZER_ONLY`, `MAIL_AGENT_ONLY`, `BRIEF_AGENT_ONLY` replaced; the Organizer folded into Posty (its sessions and stored references pointed to `session`, its prompt lines into the `tasks-and-reminders` skill); the gaps in `docs/AGENT_OWNERS_PLAN.md` §2 closed. Tests: a walking test over every tool; "remind me at 5" done by Posty in one run.
+
+C. **Routing and checks.** `description` on every agent; "Yours, and not yours" and Posty's hand-overs generated; the description cap; tool errors name the owner; run records (`plugin:name` and hash per run); the done-check when a team task closes.
+
+D. **Routines, backend.** A `routines` table owns its triggers: the existing `schedules` and `agent_triggers` rows gain a `routine` column and keep running as they do (next run, catch-up, `trigger_runs`, token limits, context modes), so nothing about timing changes. Built-in routines come from `nexusai/routines/*.md` in the plugins and are matched to today's rows: On new mail (`agent_triggers` `mail-received`), Every morning (`schedules` `mail-brief`, still daily at 08:30 unless the person changed it), Inbox review (`mail-review`), Mail agent hourly (`mail-hourly`, off). The person's schedules and triggers become their routines, run as Posty with Posty's tools instead of a hidden agent with every tool; their chats and history stay. The Routines agent (`routines` plugin) with its skill and tools. Today's contracts (`Schedule`, `Trigger`) keep being served until the Routines page is rebuilt, so the current screens keep working.
+
+E. **Repeating reminders (To do 13).** Every N minutes or hours, chosen weekdays, a daily window, an end date; one notification per firing with no model; a schedule whose prompt is only "remind me…" is refused toward the reminder tool.
+
+F. **Screens, after mockups are approved:** the Agents page, "who made it", the trace's sources, the Routines page and the Routines agent's setup card. Until then the existing screens stay and read the same contracts.
+
+The NexusAI guide (To do 14) and plugin installing follow this iteration.
+
+**Status, 2026-11-26:** A built and committed (`706a2af`), B built and committed (`a7a6c1a`), E built (repeating reminders). Changed from the text above while building: the Organizer's lines went into Posty's prompt directly rather than a `tasks-and-reminders` skill, since a weak model reads a prompt every time but must choose to load a skill; restricted agents' tool lists stay in code for now (a test compares them with the old ones), and `tools` in agent files is for plugin agents later; the weekly Inbox review isn't a built-in routine (it was removed in `agent_no_mail_suggestions_001`).
+
+**D, built 2026-11-26:** the `routines` plugin and its Routines agent (`@routines`), which owns setting up, changing, running and removing routines (`jobs.py`); Posty hands that work over and its prompt says so. No separate skill: its rules are in its prompt, for the same reason as above. The routines list stays the existing `agents.list` (the Agents map already lists every schedule and trigger with its state, next and last run), extended when the Routines page is built (F) rather than a second query now. Left for F, with the screens: the built-in routine files and "built in" on each entry, the person's schedules running as Posty instead of a hidden agent, and the sidebar number counting only what needs a look.
+
+**C, built 2026-11-26:** Posty's hand-over table is generated from each agent's `description` (`{{handovers}}`, `cards.handovers`); each agent's "Who you are" says which jobs are its alone and whose the others are; a team report from a run that changed nothing is flagged to the giver; each run's record names its plugin. No limit on descriptions yet, as decided.
+
+**F, built 2026-11-26** from the approved mockups: the Agents page in two columns (job, what starts it, what it can't do, skills, plugin, what it's told, recent work); Schedules renamed Routines, the person's own first and everything built in folded away, the morning brief switchable there; the sidebar number counts only routines that need a look; the richer triage card with suggestions kept or dismissed in place; suggested tasks say Keep and Dismiss and name the Mail agent; each answer says which agent and plugin built it. Differences from the mockups: a routine's details stay in the existing drawer rather than a side panel; the triage card shows the agent's question without answer buttons (answering still happens in chat); the Agents page has no Connectors row yet, since connectors aren't attached per agent until plugins are installable.
+
+Still to do from this plan: the person's own schedules running as Posty with Posty's prompt (today they keep the routine prompt and Posty's tools), built-in routine files, installing plugins (step 6), the person's own plugin (5), and the company layer (8).

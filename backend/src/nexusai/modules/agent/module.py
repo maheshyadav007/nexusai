@@ -257,7 +257,7 @@ PERSONAL_PROMPTS = (
     ("topics", "Instructions for specific topics"),
 )
 # Agents whose prompt the person can add to, titled by their cards.
-AGENT_PROMPTS = ("session", "mail", "organizer", "daily-prep")
+AGENT_PROMPTS = ("session", "mail", "daily-prep", "routines")
 
 agent_module = Module(
     name="agent",
@@ -336,6 +336,18 @@ agent_module = Module(
             "DELETE FROM mail_categories WHERE proposed=1;",
         ),
         scheduler.TASK_OVERDUE_MIGRATION,
+        Migration(
+            "agent_organizer_folded_001",
+            # The Organizer folded into the lead, which now keeps tasks and reminders itself. Its
+            # chats, team tasks and messages become the lead's, so nothing is left with no agent.
+            "UPDATE agent_sessions SET agent='session' WHERE agent='organizer';"
+            "UPDATE team_tasks SET owner='session' WHERE owner='organizer';"
+            "UPDATE team_tasks SET assigner='session' WHERE assigner='organizer';"
+            "UPDATE agent_channel SET sender_agent='session' WHERE sender_agent='organizer';"
+            "UPDATE agent_channel SET sender='session' WHERE sender='organizer';"
+            "UPDATE agent_channel SET recipient='session' WHERE recipient='organizer';"
+            "DELETE FROM agent_card_overrides WHERE id='organizer';",
+        ),
     ],
 )
 _runtime: runtime.SessionRuntime | None = None
@@ -1061,7 +1073,7 @@ def list_prompts(query: ListPrompts, ctx: Context) -> PromptList:
                 title=title,
                 kind="agent",
                 content=path.read_text("utf-8") if path.exists() else "",
-                base=prompts_builder.packaged(f"{name}.md"),
+                base=prompts_builder.agent_base(name),
                 layers=[PromptLayer(name=layer.name, text=layer.text) for layer in layers],
                 group="schedules" if name == triggers.CUSTOM_AGENT else "agents",
             )
@@ -1239,10 +1251,16 @@ def _schedule_list(ctx: Context) -> ScheduleList:
         f"SELECT * FROM schedules WHERE kind NOT IN ({','.join('?' * len(scheduler.BUILT_IN_KINDS))}) ORDER BY id",  # noqa: S608
         scheduler.BUILT_IN_KINDS,
     )
+    brief = ctx.bus.db.fetch_all(
+        "SELECT enabled, time, next_run FROM schedules WHERE kind = ?", (scheduler.BRIEF_KIND,)
+    )
     return ScheduleList(
         schedules=[scheduler.row_to_schedule(row) for row in rows],
         time_check_enabled=scheduler.time_check_enabled(ctx),
         live_mail_enabled=mail_agent.enabled(ctx),
+        morning_brief_enabled=bool(brief and brief[0]["enabled"]),
+        morning_brief_time=brief[0]["time"] if brief else None,
+        morning_brief_next=brief[0]["next_run"] if brief and brief[0]["enabled"] else None,
     )
 
 
@@ -1529,8 +1547,16 @@ def set_defaults(command: SetDefaults, ctx: Context) -> ScheduleList:
             )
         if _triggers:
             _triggers.wake.set()
+    if command.morning_brief_enabled is not None:
+        # The same switch as the Mail agent's settings: one place decides whether it runs.
+        scheduler.set_built_in(ctx, scheduler.BRIEF_KIND, command.morning_brief_enabled)
+        if _scheduler:
+            _scheduler.poke()
     with ctx.bus.unit_of_work() as work:
         work.emit("schedule.changed", {}, source="agent", trace_id=ctx.trace_id)
+        if command.morning_brief_enabled is not None:
+            # The Mail agent's settings show the same switch.
+            work.emit("mailAgent.changed", {}, source="agent", trace_id=ctx.trace_id)
     return _schedule_list(ctx)
 
 

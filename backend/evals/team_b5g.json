@@ -87,14 +87,17 @@
     {"name": "r-missing-category", "group": "recovery", "approve": ["create_categories", "update_mail", "update_category"],
      "messages": ["File the patent email into a Patents IP category."],
      "checks": {"filed_or_asked": {"Patents IP": ["IDF-6G-0412"]}}},
-    {"name": "t-org-asks-date", "group": "team", "approve": ["create_tasks"],
-     "messages": ["Have the Organizer set up a task for my reply to the operator escalation."],
-     "checks": {"team": {"to": "organizer"}}},
-    {"name": "t-org-asks-from-mail", "group": "team", "approve": ["create_tasks"],
-     "messages": ["Have the Organizer make a task for the patent prior art review, due the day before its deadline."],
-     "checks": {"team": {"to": "organizer"}, "task": {"words": ["prior art", "idf-6g-0412", "patent"], "due": 7}}},
-    {"name": "t-org-question-as-report", "group": "team", "approve": ["create_reminders"],
-     "messages": ["Have the Organizer set a reminder to follow up with the operator."],
-     "checks": {"team": {"to": "organizer"}}}
+    {"name": "t-mail-asks-folder", "group": "team", "approve": ["update_mail", "create_categories"],
+     "messages": ["Have the Mail agent re-sort last week's mail from the operator."],
+     "checks": {"team": {"to": "mail"}}},
+    {"name": "t-lead-task-asks-date", "group": "team", "approve": ["create_tasks"],
+     "messages": ["Set up a task for my reply to the operator escalation."],
+     "checks": {"done_directly": true}},
+    {"name": "t-lead-task-from-mail", "group": "team", "approve": ["create_tasks"],
+     "messages": ["Make a task for the patent prior art review, due the day before its deadline."],
+     "checks": {"done_directly": true, "task": {"words": ["prior art", "idf-6g-0412", "patent"], "due": 7}}},
+    {"name": "t-lead-reminder", "group": "team", "approve": ["create_reminders"],
+     "messages": ["Set a reminder to follow up with the operator."],
+     "checks": {"done_directly": true}}
   ]
 }

@@ -42,6 +42,7 @@ from nexusai.modules.agent import (
     cards,
     channel,
     citations,
+    jobs,
     kinds,
     mail_agent,
     matters,
@@ -997,12 +998,8 @@ SEARCH_SHOWN = 20
 # It ends a run, so judging simple mail takes one model call.
 ENDS_THE_RUN = frozenset({"record_triage"})
 LEARNING_ORIGIN = "mail-learn"
-MAIL_AGENT_ONLY = frozenset(
-    {
-        "record_triage",
-        "save_what_i_learned",
-    }
-)
+# Owned by the Mail agent (jobs.py). Kept as a name, since other modules read it.
+MAIL_AGENT_ONLY = jobs.JOBS["triage"].tools
 
 
 # The brief agent reads and searches, then writes the brief. Nothing else is its job.
@@ -1028,42 +1025,33 @@ BRIEF_TOOLS = frozenset(
         "team_close",
     }
 )
-BRIEF_AGENT_ONLY = frozenset({"read_plate", "update_brief"})
+BRIEF_AGENT_ONLY = jobs.JOBS["brief"].tools
 
 
-# The Organizer keeps tasks and reminders. It reads mail only to link and date what it adds.
-ORGANIZER_TOOLS = frozenset(
+# The Routines agent sets up, changes, runs and removes routines, reading enough to write them well.
+ROUTINES_TOOLS = frozenset(
     {
-        "list_tasks",
-        "open_item",
-        "find_matters",
-        "create_tasks",
-        "update_tasks",
-        "delete_tasks",
-        "list_reminders",
-        "create_reminders",
-        "update_reminders",
-        "delete_reminders",
+        "list_schedules",
+        "create_schedule",
+        "update_schedule",
+        "remove_schedules",
+        "run_schedule",
         "search_mail",
         "read_thread",
+        "open_item",
+        "find_matters",
+        "list_mail",
+        "list_tasks",
+        "list_reminders",
+        "list_categories",
         "remember",
         "list_memory",
+        "load_skill",
+        "read_skill_file",
+        "team_roster",
         "team_inbox",
         "team_message",
         "team_close",
-    }
-)
-# Making and changing tasks and reminders is the Organizer's work, so the lead hands it over.
-ORGANIZER_ONLY = frozenset(
-    {
-        "create_tasks",
-        "update_tasks",
-        "delete_tasks",
-        "create_reminders",
-        "update_reminders",
-        "delete_reminders",
-        "propose_task",
-        "propose_reminder",
     }
 )
 
@@ -1093,7 +1081,7 @@ ALWAYS_SHOWN = frozenset({"ask_user", "remember", "list_memory", "load_skill"})
 LEAD_SHOWN = ALWAYS_SHOWN | {
     "open_item", "find_matters", "search_mail", "semantic_search", "search_documents", "read_thread",
     "list_mail", "update_mail", "draft_reply", "draft_forward", "list_drafts",
-    "list_tasks", "list_reminders", "list_categories",
+    "list_tasks", "list_reminders", "create_tasks", "create_reminders", "list_categories",
     "list_rules", "list_schedules", "list_panels", "propose_preference",
     "team_assign", "team_inbox", "team_message", "team_close",
 }  # fmt: skip
@@ -1114,7 +1102,7 @@ def shown_for(agent: str, has_email: bool) -> frozenset[str] | None:
     if agent == "mail":
         return None if has_email else MAIL_SHOWN
     # Their whole sets are small enough to show.
-    return None if agent in {"daily-prep", "organizer"} else LEAD_SHOWN
+    return None if agent in {"daily-prep", "routines"} else LEAD_SHOWN
 
 
 def other_tools(all_names: list[str], shown: frozenset[str] | None) -> str:
@@ -1177,14 +1165,18 @@ def find(catalog: list[StructuredTool], query: str, shown: int = FOUND_SHOWN) ->
 
 
 def withheld_for(agent: str) -> frozenset[str]:
-    """Tools another agent owns, kept from one that would otherwise have them all."""
-    return ORGANIZER_ONLY if agent == "session" else frozenset()
+    """Tools another agent owns (jobs.py), kept from one that would otherwise have them all."""
+    return jobs.withheld_for(agent)
 
 
 def owners_of_withheld(db: Any, agent: str) -> dict[str, str]:
     """Each withheld tool's owner, by @handle, so a call to one is pointed the right way."""
-    found = cards.card(db, "organizer")
-    return {name: found.at for name in withheld_for(agent)} if found else {}
+    owners: dict[str, str] = {}
+    for tool, owner in jobs.handed_over_tools(agent).items():
+        found = cards.card(db, owner)
+        if found is not None:
+            owners[tool] = found.at
+    return owners
 
 
 def allowed_for(agent: str, origin: str, has_email: bool) -> frozenset[str] | None:
@@ -1194,8 +1186,8 @@ def allowed_for(agent: str, origin: str, has_email: bool) -> frozenset[str] | No
         return INTERVIEW_TOOLS
     if agent == "daily-prep":
         return BRIEF_TOOLS | {"ask_user"} if origin == "person" else BRIEF_TOOLS
-    if agent == "organizer":
-        return ORGANIZER_TOOLS | {"ask_user"} if origin == "person" else ORGANIZER_TOOLS
+    if agent == "routines":
+        return ROUTINES_TOOLS | {"ask_user"} if origin == "person" else ROUTINES_TOOLS
     if agent != "mail":
         return None
     if has_email:
@@ -2482,7 +2474,8 @@ def build_tools(
         )
         for func, schema, description in specs
         if func.__name__ != "semantic_search" or _meaning_is_on()
-        # Judging mail belongs to the Mail agent alone, and the brief to the brief agent.
+        # A job another agent owns (jobs.py) is withheld. Judging mail and the brief are never in
+        # a full set, even if a caller forgets to pass what's withheld.
         if (allowed is None and func.__name__ not in MAIL_AGENT_ONLY | BRIEF_AGENT_ONLY | withheld)
         or (allowed is not None and func.__name__ in allowed)
     ]

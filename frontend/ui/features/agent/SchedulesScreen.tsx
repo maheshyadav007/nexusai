@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import type { Schedule, ScheduleRow, Trigger } from "@/ui/client/contracts.generated";
+import type { Schedule, ScheduleList, ScheduleRow, Trigger } from "@/ui/client/contracts.generated";
+import { useLeadName } from "@/ui/client/home";
 import { useDateOnly, useDateTime, useRelativeTime, useTimeOnly } from "@/ui/client/format";
 import { useAgentName, usePausePipeline, usePipelines, useRemoveSchedule, useRunSchedule, useSaveSchedule, useSaveTrigger, useSchedules, useSetDefaults, useTriggers } from "@/ui/client/work";
 import { SessionGeneration } from "@/ui/features/agent/SessionGeneration";
@@ -16,6 +17,7 @@ import { Field } from "@/ui/primitives/Field";
 import { Input, Textarea } from "@/ui/primitives/Input";
 import { ListGroup, ListRow } from "@/ui/primitives/List";
 import { PageHeader } from "@/ui/primitives/PageHeader";
+import { Pressable } from "@/ui/primitives/Pressable";
 import { Segmented } from "@/ui/primitives/Segmented";
 import { Select } from "@/ui/primitives/Select";
 import { Skeleton } from "@/ui/primitives/Skeleton";
@@ -213,6 +215,7 @@ function ScheduleItem({ row, onOpen }: { row: ScheduleRow; onOpen: () => void })
   const save = useSaveSchedule();
   const cadence = useCadence();
   const relative = useRelativeTime();
+  const lead = useLeadName();
   const on = row.enabled ?? true;
   return (
     <ListRow
@@ -220,7 +223,7 @@ function ScheduleItem({ row, onOpen }: { row: ScheduleRow; onOpen: () => void })
       state={on ? "on" : "paused"}
       lead={<StatusDot tone={on ? "done" : "idle"} />}
       title={row.title}
-      meta={`${cadence(row)} · ${on && row.next_run ? t("schedules.nextIn", { when: relative(row.next_run) }) : t(on ? "schedules.noNext" : "schedules.paused")}`}
+      meta={`${cadence(row)} · ${t("routines.doneBy", { agent: lead })} · ${on && row.next_run ? t("schedules.nextIn", { when: relative(row.next_run) }) : t(on ? "schedules.noNext" : "schedules.paused")}`}
       onOpen={onOpen}
       trailing={<Switch label={t("rules.enabled")} hideLabel checked={on} onChange={(enabled) => save.mutate(saved(row, enabled))} />}
     />
@@ -243,14 +246,30 @@ function TriggerItem({ trigger, label, onOpen }: { trigger: Trigger; label: stri
   );
 }
 
-/** What comes with the app: mail sync on its timer, and the two checks that run by default. */
-function BuiltIn({ liveMail, timeCheck }: { liveMail: boolean; timeCheck: boolean }) {
+/** What comes with the app: the morning brief, reading new mail, mail sync and the checks that
+ * run by default. Folded away until asked for, so the page is about the person's own routines. */
+function BuiltIn({ list, triggers }: { list: ScheduleList; triggers: React.ReactNode }) {
   const pipelines = usePipelines();
   const pause = usePausePipeline();
   const defaults = useSetDefaults();
   const relative = useRelativeTime();
+  const [open, setOpen] = useState(false);
+  const liveMail = list.live_mail_enabled;
+  const timeCheck = list.time_check_enabled;
+  const brief = list.morning_brief_enabled ?? false;
+  const count = (pipelines.data?.pipelines.length ?? 0) + 3;
   return (
+    <div className="flex flex-col gap-3">
+      <Pressable aria-expanded={open} onClick={() => setOpen(!open)} className="flex min-h-11 items-center justify-between gap-4 rounded-lg border border-dashed border-line-subtle px-4 py-3 text-left transition-colors duration-fast hover:border-line-strong">
+        <span className="flex min-w-0 flex-col gap-1">
+          <span className="text-md font-medium text-ink-secondary">{t("routines.builtIn.title", { count })}</span>
+          <span className="text-sm text-ink-muted">{t("routines.builtIn.line")}</span>
+        </span>
+        <span className="shrink-0 text-md text-accent-default">{t(open ? "routines.builtIn.hide" : "routines.builtIn.show")}</span>
+      </Pressable>
+      {open ? (
     <ListGroup title={t("schedules.group.builtIn")}>
+      <ListRow testid="built-in-brief" lead={<StatusDot tone={brief ? "done" : "idle"} />} title={t("routines.brief")} meta={brief && list.morning_brief_time ? [t("routines.brief.when", { time: list.morning_brief_time }), list.morning_brief_next ? t("schedules.nextIn", { when: relative(list.morning_brief_next) }) : null].filter(Boolean).join(" · ") : t("schedules.paused")} trailing={<Switch label={t("routines.brief")} hideLabel checked={brief} onChange={(morning_brief_enabled) => defaults.mutate({ morning_brief_enabled })} />} />
       {pipelines.data?.pipelines.map((row) => {
         const stopped = row.state === "stopped";
         return (
@@ -266,7 +285,10 @@ function BuiltIn({ liveMail, timeCheck }: { liveMail: boolean; timeCheck: boolea
       })}
       <ListRow lead={<StatusDot tone={liveMail ? "done" : "idle"} />} title={t("schedules.liveMail")} trailing={<Switch label={t("schedules.liveMail")} hideLabel checked={liveMail} onChange={(live_mail_enabled) => defaults.mutate({ live_mail_enabled })} />} />
       <ListRow lead={<StatusDot tone={timeCheck ? "done" : "idle"} />} title={t("schedules.timeCheck")} trailing={<Switch label={t("schedules.timeCheck")} hideLabel checked={timeCheck} onChange={(time_check_enabled) => defaults.mutate({ time_check_enabled })} />} />
+      {triggers}
     </ListGroup>
+      ) : null}
+    </div>
   );
 }
 
@@ -304,17 +326,18 @@ export function SchedulesScreen() {
           </div>
         </div>
       ) : null}
-      {rows.length ? (
-        <ListGroup title={t("schedules.group.clock")}>
+      {rows.length || yours.length ? (
+        <ListGroup title={t("routines.group.yours")}>
           {rows.map((row) => <ScheduleItem key={row.id} row={row} onOpen={() => row.id != null && setOpen({ schedule: row.id })} />)}
+          {yours.map((trigger) => <TriggerItem key={trigger.id} trigger={trigger} label={labelOf(trigger)} onOpen={() => setOpen({ trigger: trigger.id })} />)}
         </ListGroup>
       ) : null}
-      {triggerRows.length ? (
-        <ListGroup title={t("triggers.title")}>
-          {triggerRows.map((trigger) => <TriggerItem key={trigger.id} trigger={trigger} label={labelOf(trigger)} onOpen={() => setOpen({ trigger: trigger.id })} />)}
-        </ListGroup>
+      {schedules.data ? (
+        <BuiltIn
+          list={schedules.data}
+          triggers={triggerRows.filter((trigger) => trigger.kind === "mail").map((trigger) => <TriggerItem key={trigger.id} trigger={trigger} label={labelOf(trigger)} onOpen={() => setOpen({ trigger: trigger.id })} />)}
+        />
       ) : null}
-      {schedules.data ? <BuiltIn liveMail={schedules.data.live_mail_enabled} timeCheck={schedules.data.time_check_enabled} /> : null}
       <Dialog title={title} shape="drawer" open={open !== null} onOpenChange={(next) => (next ? null : close())}>
         <div className="-mx-5 min-h-0 flex-1 overflow-y-auto px-5 pb-5">
           {editing ? <ScheduleDetails row={editing} onDone={close} /> : null}

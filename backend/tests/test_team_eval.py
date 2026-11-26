@@ -129,12 +129,12 @@ def test_the_b5g_suite_has_its_cases_with_every_date_filled_in(team_eval: Any) -
         "handover": 10,
         "memory": 5,
         "recovery": 3,
-        "team": 3,
+        "team": 4,
     }
     judged = load("dates").fill_all(
         team_eval.json.loads((EVALS / "mail_cases_b5g.json").read_text())
     )["cases"]
-    assert len(judged) + len(suite.cases) == 53
+    assert len(judged) + len(suite.cases) == 54
     text = team_eval.json.dumps([suite.mailbox, [c.message for c in suite.cases], judged])
     assert "{day" not in text and "{iso" not in text
     # The invented person's own mail comes from the fake server's user, so it counts as theirs.
@@ -176,24 +176,24 @@ def test_a_team_question_is_graded_on_one_ask_an_answer_and_a_verified_task(
     monkeypatch.setattr(gateway, "resolve_provider", lambda ctx: (script, "script-model"))
     suite = team_eval.load_suite("b5g")
     given = {
-        "to": "@organizer",
-        "objective": "A task for the reply to the operator escalation",
-        "expected_output": "The task id",
-        "done_criteria": "The task exists with a due date",
+        "to": "@mail",
+        "objective": "Re-sort last week's mail from the operator",
+        "expected_output": "The ids of the threads moved",
+        "done_criteria": "Every operator thread from last week is filed",
         "references": [],
     }
-    ask = {"task": 1, "kind": "ask", "text": "Which date should it be due?"}
-    report = {"task": 1, "action": "report", "outcome": "Task added, due Friday."}
+    ask = {"task": 1, "kind": "ask", "text": "Which folder should they go to?"}
+    report = {"task": 1, "action": "report", "outcome": "Moved 4 threads to Operators."}
     script.say(
         "Posty",
         [ToolCall("a", "team_assign", given)],
-        [ToolCall("b", "team_message", {"task": 1, "kind": "answer", "text": "Friday"})],
+        [ToolCall("b", "team_message", {"task": 1, "kind": "answer", "text": "Operators"})],
         [ToolCall("v", "team_close", {"task": 1, "action": "verify", "outcome": "Seen."})],
         [TextChunk("Done.")],
     )
     script.say(
-        "Organizer", [ToolCall("q", "team_message", ask)], [ToolCall("r", "team_close", report)]
+        "Mail agent", [ToolCall("q", "team_message", ask)], [ToolCall("r", "team_close", report)]
     )
-    case = next(c for c in suite.cases if c.name == "t-org-asks-date")
+    case = next(c for c in suite.cases if c.name == "t-mail-asks-folder")
     row = team_eval.run_case(case, suite)
     assert row["passed"] and not row["timed_out"], row["missed"]

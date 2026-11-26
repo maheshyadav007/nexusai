@@ -43,6 +43,7 @@ from nexusai.modules.agent import (
     guard,
     knowledge,
     personalization,
+    plugins,
     policy,
     prompts_builder,
     providers,
@@ -309,6 +310,7 @@ class SessionRuntime:
                     "feedback": turn["feedback"],
                     "origin": turn["origin"],
                     "thread": _thread_of(turn["target"]),
+                    "built": self._built(turn["id"]),
                 }
             )
         if assembled:
@@ -350,6 +352,19 @@ class SessionRuntime:
     def _latest_checkpoint(self, session: str) -> str | None:
         found = self.saver.get_tuple({"configurable": {"thread_id": session}})
         return str(found.config["configurable"]["checkpoint_id"]) if found else None
+
+    def _built(self, turn: int) -> dict[str, Any] | None:
+        """What this answer was built from, for the person: the agent's file and its plugin."""
+        rows = self.db.fetch_all("SELECT versions FROM agent_turns WHERE id = ?", (turn,))
+        if not rows or not rows[0]["versions"]:
+            return None
+        stamp = json.loads(rows[0]["versions"])
+        found = next((p for p in plugins.built_in() if p.name == stamp.get("plugin")), None)
+        return {
+            "agent": stamp.get("agent"),
+            "plugin": found.display_name if found else None,
+            "card": stamp.get("card"),
+        }
 
     def _versions(self, session: str, turn: int) -> dict[str, Any] | None:
         """The other answers to this message, once it has been tried again."""
@@ -811,6 +826,8 @@ class SessionRuntime:
         versions = {
             "agent": agent,
             "card": card.version if card else None,
+            # Which plugin the agent's file came from, so a run is traced to the exact text used.
+            "plugin": plugins.plugin_of(card.engine or agent) if card else None,
             "prompt": prompt,
             "model": model or "default",
             "harness": HARNESS_VERSION,

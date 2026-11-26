@@ -53,7 +53,9 @@ class TaskAction(BaseModel):
     id: int
 
 
-Repeat = Literal["none", "day", "week", "month", "year"]
+Repeat = Literal["none", "interval", "day", "week", "month", "year"]
+# Monday is 0, as Python's weekday().
+Weekday = Literal[0, 1, 2, 3, 4, 5, 6]
 
 
 class Reminder(BaseModel):
@@ -70,6 +72,15 @@ class Reminder(BaseModel):
     source_ref: SourceRef | None = None
     updated: str | None = None
     looks_done: str | None = None
+    # For repeat "interval": how many minutes apart, such as 60 for hourly.
+    every_minutes: int | None = None
+    # Only on these days (Monday is 0). None is every day.
+    days: list[Weekday] | None = None
+    # Only between these local times, as HH:MM. Both or neither.
+    window_start: str | None = None
+    window_end: str | None = None
+    # The last day it goes off, YYYY-MM-DD.
+    until: str | None = None
 
 
 class ListReminders(BaseModel):
@@ -91,6 +102,11 @@ class SaveReminder(BaseModel):
     thread: int | None = None
     task: int | None = None
     proposed: bool = False
+    every_minutes: int | None = Field(default=None, ge=5, le=1440)
+    days: list[Weekday] | None = None
+    window_start: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    window_end: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    until: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
 
 
 class SnoozeReminder(BaseModel):

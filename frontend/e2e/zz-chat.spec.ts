@@ -214,20 +214,20 @@ test("work folds behind a thinking line that opens to each step", async ({ page 
 
 test("a reminder asked for is set, and shows as a card that links to it", async ({ page }) => {
   await openFresh(page);
-  // Reminders are the Organizer's work, so the person asks it by its @handle.
-  await say(page, "@organizer remind me to call");
+  // Reminders are Posty's own work now, done in its run.
+  await say(page, "remind me to call");
   const card = page.getByTestId("result-card");
   await expect(card).toContainText("Call the vendor");
   await card.getByRole("link", { name: "Open reminders" }).click();
   await expect(page.getByTestId("reminder").filter({ hasText: "Call the vendor" })).toBeVisible();
-  await expect(page.getByTestId("reminder").filter({ hasText: "Call the vendor" }).getByRole("button", { name: "Accept" })).toHaveCount(0);
+  await expect(page.getByTestId("reminder").filter({ hasText: "Call the vendor" }).getByRole("button", { name: "Keep" })).toHaveCount(0);
 });
 
 test("a hand-over is one quiet line that opens to what it's doing", async ({ page }) => {
   await openFresh(page);
   await say(page, "hand the filing over");
   const line = page.getByTestId("handoff-card");
-  await expect(line).toContainText("Organizer");
+  await expect(line).toContainText("Mail agent");
   await expect(line).toContainText("File last week's PLM mail under PLM");
   await expect(line).not.toHaveAttribute("data-state", "refused");
   // Opened once the reply has finished, so the settled message keeps it open.
@@ -256,8 +256,8 @@ test("many requests at once are one decision, and one can be left out", async ({
   const current = await (await request.post("/api/queries/permissions.get", { data: {} })).json();
   await request.post("/api/commands/permissions.save", { data: { ...current, tools: { ...current.tools, create_tasks: "ask" } } });
   await openFresh(page);
-  // Tasks are the Organizer's work, so the person asks it by its @handle.
-  await say(page, "@organizer add three tasks");
+  // Tasks are Posty's own work now, done in its run.
+  await say(page, "add three tasks");
   const group = page.getByTestId("approval-group");
   await expect(group).toContainText("3 requests");
   await expect(page.getByTestId("approval")).toHaveCount(0);
@@ -271,7 +271,7 @@ test("many requests at once are one decision, and one can be left out", async ({
   await expect(page.getByTestId("task").filter({ hasText: "Second task" })).toHaveCount(0);
 
   await openFresh(page);
-  await say(page, "@organizer add three tasks");
+  await say(page, "add three tasks");
   await page.getByTestId("approval-group").getByRole("button", { name: "Approve for this session" }).click();
   await expect(page.getByTestId("session-status")).toContainText("Done");
   await expect(page.getByTestId("approval-group")).toHaveCount(0);

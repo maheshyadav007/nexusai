@@ -501,6 +501,11 @@ def graded(
                 missed.append(f"no task given to {checks['task_to']}: {owners}")
         if "team" in checks:
             missed += _team_flow(checks["team"])
+        if checks.get("done_directly"):
+            # A small job the lead owns is done in its own run, with no hand-over.
+            owners = [r["owner"] for r in _db().fetch_all("SELECT owner FROM team_tasks")]
+            if owners:
+                missed.append(f"handed over instead of done directly: {owners}")
         tasks = [
             dict(r)
             for r in _db().fetch_all("SELECT title, notes, due FROM tasks WHERE proposed = 0")

@@ -4,7 +4,6 @@ import json
 import re
 import uuid
 from datetime import UTC, datetime, timedelta
-from importlib import resources
 from typing import Any, Literal
 
 import structlog
@@ -33,6 +32,7 @@ from nexusai.modules.agent import (
     matters,
     memory,
     personalization,
+    plugins,
     prompts_builder,
     providers,
     signals,
@@ -371,8 +371,7 @@ def _strings(value: Any) -> list[str]:
 
 def _template(name: str, **values: Any) -> str:
     """Our own wording, filled in here. What came from outside is only ever put in, never read."""
-    text = resources.files(__package__).joinpath("prompts", "triggers", f"{name}.md")
-    filled = text.read_text("utf-8").strip()
+    filled = plugins.prompt(name).strip()
     for key, value in values.items():
         filled = filled.replace(f"{{{key}}}", str(value))
     return filled

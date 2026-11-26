@@ -794,8 +794,8 @@ def test_a_chat_knows_its_other_tools_and_how_to_save_what_it_learns(
     assert "save_rule" in rule_line and "delete_rules" in rule_line
     # What it starts with isn't repeated, and find_tools itself isn't a hidden tool.
     assert "list_rules" not in listed and "find_tools" not in listed
-    # Tasks and reminders are the Organizer's, so the lead isn't told it has them.
-    assert "delete_tasks" not in listed and "create_reminders" not in listed
+    # Tasks and reminders are the lead's own: making them is shown up front, the rest listed here.
+    assert "delete_tasks" in listed and "create_reminders" not in listed
     system = layers["System prompt"]
     assert "## Saving what you learn" in system and "## Finding tools" in system
     assert "unless you saved it in this same step" in system

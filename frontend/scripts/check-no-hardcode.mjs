@@ -1,5 +1,5 @@
 // Fails on hardcoded colors, one-off sizes and user-facing text outside the files that own them.
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, relative, sep } from "node:path";
 import ts from "typescript";
 
@@ -80,13 +80,19 @@ for (const root of process.argv.slice(2)) {
     if (path.endsWith(".tsx")) scanJsx(name, text, report);
   }
 }
-// Agent names live only in the backend's card files, so a rename is one change. Strings take them
-// as {agent}, filled from the cards the backend sends.
-const CARDS = join(process.cwd(), "..", "backend", "src", "nexusai", "modules", "agent", "agents");
-const agentNames = readdirSync(CARDS)
-  .filter((entry) => entry.endsWith(".toml"))
-  .map((entry) => /^name = "(.+)"$/m.exec(readFileSync(join(CARDS, entry), "utf8"))?.[1])
+// Agent names live only in the backend's agent files (the frontmatter of
+// builtin_plugins/<plugin>/agents/<id>.md), so a rename is one change. Strings take them as {agent},
+// filled from the cards the backend sends.
+const PLUGINS = join(process.cwd(), "..", "backend", "src", "nexusai", "modules", "agent", "builtin_plugins");
+const agentNames = readdirSync(PLUGINS, { withFileTypes: true })
+  .filter((entry) => entry.isDirectory())
+  .flatMap((plugin) => {
+    const folder = join(PLUGINS, plugin.name, "agents");
+    return existsSync(folder) ? readdirSync(folder).filter((entry) => entry.endsWith(".md")).map((entry) => join(folder, entry)) : [];
+  })
+  .map((path) => /^ {2}displayName: ['"]?(.+?)['"]?$/m.exec(readFileSync(path, "utf8").split("\n---\n")[0])?.[1])
   .filter(Boolean);
+if (agentNames.length === 0) throw new Error(`No agent names found in ${PLUGINS}; the check would pass without checking.`);
 const named = (text) => agentNames.find((agent) => new RegExp(`\\b${agent.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(text));
 for (const [key, value] of Object.entries(JSON.parse(readFileSync("ui/strings/en.json", "utf8")))) {
   const agent = named(value);

@@ -165,7 +165,7 @@ def create_fake() -> FastAPI:
                         "name": "team_assign",
                         "arguments": json.dumps(
                             {
-                                "to": "@organizer",
+                                "to": "@mail",
                                 "objective": "File last week's PLM mail under PLM",
                                 "expected_output": "The ids of the threads moved",
                                 "done_criteria": "Every PLM thread from last week is in PLM",

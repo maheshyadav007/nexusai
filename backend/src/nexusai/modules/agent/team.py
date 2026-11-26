@@ -17,6 +17,7 @@ from nexusai.contracts.agent import (
     OPEN_TASK_STATES,
     AgentCard,
     AgentNow,
+    AgentStart,
     AgentUsage,
     TaskStep,
     TeamMessage,
@@ -781,10 +782,36 @@ def report_text(db: Database, row: Any) -> str:
             f"Outcome: {row['outcome'] or 'none yet'}",
             f"Evidence: {', '.join(_as_markers(json.loads(row['evidence']))) or 'none'}",
             _done_before_stopping(db, row) if row["state"] in {"blocked", "failed"} else "",
+            _changed_nothing(db, row) if row["state"] == "reported" else "",
             _thread(db, row["id"]),
         ]
     ).strip()
     return head + "\n" + (untrusted(body) if row["untrusted"] else body)
+
+
+# Tools that talk or take notes. Calling them isn't doing the task.
+NOT_THE_WORK = frozenset({"remember", "team_message", "team_close", "team_assign", "ask_user"})
+
+
+def _changed_nothing(db: Database, row: Any) -> str:
+    """Said when the owner's run made no change at all, so a report that only claims work done
+    isn't verified on its word. A task that only asked to find or check something needs none."""
+    from nexusai.modules.agent import policy
+
+    if not row["owner_session"]:
+        return ""
+    calls = db.fetch_all(
+        "SELECT tool FROM tool_calls WHERE session = ? AND status = 'done' AND started >= ?",
+        (row["owner_session"], row["created"]),
+    )
+    for call in calls:
+        entry = policy.TOOLS_BY_NAME.get(call["tool"])
+        if call["tool"] not in NOT_THE_WORK and entry is not None and entry.action != "read":
+            return ""
+    return (
+        "Its run changed nothing. If the task asked for a change, it isn't done: reject it and say"
+        " what's missing. If it only asked to find or check something, check what it found."
+    )
 
 
 def _done_before_stopping(db: Database, row: Any) -> str:
@@ -889,6 +916,7 @@ def listing(ctx: Context, running: Any) -> list[AgentCard]:
         allowed = tools.allowed_for(card.id, PERSON, False)
         contract = cards.to_contract(card, sorted(allowed) if allowed is not None else [])
         contract.now = _now_for(db, card.id, running)
+        _describe(ctx, card, contract)
         usage = db.fetch_all(
             "SELECT COALESCE(SUM(CASE WHEN day = ? THEN input_tokens + output_tokens END), 0) AS today,"
             " COALESCE(SUM(input_tokens + output_tokens), 0) AS week"
@@ -918,6 +946,35 @@ def listing(ctx: Context, running: Any) -> list[AgentCard]:
         )
         out.append(contract)
     return out
+
+
+def _starts(db: Database, agent: str) -> list[AgentStart]:
+    """The built-in routines that start this agent by themselves, and are on."""
+    found: list[AgentStart] = []
+    if agent == "mail":
+        if db.fetch_all("SELECT 1 FROM agent_triggers WHERE id = 'mail-received' AND enabled = 1"):
+            found.append(AgentStart(key="on-new-mail"))
+        if db.fetch_all("SELECT 1 FROM schedules WHERE kind = 'mail-hourly' AND enabled = 1"):
+            found.append(AgentStart(key="every-hour"))
+    if agent == "daily-prep":
+        rows = db.fetch_all("SELECT time FROM schedules WHERE kind = 'mail-brief' AND enabled = 1")
+        if rows:
+            found.append(AgentStart(key="every-morning", time=rows[0]["time"]))
+    return found
+
+
+def _describe(ctx: Context, card: cards.Card, contract: AgentCard) -> None:
+    """What the Agents page says about it: its plugin, jobs, skills and what starts it."""
+    from nexusai.modules.agent import jobs, plugins, skills
+
+    engine = card.engine or card.id
+    plugin = plugins.plugin_of(engine) if card.kind == "built_in" else None
+    found = next((p for p in plugins.built_in() if p.name == plugin), None)
+    contract.plugin = found.display_name if found else None
+    contract.jobs = [job.label for job in jobs.jobs_of(engine)]
+    contract.skills = [skill.name for skill in skills.available(ctx, card.id)]
+    contract.starts = _starts(ctx.bus.db, card.id)
+    contract.reads_untrusted_mail = card.untrusted_mail
 
 
 def _now_for(db: Database, agent: str, running: Any) -> AgentNow:
